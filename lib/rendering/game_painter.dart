@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'character_renderer.dart';
 import '../entities/villager_entity.dart';
@@ -78,15 +79,19 @@ final _pRain = Paint()
 final _pFogBase = Paint()..isAntiAlias = false;
 final _pFogWisp = Paint()..isAntiAlias = false;
 
-// Gölgeler — isAntiAlias=true (yumuşak halka)
-final _pShadow         = Paint()..color = const Color(0x55000000)..isAntiAlias = true;
-final _pBuildingShadow = Paint()..color = const Color(0x33000000)..isAntiAlias = false;
+// Gölgeler — karakter/ağaç için yumuşak eliptik, bina için diamond.
+// Bina gölgesi MaskFilter ile hafif blur (yükseklik hissi).
+final _pShadow         = Paint()..color = const Color(0x77000000)..isAntiAlias = true;
+final _pBuildingShadow = Paint()
+  ..color      = const Color(0x55000000)
+  ..isAntiAlias = true
+  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
 
 /// Karakterin ayağı altında ince yatay elips. (sx, sy) = feet pozisyonu
 /// (her character drawable'da gridToScreen sonucu).
 void _drawCharShadow(Canvas canvas, double sx, double sy) {
   canvas.drawOval(
-    Rect.fromCenter(center: Offset(sx, sy + 2), width: 16, height: 5),
+    Rect.fromCenter(center: Offset(sx, sy + 2), width: 20, height: 7),
     _pShadow,
   );
 }
@@ -95,9 +100,9 @@ void _drawCharShadow(Canvas canvas, double sx, double sy) {
 /// growthScale fidan büyüme oranı.
 void _drawTreeShadow(Canvas canvas, double cx, double cy,
     double widthScale, double growthScale) {
-  final w = widthScale * growthScale;
+  final w = widthScale * growthScale * 1.25;
   canvas.drawOval(
-    Rect.fromCenter(center: Offset(cx, cy + 3), width: w, height: w * 0.32),
+    Rect.fromCenter(center: Offset(cx, cy + 3), width: w, height: w * 0.34),
     _pShadow,
   );
 }
@@ -592,6 +597,24 @@ class VillageGamePainter extends CustomPainter {
     _drawDayNightOverlay(canvas, size);
     _drawFog(canvas, size);
     _drawRain(canvas, size);
+    _drawVignette(canvas, size);
+  }
+
+  // Ekran kenarlarında radial koyu gradient — merkez net, kenarlar koyu.
+  // Klasik post-process: derinlik hissi + dikkat odağı + cinematic ton.
+  void _drawVignette(Canvas canvas, Size size) {
+    final cx = size.width  / 2;
+    final cy = size.height / 2;
+    final shader = ui.Gradient.radial(
+      Offset(cx, cy),
+      size.shortestSide * 0.85,
+      const [Color(0x00000000), Color(0x33000000), Color(0x66000000)],
+      const [0.50, 0.85, 1.0],
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..shader = shader,
+    );
   }
 
   // ── Görünür dünya-koordinat sınırları (zoom'a göre) ───────────────────────

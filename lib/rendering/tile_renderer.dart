@@ -7,29 +7,37 @@ class TileRenderer {
   static ui.Image? _grass;
 
   // ── Sprite tint varyantları (modulate) ─────────────────────────────────────
-  // Her variant aynı grass.png'yi farklı tonda gösterir.
-  // Paint kalitesi AssetStyle'dan; colorFilter variant-spesifik.
+  // 8 ton paleti — açık warm sarımsı → doygun yeşil → kuru bej arası geniş
+  // spread. Patch system ile komşu tile'lar benzer variant'a düşer → organik
+  // renk lekeleri (uniform "halı" görüntüsü değil, çayır gibi).
   static final List<Paint> _imgVariants = [
-    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFFFFFFF), BlendMode.modulate)),
-    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFE6F0D8), BlendMode.modulate)),
-    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFD2DEB8), BlendMode.modulate)),
-    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFBED4A8), BlendMode.modulate)),
-    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFCEE0B0), BlendMode.modulate)),
-    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFE0D8B8), BlendMode.modulate)),
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFFFFFFF), BlendMode.modulate)), // 0: parlak (base)
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFEAE5C0), BlendMode.modulate)), // 1: sun-bleached warm
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFD2E2B0), BlendMode.modulate)), // 2: açık yeşil
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFB8D094), BlendMode.modulate)), // 3: orta yeşil
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFF98B874), BlendMode.modulate)), // 4: koyu doygun yeşil
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFB4BC88), BlendMode.modulate)), // 5: kuru yeşil
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFCAD8B8), BlendMode.modulate)), // 6: soft turkuaz-yeşil
+    AssetStyle.apply(Paint()..colorFilter = const ColorFilter.mode(Color(0xFFD8C8A0), BlendMode.modulate)), // 7: kuru bej (toprak yakın)
   ];
 
   // ── Fallback (asset yüklenmediyse) renkli fill ────────────────────────────
+  // Variant index'leri _imgVariants ile aynı sırada.
   static final List<Paint> _fillVariants = [
-    Paint()..color = const Color(0xFF52A858)..isAntiAlias = false,
-    Paint()..color = const Color(0xFF58B45E)..isAntiAlias = false,
-    Paint()..color = const Color(0xFF479248)..isAntiAlias = false,
-    Paint()..color = const Color(0xFF60AE60)..isAntiAlias = false,
-    Paint()..color = const Color(0xFF4E9C50)..isAntiAlias = false,
-    Paint()..color = const Color(0xFF5BA655)..isAntiAlias = false,
+    Paint()..color = const Color(0xFF58B45E)..isAntiAlias = false, // 0
+    Paint()..color = const Color(0xFF7AB050)..isAntiAlias = false, // 1
+    Paint()..color = const Color(0xFF6CAA55)..isAntiAlias = false, // 2
+    Paint()..color = const Color(0xFF509644)..isAntiAlias = false, // 3
+    Paint()..color = const Color(0xFF3D7E36)..isAntiAlias = false, // 4
+    Paint()..color = const Color(0xFF6A803E)..isAntiAlias = false, // 5
+    Paint()..color = const Color(0xFF6FA470)..isAntiAlias = false, // 6
+    Paint()..color = const Color(0xFF9A8B5C)..isAntiAlias = false, // 7
   ];
 
+  // Tile kenar çizgisi — düşük alpha, "grid" hissini azaltır ama tile
+  // sınırını hâlâ görünür tutar.
   static final _border = Paint()
-    ..color       = const Color(0x99000000)
+    ..color       = const Color(0x22000000)
     ..style       = PaintingStyle.stroke
     ..strokeWidth = 1
     ..isAntiAlias = false;
@@ -83,9 +91,19 @@ class TileRenderer {
       ..lineTo(px - hw, py + hh)
       ..close();
 
-    // Hash → tint variant + decor decision
-    final hash    = (col * 73856093) ^ (row * 19349663);
-    final variant = (hash & 0x7FFFFFFF) % _imgVariants.length;
+    // ── Variant seçimi: patch (macro) + jitter (micro) hibrid ────────────
+    // Macro hash: 4x4 tile bloklarında sabit → komşu tile'lar benzer
+    // baseTone paylaşır → organik renk lekeleri (uniform halı değil).
+    // Micro hash: tile-spesifik küçük varyasyon (±1 variant kaydır).
+    final macro = ((col >> 2) * 7919) ^ ((row >> 2) * 2729);
+    final micro = (col * 73856093) ^ (row * 19349663);
+    final baseTone = (macro & 0x7FFFFFFF) % _imgVariants.length;
+    // Mikro jitter: %60 ihtimalle aynı, %40 ihtimalle komşu variant
+    final jitter = (micro >> 3) & 0xF;
+    final variant = jitter < 10
+        ? baseTone
+        : ((baseTone + (jitter < 13 ? 1 : -1)) % _imgVariants.length + _imgVariants.length) % _imgVariants.length;
+    final hash = micro; // decor için aşağıda kullanılır
 
     if (img == null) {
       canvas.drawPath(_diamond, _fillVariants[variant]);
@@ -100,9 +118,9 @@ class TileRenderer {
 
     canvas.drawPath(_diamond, _border);
 
-    // ~%15 tile'da dekor (çiçek / çakıl / ot)
+    // ~%24 tile'da dekor (çiçek / çakıl / ot tutamı / ot bıçağı)
     final decorRoll = ((hash >> 5) & 0xFFFF) % 100;
-    if (decorRoll < 15) {
+    if (decorRoll < 24) {
       _drawDecor(canvas, px, py, hw, hh, hash);
     }
   }

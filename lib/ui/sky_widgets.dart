@@ -125,20 +125,42 @@ class PixelMoon extends StatelessWidget {
   }
 }
 
+/// Pixel-art bulut. [scale] boyut çarpanı (0.5 küçük, 1.0 normal, 1.6 büyük).
+/// [dark] yağmurlu gri ton.  [parallax] uzaklık (0.0 çok uzak/soluk,
+/// 1.0 yakın/net) — alpha ve renk doygunluğunu etkiler.
 class PixelCloud extends StatelessWidget {
-  final bool dark;
-  const PixelCloud({super.key, this.dark = false});
+  final bool   dark;
+  final double scale;
+  final double parallax;
+  const PixelCloud({
+    super.key,
+    this.dark     = false,
+    this.scale    = 1.0,
+    this.parallax = 1.0,
+  });
+
   @override
   Widget build(BuildContext context) {
-    final c1 = dark ? const Color(0xCC888888) : const Color(0xCCEEEEEE);
-    final c2 = dark ? const Color(0xCCAAAAAA) : const Color(0xCCFFFFFF);
+    // Uzak bulutlar soluk + biraz daha mavi (atmosferik perspektif)
+    final baseDk = dark ? const Color(0xFF888888) : const Color(0xFFEEEEEE);
+    final baseLt = dark ? const Color(0xFFAAAAAA) : const Color(0xFFFFFFFF);
+    // Alpha parallax ile — uzak: %50, yakın: %85
+    final alpha = (0.50 + parallax * 0.35).clamp(0.0, 1.0);
+    final c1 = baseDk.withValues(alpha: alpha * 0.80);
+    final c2 = baseLt.withValues(alpha: alpha);
+    // Daha derinlikli silüet: 5 dikdörtgen, alt-üst basamaklı
+    final h1 = 6.0  * scale;
+    final h2 = 10.0 * scale;
+    final h3 = 14.0 * scale;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Container(width: 16, height: 8,  color: c1),
-        Container(width: 24, height: 12, color: c2),
-        Container(width: 16, height: 8,  color: c1),
+        Container(width: 10.0 * scale, height: h1, color: c1),
+        Container(width: 14.0 * scale, height: h2, color: c2),
+        Container(width: 20.0 * scale, height: h3, color: c2),
+        Container(width: 14.0 * scale, height: h2, color: c2),
+        Container(width: 10.0 * scale, height: h1, color: c1),
       ],
     );
   }
