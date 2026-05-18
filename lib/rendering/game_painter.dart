@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'character_renderer.dart';
 import '../entities/villager_entity.dart';
@@ -74,10 +73,6 @@ final _pGhostBorder = Paint()..style = PaintingStyle.stroke..strokeWidth = 2..is
 final _pRain = Paint()
   ..strokeWidth = 1.0
   ..isAntiAlias = false;
-
-// Sis paint havuzu
-final _pFogBase = Paint()..isAntiAlias = false;
-final _pFogWisp = Paint()..isAntiAlias = false;
 
 // Gölgeler — karakter/ağaç için yumuşak eliptik, bina için diamond.
 // Bina gölgesi MaskFilter ile hafif blur (yükseklik hissi).
@@ -595,26 +590,7 @@ class VillageGamePainter extends CustomPainter {
 
     // ── Ekran uzayı efektleri (zoom'dan etkilenmez) ──────────────────────────
     _drawDayNightOverlay(canvas, size);
-    _drawFog(canvas, size);
     _drawRain(canvas, size);
-    _drawVignette(canvas, size);
-  }
-
-  // Ekran kenarlarında radial koyu gradient — merkez net, kenarlar koyu.
-  // Klasik post-process: derinlik hissi + dikkat odağı + cinematic ton.
-  void _drawVignette(Canvas canvas, Size size) {
-    final cx = size.width  / 2;
-    final cy = size.height / 2;
-    final shader = ui.Gradient.radial(
-      Offset(cx, cy),
-      size.shortestSide * 0.85,
-      const [Color(0x00000000), Color(0x33000000), Color(0x66000000)],
-      const [0.50, 0.85, 1.0],
-    );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      Paint()..shader = shader,
-    );
   }
 
   // ── Görünür dünya-koordinat sınırları (zoom'a göre) ───────────────────────
@@ -1027,37 +1003,6 @@ class VillageGamePainter extends CustomPainter {
     if (sceneOverlay.alpha == 0) return;
     _pOverlay.color = sceneOverlay;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _pOverlay);
-  }
-
-  // ── Sis ───────────────────────────────────────────────────────────────────
-  // Yağmur + alacakaranlık kombinasyonunda ekran altında yumuşak sis.
-  // Bant rect'leri sin ile drift eder — atmosferik canlılık.
-
-  void _drawFog(Canvas canvas, Size size) {
-    final twilight  = (1.0 - dayLight).clamp(0.0, 1.0);
-    final intensity = (rainIntensity * 0.7 + twilight * 0.15).clamp(0.0, 0.85);
-    if (intensity < 0.05) return;
-
-    // Taban katman — bottom %45 hafif beyazımtırak
-    final baseAlpha = (intensity * 38).toInt().clamp(0, 38);
-    _pFogBase.color = Color.fromARGB(baseAlpha, 232, 236, 244);
-    canvas.drawRect(
-      Rect.fromLTWH(0, size.height * 0.55, size.width, size.height * 0.45),
-      _pFogBase,
-    );
-
-    // Drift wisp bantları — sin ile yatay konum salınımı
-    for (int i = 0; i < 2; i++) {
-      final yBase = size.height * (0.62 + i * 0.16);
-      final speed = 0.05 + i * 0.03;
-      final shift = sin(time * speed + i * 1.3) * 22.0;
-      final alpha = (intensity * 50).toInt().clamp(0, 50);
-      _pFogWisp.color = Color.fromARGB(alpha, 240, 240, 248);
-      canvas.drawRect(
-        Rect.fromLTWH(0, yBase + shift, size.width, 18.0 + i * 8.0),
-        _pFogWisp,
-      );
-    }
   }
 
   // ── Yağmur ────────────────────────────────────────────────────────────────
