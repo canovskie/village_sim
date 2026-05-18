@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze *)",
+      "Bash(flutter build *)",
+      "Bash(flutter run *)",
+      "Bash(pkill -f \"flutter\")",
+      "Bash(head -361 /Users/cankaynar/Desktop/FlutterProj/village_sim/lib/buildings/building_renderer.dart)",
+      "Read(//tmp/**)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(python3 *)",
+      "Read(//Users/cankaynar/Desktop/**)",
+      "Bash(ls /Users/cankaynar/Desktop/FlutterProj/village_sim/README*)",
+      "Bash(open *)",
+      "Bash(cp \"/Users/cankaynar/Desktop/Medieval assets/Nature/lotus_0.png\" /Users/cankaynar/Desktop/FlutterProj/village_sim/assets/nature/)",
+      "Bash(cp \"/Users/cankaynar/Desktop/Medieval assets/Nature/lotus_1.png\" /Users/cankaynar/Desktop/FlutterProj/village_sim/assets/nature/)",
+      "Bash(cp \"/Users/cankaynar/Desktop/Medieval assets/Nature/reeds.png\" /Users/cankaynar/Desktop/FlutterProj/village_sim/assets/nature/)",
+      "Bash(xargs ls *)",
+      "Bash(mv \"/Users/cankaynar/Desktop/FlutterProj/village_sim/assets/buildings/warehouse.png/warehouse.png\" \"/tmp/warehouse.tmp.png\")",
+      "Bash(mv \"/tmp/warehouse.tmp.png\" \"/Users/cankaynar/Desktop/FlutterProj/village_sim/assets/buildings/warehouse.png\")",
+      "Bash(find /Users/cankaynar/Desktop/FlutterProj/village_sim/lib -name \"*.dart\" -type f -exec wc -l {} +)",
+      "Bash(file *)",
+      "Bash(find lib *)",
+      "Bash(awk '{sum+=$1} END {print \"Toplam satır sayısı:\", sum}')",
+      "Bash(cp /tmp/new_buildings/lumberjack.png \"/Users/cankaynar/Desktop/FlutterProj/village_sim/assets/buildings/lumberjack.png\")",
+      "Bash(cp /tmp/new_buildings/mine.png \"/Users/cankaynar/Desktop/FlutterProj/village_sim/assets/buildings/mine.png\")",
+      "Bash(flutter --version)",
+      "Bash(flutter test *)"
+    ]
+  }
+}
