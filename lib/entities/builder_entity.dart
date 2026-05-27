@@ -21,10 +21,9 @@ class BuilderEntity extends WorkerEntity {
   double get speed => kBuilderSpeed;
   static const double wanderSpeed = kBuilderWanderSpeed;
 
-  BuilderEntity({required double startCol, required double startRow})
+  BuilderEntity({required super.startCol, required super.startRow})
       : _wanderTargetCol = startCol.round(),
-        _wanderTargetRow = startRow.round(),
-        super(startCol: startCol, startRow: startRow);
+        _wanderTargetRow = startRow.round();
 
   void update(double dt, List<BuildOrder> orders, List<BuildingEntity> buildings, Random rng,
       {Set<(int, int)> waterTiles    = const {},

@@ -31,6 +31,11 @@ class GameHUD extends StatelessWidget {
   final int buildingCount;
   final int pendingOrderCount;
 
+  // Köy sağlığı
+  final double morale;     // 0..1
+  final bool   lowWater;   // dolu bir evin su deposu kritik seviyede mi
+  final bool   starving;   // yiyecek stoğu kritik — açlık başladı
+
   // Diğer
   final VoidCallback onNewMap;
 
@@ -54,8 +59,18 @@ class GameHUD extends StatelessWidget {
     required this.dayLight,
     required this.buildingCount,
     required this.pendingOrderCount,
+    required this.morale,
+    required this.lowWater,
+    required this.starving,
     required this.onNewMap,
   });
+
+  /// Moral rengi — yeşil (mutlu) → sarı → kırmızı (mutsuz).
+  Color get _moraleColor => morale >= 0.6
+      ? MedievalTheme.successColor
+      : morale >= 0.4
+          ? const Color(0xFFDDBB44)
+          : MedievalTheme.dangerColor;
 
   String get _clockText {
     final hours = (timeOfDay * 24).floor() % 24;
@@ -103,6 +118,38 @@ class GameHUD extends StatelessWidget {
                     const SizedBox(width: 6),
                     _HudChip(icon: '♟', value: '$_totalPop', color: MedievalTheme.textPrimary),
                     const SizedBox(width: 5),
+                    Tooltip(
+                      message: 'Köy morali — kuyu/taverna yükseltir, '
+                          'susuz evler düşürür',
+                      child: _HudChip(
+                        icon: '♥',
+                        value: '${(morale * 100).round()}%',
+                        color: _moraleColor,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    if (lowWater) ...[
+                      Tooltip(
+                        message: 'Evlerin su deposu boşalıyor — kuyu yapın',
+                        child: _HudChip(
+                          icon: '💧',
+                          value: 'Susuz!',
+                          color: MedievalTheme.dangerColor,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                    ],
+                    if (starving) ...[
+                      Tooltip(
+                        message: 'Yiyecek tükeniyor — tarla/balıkçı üretimi artırın',
+                        child: _HudChip(
+                          icon: '🍞',
+                          value: 'Açlık!',
+                          color: MedievalTheme.dangerColor,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                    ],
                     if (farmerCount > 0)
                       _MiniStat('⚘', farmerCount, const Color(0xFF88CC44)),
                     if (woodcutterCount > 0)

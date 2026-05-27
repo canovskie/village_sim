@@ -35,7 +35,9 @@ void processHayPiles(List<HayEntity> hayEntities) {
       final cx = tileC + (slot == 0 ? 0.0 : 0.58);
       final cy = tileR + (slot == 0 ? 0.0 : 0.42);
 
-      for (final p in cluster) p.isDelivered = true;
+      for (final p in cluster) {
+        p.isDelivered = true;
+      }
       hayEntities.add(HayEntity(type: HayType.bale, gridX: cx, gridY: cy));
       break; // Bir tick'te bir cluster yeter — sonraki tick'te diğeri.
     }

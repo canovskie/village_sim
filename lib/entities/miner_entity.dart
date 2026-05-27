@@ -17,8 +17,7 @@ class MinerEntity extends WorkerEntity {
   double   lastHarvestX = 0;
   double   lastHarvestY = 0;
 
-  MinerEntity({required double startCol, required double startRow})
-      : super(startCol: startCol, startRow: startRow);
+  MinerEntity({required super.startCol, required super.startRow});
 
   @override
   double get speed => kMinerSpeed;
@@ -73,8 +72,10 @@ class MinerEntity extends WorkerEntity {
         }
     }
 
-    final moving = state == MinerState.walkingToMine;
-    walkPhase += dt * (moving ? speed * 5.5 : 1.2);
+    // isWalking → moveIntensity (smoothMotion) → idle↔yürüyüş animasyon karışımı.
+    // Set edilmezse moveIntensity 0'da kalır ve madenci yürürken kayar.
+    isWalking = state == MinerState.walkingToMine;
+    walkPhase += dt * (isWalking ? speed * 5.5 : 1.2);
     walkPhase %= pi * 2;
   }
 

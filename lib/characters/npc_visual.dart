@@ -14,9 +14,6 @@ class NpcVisual {
   /// Kıyafet için ince ton kayması (-1..+1).  Renderer baz kıyafet renginin
   /// üzerine bu kadar ton oynatır → her NPC kıyafeti hafif farklı.
   final double clothingShift;
-  /// Boy varyasyonu (0.92..1.08 çarpan).  Spritedeki tüm yükseklikleri
-  /// (kafa konumu, gövde uzunluğu) ölçekler.
-  final double heightScale;
   /// Blink fazı (0..2π) — göz kapama animasyonu için per-NPC offset.
   final double blinkPhase;
   /// Cinsiyete bağlı saç stili kararı için saklanır (sakal kararı, vb).
@@ -30,10 +27,37 @@ class NpcVisual {
     required this.hasBeard,
     required this.beardStyle,
     required this.clothingShift,
-    required this.heightScale,
     required this.blinkPhase,
     required this.isMale,
   });
+
+  NpcVisual copyWith({
+    Color? skin,
+    Color? hair,
+    HairStyle? hairStyle,
+    Color? eyes,
+    bool? hasBeard,
+    BeardStyle? beardStyle,
+    double? clothingShift,
+    double? blinkPhase,
+    bool? isMale,
+  }) =>
+      NpcVisual(
+        skin: skin ?? this.skin,
+        hair: hair ?? this.hair,
+        hairStyle: hairStyle ?? this.hairStyle,
+        eyes: eyes ?? this.eyes,
+        hasBeard: hasBeard ?? this.hasBeard,
+        beardStyle: beardStyle ?? this.beardStyle,
+        clothingShift: clothingShift ?? this.clothingShift,
+        blinkPhase: blinkPhase ?? this.blinkPhase,
+        isMale: isMale ?? this.isMale,
+      );
+
+  /// Yaşlı varyantı — saç/sakal kıra döner. Sprite ölçeği [LifeStage] ile
+  /// ayrıca küçültülür; bu yalnızca renk değişimi.
+  NpcVisual elderly() =>
+      copyWith(hair: Color.lerp(hair, const Color(0xFFDAD8D0), 0.72)!);
 
   factory NpcVisual.fromSeed(int seed) {
     final r       = Random(seed);
@@ -76,7 +100,6 @@ class NpcVisual {
       hasBeard:      hasBeard,
       beardStyle:    beardStyle,
       clothingShift: (r.nextDouble() * 2 - 1) * 0.18,
-      heightScale:   0.92 + r.nextDouble() * 0.16,
       blinkPhase:    r.nextDouble() * 2 * pi,
       isMale:        isMale,
     );

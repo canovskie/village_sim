@@ -155,8 +155,8 @@ class MineRenderer {
     final botRight = Offset(px + hw,  py  + hh);
     final botFront = Offset(px,       py  + hh * 2);
 
-    Paint _f(Color c) => Paint()..color = c..isAntiAlias = false;
-    Paint _s(Color c) => Paint()
+    Paint fill(Color c) => Paint()..color = c..isAntiAlias = false;
+    Paint stroke(Color c) => Paint()
       ..color = c..style = PaintingStyle.stroke
       ..strokeWidth = 1..isAntiAlias = false;
 
@@ -167,8 +167,8 @@ class MineRenderer {
       ..lineTo(botLeft.dx,  botLeft.dy)
       ..lineTo(px,          py)
       ..close();
-    canvas.drawPath(leftFace, _f(leftCol));
-    canvas.drawPath(leftFace, _s(const Color(0xFF1A1A1A)));
+    canvas.drawPath(leftFace, fill(leftCol));
+    canvas.drawPath(leftFace, stroke(const Color(0xFF1A1A1A)));
 
     // Sağ yüz
     final rightFace = Path()
@@ -177,8 +177,8 @@ class MineRenderer {
       ..lineTo(botRight.dx, botRight.dy)
       ..lineTo(px,          py)
       ..close();
-    canvas.drawPath(rightFace, _f(rightCol));
-    canvas.drawPath(rightFace, _s(const Color(0xFF1A1A1A)));
+    canvas.drawPath(rightFace, fill(rightCol));
+    canvas.drawPath(rightFace, stroke(const Color(0xFF1A1A1A)));
 
     // Ön yüz (sol-alt)
     final frontFace = Path()
@@ -187,7 +187,7 @@ class MineRenderer {
       ..lineTo(botFront.dx, botFront.dy)
       ..lineTo(botLeft.dx,  botLeft.dy)
       ..close();
-    canvas.drawPath(frontFace, _f(leftCol));
+    canvas.drawPath(frontFace, fill(leftCol));
 
     // Ön yüz (sağ-alt)
     final frontFaceR = Path()
@@ -196,7 +196,7 @@ class MineRenderer {
       ..lineTo(botFront.dx, botFront.dy)
       ..lineTo(botRight.dx, botRight.dy)
       ..close();
-    canvas.drawPath(frontFaceR, _f(rightCol));
+    canvas.drawPath(frontFaceR, fill(rightCol));
 
     // Üst yüz
     final topFace = Path()
@@ -205,8 +205,8 @@ class MineRenderer {
       ..lineTo(topFront.dx, topFront.dy)
       ..lineTo(topLeft.dx,  topLeft.dy)
       ..close();
-    canvas.drawPath(topFace, _f(topCol));
-    canvas.drawPath(topFace, _s(const Color(0xFF2A2A2A)));
+    canvas.drawPath(topFace, fill(topCol));
+    canvas.drawPath(topFace, stroke(const Color(0xFF2A2A2A)));
 
     // ── Damar/maden işareti (üst yüzde) ───────────────────────────────────
     // Her düğümün seed'ine göre 2-3 rastgele damar çizgisi

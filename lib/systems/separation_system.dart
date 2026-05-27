@@ -49,7 +49,7 @@ void applySeparation({
   // Bucket grid: tile-bazlı (1×1 tile bucket).
   final buckets = <(int, int), List<int>>{};
   for (int i = 0; i < entities.length; i++) {
-    final (x, y, _, __) = entities[i];
+    final (x, y, _, _) = entities[i];
     final key = (x.floor(), y.floor());
     (buckets[key] ??= []).add(i);
   }
@@ -69,7 +69,7 @@ void applySeparation({
         if (neighbors == null) continue;
         for (final j in neighbors) {
           if (i == j) continue;
-          final (xj, yj, _, __) = entities[j];
+          final (xj, yj, _, _) = entities[j];
           final dx   = xi - xj;
           final dy   = yi - yj;
           final dist = sqrt(dx * dx + dy * dy);

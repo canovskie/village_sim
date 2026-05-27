@@ -29,10 +29,6 @@ abstract class WorkerEntity {
   /// Walking ↔ idle animasyonu arasında smooth blend için kullanılır.
   double moveIntensity = 0.0;
 
-  /// İstenen yön (facingRight'ın smooth versiyonu). 0..1: 0=sola, 1=sağa.
-  /// Flip anında zıplamasın diye lerp; gövde dönüşü smooth gözükür.
-  double facingSmooth = 1.0;
-
   /// İlk doğum koordinatı — varsayılan dolaşma merkezi.
   final double spawnCol;
   final double spawnRow;
@@ -50,11 +46,10 @@ abstract class WorkerEntity {
         spawnCol = startCol,
         spawnRow = startRow;
 
-  /// Her tick ana loop çağırır.  Render pozisyonu, hareket yoğunluğu ve
-  /// dönüş smoothingini günceller.
+  /// Her tick ana loop çağırır.  Render pozisyonu ve hareket yoğunluğunu
+  /// günceller.
   /// - Render exp-smoothing: ~0.15 sn'de gridX/Y'ye yetişir
   /// - moveIntensity: 0.20 sn'de isWalking'e yetişir
-  /// - facingSmooth: 0.10 sn'de facingRight'a yetişir (gövde dönüşü)
   void smoothMotion(double dt) {
     final kPos  = 1 - exp(-dt * 14.0);
     renderX += (gridX - renderX) * kPos;
@@ -63,10 +58,6 @@ abstract class WorkerEntity {
     final targetIntensity = isWalking ? 1.0 : 0.0;
     final kInt = 1 - exp(-dt * 8.0);
     moveIntensity += (targetIntensity - moveIntensity) * kInt;
-
-    final targetFacing = facingRight ? 1.0 : 0.0;
-    final kFace = 1 - exp(-dt * 16.0);
-    facingSmooth += (targetFacing - facingSmooth) * kFace;
   }
 
   double get depth => gridX + gridY;

@@ -29,6 +29,8 @@ void assignCarriers({
 
   for (final v in villagers) {
     if (v.state != VillagerState.idle) continue;
+    // Çocuklar çalışmaz — yalnızca oyun oynar.
+    if (v.isChild) continue;
     // Çiftçiler odun/maden kutusu taşımaz — sadece saman/balya taşır.
     final isFarmer = v.type == VillagerType.farmer;
 
@@ -95,8 +97,10 @@ void assignCarriers({
           onDelivered: () {
             bale.isDelivered = true;
             hayEntities.remove(bale);
-            // Bir balya = bir birim yiyecek (4 hay pile'dan oluşur).
-            stockpile.food += 1;
+            // Bir balya = bir birim yiyecek (4 hay pile'dan oluşur). Çalışan
+            // değirmen varsa öğütülüp +1 fazla yiyecek verir.
+            final hasMill = buildings.any((b) => b.type == BuildingType.mill);
+            stockpile.food += hasMill ? 2 : 1;
           },
         );
       }

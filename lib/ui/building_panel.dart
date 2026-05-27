@@ -75,18 +75,26 @@ class BuildingPanel extends StatelessWidget {
                                 )),
                       ),
                       const SizedBox(height: 2),
-                      Text(meta.label,
-                          textAlign: TextAlign.center,
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                          style: TextStyle(
-                            color: canAfford
-                                ? (isSelected ? MedievalTheme.textAccent : MedievalTheme.textPrimary)
-                                : MedievalTheme.textDim,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                          )),
+                      // Sabit yükseklikli 2 satır — uzun isimler kesilmek yerine
+                      // sarar ("Balıkçı Kulübesi" vb.) ve tüm hücreler hizalı kalır.
+                      SizedBox(
+                        height: 20,
+                        child: Center(
+                          child: Text(meta.label,
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                              style: TextStyle(
+                                color: canAfford
+                                    ? (isSelected ? MedievalTheme.textAccent : MedievalTheme.textPrimary)
+                                    : MedievalTheme.textDim,
+                                fontSize: 8,
+                                height: 1.15,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                              )),
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       _CostStrip(cost: meta.cost, stockpile: stockpile),
                     ],

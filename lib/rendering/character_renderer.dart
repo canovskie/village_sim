@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../characters/villager_type.dart';
 import '../characters/npc_visual.dart';
+import '../characters/life_stage.dart';
 import 'tool_renderer.dart';
 
 // ─── ANİMASYON ────────────────────────────────────────────────────────────────
@@ -77,28 +78,50 @@ class CharacterRenderer {
     bool torch = false,
     NpcVisual? visual,
     double time = 0,
+    LifeStage stage = LifeStage.adult,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
     final anim = _Anim.compute(walkPhase, moveIntensity, carrying: carrying);
-    switch (type) {
-      case VillagerType.farmer:
-        visual != null ? _farmerNpc(canvas, anim, visual, time)
-                       : _farmer(canvas, anim);
-      case VillagerType.merchant:   _merchant(canvas, anim);
-      case VillagerType.blacksmith: _blacksmith(canvas, anim);
-      case VillagerType.guard:      _guard(canvas, anim);
-      case VillagerType.mage:       _mage(canvas, anim);
-      case VillagerType.miner:      _miner(canvas, anim);
-      case VillagerType.fisher:     _fisherIdle(canvas, anim);
+
+    // Çocuk/genç henüz meslek edinmemiş → standart köylü görünümü, tipten
+    // bağımsız. Yetişkin/yaşlı meslek görünür; yaşlıda saç kıra döner.
+    if (visual != null && !stage.hasProfession) {
+      _peasantNpc(canvas, anim, visual, time, child: stage == LifeStage.child);
+    } else {
+      final v = (visual != null && stage == LifeStage.elder)
+          ? visual.elderly()
+          : visual;
+      switch (type) {
+        case VillagerType.farmer:
+          v != null ? _farmerNpc(canvas, anim, v, time)
+                    : _farmer(canvas, anim);
+        case VillagerType.merchant:
+          v != null ? _merchantNpc(canvas, anim, v, time)
+                    : _merchant(canvas, anim);
+        case VillagerType.blacksmith:
+          v != null ? _blacksmithNpc(canvas, anim, v, time)
+                    : _blacksmith(canvas, anim);
+        case VillagerType.guard:
+          v != null ? _guardNpc(canvas, anim, v, time)
+                    : _guard(canvas, anim);
+        case VillagerType.mage:
+          v != null ? _mageNpc(canvas, anim, v, time)
+                    : _mage(canvas, anim);
+        case VillagerType.miner:
+          v != null ? _minerNpc(canvas, anim, v, time)
+                    : _miner(canvas, anim);
+        case VillagerType.fisher:
+          v != null ? _fisherNpc(canvas, anim, v, time)
+                    : _fisherIdle(canvas, anim);
+      }
     }
 
     // Gece yürüyüşünde torch — sağ kola yapıştırılır, kol açısıyla sallanır.
-    // shoulderX 15: ortalama (farmer/merchant/miner/fisher 15-16; daha büyük
-    // tipler 18-20 ama küçük sapma kabul edilebilir).
+    // Omuz x'i tipe göre alınır → torch farklı gövde genişliklerinde de ele oturur.
     if (torch) {
       canvas.save();
-      canvas.translate(15, -68);  // sağ omuz pivotu
+      canvas.translate(_rightShoulderX(type), -68);  // sağ omuz pivotu
       canvas.rotate(anim.armR);   // kol açısı
       ToolRenderer.drawTorch(canvas);
       canvas.restore();
@@ -179,6 +202,7 @@ class CharacterRenderer {
     double moveIntensity = 0.0,
     bool   harvesting    = false,
     double harvestPhase  = 0,
+    bool   carryingWater = false,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
@@ -199,7 +223,7 @@ class CharacterRenderer {
       anim = _Anim.compute(walkPhase, moveIntensity);
     }
 
-    _farmer(canvas, anim);
+    _farmer(canvas, anim, carryingWater: carryingWater);
     canvas.restore();
   }
 
@@ -276,12 +300,13 @@ class CharacterRenderer {
   }
 
   /// Animasyonlu bacak: hip pivot (hipX, −36).
+  /// Bacak + bot tam olarak yere (origin y=0) ulaşır; gölge orada çizilir.
   static void _leg(Canvas c, double hipX, double angle, Color hose, Color boot) {
     c.save();
     c.translate(hipX, -36);
     c.rotate(angle);
-    c.drawRect(const Rect.fromLTWH(-4, 0, 8, 22), _f(hose));
-    c.drawRect(const Rect.fromLTWH(-5, 19, 10, 7), _f(boot));
+    c.drawRect(const Rect.fromLTWH(-4, 0, 8, 32), _f(hose));
+    c.drawRect(const Rect.fromLTWH(-5, 29, 10, 7), _f(boot));
     c.restore();
   }
 
@@ -296,6 +321,18 @@ class CharacterRenderer {
     c.restore();
   }
 
+  /// Tipe göre sağ omuz x'i — torch/alet bağlama pivotu için.
+  /// Render fonksiyonlarındaki sağ kol shoulderX değerleriyle aynı tutulmalı.
+  static double _rightShoulderX(VillagerType t) => switch (t) {
+        VillagerType.guard      => 20,
+        VillagerType.blacksmith => 18,
+        VillagerType.mage       => 18,
+        VillagerType.merchant   => 16,
+        VillagerType.miner      => 16,
+        VillagerType.farmer     => 15,
+        VillagerType.fisher     => 15,
+      };
+
   /// Tunik gövde + kemer.
   static void _tunic(Canvas c, Color col, Color shade) {
     c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(col));
@@ -308,7 +345,7 @@ class CharacterRenderer {
   }
 
   // ─── 1. ÇIFTÇI ────────────────────────────────────────────────────────────
-  static void _farmer(Canvas c, _Anim anim) {
+  static void _farmer(Canvas c, _Anim anim, {bool carryingWater = false}) {
     _shadow(c);
     _leg(c, -6, anim.legL, _woolBrown, _leatherDk);
     _leg(c,  6, anim.legR, _woolBrown, _leatherDk);
@@ -316,8 +353,9 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
     _tunic(c, _linen, _woolBrown);
     _arm(c, -15, anim.armL, _linen);
-    // İdle pozda alet elinde değil — aktif çiftçi ayrı (drawFarmer).
-    _arm(c, 15, anim.armR, _linen);
+    // Sulama turunda sağ elde su kovası; değilse boş el (idle/hasat).
+    _arm(c, 15, anim.armR, _linen,
+        carryingWater ? (a) => ToolRenderer.drawWaterbucket(a) : null);
     _head(c, _skin1);
     // Hasır şapka (yassı brim + kule)
     c.drawRect(const Rect.fromLTWH(-17, -98, 34, 8), _f(_straw));
@@ -767,13 +805,14 @@ class CharacterRenderer {
   }
 
   /// Shaded leg — hip pivot rotation + 3-tone hose + boot.
+  /// Bacak + bot tam olarak yere (origin y=0) ulaşır; gölge orada çizilir.
   static void _shadedLeg(Canvas c, double hipX, double angle,
       Color hose, Color boot) {
     c.save();
     c.translate(hipX, -36);
     c.rotate(angle);
-    _shadedRect(c, const Rect.fromLTWH(-4, 0, 8, 22), hose);
-    _shadedRect(c, const Rect.fromLTWH(-5, 19, 10, 7), boot);
+    _shadedRect(c, const Rect.fromLTWH(-4, 0, 8, 32), hose);
+    _shadedRect(c, const Rect.fromLTWH(-5, 29, 10, 7), boot);
     c.restore();
   }
 
@@ -896,6 +935,36 @@ class CharacterRenderer {
     }
   }
 
+  // ─── KÖYLÜ (mesleksiz — çocuk/genç evresi) ────────────────────────────────
+  // Tipten bağımsız standart keten tunik + yün pantolon, alet/şapka yok.
+  // [child] true ise kafa büyük çizilir (çocuk oranı).
+  static void _peasantNpc(Canvas c, _Anim anim, NpcVisual v, double time,
+      {bool child = false}) {
+    final tunicBase = tintCloth(_linen,     v.clothingShift);
+    final hoseBase  = tintCloth(_woolBrown, v.clothingShift * 0.6);
+
+    _shadow(c);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+    _shadedTunic(c, tunicBase);
+    _shadedArm(c, -15, anim.armL, tunicBase, v.skin);
+    _shadedArm(c,  15, anim.armR, tunicBase, v.skin);
+    if (child) {
+      // Çocuk: kafayı büyüt → "küçük yetişkin" hissini kırar.
+      c.save();
+      c.translate(0, -80);
+      c.scale(1.28, 1.28);
+      _shadedHead(c, v, time, y: 0);
+      c.restore();
+    } else {
+      _shadedHead(c, v, time);
+    }
+    c.restore();
+  }
+
   // ─── ÇIFTÇI (yeni — per-NPC görsel + akıcı hareket) ───────────────────────
   static void _farmerNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
     // Kıyafet renkleri — baz + tint shift per-NPC
@@ -922,6 +991,235 @@ class CharacterRenderer {
     _shadedRect(c, const Rect.fromLTWH( -7, -110, 14, 12), hatStraw);
     c.drawRect(const Rect.fromLTWH(-7, -100, 14, 2),
         _f(const Color(0xFF6A4830)));
+    c.restore();
+  }
+
+  // ─── TÜCCAR (yeni — shaded + per-NPC görsel) ──────────────────────────────
+  static void _merchantNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+    final cloakBase = tintCloth(const Color(0xFF4A5030), v.clothingShift);
+    final hoseBase  = tintCloth(_woolDark, v.clothingShift * 0.6);
+    final hoodBase  = darker(cloakBase, 0.06);
+
+    _shadow(c);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+
+    // Pelerin (gövde)
+    _shadedRect(c, const Rect.fromLTWH(-14, -68, 28, 32), cloakBase);
+    // Yaka linen
+    _shadedRect(c, const Rect.fromLTWH(-8, -42, 16, 6), _linen);
+    // Broş
+    _shadedRect(c, const Rect.fromLTWH(-3, -66, 6, 6), const Color(0xFFB0900A));
+
+    _shadedArm(c, -16, anim.armL, cloakBase, v.skin);
+    _shadedArm(c,  16, anim.armR, cloakBase, v.skin);
+
+    // Çanta
+    _shadedRect(c, const Rect.fromLTWH(14, -50, 12, 14), _leather);
+    c.drawRect(const Rect.fromLTWH(14, -50, 12, 3), _f(_leatherDk));
+    c.drawLine(const Offset(14, -52), const Offset(8, -62), _s(_leatherDk, 1.2));
+
+    _shadedHead(c, v, time);
+
+    // Kapüşon — saç görünür kalsın diye arka katman
+    _shadedRect(c, const Rect.fromLTWH(-11, -98, 22, 14), hoodBase);
+    c.drawRect(const Rect.fromLTWH(-10, -92, 20, 8), _f(darker(hoodBase, 0.14)));
+    c.restore();
+  }
+
+  // ─── DEMIRCI (yeni — shaded + per-NPC görsel) ──────────────────────────────
+  static void _blacksmithNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+    final shirtBase = tintCloth(const Color(0xFF5A3818), v.clothingShift);
+    final hoseBase  = tintCloth(const Color(0xFF3A3028), v.clothingShift * 0.5);
+    final apronBase = _leather;
+
+    _shadow(c);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+
+    // Tunik
+    _shadedRect(c, const Rect.fromLTWH(-14, -68, 28, 32), shirtBase);
+    // Önlük (deri)
+    _shadedRect(c, const Rect.fromLTWH(-9, -66, 18, 30), apronBase);
+    // Askılar
+    c.drawLine(const Offset(-7, -66), const Offset(0, -76), _s(_leather, 2.5));
+    c.drawLine(const Offset( 7, -66), const Offset(0, -76), _s(_leather, 2.5));
+
+    _shadedArm(c, -18, anim.armL, shirtBase, v.skin);
+    _shadedArm(c,  18, anim.armR, shirtBase, v.skin);
+
+    _shadedHead(c, v, time, y: -82);
+
+    // Deri kukuleta
+    _shadedRect(c, const Rect.fromLTWH(-10, -100, 20, 14), _leather);
+    c.restore();
+  }
+
+  // ─── MUHAFIZ (yeni — shaded + per-NPC görsel) ──────────────────────────────
+  static void _guardNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+    final gambBase  = tintCloth(const Color(0xFFB8A878), v.clothingShift);
+    final hoseBase  = tintCloth(const Color(0xFF504838), v.clothingShift * 0.4);
+    final gambStripe = darker(gambBase, 0.20);
+
+    _shadow(c);
+    _shadedLeg(c, -6, anim.legL, hoseBase, const Color(0xFF303028));
+    _shadedLeg(c,  6, anim.legR, hoseBase, const Color(0xFF303028));
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+
+    // Gambeson
+    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), gambBase);
+    // Yatay dikiş çizgileri
+    for (final y in [-62.0, -55.0, -48.0, -41.0]) {
+      c.drawRect(Rect.fromLTWH(-12, y, 24, 1), _f(gambStripe));
+    }
+    // Omuz plakaları
+    _shadedRect(c, const Rect.fromLTWH(-28, -74, 16, 10), _leather);
+    _shadedRect(c, const Rect.fromLTWH( 12, -74, 16, 10), _leather);
+
+    // Sol kol + kalkan
+    _shadedArmWithShield(c, -20, anim.armL, gambBase, v.skin);
+    // Sağ kol + mızrak
+    _shadedArm(c, 20, anim.armR, gambBase, v.skin, (arm) {
+      _shadedRect(arm, const Rect.fromLTWH(3, -40, 3, 80), _woodBrown);
+      _shadedRect(arm, const Rect.fromLTWH(1, -52, 7, 12), _ironGrey);
+    });
+
+    _shadedHead(c, v, time);
+
+    // Demir miğfer — başı kaplar (saçın üstüne)
+    _shadedRect(c, const Rect.fromLTWH(-11, -100, 22, 18), _ironGrey);
+    c.drawRect(const Rect.fromLTWH(-13, -92, 26, 4), _f(_ironGrey));
+    c.drawRect(const Rect.fromLTWH( -2, -92,  4, 10), _f(_ironDk));
+    c.restore();
+  }
+
+  static void _shadedArmWithShield(Canvas c, double shoulderX, double angle,
+      Color sleeve, Color skin) {
+    c.save();
+    c.translate(shoulderX, -68);
+    c.rotate(angle);
+    _shadedRect(c, const Rect.fromLTWH(-4, 0, 8, 16), sleeve);
+    _shadedRect(c, const Rect.fromLTWH(-4, 16, 8, 6), skin);
+    // Kalkan
+    _shadedRect(c, const Rect.fromLTWH(-16, 4, 22, 22), const Color(0xFF8B4513));
+    // Merkez kabara
+    _shadedRect(c, const Rect.fromLTWH(-8, 10, 8, 8), _ironGrey);
+    c.restore();
+  }
+
+  // ─── BÜYÜCÜ (yeni — shaded + per-NPC görsel) ──────────────────────────────
+  static void _mageNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+    final robeBase = tintCloth(const Color(0xFF2A3040), v.clothingShift);
+
+    _shadow(c);
+    _shadedLeg(c, -5, anim.legL * 0.5, robeBase, _leatherDk);
+    _shadedLeg(c,  5, anim.legR * 0.5, robeBase, _leatherDk);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+
+    // Uzun kaftan
+    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 62), robeBase);
+    // Altın bordür
+    c.drawRect(const Rect.fromLTWH(-11, -52, 22, 3), _f(const Color(0xFFC8A042)));
+    c.drawRect(const Rect.fromLTWH(-11, -50, 22, 1), _f(darker(const Color(0xFFC8A042), 0.25)));
+    // Ayak ucu botları
+    _shadedRect(c, const Rect.fromLTWH(-8, -8, 5, 6), _leatherDk);
+    _shadedRect(c, const Rect.fromLTWH( 3, -8, 5, 6), _leatherDk);
+
+    _shadedArm(c, -18, anim.armL, robeBase, v.skin);
+    // Sağ kol + asa
+    _shadedArm(c, 18, anim.armR, robeBase, v.skin, (arm) {
+      _shadedRect(arm, const Rect.fromLTWH(4, -44, 3, 82), _woodBrown);
+      _shadedRect(arm, const Rect.fromLTWH(2, -48, 7, 6), _woodBrown);
+      for (final y in [-32.0, -20.0, -8.0]) {
+        arm.drawRect(Rect.fromLTWH(3, y, 8, 2), _f(const Color(0xFFC8A042)));
+      }
+    });
+
+    // Tomar
+    _shadedRect(c, const Rect.fromLTWH(-20, -50, 9, 12), _linen);
+
+    _shadedHead(c, v, time);
+
+    // Kapüşon
+    _shadedRect(c, const Rect.fromLTWH(-12, -96, 24, 14), robeBase);
+    // Sivri şapka tepe
+    _shadedRect(c, const Rect.fromLTWH(-8, -112, 16, 16), robeBase);
+    _shadedRect(c, const Rect.fromLTWH(-4, -124,  8, 12), robeBase);
+    c.restore();
+  }
+
+  // ─── MADENCI (idle, yeni — shaded + per-NPC görsel) ────────────────────────
+  static void _minerNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+    final shirtBase = tintCloth(const Color(0xFF4A4840), v.clothingShift);
+    final vestBase  = tintCloth(const Color(0xFF6A4A28), v.clothingShift * 0.6);
+    final hoseBase  = tintCloth(const Color(0xFF3A3028), v.clothingShift * 0.4);
+
+    _shadow(c);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+
+    // Gömlek
+    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), shirtBase);
+    // Deri yelek (gömleğin üstüne)
+    _shadedRect(c, const Rect.fromLTWH(-10, -67, 20, 30), vestBase);
+    // Yelek tokası
+    c.drawRect(const Rect.fromLTWH(-2, -58, 4, 14), _f(_leatherDk));
+
+    _shadedArm(c, -16, anim.armL, shirtBase, v.skin);
+    _shadedArm(c,  16, anim.armR, shirtBase, v.skin);
+
+    _shadedHead(c, v, time);
+
+    // Madenci başlığı (kafayı kaplar)
+    _shadedRect(c, const Rect.fromLTWH(-12, -96, 24,  6), const Color(0xFF2A2010));
+    _shadedRect(c, const Rect.fromLTWH( -8, -108, 16, 12), const Color(0xFF2A2010));
+    // Kask lambası
+    c.drawRect(const Rect.fromLTWH(-3, -108, 6, 4), _f(const Color(0xFFFFDD44)));
+    c.drawRect(const Rect.fromLTWH(-3, -108, 6, 1), _f(const Color(0xFFFFEE88)));
+    c.restore();
+  }
+
+  // ─── BALIKÇI (idle, yeni — shaded + per-NPC görsel) ────────────────────────
+  static void _fisherNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+    final shirtBase = tintCloth(const Color(0xFF5A7888), v.clothingShift);
+    final vestBase  = tintCloth(const Color(0xFF2A3840), v.clothingShift * 0.5);
+    final hoseBase  = tintCloth(const Color(0xFF3A5060), v.clothingShift * 0.4);
+    final hatBrim   = const Color(0xFF4A3A20);
+    final hatDome   = const Color(0xFF5A4A28);
+
+    _shadow(c);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+
+    // Gömlek
+    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 32), shirtBase);
+    // Yelek
+    _shadedRect(c, const Rect.fromLTWH(-9, -67, 18, 30), vestBase);
+
+    _shadedArm(c, -15, anim.armL, shirtBase, v.skin);
+    _shadedArm(c,  15, anim.armR, shirtBase, v.skin);
+
+    _shadedHead(c, v, time);
+
+    // Balıkçı şapkası — geniş brim + düz kubbe
+    _shadedRect(c, const Rect.fromLTWH(-14, -98, 28, 6), hatBrim);
+    _shadedRect(c, const Rect.fromLTWH( -8, -110, 16, 12), hatDome);
     c.restore();
   }
 

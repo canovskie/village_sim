@@ -131,8 +131,9 @@ class DayNightCycle {
       rgb = const Color(0xFF000000); // gündüz — nötr
     }
 
-    final base = Color.fromARGB((darkA * 255).round().clamp(0, 255),
-        rgb.red, rgb.green, rgb.blue);
+    final base = Color.fromARGB(
+        (darkA * 255).round().clamp(0, 255),
+        (rgb.r * 255).round(), (rgb.g * 255).round(), (rgb.b * 255).round());
 
     if (rainIntensity <= 0) return base;
     final rainA = (rainIntensity * 0.22 * 255).round().clamp(0, 255);

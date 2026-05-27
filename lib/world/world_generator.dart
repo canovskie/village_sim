@@ -98,7 +98,9 @@ class WorldGenerator {
     final result = <LotusEntity>[];
     for (final (c, r) in water) {
       if (!water.contains((c - 1, r)) || !water.contains((c + 1, r)) ||
-          !water.contains((c, r - 1)) || !water.contains((c, r + 1))) continue;
+          !water.contains((c, r - 1)) || !water.contains((c, r + 1))) {
+        continue;
+      }
       if (_rng.nextDouble() < 0.12) {
         result.add(LotusEntity(col: c, row: r, variant: _rng.nextInt(2)));
       }
@@ -262,7 +264,9 @@ class WorldGenerator {
           if (occupied.contains((c, r)) ||
               water.contains((c, r)) ||
               treeTiles.contains((c, r)) ||
-              _inSafe(c, r, margin: 2)) ok = false;
+              _inSafe(c, r, margin: 2)) {
+            ok = false;
+          }
         }
       }
       if (!ok) continue;

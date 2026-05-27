@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'character_renderer.dart';
 import '../entities/villager_entity.dart';
+import '../characters/life_stage.dart';
 import '../entities/builder_entity.dart';
 import '../entities/build_order.dart';
 import '../core/constants.dart';
@@ -65,6 +66,20 @@ final _pMapBorder = Paint()
   ..color = const Color(0xFF1E4820)..style = PaintingStyle.stroke
   ..strokeWidth = 2..isAntiAlias = false;
 
+// Kıyı sisi — kara kenarı boyunca yumuşak karanlık hale. Adanın keskin
+// kesimini gece atmosferine eritir (sert siyah çizgi yerine yumuşak geçiş).
+final _pEdgeMist = Paint()
+  ..color = const Color(0x520A1018)..style = PaintingStyle.stroke
+  ..strokeWidth = 20
+  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+  ..isAntiAlias = true;
+
+// Gece ateş böcekleri — yumuşak hale + parlak çekirdek. Alpha her frame değişir.
+final _pFireflyGlow = Paint()
+  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4)
+  ..isAntiAlias = true;
+final _pFireflyCore = Paint()..isAntiAlias = true;
+
 // Ghost
 final _pGhostFill   = Paint()..isAntiAlias = false;
 final _pGhostBorder = Paint()..style = PaintingStyle.stroke..strokeWidth = 2..isAntiAlias = false;
@@ -83,10 +98,14 @@ final _pBuildingShadow = Paint()
   ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
 
 /// Karakterin ayağı altında ince yatay elips. (sx, sy) = feet pozisyonu
-/// (her character drawable'da gridToScreen sonucu).
-void _drawCharShadow(Canvas canvas, double sx, double sy) {
+/// (her character drawable'da gridToScreen sonucu). [scale] karakterin
+/// efektif çizim ölçeği (kCharScale × yaşam-evresi) — gölge boyu onunla orantılı.
+void _drawCharShadow(Canvas canvas, double sx, double sy,
+    [double scale = kCharScale]) {
+  final w = 34 * scale;
+  final h = w * 0.34;
   canvas.drawOval(
-    Rect.fromCenter(center: Offset(sx, sy + 2), width: 20, height: 7),
+    Rect.fromCenter(center: Offset(sx, sy + 1), width: w, height: h),
     _pShadow,
   );
 }
@@ -154,8 +173,9 @@ class _VillagerDrawable extends _Drawable {
 
     final s = gridToScreen(e.renderX, e.renderY, size, camera);
 
-    // Gölge — ayak altında, torch glow'un da altında
-    _drawCharShadow(canvas, s.dx, s.dy);
+    // Gölge — ayak altında, torch glow'un da altında.  Boyut karakter
+    // ölçeğiyle (yaşam-evresi dahil) orantılı.
+    _drawCharShadow(canvas, s.dx, s.dy, kCharScale * e.lifeStage.renderScale);
 
     // Draw torch glow BEFORE character (lower layer)
     final isWalkingAtNight = e.isWalking && dayLight < 0.4;
@@ -166,9 +186,10 @@ class _VillagerDrawable extends _Drawable {
 
     if (e.isSleeping && !e.isInsideBuilding) {
       // Yatay uyku pozu — yastık + battaniye + kapalı göz, hafif breath.
+      final sleepScale = kCharScale * e.lifeStage.renderScale;
       canvas.save();
       canvas.translate(s.dx, s.dy);
-      canvas.scale(kCharScale, kCharScale);
+      canvas.scale(sleepScale, sleepScale);
       CharacterRenderer.drawSleeping(canvas, e.type,
           walkPhase: e.walkPhase,
           flipX: !e.facingRight);
@@ -177,9 +198,11 @@ class _VillagerDrawable extends _Drawable {
       return;
     }
 
+    // Yaşam evresine göre boy ölçeği — çocuk küçük, yetişkin tam, yaşlı hafif.
+    final charScale = kCharScale * e.lifeStage.renderScale;
     canvas.save();
     canvas.translate(s.dx, s.dy);
-    canvas.scale(kCharScale, kCharScale);
+    canvas.scale(charScale, charScale);
     CharacterRenderer.draw(canvas, e.type,
         flipX:         !e.facingRight,
         walkPhase:     e.walkPhase,
@@ -187,7 +210,8 @@ class _VillagerDrawable extends _Drawable {
         carrying:      e.isCarrying && e.carriedItem != null,
         torch:         isWalkingAtNight,
         visual:        e.visual,
-        time:          time);
+        time:          time,
+        stage:         e.lifeStage);
     canvas.restore();
 
     // Draw carried item above the villager
@@ -274,7 +298,8 @@ class _FarmerDrawable extends _Drawable {
         walkPhase:     f.walkPhase,
         moveIntensity: f.moveIntensity,
         harvesting:    f.state == FarmerState.harvesting,
-        harvestPhase:  f.harvestPhase);
+        harvestPhase:  f.harvestPhase,
+        carryingWater: f.isHandlingWater);
     canvas.restore();
   }
 }
@@ -408,7 +433,10 @@ class _BuildingDrawable extends _Drawable {
   final double time;
   final double dayLight;
   _BuildingDrawable(this.b, this.time, this.dayLight);
-  @override double get depth => b.depth;
+  // Sıralama derinliği = footprint MERKEZİ (ön köşe değil).  Böylece binanın
+  // önünde duran karakterler (merkezden öne) sprite'ın üstünde çizilir;
+  // yalnızca gerçekten arkada kalanlar (merkezden geride) altta kalır.
+  @override double get depth => b.col + b.row + (b.cols + b.rows) / 2;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final corners = _corners(b.col, b.row, b.cols, b.rows, size, camera);
@@ -426,7 +454,7 @@ class _ScaffoldDrawable extends _Drawable {
   @override
   double get depth {
     final m = kBuildingMeta[order.type]!;
-    return (order.col + m.cols + order.row + m.rows).toDouble();
+    return order.col + order.row + (m.cols + m.rows) / 2;
   }
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
@@ -590,7 +618,47 @@ class VillageGamePainter extends CustomPainter {
 
     // ── Ekran uzayı efektleri (zoom'dan etkilenmez) ──────────────────────────
     _drawDayNightOverlay(canvas, size);
+    _drawFireflies(canvas, size);
     _drawRain(canvas, size);
+  }
+
+  /// Dünya (grid) noktasını, paint()'teki zoom dönüşümüyle aynı biçimde ekran
+  /// koordinatına çevirir. Gece overlay'inin ÜSTÜNE çizilen efektler için.
+  Offset _worldToScreen(double gx, double gy, Size size) {
+    final s  = gridToScreen(gx, gy, size, camera);
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    return Offset(cx + (s.dx - cx) * zoom, cy + (s.dy - cy) * zoom);
+  }
+
+  // ── Gece ateş böcekleri ─────────────────────────────────────────────────────
+  // Geceleri kara üzerinde yavaşça süzülen, parıldayan sıcak ışık noktaları.
+  // Prosedürel (durumsuz): konum index + time'dan türer. Overlay sonrası çizilir
+  // ki parlasın; gündüz/yağmurda görünmez.
+  void _drawFireflies(Canvas canvas, Size size) {
+    final strength = ((0.42 - dayLight) / 0.42).clamp(0.0, 1.0);
+    if (strength <= 0.01 || rainIntensity > 0.3) return;
+    const count = 38;
+    for (int i = 0; i < count; i++) {
+      final h     = i * 73856093;
+      final baseC = (h % 1000) / 1000.0 * kCols;
+      final baseR = ((h ~/ 1000) % 1000) / 1000.0 * kRows;
+      final gx    = baseC + sin(time * 0.18 + i * 1.3) * 1.4;
+      final gy    = baseR + cos(time * 0.15 + i * 2.1) * 1.1;
+      final p     = _worldToScreen(gx, gy, size);
+      if (p.dx < -20 || p.dx > size.width + 20 ||
+          p.dy < -20 || p.dy > size.height + 20) {
+        continue;
+      }
+      final tw = sin(time * 2.3 + i * 4.7) * 0.5 + 0.5; // 0..1 parıltı
+      final a  = (strength * tw * tw * 205).round().clamp(0, 220);
+      if (a < 8) continue;
+      final r = (1.6 + tw * 1.4) * zoom;
+      _pFireflyGlow.color = Color.fromARGB((a * 0.45).round(), 0xC8, 0xFF, 0x9A);
+      canvas.drawCircle(p, r * 2.6, _pFireflyGlow);
+      _pFireflyCore.color = Color.fromARGB(a, 0xEC, 0xFF, 0xC0);
+      canvas.drawCircle(p, r, _pFireflyCore);
+    }
   }
 
   // ── Görünür dünya-koordinat sınırları (zoom'a göre) ───────────────────────
@@ -705,6 +773,11 @@ class VillageGamePainter extends CustomPainter {
       ..lineTo(p2.dx, p2.dy)
       ..lineTo(p3.dx, p3.dy)
       ..close();
+    // Önce yumuşak kıyı sisi (kenarı karanlığa eritir), sonra ince kara çizgisi.
+    // Sis geceleyin güçlü, gündüz neredeyse görünmez — yüzen ada hissini kırar.
+    final mistA = (0x6E - (0x6E - 0x1E) * dayLight.clamp(0.0, 1.0)).round();
+    _pEdgeMist.color = Color.fromARGB(mistA, 0x0A, 0x10, 0x18);
+    canvas.drawPath(_scratchPath, _pEdgeMist);
     canvas.drawPath(_scratchPath, _pMapBorder);
   }
 
@@ -1000,7 +1073,7 @@ class VillageGamePainter extends CustomPainter {
   // ── Gece/gündüz overlay ───────────────────────────────────────────────────
 
   void _drawDayNightOverlay(Canvas canvas, Size size) {
-    if (sceneOverlay.alpha == 0) return;
+    if (sceneOverlay.a == 0) return;
     _pOverlay.color = sceneOverlay;
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _pOverlay);
   }

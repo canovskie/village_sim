@@ -45,15 +45,22 @@ class FarmFarmer extends WorkerEntity {
   final double _homeCol;
   final double _homeRow;
 
-  FarmFarmer({required double startCol, required double startRow})
+  FarmFarmer({required super.startCol, required super.startRow})
       : _homeCol = startCol,
-        _homeRow = startRow,
-        super(startCol: startCol, startRow: startRow);
+        _homeRow = startRow;
 
   bool get isMoving => state == FarmerState.walkingToFarm ||
       state == FarmerState.walkingToWell ||
       state == FarmerState.walkingToWater;
   bool get isCarryingWater => hasWater;
+
+  /// Su işiyle meşgul mü — kuyuya gidiyor / su alıyor / sulamaya gidiyor /
+  /// suluyor. Render bu sürede çiftçinin eline su kovası çizer.
+  bool get isHandlingWater =>
+      state == FarmerState.walkingToWell ||
+      state == FarmerState.fetchingWater ||
+      state == FarmerState.walkingToWater ||
+      state == FarmerState.watering;
 
   void update(double dt, List<FarmTile> tiles, Random rng,
       {Set<(int, int)> waterTiles    = const {},
@@ -68,11 +75,11 @@ class FarmFarmer extends WorkerEntity {
       case FarmerState.idle:
         _idleWander(dt, rng, waterTiles, softObstacles);
 
-        // Water run: cooldown expired and wells exist
+        // Sulama turu: cooldown bitti, erişilebilir kuyu var ve sulanacak
+        // (büyüyen) ekin var. Kuyu yoksa/uzaksa çiftçi sadece hasat yapar.
         if (_waterCooldown <= 0 &&
-            wellPositions != null && wellPositions.isNotEmpty) {
-          _waterCooldown = kFarmWaterCooldown;
-          // Find nearest well
+            wellPositions != null && wellPositions.isNotEmpty &&
+            tiles.any((t) => t.isGrowing)) {
           double bestD2 = double.infinity;
           (double, double)? nearest;
           for (final w in wellPositions) {
@@ -81,7 +88,11 @@ class FarmFarmer extends WorkerEntity {
             final d2 = dx * dx + dy * dy;
             if (d2 < bestD2) { bestD2 = d2; nearest = w; }
           }
-          if (nearest != null) {
+          // Yalnızca makul mesafedeki kuyuya git; yoksa cooldown'u yakmadan
+          // bir sonraki idle'da tekrar dene.
+          if (nearest != null &&
+              bestD2 <= kFarmWellMaxDistance * kFarmWellMaxDistance) {
+            _waterCooldown = kFarmWaterCooldown;
             _wellX = nearest.$1;
             _wellY = nearest.$2;
             state  = FarmerState.walkingToWell;
@@ -140,11 +151,11 @@ class FarmFarmer extends WorkerEntity {
           hasWater    = true;
           state       = FarmerState.idle; // will find a crop to water next idle
           _waterTimer = 0.0;
-          // Immediately look for a crop that needs water
+          // Hemen sulanacak (büyüyen) en yakın ekini bul
           FarmTile? waterTarget;
           double    wBestD = double.infinity;
           for (final t in tiles) {
-            if (t.stage < 1) continue; // nothing planted
+            if (!t.isGrowing) continue; // hasada hazır / hasat edilen ekini atla
             final dx = t.col + 0.5 - gridX;
             final dy = t.row + 0.5 - gridY;
             final d  = dx * dx + dy * dy;
@@ -166,7 +177,20 @@ class FarmFarmer extends WorkerEntity {
       case FarmerState.watering:
         _waterTimer += dt;
         if (_waterTimer >= _waterTime) {
-          _waterTarget?.boostGrowth();
+          // Kova bir yamayı sular: hedef + yakın büyüyen ekinler 2x hızlanır.
+          if (_waterTarget != null) {
+            final cx = _waterTarget!.col + 0.5;
+            final cy = _waterTarget!.row + 0.5;
+            const r2 = kFarmWaterSplashRadius * kFarmWaterSplashRadius;
+            for (final t in tiles) {
+              if (!t.isGrowing) continue;
+              final dx = t.col + 0.5 - cx;
+              final dy = t.row + 0.5 - cy;
+              if (dx * dx + dy * dy <= r2) {
+                t.boostGrowth(kFarmWaterBoostDuration);
+              }
+            }
+          }
           _waterTarget = null;
           hasWater     = false;
           state        = FarmerState.idle;
@@ -174,7 +198,12 @@ class FarmFarmer extends WorkerEntity {
         }
     }
 
-    if (isMoving) walkPhase = (walkPhase + dt * 6.0) % 1.0;
+    // isWalking → moveIntensity (smoothMotion) → idle↔yürüyüş karışımı.
+    // walkPhase tam 2π döngüsünde sarılır (önceden %1.0 idi → sin() döngüyü
+    // hiç tamamlamıyordu, çiftçi yürürken bacaksız kayıyordu).
+    isWalking = isMoving;
+    walkPhase += dt * (isWalking ? speed * 5.5 : 1.2);
+    walkPhase %= 2 * pi;
   }
 
   void _idleWander(double dt, Random rng,
@@ -200,9 +229,7 @@ class FarmFarmer extends WorkerEntity {
       gridX = prevX;
       _idleTimer = 0.1;
     }
-    if (state == FarmerState.idle) {
-      walkPhase = (walkPhase + dt * 4.0) % 1.0;
-    }
+    // walkPhase güncellemesi artık update() sonunda tek yerde (tam 2π döngüsü).
   }
 
   /// [true] döner = hedefe ulaştı.

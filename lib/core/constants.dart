@@ -5,7 +5,7 @@ const int kCols = 48;
 const int kRows = 36;
 const double kTileW = 64.0;   // piksel sanatı için 2:1 standart (64x32)
 const double kTileH = 32.0;
-const double kCharScale = 0.46;
+const double kCharScale = 0.34;
 
 // ─── İşçi hızları (tile / sn) ────────────────────────────────────────────────
 // Tek yerde toplandı; balance tuning için buradan değiştirin.
@@ -23,7 +23,29 @@ const double kFishDuration         = 5.0;
 const double kFarmHarvestDuration  = 2.2;
 const double kFarmWaterFetchTime   = 1.5;
 const double kFarmWaterTime        = 1.2;
-const double kFarmWaterCooldown    = 30.0;
+const double kFarmWaterCooldown    = 18.0;
+
+// ─── Sulama mekaniği (kuyu → tarla hızlandırıcı) ──────────────────────────────
+// Kuyu varsa çiftçi oradan su taşır, ekin yamasını sular → sulanan ekin 2x
+// büyür (bkz. FarmTile.update / boostGrowth). Kuyu yoksa ekin baz hızda büyür.
+const double kFarmWaterBoostDuration = 9.0; // sulamanın 2x bonus süresi (sn)
+const double kFarmWaterSplashRadius  = 1.8; // bir kovanın suladığı yarıçap (tile)
+const double kFarmWellMaxDistance    = 14.0; // bundan uzak kuyuya gidilmez (tile)
+
+// ─── Ev su deposu (kuyu → ev) ─────────────────────────────────────────────────
+// Her evin 0..1 su deposu var. Sakinler tüketir, kuyular doldurur. Susuz evler
+// köy moralini düşürür (→ nüfus büyümesi yavaşlar). Kuyu yoksa depo boşalır.
+const double kHouseWaterDrainPerOccupant = 0.012; // /sn, sakin başına tüketim
+const double kWellWaterRefill            = 0.05;  // /sn, kuyu başına ev doldurma
+const double kWaterMoralePenalty         = 0.30;  // tamamen susuz köyde moral cezası
+
+// ─── Nüfus yiyecek tüketimi & açlık ───────────────────────────────────────────
+// Her köylü zamanla yiyecek tüketir; üretim yetmezse stok azalır. Stok
+// [kStarveRampFood] eşiğinin altına inince açlık başlar → moral & büyüme düşer
+// (su sistemine paralel). Kabaca her 8 köylü 1 aktif yiyecek üreticisi ister.
+const double kFoodPerVillagerPerDay = 6.0;  // köylü başına günlük tüketim
+const int    kStarveRampFood        = 10;   // bu eşiğin altında açlık morali vurur
+const double kStarvationMoralePenalty = 0.35; // tamamen aç köyde moral cezası
 
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────
 // dayLight bu eşiklerin altına düşünce "gece"; üstüne çıkınca "gündüz".

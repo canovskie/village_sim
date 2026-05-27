@@ -43,6 +43,9 @@ import 'ui/main_menu_screen.dart';
 import 'systems/separation_system.dart';
 import 'systems/hay_processor.dart';
 import 'systems/carrier_system.dart';
+import 'systems/building_system.dart';
+import 'buildings/building_function.dart';
+import 'characters/life_stage.dart';
 
 void main() => runApp(const VillageSimApp());
 
@@ -114,6 +117,16 @@ class _VillageSceneState extends State<VillageScene>
   // Ateş yeri ücretsiz; gerçek malzemeler işçiler ürettikçe birikir.
   final ResourceBundle _stockpile = ResourceBundle();
 
+  // Binalardan türeyen köy istatistikleri (kapasite, moral, taşıyıcı hızı).
+  // Her tick updateBuildings ile güncellenir; panel ve HUD okur.
+  VillageStats _stats = const VillageStats(
+    stockCapacity: kBaseStockCapacity,
+    morale: 0.5,
+    growthMultiplier: 1.0,
+    carrierSpeedMultiplier: 1.0,
+    wellCount: 0,
+  );
+
   // ── Entities ───────────────────────────────────────────────────────────────
   final List<VillagerEntity> _villagers = [];
   final List<BuildingEntity> _buildings = [];
@@ -171,6 +184,9 @@ class _VillageSceneState extends State<VillageScene>
   final List<ResourceBox> _resourceBoxes = [];
   final List<HayEntity> _hayEntities = [];
   double _carrierTimer = 0.0;
+
+  /// Nüfus yiyecek tüketimi için kesirli birikim (≥1 olunca stoktan düşülür).
+  double _foodHunger = 0.0;
 
   // ── God mode ───────────────────────────────────────────────────────────────
   bool _godMode = false;
@@ -240,17 +256,69 @@ class _VillageSceneState extends State<VillageScene>
         }
       }
 
-      // ── Maden ocağı aktif mi? ────────────────────────────────────────────────
+      // Konut doluluğunu güncelle — ev su tüketimi sakin sayısına bağlı.
       for (final b in _buildings) {
-        if (b.type == BuildingType.mineBuilding) {
-          b.isActive = _miners.any(
-            (m) =>
-                m.isMining &&
-                m.gridX >= b.col - 0.5 &&
-                m.gridX < b.col + b.cols + 0.5 &&
-                m.gridY >= b.row - 0.5 &&
-                m.gridY < b.row + b.rows + 0.5,
-          );
+        if (b.fn?.role == BuildingRole.housing) b.occupants = 0;
+      }
+      for (final v in _villagers) {
+        if (v.homeBuilding case final h?) (h as BuildingEntity).occupants++;
+      }
+
+      // ── Nüfus yiyecek tüketimi ──────────────────────────────────────────────
+      // Tüm köylüler + işçiler zamanla yiyecek yer; üretim yetmezse stok azalır.
+      final mouths = _villagers.length + _farmers.length + _woodcutters.length +
+          _miners.length + _fishers.length + _builders.length;
+      if (!_godMode && mouths > 0) {
+        _foodHunger += dt * mouths * (kFoodPerVillagerPerDay / kGameDaySeconds);
+        if (_foodHunger >= 1.0) {
+          final eat = _foodHunger.floor();
+          _foodHunger -= eat;
+          _stockpile.food = (_stockpile.food - eat).clamp(0, 1 << 30);
+        }
+      }
+      // Açlık 0..1: stok kStarveRampFood altına inince devreye girer (moral düşer).
+      final starvation = _stockpile.food >= kStarveRampFood
+          ? 0.0
+          : (1.0 - _stockpile.food / kStarveRampFood);
+
+      // ── Bina işlevleri: üretim, ticaret, nüfus büyümesi, stok kapasitesi ────
+      _stats = updateBuildings(
+        dt: dt,
+        buildings: _buildings,
+        stockpile: _stockpile,
+        freeHousingSlots: _freeHousingSlots(),
+        onSpawnVillager: _spawnGrownVillager,
+        enforceCapacity: !_godMode,
+        starvation: starvation,
+      );
+      // Ahır bonusunu taşıyıcılara uygula
+      for (final v in _villagers) {
+        v.carrySpeedMultiplier = _stats.carrierSpeedMultiplier;
+      }
+
+      // ── Toplama binaları çalışıyor mu? (panel durumu) ──────────────────────
+      for (final b in _buildings) {
+        switch (b.type) {
+          case BuildingType.mineBuilding:
+            b.isActive = _miners.any(
+              (m) =>
+                  m.isMining &&
+                  m.gridX >= b.col - 0.5 &&
+                  m.gridX < b.col + b.cols + 0.5 &&
+                  m.gridY >= b.row - 0.5 &&
+                  m.gridY < b.row + b.rows + 0.5,
+            );
+          case BuildingType.lumberCamp:
+            b.isActive = _lumberCamps.any(
+              (lc) =>
+                  lc.buildingCol == b.col &&
+                  lc.buildingRow == b.row &&
+                  lc.state != LumberCampState.idle,
+            );
+          case BuildingType.fisherCabin:
+            b.isActive = _fishers.any((f) => f.isFishing);
+          default:
+            break;
         }
       }
       // Su + aktif maden node'ları → geçilmez alan
@@ -277,6 +345,13 @@ class _VillageSceneState extends State<VillageScene>
           dayLight: _cycle.dayLight,
         );
       }
+      // Doğal ölüm — ömrü dolan yaşlılar köyden ayrılır. Taşıma işi varsa
+      // önce bitirsin (yerde öksüz kutu/balya kalmasın). Belediye yerini doldurur.
+      _villagers.removeWhere((v) {
+        if (v.ageDays < v.lifespanDays || v.isCarrying) return false;
+        _showNotification('🕯️ Yaşlı bir köylü hayata veda etti.');
+        return true;
+      });
       for (final b in _builders) {
         b.update(
           dt,
@@ -295,6 +370,12 @@ class _VillageSceneState extends State<VillageScene>
       for (final t in _farmTiles) {
         t.update(dt);
       }
+      // Kuyu binaları → çiftçilerin su aldığı kaynak (1x1, merkez konum).
+      final wellPositions = <(double, double)>[
+        for (final b in _buildings)
+          if (b.type == BuildingType.well)
+            (b.col + b.cols / 2, b.row + b.rows / 2),
+      ];
       for (final f in _farmers) {
         f.update(
           dt,
@@ -302,6 +383,7 @@ class _VillageSceneState extends State<VillageScene>
           _rng,
           waterTiles: obstacles,
           softObstacles: softObs,
+          wellPositions: wellPositions,
         );
         // Çiftçi hasat sonucunu altın olarak değil yiyecek olarak hay pile
         // yığınıyla üretir; piller balya olur, balyalar depoya taşınır.
@@ -426,9 +508,9 @@ class _VillageSceneState extends State<VillageScene>
         waterTiles: _waterTiles,
       );
 
-      // Hareket yumuşatma — renderX/Y, moveIntensity, facingSmooth.
-      // AI'ın gridX/Y sıçramaları ve isWalking flip'leri animasyona
-      // anlık değil, exp-lerp ile yansır → donuk değil akıcı.
+      // Hareket yumuşatma — renderX/Y ve moveIntensity.
+      // AI'ın gridX/Y sıçramaları animasyona anlık değil, exp-lerp ile
+      // yansır → donuk değil akıcı.
       for (final v in _villagers) {
         v.smoothMotion(dt);
       }
@@ -473,11 +555,16 @@ class _VillageSceneState extends State<VillageScene>
     for (int i = 0; i < types.length; i++) {
       final angle = i * (2 * pi / types.length);
       final dist = 1.2 + _rng.nextDouble() * 0.6;
+      // Kurucular yetişkin/yaşlı yaşıyla doğar — köy ilk günden işlevsel.
+      final founderAge =
+          kAdultStartDay + _rng.nextDouble() * (kElderStartDay - kAdultStartDay + 5);
       _villagers.add(
         VillagerEntity(
           type: types[i],
           startCol: cx + cos(angle) * dist,
           startRow: cy + sin(angle) * dist,
+          ageDays: founderAge,
+          lifespanDays: _rollLifespan(),
         ),
       );
     }
@@ -522,6 +609,69 @@ class _VillageSceneState extends State<VillageScene>
     }
   }
 
+  // ── Nüfus & ev kapasitesi ─────────────────────────────────────────────────
+
+  /// Ev binalarındaki boş sakin kapasitesinin toplamı.
+  int _freeHousingSlots() {
+    int free = 0;
+    for (final b in _buildings) {
+      final f = b.fn;
+      if (f == null || f.role != BuildingRole.housing) continue;
+      final occ = _villagers.where((v) => v.homeBuilding == b).length;
+      final slots = f.housingCapacity - occ;
+      if (slots > 0) free += slots;
+    }
+    return free;
+  }
+
+  /// Rastgele doğal ömür (oyun günü) — yaşlı evresinden sonra biraz daha yaşar.
+  double _rollLifespan() =>
+      kElderStartDay + kElderLifeMin +
+      _rng.nextDouble() * (kElderLifeMax - kElderLifeMin);
+
+  /// Köyün ev tavanı — tüm evlerin sakin kapasitesi toplamı.
+  int _populationCap() {
+    int cap = 0;
+    for (final b in _buildings) {
+      final f = b.fn;
+      if (f != null && f.role == BuildingRole.housing) cap += f.housingCapacity;
+    }
+    return cap;
+  }
+
+  /// Belediyenin büyüme döngüsü dolunca yeni köylü doğurur, boş eve yerleştirir.
+  void _spawnGrownVillager(BuildingEntity townhall) {
+    BuildingEntity? house;
+    for (final b in _buildings) {
+      final f = b.fn;
+      if (f == null || f.role != BuildingRole.housing) continue;
+      final occ = _villagers.where((v) => v.homeBuilding == b).length;
+      if (occ < f.housingCapacity) {
+        house = b;
+        break;
+      }
+    }
+
+    const civilianTypes = [
+      VillagerType.farmer,
+      VillagerType.merchant,
+      VillagerType.blacksmith,
+      VillagerType.guard,
+      VillagerType.mage,
+    ];
+    final type = civilianTypes[_rng.nextInt(civilianTypes.length)];
+    final (sx, sy) = _nearestLand(
+      townhall.col + townhall.cols / 2.0,
+      townhall.row + townhall.rows.toDouble(),
+    );
+    // Bebek olarak doğar (ageDays=0); büyüdükçe mesleğini (type) edinir.
+    final v = VillagerEntity(
+        type: type, startCol: sx, startRow: sy, lifespanDays: _rollLifespan());
+    if (house != null) v.homeBuilding = house;
+    _villagers.add(v);
+    _showNotification('👶 Köye bir bebek doğdu!');
+  }
+
   // ── Bina tile kontrolü ────────────────────────────────────────────────────
 
   BuildingEntity? _buildingAt(int col, int row) {
@@ -529,8 +679,9 @@ class _VillageSceneState extends State<VillageScene>
       if (col >= b.col &&
           col < b.col + b.cols &&
           row >= b.row &&
-          row < b.row + b.rows)
+          row < b.row + b.rows) {
         return b;
+      }
     }
     return null;
   }
@@ -633,8 +784,9 @@ class _VillageSceneState extends State<VillageScene>
         b.row,
         b.cols,
         b.rows,
-      ))
+      )) {
         return false;
+      }
     }
     for (final o in _orders) {
       final om = kBuildingMeta[o.type]!;
@@ -647,8 +799,9 @@ class _VillageSceneState extends State<VillageScene>
         o.row,
         om.cols,
         om.rows,
-      ))
+      )) {
         return false;
+      }
     }
     return true;
   }
@@ -813,8 +966,9 @@ class _VillageSceneState extends State<VillageScene>
     for (int radius = 1; radius < 12; radius++) {
       for (int dc = -radius; dc <= radius; dc++) {
         for (int dr = -radius; dr <= radius; dr++) {
-          if (dc.abs() != radius && dr.abs() != radius)
+          if (dc.abs() != radius && dr.abs() != radius) {
             continue; // sadece dış halka
+          }
           final nc = (c0 + dc).clamp(0, kCols - 1);
           final nr = (r0 + dr).clamp(0, kRows - 1);
           if (!_waterTiles.contains((nc, nr))) {
@@ -1149,8 +1303,9 @@ class _VillageSceneState extends State<VillageScene>
                           final tile = _toTile(d.localFocalPoint);
                           setState(() {
                             if (_mineMode && tile != _mineEnd) _mineEnd = tile;
-                            if (_lumberMode && tile != _lumberEnd)
+                            if (_lumberMode && tile != _lumberEnd) {
                               _lumberEnd = tile;
+                            }
                             if (_farmMode && tile != _farmEnd) _farmEnd = tile;
                           });
                         } else if (_placing != null) {
@@ -1347,6 +1502,12 @@ class _VillageSceneState extends State<VillageScene>
               dayLight: _cycle.dayLight,
               buildingCount: _buildings.length,
               pendingOrderCount: _orders.where((o) => !o.completed).length,
+              morale: _stats.morale,
+              lowWater: _buildings.any((b) =>
+                  b.fn?.role == BuildingRole.housing &&
+                  b.occupants > 0 &&
+                  b.waterLevel < 0.3),
+              starving: !_godMode && _stockpile.food < kStarveRampFood,
               onNewMap: () => setState(() => _generateWorld()),
             ),
 
@@ -1490,7 +1651,13 @@ class _VillageSceneState extends State<VillageScene>
                         m.gridY >= b.row - 0.5 &&
                         m.gridY < b.row + b.rows + 0.5;
                   }).toList(),
+                  stockpile: _stockpile,
+                  stats: _stats,
+                  population: _villagers.length,
+                  populationCap: _populationCap(),
                   onClose: () => setState(() => _selectedBuilding = null),
+                  onSell: (kind) =>
+                      setState(() => sellAtMarket(_stockpile, kind)),
                 ),
               ),
 

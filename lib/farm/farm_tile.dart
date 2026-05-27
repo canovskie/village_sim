@@ -32,11 +32,12 @@ class FarmTile {
     beingHarvested = false;
   }
 
-  /// Sulama ile büyüme hızını artır (5 saniyelik 2x bonus).
+  /// Sulama ile büyüme hızını artır ([seconds] saniyelik 2x bonus).
+  /// Üst üste binen sulamalar süreyi uzatır (kısaltmaz).
   double _waterBoostRemaining = 0.0;
 
-  void boostGrowth() {
-    _waterBoostRemaining = 5.0;
+  void boostGrowth([double seconds = 5.0]) {
+    if (seconds > _waterBoostRemaining) _waterBoostRemaining = seconds;
   }
 
   bool get isWatered => _waterBoostRemaining > 0;

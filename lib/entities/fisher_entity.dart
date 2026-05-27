@@ -16,8 +16,7 @@ class FisherEntity extends WorkerEntity {
   double _shoreRow  = -1;
   double _fishTimer = 0.0;
 
-  FisherEntity({required double startCol, required double startRow})
-      : super(startCol: startCol, startRow: startRow);
+  FisherEntity({required super.startCol, required super.startRow});
 
   @override
   double get speed => kFisherSpeed;
@@ -56,8 +55,17 @@ class FisherEntity extends WorkerEntity {
           state      = FisherState.fishing;
           _fishTimer = 0;
           fishPhase  = 0;
-          // Suya bak — yüzü su tarafına çevir
-          facingRight = _shoreCol < gridX + 1;
+          // Suya bak — kıyıya komşu su tile'ına göre yüzü çevir.
+          // (İzometride ekran-x ∝ col − row; su o yöndeyse yüz sağa döner.)
+          final sc = _shoreCol.round();
+          final sr = _shoreRow.round();
+          for (final (wc, wr) in [(sc + 1, sr), (sc - 1, sr),
+                                  (sc, sr + 1), (sc, sr - 1)]) {
+            if (waterTiles.contains((wc, wr))) {
+              facingRight = (wc - sc) - (wr - sr) > 0;
+              break;
+            }
+          }
         }
 
       case FisherState.fishing:
@@ -70,8 +78,9 @@ class FisherEntity extends WorkerEntity {
         }
     }
 
-    final moving = state == FisherState.walkingToShore;
-    walkPhase = (walkPhase + dt * (moving ? 6.5 : 1.5)) % (2 * pi);
+    // isWalking → moveIntensity (smoothMotion) → idle↔yürüyüş animasyon karışımı.
+    isWalking = state == FisherState.walkingToShore;
+    walkPhase = (walkPhase + dt * (isWalking ? 6.5 : 1.5)) % (2 * pi);
   }
 
   /// Su'ya komşu, su olmayan en yakın tile'ı bul.

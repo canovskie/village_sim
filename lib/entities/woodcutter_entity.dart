@@ -17,8 +17,7 @@ class WoodcutterEntity extends WorkerEntity {
   double lastHarvestX = 0;
   double lastHarvestY = 0;
 
-  WoodcutterEntity({required double startCol, required double startRow})
-      : super(startCol: startCol, startRow: startRow);
+  WoodcutterEntity({required super.startCol, required super.startRow});
 
   @override
   double get speed => kWoodcutterSpeed;
@@ -77,8 +76,9 @@ class WoodcutterEntity extends WorkerEntity {
         }
     }
 
-    final moving = state == WoodcutterState.walkingToTree;
-    walkPhase += dt * (moving ? speed * 5.5 : 1.2);
+    // isWalking → moveIntensity (smoothMotion) → idle↔yürüyüş animasyon karışımı.
+    isWalking = state == WoodcutterState.walkingToTree;
+    walkPhase += dt * (isWalking ? speed * 5.5 : 1.2);
     walkPhase %= pi * 2;
   }
 
