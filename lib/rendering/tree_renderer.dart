@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../world/tree_entity.dart';
 import '../core/constants.dart';
 import 'asset_style.dart';
+import 'wind.dart';
 
 class TreeRenderer {
   static final Map<TreeType, ui.Image> _cache = {};
@@ -35,7 +36,7 @@ class TreeRenderer {
   ///               0 = darbe tam isabet — titreşim başlar, azalır, 2π'de söner.
   static void draw(Canvas canvas, TreeType type, Offset center,
       {double time = 0, int seed = 0, double chopPhase = -1,
-       double growthScale = 1.0}) {
+       double growthScale = 1.0, double col = 0, double row = 0}) {
     final img = _cache[type];
     if (img == null) return;
 
@@ -45,11 +46,10 @@ class TreeRenderer {
     // Fidan tabandan büyür — taban sabit, tepe yükselir
     final top     = center.dy - spriteH;
 
-    // ── Rüzgar sallantısı ─────────────────────────────────────────────────
-    final freq     = 0.7 + (seed % 7) * 0.08;
-    final phase    = (seed * 1.618) % (2 * pi);
-    final amp      = 0.028 + (seed % 5) * 0.004;
-    final windSway = sin(time * freq + phase) * amp;
+    // ── Rüzgar sallantısı — ortak rüzgâr alanı (tarlada dalga gibi gezer) ──
+    final amp      = 0.028 + (seed % 5) * 0.004; // ağaçtan ağaca hafif genlik farkı
+    final windSway = Wind.swayAt(col, row, time,
+        amp: amp, jitter: (seed * 1.618) % (2 * pi));
 
     // ── Darbe titreşimi (damlı harmonik) ──────────────────────────────────
     // chopPhase=0 → darbe isabet etti → ağaç sarsılır → sönümler → 2π'ye kadar durulur

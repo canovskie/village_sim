@@ -80,6 +80,16 @@ final _pFireflyGlow = Paint()
   ..isAntiAlias = true;
 final _pFireflyCore = Paint()..isAntiAlias = true;
 
+// Bulut gölgeleri — gündüz kara üzerinde süzülen yumuşak karanlık lekeler.
+final _pCloudShadow = Paint()
+  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 26)
+  ..isAntiAlias = true;
+
+// Gündüz polen/toz zerreleri — güneşte parıldayan ince, soluk parçacıklar.
+final _pPollen = Paint()
+  ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5)
+  ..isAntiAlias = true;
+
 // Ghost
 final _pGhostFill   = Paint()..isAntiAlias = false;
 final _pGhostBorder = Paint()..style = PaintingStyle.stroke..strokeWidth = 2..isAntiAlias = false;
@@ -407,7 +417,8 @@ class _ReedDrawable extends _Drawable {
     final cx = (s1.dx + s2.dx) / 2;
     final cy = (s1.dy + s2.dy) / 2 + kTileH / 2; // tile orta yüksekliğine in
     NatureRenderer.drawReeds(canvas, cx, cy,
-        time: time, seed: r.col * 19 + r.row * 41);
+        time: time, seed: r.col * 19 + r.row * 41,
+        col: r.col.toDouble(), row: r.row.toDouble());
   }
 }
 
@@ -424,7 +435,8 @@ class _TreeDrawable extends _Drawable {
     TreeRenderer.draw(canvas, t.type, center,
         time: time, seed: t.col * 17 + t.row * 31,
         chopPhase: t.chopPhase,
-        growthScale: t.growthScale);
+        growthScale: t.growthScale,
+        col: t.col + 0.5, row: t.row + 0.5);
   }
 }
 
@@ -604,6 +616,7 @@ class VillageGamePainter extends CustomPainter {
     _drawGround(canvas, size);
     _drawFarmTiles(canvas, size);
     _drawWaterFoam(canvas, size);
+    _drawCloudShadows(canvas, size);
     if (farmSelection   != null) _drawFarmSelection(canvas, size);
     if (lumberSelection != null) _drawLumberSelection(canvas, size);
     if (mineSelection   != null) _drawMineSelection(canvas, size);
@@ -619,6 +632,7 @@ class VillageGamePainter extends CustomPainter {
     // ── Ekran uzayı efektleri (zoom'dan etkilenmez) ──────────────────────────
     _drawDayNightOverlay(canvas, size);
     _drawFireflies(canvas, size);
+    _drawPollen(canvas, size);
     _drawRain(canvas, size);
   }
 
@@ -658,6 +672,34 @@ class VillageGamePainter extends CustomPainter {
       canvas.drawCircle(p, r * 2.6, _pFireflyGlow);
       _pFireflyCore.color = Color.fromARGB(a, 0xEC, 0xFF, 0xC0);
       canvas.drawCircle(p, r, _pFireflyCore);
+    }
+  }
+
+  // ── Gündüz polen/toz zerreleri ──────────────────────────────────────────────
+  // Güneşte parıldayan, havada yumuşakça süzülen soluk parçacıklar — ateş
+  // böceklerinin gündüz karşılığı. Geceye doğru sönümlenir, yağmurda görünmez.
+  void _drawPollen(Canvas canvas, Size size) {
+    final strength = ((dayLight - 0.5) / 0.5).clamp(0.0, 1.0);
+    if (strength <= 0.02 || rainIntensity > 0.2) return;
+    const count = 46;
+    for (int i = 0; i < count; i++) {
+      final h  = i * 40503;
+      final bc = (h % 1000) / 1000.0 * kCols;
+      final br = (h ~/ 1000 % 1000) / 1000.0 * kRows;
+      // Yumuşak meandering — yerinde süzülür, hafif salınır (rüzgâr hissi).
+      final gx = bc + sin(time * 0.35 + i * 1.1) * 1.6 + sin(time * 0.13 + i) * 0.9;
+      final gy = br + cos(time * 0.30 + i * 1.7) * 1.1;
+      final p  = _worldToScreen(gx, gy, size);
+      if (p.dx < -10 || p.dx > size.width + 10 ||
+          p.dy < -10 || p.dy > size.height + 10) {
+        continue;
+      }
+      final tw = sin(time * 1.3 + i * 2.3) * 0.5 + 0.5; // parıltı
+      final a  = (strength * (0.35 + tw * 0.65) * 95).round().clamp(0, 110);
+      if (a < 6) continue;
+      final r = (0.8 + tw * 0.9) * zoom;
+      _pPollen.color = Color.fromARGB(a, 0xFF, 0xF2, 0xC8);
+      canvas.drawCircle(p, r, _pPollen);
     }
   }
 
@@ -758,6 +800,30 @@ class VillageGamePainter extends CustomPainter {
       if (py < minY || py > maxY) continue;
       WaterRenderer.drawFoam(canvas, px, py, hw, hh, time,
           col * 17 + row * 31);
+    }
+  }
+
+  // ── Bulut gölgeleri ─────────────────────────────────────────────────────────
+  // Gündüz, rüzgârla yatay süzülen bulutların yere düşen yumuşak gölgeleri.
+  // Yer tile'larının üstüne, nesnelerin altına çizilir → araziyi karartır,
+  // binaları değil. Geceleri güneş yok → gün ışığına göre sönümlenir.
+  void _drawCloudShadows(Canvas canvas, Size size) {
+    final s = ((dayLight - 0.35) / 0.45).clamp(0.0, 1.0);
+    if (s <= 0.02) return;
+    const clouds = 5;
+    final period = kCols + 22.0; // sürüklenme döngü aralığı (tile)
+    for (int i = 0; i < clouds; i++) {
+      final h  = i * 2654435761;
+      final bc = (h % 1000) / 1000.0 * kCols;
+      final br = (h ~/ 1000 % 1000) / 1000.0 * kRows;
+      // Rüzgâr: col +, row − eşit → ekran-y sabit, yatay sağa süzülür.
+      final t  = (time * (0.45 + (i % 3) * 0.12) + i * (period / clouds)) % period;
+      final c  = gridToScreen(bc + t, br - t, size, camera);
+      if (c.dx < -300 || c.dx > size.width + 300) continue;
+      final w  = 200.0 + (h % 130);
+      _pCloudShadow.color = Color.fromARGB((s * 44).round(), 0x10, 0x14, 0x1C);
+      canvas.drawOval(
+          Rect.fromCenter(center: c, width: w, height: w * 0.42), _pCloudShadow);
     }
   }
 

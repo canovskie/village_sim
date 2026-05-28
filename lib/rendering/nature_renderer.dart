@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'asset_style.dart';
+import 'wind.dart';
 
 class NatureRenderer {
   static ui.Image? _lotus0;
@@ -67,6 +68,8 @@ class NatureRenderer {
     double cy, {
     double time = 0,
     int seed = 0,
+    double col = 0,
+    double row = 0,
   }) {
     final img = _reeds;
     if (img == null) return;
@@ -77,8 +80,9 @@ class NatureRenderer {
     final dst = Rect.fromLTWH(cx - drawW / 2, cy - drawH, drawW, drawH);
     final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
 
-    // Rüzgar sallantısı — tabanı sabit, tepe sallanır
-    final sway = sin(time * 1.1 + seed * 1.7) * 0.025;
+    // Rüzgar sallantısı — ortak rüzgâr alanı (ağaçlarla aynı dalga). Saz ince,
+    // genliği biraz büyük; tabanı sabit, tepe sallanır.
+    final sway = Wind.swayAt(col, row, time, amp: 0.045, jitter: seed * 1.7);
 
     canvas.save();
     // Skew pivot tabanda (cx, cy)
