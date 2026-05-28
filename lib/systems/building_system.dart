@@ -35,7 +35,7 @@ class VillageStats {
 /// Köy çapı değerlerini binalardan türetir. Yan etkisizdir; her tick ve
 /// panel açılışında güvenle çağrılabilir.
 VillageStats computeVillageStats(List<BuildingEntity> buildings,
-    {double starvation = 0.0}) {
+    {double starvation = 0.0, double eventMorale = 0.0}) {
   int capacity = kBaseStockCapacity;
   double moraleBonus = 0.0;
   double carrierBonus = 0.0;
@@ -84,11 +84,12 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
   final starvePenalty =
       (starvation.clamp(0.0, 1.0) * kStarvationMoralePenalty);
 
-  final penalty = waterPenalty + starvePenalty;
+  // Net etki: civic bonus − su/açlık cezası + olay etkisi (festival +/kuraklık −).
+  final net = moraleBonus - waterPenalty - starvePenalty + eventMorale;
   return VillageStats(
     stockCapacity: capacity,
-    morale: (0.5 + moraleBonus - penalty).clamp(0.0, 1.0),
-    growthMultiplier: (1.0 + moraleBonus - penalty).clamp(0.5, 2.0),
+    morale: (0.5 + net).clamp(0.0, 1.0),
+    growthMultiplier: (1.0 + net).clamp(0.5, 2.0),
     carrierSpeedMultiplier: 1.0 + carrierBonus,
     wellCount: wellCount,
   );
@@ -112,8 +113,10 @@ VillageStats updateBuildings({
   required void Function(BuildingEntity townhall) onSpawnVillager,
   bool enforceCapacity = true,
   double starvation = 0.0,
+  double eventMorale = 0.0,
 }) {
-  final stats = computeVillageStats(buildings, starvation: starvation);
+  final stats = computeVillageStats(buildings,
+      starvation: starvation, eventMorale: eventMorale);
   int remainingHousing = freeHousingSlots;
 
   for (final b in buildings) {

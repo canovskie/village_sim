@@ -35,6 +35,7 @@ class GameHUD extends StatelessWidget {
   final double morale;     // 0..1
   final bool   lowWater;   // dolu bir evin su deposu kritik seviyede mi
   final bool   starving;   // yiyecek stoğu kritik — açlık başladı
+  final String? eventLabel; // aktif geçici olay etiketi (null = yok)
 
   // Diğer
   final VoidCallback onNewMap;
@@ -62,6 +63,7 @@ class GameHUD extends StatelessWidget {
     required this.morale,
     required this.lowWater,
     required this.starving,
+    this.eventLabel,
     required this.onNewMap,
   });
 
@@ -147,6 +149,14 @@ class GameHUD extends StatelessWidget {
                           value: 'Açlık!',
                           color: MedievalTheme.dangerColor,
                         ),
+                      ),
+                      const SizedBox(width: 5),
+                    ],
+                    if (eventLabel != null) ...[
+                      _HudChip(
+                        icon: eventLabel!,
+                        value: '',
+                        color: const Color(0xFFD9C27A),
                       ),
                       const SizedBox(width: 5),
                     ],

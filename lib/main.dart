@@ -44,6 +44,7 @@ import 'systems/separation_system.dart';
 import 'systems/hay_processor.dart';
 import 'systems/carrier_system.dart';
 import 'systems/building_system.dart';
+import 'systems/event_system.dart';
 import 'buildings/building_function.dart';
 import 'characters/life_stage.dart';
 
@@ -188,6 +189,12 @@ class _VillageSceneState extends State<VillageScene>
   /// Nüfus yiyecek tüketimi için kesirli birikim (≥1 olunca stoktan düşülür).
   double _foodHunger = 0.0;
 
+  // ── Rastgele olaylar ───────────────────────────────────────────────────────
+  double  _eventTimer      = kEventFirstDelay; // bir sonraki olaya kalan süre
+  double  _eventMorale     = 0.0;  // aktif geçici moral etkisi (+/−)
+  double  _eventMoraleLeft = 0.0;  // o etkinin kalan süresi (sn)
+  String? _eventLabel;             // aktif geçici olayın HUD etiketi
+
   // ── God mode ───────────────────────────────────────────────────────────────
   bool _godMode = false;
 
@@ -281,6 +288,24 @@ class _VillageSceneState extends State<VillageScene>
           ? 0.0
           : (1.0 - _stockpile.food / kStarveRampFood);
 
+      // ── Rastgele olaylar ────────────────────────────────────────────────────
+      // Aktif geçici etki sönümlenir; zamanlayıcı dolunca yeni olay tetiklenir.
+      if (_eventMoraleLeft > 0) {
+        _eventMoraleLeft -= dt;
+        if (_eventMoraleLeft <= 0) {
+          _eventMorale = 0;
+          _eventLabel = null;
+        }
+      }
+      if (!_godMode && _villagers.isNotEmpty) {
+        _eventTimer -= dt;
+        if (_eventTimer <= 0) {
+          _triggerRandomEvent();
+          _eventTimer = kEventMinInterval +
+              _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval);
+        }
+      }
+
       // ── Bina işlevleri: üretim, ticaret, nüfus büyümesi, stok kapasitesi ────
       _stats = updateBuildings(
         dt: dt,
@@ -290,6 +315,7 @@ class _VillageSceneState extends State<VillageScene>
         onSpawnVillager: _spawnGrownVillager,
         enforceCapacity: !_godMode,
         starvation: starvation,
+        eventMorale: _eventMorale,
       );
       // Ahır bonusunu taşıyıcılara uygula
       for (final v in _villagers) {
@@ -629,6 +655,22 @@ class _VillageSceneState extends State<VillageScene>
       kElderStartDay + kElderLifeMin +
       _rng.nextDouble() * (kElderLifeMax - kElderLifeMin);
 
+  /// Rastgele bir köy olayı tetikler: anlık stok etkisini uygular, geçici
+  /// olaysa moral modifikatörünü süreli olarak aktive eder, bildirim gösterir.
+  void _triggerRandomEvent() {
+    final e = EventSystem.roll(_rng);
+    if (e.foodDelta != 0) {
+      _stockpile.food = (_stockpile.food + e.foodDelta).clamp(0, 1 << 30);
+    }
+    if (e.goldDelta != 0) _stockpile.gold += e.goldDelta;
+    if (e.isTemporary) {
+      _eventMorale     = e.moraleModifier;
+      _eventMoraleLeft = e.duration;
+      _eventLabel      = '${e.icon} ${e.title}';
+    }
+    _showNotification(e.message);
+  }
+
   /// Köyün ev tavanı — tüm evlerin sakin kapasitesi toplamı.
   int _populationCap() {
     int cap = 0;
@@ -895,6 +937,13 @@ class _VillageSceneState extends State<VillageScene>
     _hasFire = false;
     _firepitBuilding = null;
     _selectedBuilding = null;
+
+    // Olay durumunu sıfırla
+    _eventTimer      = kEventFirstDelay;
+    _eventMorale     = 0.0;
+    _eventMoraleLeft = 0.0;
+    _eventLabel      = null;
+    _foodHunger      = 0.0;
 
     // Köylülerin ev/uyku atamalarını sıfırla
     for (final v in _villagers) {
@@ -1508,6 +1557,7 @@ class _VillageSceneState extends State<VillageScene>
                   b.occupants > 0 &&
                   b.waterLevel < 0.3),
               starving: !_godMode && _stockpile.food < kStarveRampFood,
+              eventLabel: _eventLabel,
               onNewMap: () => setState(() => _generateWorld()),
             ),
 

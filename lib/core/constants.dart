@@ -47,6 +47,11 @@ const double kFoodPerVillagerPerDay = 6.0;  // köylü başına günlük tüketi
 const int    kStarveRampFood        = 10;   // bu eşiğin altında açlık morali vurur
 const double kStarvationMoralePenalty = 0.35; // tamamen aç köyde moral cezası
 
+// ─── Rastgele olaylar ─────────────────────────────────────────────────────────
+const double kEventFirstDelay  = 75.0;  // kuruluştan ilk olaya kadar (sn)
+const double kEventMinInterval = 90.0;  // olaylar arası en kısa süre (sn)
+const double kEventMaxInterval = 180.0; // olaylar arası en uzun süre (sn)
+
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────
 // dayLight bu eşiklerin altına düşünce "gece"; üstüne çıkınca "gündüz".
 // Histerez için iki ayrı değer — flicker önler.
