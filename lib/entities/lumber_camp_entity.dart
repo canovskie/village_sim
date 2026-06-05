@@ -27,10 +27,12 @@ class LumberCampEntity extends WorkerEntity {
   double      _chopTimer   = 0.0;
   double      _manageTimer = 0.0;
 
+  // Bina 2×2; spawn = footprint'in hemen güneyinde (iso'da ön).
+  // Bina artık engel sayıldığı için içinde başlanmamalı.
   LumberCampEntity({required this.buildingCol, required this.buildingRow})
       : super(
-          startCol: buildingCol + 0.5,
-          startRow: buildingRow + 1.5,
+          startCol: buildingCol + 1.0,
+          startRow: buildingRow + 2.3,
         );
 
   @override

@@ -9,12 +9,19 @@ import 'tool_renderer.dart';
 
 class _Anim {
   final double legL, legR, armL, armR, bob;
+  /// Adım atan ayağın yerden yükselmesi (negatif Y, sadece walking).
+  /// Yürürken bir ayak yukarı kalkar, diğeri yere basar → "yürüyor" hissi.
+  final double legLiftL, legLiftR;
   /// Gövde yatay ağırlık değişimi (idle slow sway).
   final double sway;
   /// Gövde + kafa lean (öne eğilme, walking).  Radyan.
   final double lean;
+  /// Üst gövdenin yan twist'i (walking — yürüyenin omuzu hafif döner).
+  final double torsoTwist;
   const _Anim(this.legL, this.legR, this.armL, this.armR, this.bob,
-              {this.sway = 0, this.lean = 0});
+              {this.sway = 0, this.lean = 0,
+               this.legLiftL = 0, this.legLiftR = 0,
+               this.torsoTwist = 0});
 
   /// Karakter idle/walking/carrying için kol-bacak-bob salınımı.
   ///
@@ -27,40 +34,52 @@ class _Anim {
 
     if (carrying) {
       final wobble = sin(phase) * (0.02 + m * 0.04);
-      final bobWalk = (cos(phase * 2) - 1) * 1.6;
+      final bobWalk = (cos(phase * 2) - 1) * 2.0;
+      final liftL = max(0.0, sin(phase)) * 1.4 * m;
+      final liftR = max(0.0, -sin(phase)) * 1.4 * m;
       return _Anim(
-        sin(phase) * (0.04 + m * 0.30),
-        -sin(phase) * (0.04 + m * 0.30),
+        sin(phase) * (0.04 + m * 0.34),
+        -sin(phase) * (0.04 + m * 0.34),
         0.65 + wobble,
         -0.65 - wobble,
         bobWalk * m,
-        lean: m * 0.05,
+        lean: m * 0.06,
+        legLiftL: liftL,
+        legLiftR: liftR,
       );
     }
 
     // ── Idle parametreleri ────────────────────────────────────────────────
     final sIdle      = sin(phase) * 0.10;
-    final breathIdle = -sin(phase * 0.5).abs() * 0.6;
-    // Yavaş yan ağırlık değişimi — 0.045 Hz, ±1.6 px (idle "yaşıyor" hissi)
-    final idleSway   = sin(phase * 0.28) * 1.6;
+    // Daha yavaş, daha doğal nefes alma (0.4 Hz → 0.32 Hz). Genlik +0.2 px.
+    final breathIdle = -sin(phase * 0.35).abs() * 0.8;
+    // Yavaş yan ağırlık değişimi — idle "yaşıyor" hissi, vurgulu.
+    final idleSway   = sin(phase * 0.26) * 2.2;
 
     // ── Walking parametreleri ─────────────────────────────────────────────
     final sWalk    = sin(phase);
-    // Bob: cosine eğrisi — sharp V-peak yerine yumuşak dalga
-    final bobWalk  = (cos(phase * 2) - 1) * 1.8;
-    // Walking lean: gövde öne eğilir.  flipX scale(-1,1) ile aynalanır;
-    // her iki yönde de görsel olarak hareket yönüne lean verir.
-    const leanWalk = 0.07;
+    // Bob: 2× frequency cosine — her adımda iniş/çıkış. Daha belirgin.
+    final bobWalk  = (cos(phase * 2) - 1) * 2.6;
+    // Walking lean — gövde öne eğilir (radyan).
+    const leanWalk = 0.10;
+    // Foot lift Y — sin'in pozitif yarısında sol ayak kalkar, ters yarıda sağ.
+    final liftL    = max(0.0, sWalk)  * 1.6 * m;
+    final liftR    = max(0.0, -sWalk) * 1.6 * m;
+    // Üst gövde twist — yürürken omuzlar hafif tersine döner (counter-leg).
+    final twist    = sWalk * 0.04 * m;
 
     // ── Blend ──────────────────────────────────────────────────────────────
     return _Anim(
-      sIdle        + (sWalk * 0.42 - sIdle) * m,           // legL
-      -sIdle       + (-sWalk * 0.42 + sIdle) * m,          // legR
-      -sIdle * 0.5 + (-sWalk * 0.30 + sIdle * 0.5) * m,    // armL
-       sIdle * 0.5 + ( sWalk * 0.30 - sIdle * 0.5) * m,    // armR
+      sIdle        + (sWalk * 0.55 - sIdle) * m,           // legL (daha geniş adım)
+      -sIdle       + (-sWalk * 0.55 + sIdle) * m,          // legR
+      -sIdle * 0.5 + (-sWalk * 0.40 + sIdle * 0.5) * m,    // armL (counter-leg)
+       sIdle * 0.5 + ( sWalk * 0.40 - sIdle * 0.5) * m,    // armR
       breathIdle   + (bobWalk - breathIdle) * m,            // bob
-      sway: idleSway * (1.0 - m),                            // idle only
-      lean: leanWalk * m,                                    // walking only
+      sway: idleSway * (1.0 - m),
+      lean: leanWalk * m,
+      legLiftL: liftL,
+      legLiftR: liftR,
+      torsoTwist: twist,
     );
   }
 }
@@ -276,7 +295,8 @@ class CharacterRenderer {
   }
 
   /// Gövde transform — bacaklar ve gölge yere sabit kalır, üst gövde
-  /// (torso + kol + kafa) sway (yan), lean (öne eğilme), bob (dikey) uygular.
+  /// (torso + kol + kafa) sway (yan), lean (öne eğilme), bob (dikey),
+  /// torsoTwist (yan twist) uygular.
   /// Çağırılan kod c.save() yapmış olmalı; restore yine kendi sorumluluğunda.
   static void _applyTorsoTransform(Canvas c, _Anim anim) {
     if (anim.sway != 0) c.translate(anim.sway, 0);
@@ -284,6 +304,12 @@ class CharacterRenderer {
       c.translate(0, -36);
       c.rotate(anim.lean);
       c.translate(0, 36);
+    }
+    // Twist: omuz hizasında pivot, walking iken hafif yan rotation.
+    if (anim.torsoTwist != 0) {
+      c.translate(0, -28);
+      c.rotate(anim.torsoTwist);
+      c.translate(0, 28);
     }
     if (anim.bob != 0) c.translate(0, anim.bob);
   }
@@ -780,6 +806,188 @@ class CharacterRenderer {
     canvas.restore();
   }
 
+  // ─── ÇOBAN ────────────────────────────────────────────────────────────────
+  // drawWoodcutter pattern'ı; balta yerine değnek, kıyafet yeşil yelek + bej
+  // gömlek. milking iken kollar inek yönünde aşağı eğilir, gövde hafif öne.
+  static void drawShepherd(Canvas canvas, {
+    bool   flipX         = false,
+    double walkPhase     = 0,
+    double moveIntensity = 0.0,
+    bool   milking       = false,
+    double milkPhase     = 0,
+  }) {
+    canvas.save();
+    if (flipX) canvas.scale(-1, 1);
+
+    final _Anim anim;
+    final double armRAngle;
+    final double armLAngle;
+    if (milking) {
+      // Eller aşağı sabit, hafif ritmik salınım (sağım hareketi)
+      final wobble = sin(milkPhase * 2) * 0.12;
+      anim = _Anim(0, 0, 0, 0, 1.5, lean: 0.18);
+      armRAngle = 1.10 + wobble;
+      armLAngle = 1.10 - wobble;
+    } else {
+      anim = _Anim.compute(walkPhase, moveIntensity);
+      armRAngle = anim.armR;
+      armLAngle = anim.armL;
+    }
+
+    _shadow(canvas);
+    _leg(canvas, -6, anim.legL, const Color(0xFF4A3818), _leatherDk);
+    _leg(canvas,  6, anim.legR, const Color(0xFF4A3818), _leatherDk);
+
+    canvas.save();
+    _applyTorsoTransform(canvas, anim);
+    // Bej keten gömlek
+    const shirtColor = Color(0xFFC8B080);
+    const shirtDark  = Color(0xFF8A6C40);
+    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtColor));
+    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
+    // Yeşil yelek üstte
+    const vestColor = Color(0xFF3A6A40);
+    const vestDark  = Color(0xFF1E3A22);
+    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 28), _f(vestColor));
+    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 28), _s(vestDark));
+    // Kemer
+    canvas.drawRect(const Rect.fromLTWH(-11, -42, 22, 4), _f(_leatherDk));
+
+    _arm(canvas, -16, armLAngle, shirtColor);
+    // Sağ elde çoban değneği (basit kavisli sopa). Milking'de çizmiyoruz —
+    // değnek yere bırakılmış sayılır.
+    if (!milking) {
+      _arm(canvas, 16, armRAngle, shirtColor, (arm) {
+        arm.drawRect(const Rect.fromLTWH(-1, -32, 3, 56), _f(const Color(0xFF6A4A20)));
+        arm.drawRect(const Rect.fromLTWH(-3, -34, 6, 6),  _f(const Color(0xFF6A4A20)));
+      });
+    } else {
+      _arm(canvas, 16, armRAngle, shirtColor);
+    }
+
+    _head(canvas, _skin1);
+    // Hasır şapka (geniş kenar + üst)
+    canvas.drawRect(const Rect.fromLTWH(-14, -94, 28, 4), _f(_straw));
+    canvas.drawRect(const Rect.fromLTWH(-14, -94, 28, 4), _s(const Color(0xFF6A4A18)));
+    canvas.drawRect(const Rect.fromLTWH(-9, -104, 18, 10), _f(_straw));
+    canvas.drawRect(const Rect.fromLTWH(-9, -104, 18, 10), _s(const Color(0xFF6A4A18)));
+    canvas.restore();
+
+    canvas.restore();
+  }
+
+  // ─── İNEK ─────────────────────────────────────────────────────────────────
+  // 4 bacaklı, beyaz gövde + kahverengi lekeler. walkPhase'a göre çapraz
+  // bacak yürüyüşü (sol-ön + sağ-arka birlikte ↔ sağ-ön + sol-arka). beingMilked
+  // iken sabit durur, kuyruk hafif sallanır.
+  // Boyut: insan ~110 px boyunda; ineğin sırtı insanın göğüs hizasında
+  // (~80 px). Bu insan boyunun ~%75'i — gerçek inek/insan oranına yakın.
+  static void drawCow(Canvas canvas, {
+    bool   flipX         = false,
+    double walkPhase     = 0,
+    bool   isWalking     = false,
+    bool   beingMilked   = false,
+  }) {
+    canvas.save();
+    if (flipX) canvas.scale(-1, 1);
+
+    // Bacak salınımı — diagonal pairs. Bacak uzadığı için lift biraz daha.
+    final sw = isWalking ? sin(walkPhase) * 4.0 : 0.0;
+    final liftFL = isWalking ? max(0.0, sin(walkPhase)) * 3.0 : 0.0;
+    final liftBR = liftFL;
+    final liftFR = isWalking ? max(0.0, -sin(walkPhase)) * 3.0 : 0.0;
+    final liftBL = liftFR;
+
+    const bodyColor  = Color(0xFFE8DCC4);
+    const bodyShade  = Color(0xFFB8A888);
+    const patchColor = Color(0xFF5A3818);
+    const patchDark  = Color(0xFF3A2410);
+    const hoof       = Color(0xFF1A1208);
+    const udder      = Color(0xFFD88A8A);
+    const muzzle     = Color(0xFFC89870);
+
+    // Gölge — gövde tabanından geniş projeksiyon
+    canvas.drawRect(const Rect.fromLTWH(-28, -3, 56, 7),
+        Paint()..color = const Color(0x35000000)..isAntiAlias = false);
+
+    // Bacaklar (ayaklar y=0). 4 bacak — ön/arka × sol/sağ. Bacak 25 px.
+    void leg(double x, double lift) {
+      canvas.drawRect(Rect.fromLTWH(x - 2.5, -25 + lift, 5, 23), _f(bodyColor));
+      canvas.drawRect(Rect.fromLTWH(x - 2.5, -25 + lift, 5, 23), _s(_outline));
+      // Üst kısım — gölge tonu (kas hissi)
+      canvas.drawRect(Rect.fromLTWH(x - 2.5, -25 + lift, 5, 6), _f(bodyShade));
+      // Toynak (siyah)
+      canvas.drawRect(Rect.fromLTWH(x - 3, -3 + lift, 6, 4), _f(hoof));
+    }
+    // Bacak konumları: gövde 50 geniş (-25..+25), bacaklar ön ve arka çeyrekte
+    leg(-19, liftBL);  // arka sol
+    leg(-12, liftFL);  // ön sol
+    leg( 11, liftFR);  // ön sağ
+    leg( 18, liftBR);  // arka sağ
+
+    // Gövde — 50 geniş × 32 yüksek. Bacaklar hip=-25'te, gövde alt kenarı orada.
+    final bodyTop = -57.0 + (isWalking ? sin(walkPhase * 2) * 0.8 : 0.0);
+    final bodyRect = Rect.fromLTWH(-25, bodyTop, 50, 32);
+    canvas.drawRect(bodyRect, _f(bodyColor));
+    canvas.drawRect(bodyRect, _s(_outline));
+    // Üst highlight (1px)
+    canvas.drawRect(Rect.fromLTWH(bodyRect.left + 1, bodyRect.top + 1,
+        bodyRect.width - 2, 2), _f(lighter(bodyColor, 0.10)));
+    // Alt gölge (1px)
+    canvas.drawRect(Rect.fromLTWH(bodyRect.left + 1, bodyRect.bottom - 3,
+        bodyRect.width - 2, 2), _f(bodyShade));
+
+    // Kahverengi lekeler — gövdeye göre yeniden ölçeklendi
+    canvas.drawRect(Rect.fromLTWH(-22, bodyTop + 4, 14, 9), _f(patchColor));
+    canvas.drawRect(Rect.fromLTWH(-22, bodyTop + 4, 14, 9), _s(patchDark));
+    canvas.drawRect(Rect.fromLTWH(-6, bodyTop + 15, 16, 11), _f(patchColor));
+    canvas.drawRect(Rect.fromLTWH(-6, bodyTop + 15, 16, 11), _s(patchDark));
+    canvas.drawRect(Rect.fromLTWH(11, bodyTop + 3, 12, 7), _f(patchColor));
+    canvas.drawRect(Rect.fromLTWH(11, bodyTop + 3, 12, 7), _s(patchDark));
+
+    // Meme (gövdenin alt-ön kısmında). beingMilked iken biraz sarkar.
+    final udderY = bodyTop + 26.0 + (beingMilked ? 1.5 : 0.0);
+    canvas.drawRect(Rect.fromLTWH(-3, udderY, 8, 6), _f(udder));
+    canvas.drawRect(Rect.fromLTWH(-3, udderY, 8, 6), _s(_outline));
+
+    // Kuyruk — arkada sarkık, beingMilked iken sallanır. Uzun ve ince.
+    final tailSway = beingMilked
+        ? sin(walkPhase * 1.5) * 4.0
+        : (isWalking ? sw * 0.5 : sin(walkPhase * 0.3) * 1.5);
+    canvas.save();
+    canvas.translate(-25, bodyTop + 6);
+    canvas.rotate(tailSway * 0.04);
+    canvas.drawRect(const Rect.fromLTWH(-2, 0, 3, 20), _f(patchColor));
+    canvas.drawRect(const Rect.fromLTWH(-3, 18, 5, 5), _f(_outline));
+    canvas.restore();
+
+    // Kafa — gövdenin ön (sağ) ucundan dışarı çıkar, biraz aşağıda
+    final headX = 22.0;
+    final headY = bodyTop + 4.0;
+    canvas.drawRect(Rect.fromLTWH(headX, headY, 18, 22), _f(bodyColor));
+    canvas.drawRect(Rect.fromLTWH(headX, headY, 18, 22), _s(_outline));
+    // Yüz üst kısmı highlight
+    canvas.drawRect(Rect.fromLTWH(headX + 1, headY + 1, 16, 2),
+        _f(lighter(bodyColor, 0.10)));
+    // Burun (muzzle)
+    canvas.drawRect(Rect.fromLTWH(headX + 10, headY + 11, 9, 10), _f(muzzle));
+    canvas.drawRect(Rect.fromLTWH(headX + 10, headY + 11, 9, 10), _s(_outline));
+    // Burun delikleri
+    canvas.drawRect(Rect.fromLTWH(headX + 12, headY + 15, 2, 3), _f(_outline));
+    canvas.drawRect(Rect.fromLTWH(headX + 16, headY + 15, 2, 3), _f(_outline));
+    // Göz
+    canvas.drawRect(Rect.fromLTWH(headX + 5, headY + 5, 3, 3), _f(_outline));
+    // Kulak (yan tarafta, kafadan dışarı taşar)
+    canvas.drawRect(Rect.fromLTWH(headX + 2, headY - 4, 5, 5), _f(bodyColor));
+    canvas.drawRect(Rect.fromLTWH(headX + 2, headY - 4, 5, 5), _s(_outline));
+    // Boynuz (içeride, kafanın üst-arkası)
+    canvas.drawRect(Rect.fromLTWH(headX + 7, headY - 3, 3, 5),
+        _f(const Color(0xFFCFC0A0)));
+    canvas.drawRect(Rect.fromLTWH(headX + 7, headY - 3, 3, 5), _s(_outline));
+
+    canvas.restore();
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // YENİ NPC RENDER SİSTEMİ — per-NPC görsel varyasyon + 3-ton shading
   // ════════════════════════════════════════════════════════════════════════════
@@ -805,11 +1013,13 @@ class CharacterRenderer {
   }
 
   /// Shaded leg — hip pivot rotation + 3-tone hose + boot.
+  /// [legLift] adım atan ayağın yerden yükselmesi (negatif Y; walking iken
+  /// adım atan bacak hafifçe kalkar, diğeri yerde basılı kalır).
   /// Bacak + bot tam olarak yere (origin y=0) ulaşır; gölge orada çizilir.
   static void _shadedLeg(Canvas c, double hipX, double angle,
-      Color hose, Color boot) {
+      Color hose, Color boot, {double legLift = 0}) {
     c.save();
-    c.translate(hipX, -36);
+    c.translate(hipX, -36 - legLift);
     c.rotate(angle);
     _shadedRect(c, const Rect.fromLTWH(-4, 0, 8, 32), hose);
     _shadedRect(c, const Rect.fromLTWH(-5, 29, 10, 7), boot);
@@ -944,8 +1154,8 @@ class CharacterRenderer {
     final hoseBase  = tintCloth(_woolBrown, v.clothingShift * 0.6);
 
     _shadow(c);
-    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
-    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
     c.save();
     _applyTorsoTransform(c, anim);
@@ -974,8 +1184,8 @@ class CharacterRenderer {
 
     _shadow(c);
     // Bacaklar gövde lean/sway'ından bağımsız — ayak yerde sabit
-    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
-    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
     // Gövde transform — bob + sway + lean (ortak helper)
     c.save();
@@ -1001,8 +1211,8 @@ class CharacterRenderer {
     final hoodBase  = darker(cloakBase, 0.06);
 
     _shadow(c);
-    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
-    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
     c.save();
     _applyTorsoTransform(c, anim);
@@ -1037,8 +1247,8 @@ class CharacterRenderer {
     final apronBase = _leather;
 
     _shadow(c);
-    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
-    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
     c.save();
     _applyTorsoTransform(c, anim);
@@ -1068,8 +1278,8 @@ class CharacterRenderer {
     final gambStripe = darker(gambBase, 0.20);
 
     _shadow(c);
-    _shadedLeg(c, -6, anim.legL, hoseBase, const Color(0xFF303028));
-    _shadedLeg(c,  6, anim.legR, hoseBase, const Color(0xFF303028));
+    _shadedLeg(c, -6, anim.legL, hoseBase, const Color(0xFF303028), legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, const Color(0xFF303028), legLift: anim.legLiftR);
 
     c.save();
     _applyTorsoTransform(c, anim);
@@ -1120,8 +1330,8 @@ class CharacterRenderer {
     final robeBase = tintCloth(const Color(0xFF2A3040), v.clothingShift);
 
     _shadow(c);
-    _shadedLeg(c, -5, anim.legL * 0.5, robeBase, _leatherDk);
-    _shadedLeg(c,  5, anim.legR * 0.5, robeBase, _leatherDk);
+    _shadedLeg(c, -5, anim.legL * 0.5, robeBase, _leatherDk, legLift: anim.legLiftL * 0.5);
+    _shadedLeg(c,  5, anim.legR * 0.5, robeBase, _leatherDk, legLift: anim.legLiftR * 0.5);
 
     c.save();
     _applyTorsoTransform(c, anim);
@@ -1165,8 +1375,8 @@ class CharacterRenderer {
     final hoseBase  = tintCloth(const Color(0xFF3A3028), v.clothingShift * 0.4);
 
     _shadow(c);
-    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
-    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
     c.save();
     _applyTorsoTransform(c, anim);
@@ -1201,8 +1411,8 @@ class CharacterRenderer {
     final hatDome   = const Color(0xFF5A4A28);
 
     _shadow(c);
-    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk);
-    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
     c.save();
     _applyTorsoTransform(c, anim);

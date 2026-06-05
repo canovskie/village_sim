@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../core/constants.dart';
 import '../farm/farm_tile.dart';
+import '../systems/anchor_system.dart';
 import 'worker_entity.dart';
 
 enum FarmerState {
@@ -34,9 +35,14 @@ class FarmFarmer extends WorkerEntity {
 
   bool   hasWater       = false;
   double _waterTimer    = 0.0;
+
+  /// Render katmanı için _waterTimer'a public erişim (splash animasyonu).
+  double get waterTimerForSplash => _waterTimer;
   double _waterCooldown = 0.0; // seconds until next water run
 
   double _wellX = -1, _wellY = -1;
+  AnchorPoint? _wellPoint;
+  AnchorSlot?  _wellSlot;
   FarmTile? _waterTarget;
 
   double _idleTimer    = 0.0;
@@ -65,7 +71,7 @@ class FarmFarmer extends WorkerEntity {
   void update(double dt, List<FarmTile> tiles, Random rng,
       {Set<(int, int)> waterTiles    = const {},
        Set<(int, int)> softObstacles = const {},
-       List<(double, double)>? wellPositions}) {
+       AnchorSystem? anchorSystem}) {
     harvestReady  = false;
     harvestHayPos = null;
 
@@ -75,29 +81,31 @@ class FarmFarmer extends WorkerEntity {
       case FarmerState.idle:
         _idleWander(dt, rng, waterTiles, softObstacles);
 
-        // Sulama turu: cooldown bitti, erişilebilir kuyu var ve sulanacak
-        // (büyüyen) ekin var. Kuyu yoksa/uzaksa çiftçi sadece hasat yapar.
+        // Sulama turu: cooldown bitti, erişilebilir kuyu slot'u var ve
+        // sulanacak (büyüyen) ekin var. Anchor sistemi en yakın BOŞ slot'u
+        // verir — birden çok çiftçi aynı kuyuda farklı yönlerden yaklaşır.
         if (_waterCooldown <= 0 &&
-            wellPositions != null && wellPositions.isNotEmpty &&
+            anchorSystem != null &&
+            anchorSystem.wellPoints.isNotEmpty &&
             tiles.any((t) => t.isGrowing)) {
-          double bestD2 = double.infinity;
-          (double, double)? nearest;
-          for (final w in wellPositions) {
-            final dx = w.$1 - gridX;
-            final dy = w.$2 - gridY;
-            final d2 = dx * dx + dy * dy;
-            if (d2 < bestD2) { bestD2 = d2; nearest = w; }
-          }
-          // Yalnızca makul mesafedeki kuyuya git; yoksa cooldown'u yakmadan
-          // bir sonraki idle'da tekrar dene.
-          if (nearest != null &&
-              bestD2 <= kFarmWellMaxDistance * kFarmWellMaxDistance) {
-            _waterCooldown = kFarmWaterCooldown;
-            _wellX = nearest.$1;
-            _wellY = nearest.$2;
-            state  = FarmerState.walkingToWell;
-            _idleTimer = 0;
-            break;
+          final claim = anchorSystem.claimNearestWell(gridX, gridY, this);
+          if (claim != null) {
+            final dx = claim.$2.col - gridX;
+            final dy = claim.$2.row - gridY;
+            if (dx * dx + dy * dy <=
+                kFarmWellMaxDistance * kFarmWellMaxDistance) {
+              _waterCooldown = kFarmWaterCooldown;
+              _wellPoint = claim.$1;
+              _wellSlot  = claim.$2;
+              _wellX = claim.$2.col;
+              _wellY = claim.$2.row;
+              state  = FarmerState.walkingToWell;
+              _idleTimer = 0;
+              break;
+            } else {
+              // Slot uzakta; iade et, bir sonraki idle'da tekrar dene.
+              claim.$1.release(claim.$2, this);
+            }
           }
         }
 
@@ -151,6 +159,12 @@ class FarmFarmer extends WorkerEntity {
           hasWater    = true;
           state       = FarmerState.idle; // will find a crop to water next idle
           _waterTimer = 0.0;
+          // Slot serbest — başka çiftçi gelebilir.
+          if (_wellSlot != null && _wellPoint != null) {
+            _wellPoint!.release(_wellSlot!, this);
+            _wellSlot  = null;
+            _wellPoint = null;
+          }
           // Hemen sulanacak (büyüyen) en yakın ekini bul
           FarmTile? waterTarget;
           double    wBestD = double.infinity;
@@ -232,16 +246,14 @@ class FarmFarmer extends WorkerEntity {
     // walkPhase güncellemesi artık update() sonunda tek yerde (tam 2π döngüsü).
   }
 
-  /// [true] döner = hedefe ulaştı.
+  /// [true] döner = hedefe ulaştı. Path-aware: base moveTowards uzak hedefte
+  /// A* waypoint'lerini izler, kısa hop'larda doğrudan adım. Varışta snap.
   bool _moveTowards(double tx, double ty, double dt) {
-    final dx   = tx - gridX;
-    final dy   = ty - gridY;
-    final dist = sqrt(dx * dx + dy * dy);
-    if (dist < 0.08) { gridX = tx; gridY = ty; return true; }
-    final step = (speed * dt).clamp(0.0, dist);
-    gridX += (dx / dist) * step;
-    gridY += (dy / dist) * step;
-    facingRight = dx > 0;
+    if (moveTowards(tx, ty, dt, arriveD: 0.08)) {
+      gridX = tx;
+      gridY = ty;
+      return true;
+    }
     return false;
   }
 }

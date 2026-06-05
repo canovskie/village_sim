@@ -20,8 +20,23 @@ enum VillagerState { moving, idle, sleeping, walkingToSleep, walkingToPickup, ca
 ///                   yuva çevresinde oyun (yaşam evresi child iken geçerli)
 enum WanderBehavior { patrol, ponder, stroll, homebody, waterside, playful }
 
+/// NPC'nin o anki sosyal aktivitesi — görsel atmosfer için (gameplay etkisi
+/// yok). [chat] yan yana iki kişi konuşur, [music] tek kişi gitar çalar,
+/// [dance] yan yana iki kişi yerinde sallanır.
+enum VillagerActivity { none, chat, music, dance }
+
 class VillagerEntity extends WorkerEntity {
   final VillagerType type;
+
+  /// Köylünün adı — kurucu NPC'lerde rastgele atanır, sonradan doğanlar
+  /// _spawnGrownVillager'da random alır. Aile/bildirim sisteminde kullanılır.
+  final String name;
+
+  /// Aile bağları — bebek doğduğunda evdeki yetişkin sakinler ebeveyn olur
+  /// (max 2). Kurucu NPC'lerde boş. Ölüm anında karşı taraf listesinden
+  /// referansı kaldırılır.
+  final List<VillagerEntity> parents  = [];
+  final List<VillagerEntity> children = [];
 
   /// Her NPC için kalıcı görsel kimlik — ten/saç/göz/sakal/kıyafet tonu.
   /// Aynı tipten NPC'lerin tıpatıp aynı görünmesini önler.
@@ -77,8 +92,21 @@ class VillagerEntity extends WorkerEntity {
   /// Varsayılan sonsuz = ölümsüz (geriye dönük güvenli); main gerçek değer verir.
   final double lifespanDays;
 
+  /// Sosyal aktivite durumu — atmosferik "yaşayan köy" katmanı.
+  /// [activity] aktif tip; [chatBubbleTime] kalan süre; [chatBubbleIcon]
+  /// baloncukta gösterilen emoji.
+  double chatBubbleTime = 0;
+  String chatBubbleIcon = '';
+  VillagerActivity activity = VillagerActivity.none;
+  /// Bu NPC'nin son aktiviteden sonraki kişisel cooldown'u (sn). Her NPC
+  /// kendi başına değerlendirilir → global cap yok, nüfus arttıkça toplam
+  /// aktivite doğal artar. 60-180 sn.
+  double socialCooldown = 0;
+
   VillagerEntity({
     required this.type,
+    required this.name,
+    required bool male,
     required super.startCol,
     required super.startRow,
     int? visualSeed,
@@ -88,8 +116,14 @@ class VillagerEntity extends WorkerEntity {
         targetRow = startRow,
         speed     = _speedFor(type),
         behavior  = _behaviorFor(type),
+        // Visual seed'ten görsel detaylar (saç/ten/göz) gelir, ama cinsiyet
+        // dışarıdan zorlanır → name ile uyumlu kalır.
         visual    = NpcVisual.fromSeed(
-            visualSeed ?? _autoSeed(type, startCol, startRow));
+            visualSeed ?? _autoSeed(type, startCol, startRow),
+            forceMale: male);
+
+  /// NPC'nin cinsiyeti — visual.isMale ile aynı (getter pratik erişim).
+  bool get isMale => visual.isMale;
 
   /// Otomatik visual seed — type + spawn pozisyonu hash'i.  Aynı pozisyondan
   /// aynı tipte spawn olan iki NPC olmaz pratikte, ama görsel seed verilebilir.
@@ -214,11 +248,10 @@ class VillagerEntity extends WorkerEntity {
     final isDawn  = dayLight >= kDawnThreshold;
 
     // ── Porter: finish delivery first even at night ──────────────────────────
+    // dt * carrySpeedMultiplier → step = speed * carrySpeedMult * dt (matematik
+    // birebir aynı, ama moveTowards path-aware: uzak pickup yolları A* ile takip).
     if (state == VillagerState.walkingToPickup) {
-      final dx   = _pickupX - gridX;
-      final dy   = _pickupY - gridY;
-      final dist = sqrt(dx * dx + dy * dy);
-      if (dist < 0.25) {
+      if (moveTowards(_pickupX, _pickupY, dt * carrySpeedMultiplier, arriveD: 0.25)) {
         gridX       = _pickupX;
         gridY       = _pickupY;
         carriedItem = _pickupItem;
@@ -226,10 +259,6 @@ class VillagerEntity extends WorkerEntity {
         state       = VillagerState.carrying;
         isWalking   = false;
       } else {
-        final step = speed * carrySpeedMultiplier * dt;
-        gridX += (dx / dist) * min(step, dist);
-        gridY += (dy / dist) * min(step, dist);
-        facingRight = dx > 0;
         isWalking = true;
       }
       walkPhase += dt * (isWalking ? speed * 5.5 : 1.2);
@@ -238,10 +267,7 @@ class VillagerEntity extends WorkerEntity {
     }
 
     if (state == VillagerState.carrying) {
-      final dx   = _deliverX - gridX;
-      final dy   = _deliverY - gridY;
-      final dist = sqrt(dx * dx + dy * dy);
-      if (dist < 0.25) {
+      if (moveTowards(_deliverX, _deliverY, dt * carrySpeedMultiplier, arriveD: 0.25)) {
         gridX = _deliverX;
         gridY = _deliverY;
         _onDelivered?.call();
@@ -251,10 +277,6 @@ class VillagerEntity extends WorkerEntity {
         idleTimer    = 0.4 + rng.nextDouble() * 1.5;
         isWalking    = false;
       } else {
-        final step = speed * carrySpeedMultiplier * dt;
-        gridX += (dx / dist) * min(step, dist);
-        gridY += (dy / dist) * min(step, dist);
-        facingRight = dx > 0;
         isWalking = true;
       }
       walkPhase += dt * (isWalking ? speed * 5.5 : 1.2);
@@ -280,20 +302,13 @@ class VillagerEntity extends WorkerEntity {
 
     if (state == VillagerState.walkingToSleep) {
       final (tx, ty) = sleepTarget!;
-      final dx   = tx - gridX;
-      final dy   = ty - gridY;
-      final dist = sqrt(dx * dx + dy * dy);
-      if (dist < 0.55) {
+      if (moveTowards(tx, ty, dt, arriveD: 0.55)) {
         gridX = tx; gridY = ty;
         state = VillagerState.sleeping;
         isWalking = false;
         if (sleepIsHome) isInsideBuilding = true;
       } else {
-        final step = speed * dt;
-        gridX += (dx / dist) * min(step, dist);
-        gridY += (dy / dist) * min(step, dist);
-        facingRight = dx > 0;
-        isWalking   = true;
+        isWalking = true;
       }
       walkPhase += dt * (isWalking ? speed * 5.5 : 0.4);
       walkPhase %= pi * 2;
@@ -323,11 +338,9 @@ class VillagerEntity extends WorkerEntity {
         }
 
       case VillagerState.moving:
-        final dx   = targetCol - gridX;
-        final dy   = targetRow - gridY;
-        final dist = sqrt(dx * dx + dy * dy);
-
-        if (dist < 0.05) {
+        final prevX = gridX;
+        final prevY = gridY;
+        if (moveTowards(targetCol, targetRow, dt * _tripSpeed, arriveD: 0.05)) {
           gridX = targetCol;
           gridY = targetRow;
           // Devriyede vardığında sıradaki uca dön.
@@ -336,24 +349,13 @@ class VillagerEntity extends WorkerEntity {
           final (lo, hi) = _dwellRange;
           idleTimer  = lo + rng.nextDouble() * (hi - lo);
           _lookTimer = 0.4 + rng.nextDouble();
-        } else {
-          final step  = speed * _tripSpeed * dt;
-          final ratio = min(step / dist, 1.0);
-          final prevX = gridX;
-          gridX += dx * ratio;
-          gridY += dy * ratio;
-          if (waterTiles.contains((gridX.round(), gridY.round()))) {
-            gridX     = prevX;
-            gridY    -= (dy / dist) * step * ratio;
-            state     = VillagerState.idle;
-            idleTimer = 0.1;
-            break;
-          }
-          if (gridX - prevX > 0.001) {
-            facingRight = true;
-          } else if (gridX - prevX < -0.001) {
-            facingRight = false;
-          }
+        } else if (waterTiles.contains((gridX.round(), gridY.round()))) {
+          // Kısa hop (< 3 tile) için A* skip edilir; düz adım suya saplanırsa
+          // pushback ile geri al + idle'a düş, hedefi yeniden seçsin.
+          gridX     = prevX;
+          gridY     = prevY;
+          state     = VillagerState.idle;
+          idleTimer = 0.1;
         }
 
       case VillagerState.sleeping:

@@ -1,4 +1,3 @@
-import 'dart:math';
 import '../buildings/building_entity.dart';
 import '../buildings/building_type.dart';
 import '../characters/villager_type.dart';
@@ -6,26 +5,29 @@ import '../core/resources.dart';
 import '../entities/villager_entity.dart';
 import '../world/hay_entity.dart';
 import '../world/resource_box.dart';
+import 'anchor_system.dart';
 
 /// Idle köylüleri yere düşmüş kaynak kutularına ve hay balyalarına atar.
 /// Çiftçi NPC'leri sadece hay/bale taşır — odun/maden/demir kutularına dokunmaz.
 ///
-/// Hedef öncelik: warehouse > firepit > sabit (8, 8) varsayılanı.
-/// Mesafe filtreleri: kutu için 10 tile yarıçap, balya için 12 tile yarıçap.
+/// Teslim noktası AnchorSystem üzerinden:
+///   • Önce warehouse slot'u, yoksa firepit slot'u (fallback chain).
+///   • Slot iş bitince release; aynı teslim noktasında yığılma olmaz.
+/// Hiç anchor yoksa (ne warehouse ne firepit) taşıma yapılmaz — varsayılan
+/// "8,8" koordinatına atış kaldırıldı (kullanıcı görmesin).
 void assignCarriers({
   required List<VillagerEntity> villagers,
   required List<BuildingEntity> buildings,
-  required BuildingEntity? firepit,
   required List<ResourceBox> resourceBoxes,
   required List<HayEntity> hayEntities,
   required ResourceBundle stockpile,
-  required Random rng,
+  required AnchorSystem anchorSystem,
 }) {
-  final warehouse = buildings
-      .where((b) => b.type == BuildingType.warehouse)
-      .firstOrNull;
-  final destX = warehouse?.col.toDouble() ?? firepit?.col.toDouble() ?? 8.0;
-  final destY = warehouse?.row.toDouble() ?? firepit?.row.toDouble() ?? 8.0;
+  final hasAnyAnchor = anchorSystem.warehousePoints.isNotEmpty ||
+      anchorSystem.firepitPoints.isNotEmpty;
+  if (!hasAnyAnchor) return; // teslim noktası yoksa hiç başlama
+  // Hay balyası için depo şartı korunur — eski davranış (sadece warehouse'a).
+  final hasWarehouse = anchorSystem.warehousePoints.isNotEmpty;
 
   for (final v in villagers) {
     if (v.state != VillagerState.idle) continue;
@@ -48,15 +50,18 @@ void assignCarriers({
         }
       }
       if (nearestBox != null) {
+        final claim = anchorSystem.claimDeliverySlot(
+            nearestBox.gridX, nearestBox.gridY, v);
+        if (claim == null) continue; // tüm slot'lar dolu, bir dahaki tick'te
+        final (point, slot) = claim;
         nearestBox.isBeingCarried = true;
-        final deliverX = destX + rng.nextDouble() * 2 - 1;
-        final deliverY = destY + rng.nextDouble() * 2 - 1;
         final box = nearestBox;
         v.assignCarryTask(
           box,
           box.gridX, box.gridY,
-          deliverX, deliverY,
+          slot.col, slot.row,
           onDelivered: () {
+            point.release(slot, v);
             box.isDelivered = true;
             resourceBoxes.remove(box);
             switch (box.type) {
@@ -71,8 +76,9 @@ void assignCarriers({
       }
     }
 
-    // Balya (bale) varsa depoya/ateşe taşı — pile'lar tarlada kalır.
-    if (warehouse != null) {
+    // Balya (bale) varsa depoya taşı — pile'lar tarlada kalır.
+    // Eski koşul: warehouse şart. Anchor'da depo varsa devam, yoksa atla.
+    if (hasWarehouse) {
       HayEntity? nearestBale;
       double bestBaleDist = double.infinity;
       for (final h in hayEntities) {
@@ -86,21 +92,24 @@ void assignCarriers({
         }
       }
       if (nearestBale != null) {
+        final claim = anchorSystem.claimDeliverySlot(
+            nearestBale.gridX, nearestBale.gridY, v);
+        if (claim == null) continue;
+        final (point, slot) = claim;
         nearestBale.isBeingCarried = true;
-        final deliverX = destX + rng.nextDouble() * 2 - 1;
-        final deliverY = destY + rng.nextDouble() * 2 - 1;
         final bale = nearestBale;
         v.assignCarryTask(
           bale,
           bale.gridX, bale.gridY,
-          deliverX, deliverY,
+          slot.col, slot.row,
           onDelivered: () {
+            point.release(slot, v);
             bale.isDelivered = true;
             hayEntities.remove(bale);
-            // Bir balya = bir birim yiyecek (4 hay pile'dan oluşur). Çalışan
-            // değirmen varsa öğütülüp +1 fazla yiyecek verir.
+            // 1 balya = 4 hay pile (= 4 hasat). Tarla yavaşlatıldığı için
+            // balya değeri 6'ya çıkarıldı — denge korunur. Değirmen +2 bonus.
             final hasMill = buildings.any((b) => b.type == BuildingType.mill);
-            stockpile.food += hasMill ? 2 : 1;
+            stockpile.food += hasMill ? 8 : 6;
           },
         );
       }

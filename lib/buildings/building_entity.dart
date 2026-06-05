@@ -24,6 +24,15 @@ class BuildingEntity {
   /// Bu evde yaşayan köylü sayısı — main her tick günceller (su tüketimi için).
   int occupants = 0;
 
+  /// İnşa tamamlanma anındaki sahne zamanı. _BuildingDrawable ilk birkaç
+  /// saniyede scale pop + toz bulutu çizer ("yeni doğmuş" hissi).
+  /// 0 = henüz ayarlanmamış (eski binalar / world-init).
+  double spawnTime = 0;
+
+  /// Son satış anındaki sahne zamanı (yalnız market). 0 = hiç satış yok.
+  /// _BuildingDrawable bunu okuyup 1 sn'lik altın parıltısı animasyonu çizer.
+  double lastSaleTime = 0;
+
   BuildingEntity({required this.type, required this.col, required this.row});
 
   int get cols => kBuildingMeta[type]!.cols;

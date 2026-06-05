@@ -31,7 +31,7 @@ class MinerEntity extends WorkerEntity {
 
     switch (state) {
       case MinerState.idle:
-        _findWork(nodes);
+        if (readyToSearchWork(dt)) _findWork(nodes);
         if (state == MinerState.idle) {
           idleWander(dt, rng, waterTiles, softObstacles);
         }

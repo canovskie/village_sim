@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'asset_style.dart';
+import 'flame_renderer.dart';
 
 /// Tüm el aletlerini yükler ve arm-local koordinat uzayında çizer.
 ///
@@ -136,22 +137,67 @@ class ToolRenderer {
     canvas.restore();
   }
 
+  // ── SAZ / BAĞLAMA (procedurel — asset yok) ─────────────────────────────────
+  // Ortam: NPC eli hizasında save/translate ile çağrılır; gövde alt-orta
+  // (0,0) origin. Anadolu temalı uzun saplı saz görseli.
+  static final Paint _pSazBody  = Paint()
+    ..color = const Color(0xFF8A5A28)..isAntiAlias = false;
+  static final Paint _pSazDark  = Paint()
+    ..color = const Color(0xFF3A1A08)..isAntiAlias = false;
+  static final Paint _pSazNeck  = Paint()
+    ..color = const Color(0xFF6A4220)..isAntiAlias = false;
+  static final Paint _pSazStr   = Paint()
+    ..color = const Color(0xFFE8C880)..isAntiAlias = false;
+  static final Paint _pSazHole  = Paint()
+    ..color = const Color(0xFF1A0C04)..isAntiAlias = false;
+  static final Paint _pSazOutline = Paint()
+    ..color = const Color(0xFF1A0C04)..style = PaintingStyle.stroke
+    ..strokeWidth = 1..isAntiAlias = false;
+
+  /// Saz/bağlama çizer. Origin: gövde alt-orta. Çağıran save/translate yapar.
+  static void drawSaz(Canvas canvas) {
+    // Gövde — armudu, damla şekilli (oval)
+    canvas.drawOval(const Rect.fromLTWH(-4, -6, 8, 8), _pSazBody);
+    canvas.drawOval(const Rect.fromLTWH(-4, -6, 8, 8), _pSazOutline);
+    // Gövde gölge (alt yarı)
+    canvas.drawRect(const Rect.fromLTWH(-3, -1, 6, 3), _pSazDark);
+    // Sap — uzun ince çubuk (yukarı uzanır)
+    canvas.drawRect(const Rect.fromLTWH(-1, -16, 2, 11), _pSazNeck);
+    canvas.drawRect(const Rect.fromLTWH(-1, -16, 2, 11), _pSazOutline);
+    // Sap kafa (tuner block)
+    canvas.drawRect(const Rect.fromLTWH(-2, -18, 4, 3), _pSazNeck);
+    canvas.drawRect(const Rect.fromLTWH(-2, -18, 4, 3), _pSazOutline);
+    // Teller (3 ince çizgi)
+    canvas.drawLine(const Offset(-0.5, -16), const Offset(-0.5, -2), _pSazStr);
+    canvas.drawLine(const Offset(0.5, -16),  const Offset(0.5, -2),  _pSazStr);
+    // Ses deliği
+    canvas.drawRect(const Rect.fromLTWH(-1, -3, 2, 2), _pSazHole);
+  }
+
   /// Draw ambient torch glow in WORLD space at (cx, cy).
   /// Call this BEFORE drawing the character (lower depth layer).
+  ///
+  /// Yumuşak halo (3 katman concentric) + üstünde küçük animasyonlu alev
+  /// (FlameRenderer). Lighting pass büyük halo'yu zaten veriyor; bu sadece
+  /// yerel parlama ile torch'un ucunda gerçek alev hissi.
   static void drawTorchGlow(Canvas canvas, double cx, double cy,
       double time, int seed) {
     final flicker = sin(time * 3.7 + seed * 0.731);
 
     _pTorchGlow1.color = Color.fromARGB(
-        ((18 + flicker * 8).round()).clamp(0, 40), 255, 160, 40);
+        ((12 + flicker * 5).round()).clamp(0, 28), 255, 160, 40);
     _pTorchGlow2.color = Color.fromARGB(
-        ((30 + flicker * 12).round()).clamp(0, 60), 255, 140, 20);
+        ((22 + flicker * 8).round()).clamp(0, 50), 255, 140, 20);
     _pTorchGlow3.color = Color.fromARGB(
-        ((55 + flicker * 20).round()).clamp(0, 100), 255, 120, 0);
+        ((36 + flicker * 12).round()).clamp(0, 72), 255, 120, 0);
 
-    canvas.drawCircle(Offset(cx, cy - 10), 45, _pTorchGlow1);
-    canvas.drawCircle(Offset(cx, cy - 10), 28, _pTorchGlow2);
-    canvas.drawCircle(Offset(cx, cy - 10), 14, _pTorchGlow3);
+    canvas.drawCircle(Offset(cx, cy - 10), 36, _pTorchGlow1);
+    canvas.drawCircle(Offset(cx, cy - 10), 22, _pTorchGlow2);
+    canvas.drawCircle(Offset(cx, cy - 10), 11, _pTorchGlow3);
+
+    // Karakterin elindeki torch ucunda animasyonlu alev — küçük scale.
+    FlameRenderer.draw(canvas, cx + 4, cy - 6, 0.9, time, seed,
+        intensity: 0.95, sparks: true);
   }
 
   // ── WATERBUCKET (çiftçi sulama) ───────────────────────────────────────────

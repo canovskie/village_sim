@@ -3,14 +3,24 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'characters/villager_type.dart';
+import 'characters/villager_names.dart';
 import 'entities/villager_entity.dart';
 import 'entities/builder_entity.dart';
 import 'entities/build_order.dart';
+import 'entities/road_order.dart';
+import 'entities/worker_entity.dart';
+import 'systems/path_context.dart';
+import 'systems/road_system.dart';
+import 'world/road_surface.dart';
 import 'rendering/game_painter.dart';
+import 'rendering/flame_renderer.dart';
+import 'rendering/smoke_renderer.dart';
+import 'rendering/water_shimmer_renderer.dart';
 import 'core/constants.dart';
 import 'buildings/building_entity.dart';
 import 'buildings/building_renderer.dart';
 import 'rendering/tile_renderer.dart';
+import 'rendering/road_renderer.dart';
 import 'world/day_night_cycle.dart';
 import 'farm/farm_tile.dart';
 import 'entities/farm_farmer.dart';
@@ -23,6 +33,8 @@ import 'world/mine_node.dart';
 import 'rendering/mine_renderer.dart';
 import 'entities/miner_entity.dart';
 import 'entities/fisher_entity.dart';
+import 'entities/shepherd_entity.dart';
+import 'world/animal_entity.dart';
 import 'rendering/tool_renderer.dart';
 import 'world/nature_entity.dart';
 import 'rendering/nature_renderer.dart';
@@ -30,23 +42,40 @@ import 'world/world_generator.dart';
 import 'buildings/building_type.dart';
 import 'ui/hud.dart';
 import 'ui/building_panel.dart';
+import 'ui/road_panel.dart';
 import 'ui/building_info_panel.dart';
+import 'ui/villager_info_panel.dart';
+import 'ui/event_banner.dart';
+import 'ui/event_choice_modal.dart';
+import 'ui/dev_panel.dart';
+import 'ui/objective_panel.dart';
+import 'systems/objective_tracker.dart';
 import 'ui/sky_widgets.dart';
 import 'ui/loading_screen.dart';
 import 'ui/mode_button.dart';
 import 'world/resource_box.dart';
+import 'world/resource_placement.dart';
 import 'world/hay_entity.dart';
 import 'rendering/resource_renderer.dart';
 import 'core/resources.dart';
 import 'ui/game_theme.dart';
 import 'ui/main_menu_screen.dart';
 import 'systems/separation_system.dart';
+import 'systems/anchor_system.dart';
 import 'systems/hay_processor.dart';
 import 'systems/carrier_system.dart';
 import 'systems/building_system.dart';
 import 'systems/event_system.dart';
+import 'systems/lighting_system.dart';
 import 'buildings/building_function.dart';
 import 'characters/life_stage.dart';
+import 'scene/scene_data.dart';
+
+part 'scene/scene_scenarios.dart';
+part 'scene/scene_npc_activity.dart';
+part 'scene/scene_events.dart';
+part 'scene/scene_placement.dart';
+part 'scene/scene_building_spawn.dart';
 
 void main() => runApp(const VillageSimApp());
 
@@ -101,6 +130,11 @@ class VillageScene extends StatefulWidget {
 
 class _VillageSceneState extends State<VillageScene>
     with SingleTickerProviderStateMixin {
+  // ── part-of yardımcısı: setState @protected olduğundan extension'lardan
+  // doğrudan çağrılamıyor. Bu wrapper sayesinde scene_*.dart part dosyaları
+  // setStateHere(() {...}) ile state mutate edebilir.
+  void setStateHere(VoidCallback fn) => setState(fn);
+
   // ── Game loop ──────────────────────────────────────────────────────────────
   late final Ticker _ticker;
   Duration _last = Duration.zero;
@@ -134,10 +168,30 @@ class _VillageSceneState extends State<VillageScene>
   final List<BuilderEntity> _builders = [];
   final List<BuildOrder> _orders = [];
 
+  // ── Yol sistemi ────────────────────────────────────────────────────────────
+  // _roadSystem tamamlanmış yolları tutar (autotile + hız çarpanı kaynağı).
+  // _roadOrders builder kuyruğu — completed olunca _roadSystem'e geçer.
+  // _placingRoad set ise tap+drag ile döşeme modu aktif.
+  // _roadStrokeTiles drag boyunca aynı tile'a iki kez order düşmesini engeller.
+  final RoadSystem _roadSystem = RoadSystem();
+  final List<RoadOrder> _roadOrders = [];
+  RoadSurface? _placingRoad;
+  final Set<(int, int)> _roadStrokeTiles = {};
+
+  // A* pathfinding context — roadSystem + blockedTiles ref + version sayacı.
+  // World topology değişince (yeni bina/yol, maden tükenme) version bump'lanır
+  // ve NPC'ler cached path'i invalidate eder.
+  late final PathContext _pathContext = PathContext(roadSystem: _roadSystem);
+  // Sosyal noktalardaki (kuyu vd.) rezerve edilebilir slot'ları yöneten otorite.
+  // Topology değişince (yeni/silinmiş bina) rebuild edilir, runtime claim/release
+  // sırasında dokunulmaz — aksi halde aktif rezervasyonlar reset olur.
+  final AnchorSystem _anchorSystem = AnchorSystem();
+
   // ── Firepit & home sistemi ─────────────────────────────────────────────────
   bool _hasFire = false;
   BuildingEntity? _firepitBuilding;
   BuildingEntity? _selectedBuilding;
+  VillagerEntity? _selectedVillager;
 
   // ── Camera + Zoom ──────────────────────────────────────────────────────────
   Offset _camera = const Offset(-160, -80);
@@ -181,6 +235,10 @@ class _VillageSceneState extends State<VillageScene>
   // ── Fisher ────────────────────────────────────────────────────────────────
   final List<FisherEntity> _fishers = [];
 
+  // ── Ağıl: çobanlar + inekler ──────────────────────────────────────────────
+  final List<ShepherdEntity> _shepherds = [];
+  final List<AnimalEntity> _cows = [];
+
   // ── Resources ─────────────────────────────────────────────────────────────
   final List<ResourceBox> _resourceBoxes = [];
   final List<HayEntity> _hayEntities = [];
@@ -189,14 +247,115 @@ class _VillageSceneState extends State<VillageScene>
   /// Nüfus yiyecek tüketimi için kesirli birikim (≥1 olunca stoktan düşülür).
   double _foodHunger = 0.0;
 
+  // Gün sayacı — timeOfDay 1.0'ı geçip sardığında artar.
+  int _dayCount = 1;
+  double _lastTimeOfDay = 0.0;
+
+  // ── Spatial cache (her frame yeniden kurulmaz; kSpatialRebuildInterval) ──────
+  // Engel/yumuşak-engel/kuyu/yasak set'leri yavaş değişir; throttle'lı yenilenir.
+  final Set<(int, int)> _obstacles = {};
+  final Set<(int, int)> _softObs = {};
+  // 1-tile genişlikte engel koridorları (karşılıklı komşuları blocked).
+  // PathContext bu tile'ları yüksek cost'la pahalı yapar → A* mümkünse
+  // etrafından dolaşır. Block DEĞİL: tek geçit oraysa NPC yine geçer.
+  final Set<(int, int)> _squeezeTiles = {};
+  final Set<(int, int)> _forbiddenForTrees = {};
+  double _spatialTimer = 0.0;
+
+  // HUD için "yolda" kaynak sayımları — her frame tek geçişte hesaplanır
+  // (build içinde 5 ayrı .where().length yerine).
+  int _woodInTransit = 0,
+      _stoneInTransit = 0,
+      _ironInTransit = 0,
+      _coalInTransit = 0,
+      _foodInTransit = 0;
+
   // ── Rastgele olaylar ───────────────────────────────────────────────────────
-  double  _eventTimer      = kEventFirstDelay; // bir sonraki olaya kalan süre
-  double  _eventMorale     = 0.0;  // aktif geçici moral etkisi (+/−)
-  double  _eventMoraleLeft = 0.0;  // o etkinin kalan süresi (sn)
-  String? _eventLabel;             // aktif geçici olayın HUD etiketi
+  double _eventTimer = kEventFirstDelay; // bir sonraki olaya kalan süre
+  double _eventMorale = 0.0; // aktif geçici moral etkisi (+/−)
+  double _eventMoraleLeft = 0.0; // o etkinin kalan süresi (sn)
+  String? _eventLabel; // aktif geçici olayın HUD etiketi
+  // Pop-up event banner — son tetiklenen olay; ekran ortasında zengin kart.
+  EventOutcome? _activeEvent;
+  double _activeEventLeft = 0.0;
+
+  // Karar bekleyen olay — modal açıkken `_pendingChoice != null`. Tick'te
+  // simülasyon dt = 0 (oyun donar), oyuncu seçince serbest kalır.
+  EventOutcome? _pendingChoice;
+
+  // Geliştirici test paneli açık mı.
+  bool _devPanelOpen = false;
+
+  // Hedef listesi paneli daraltılmış mı (oyuncu küçültebilir).
+  bool _objectivesCollapsed = false;
+  // Hangi hedefler önceden tamamlanmıştı — yeni tamamlanan için bildirim.
+  final Set<String> _completedObjectives = {};
+
+  // Sosyal canlılık — bağlama duyarlı, dağıtık yoğunluk.
+  // Her NPC kendi cooldown'unda bağımsız değerlendirilir; global cap yok.
+  // Bağlam çarpanları (pazar/taverna/ateş/gece/yağmur) per-NPC ihtimalini
+  // ayarlar → nüfus arttıkça doğal olarak köy daha canlı olur, dağıtık
+  // bölgeler sessiz kalır.
+  double _socialScanTimer = 0;
+  static const double _kSocialScanInterval =
+      3.0; // her NPC için 3 sn'de bir bak
+  static const List<String> _kChatIcons = [
+    '💬',
+    '🍞',
+    '🌾',
+    '⚒',
+    '😊',
+    '❓',
+    '☀',
+    '✨',
+    '🪵',
+    '🪙',
+  ];
+  static const List<String> _kPlayIcons = ['⚽', '🪁', '🎈', '🐈', '🪀'];
+
+  // Dev: simülasyon hız boost'u. Normal _timeScale ile çarpılır. 1.0 = normal,
+  // 30.0 = hızlı denge testi. DevPanel slider'ı set eder.
+  double _devSpeedBoost = 1.0;
+
+  // Dev: 5 sn'de bir kaynak/nüfus snapshot — denge analizi için. Son 30
+  // snapshot tutulur, grafik/tablo gösterilir.
+  final List<SimSnapshot> _simHistory = [];
+  double _simSnapshotTimer = 0;
+  static const int _kMaxSnapshots = 30;
+  static const double _kSnapshotInterval = 5.0;
+
+  // Otomatik senaryo testi durumu.
+  String? _scenarioName; // çalışan senaryonun adı (null = pasif)
+  double _scenarioProgress = 0;
+  ScenarioReport? _lastReport;
+
+  // Aktif sahne efektleri — banner'dan bağımsız, sahnede partikül/overlay
+  // çizen ve simülasyona multiplier uygulayan etkiler. Bir tick'te aşağıdaki
+  // alanlara aggregate edilir.
+  final List<ActiveFx> _activeFx = [];
+  // Aggregate cache (her tick yenilenir):
+  Color _fxTint = const Color(0x00000000); // ekran üstüne overlay
+  double _fxRainBoost = 0.0; // min rain intensity zorlaması
+  double _fxNpcSpeedMul = 1.0; // NPC hız çarpanı
+  double _fxFarmMul = 1.0; // tarla büyüme çarpanı
+  double _fxBuilderMul = 1.0; // inşaatçı çarpanı
+  final Set<EventFx> _fxActiveIds = {}; // hangi fx'ler aktif (render için)
+
+  // fireOutbreak fx aktifken yanan spesifik bina(lar). Event tetiklendiğinde
+  // rastgele konut/işyeri seçilir, fx süresince işaretli kalır. Painter
+  // sprite'ın üstüne alev + yoğun duman çizer.
+  final Set<BuildingEntity> _burningBuildings = {};
 
   // ── God mode ───────────────────────────────────────────────────────────────
   bool _godMode = false;
+
+  // ── Zaman yönetimi ─────────────────────────────────────────────────────────
+  // Simülasyon hızı çarpanı. 0.0 = duraklatılmış (sahne animasyonları da
+  // donar, sadece UI canlı kalır), 1×/2×/4× hızlandırma. HUD'daki tek butona
+  // basınca cycle eder.
+  static const List<double> _speedSteps = [1.0, 2.0, 4.0, 0.0];
+  int _speedIdx = 0;
+  double _timeScale = 1.0;
 
   bool _mineMode = false;
   (int, int)? _mineStart;
@@ -210,6 +369,20 @@ class _VillageSceneState extends State<VillageScene>
   String? _notification;
   int _notifId = 0;
 
+  // ── Frame notifier ────────────────────────────────────────────────────────
+  // Tick'te value++ → ListenableBuilder bağlı widget'lar repaint olur.
+  // setState() yerine bunu kullanırız: outer Scaffold/PopScope ağacı her frame
+  // yeniden inşa edilmez, sadece time-driven leaf'ler.
+  final ValueNotifier<int> _frame = ValueNotifier<int>(0);
+
+  // Ground Picture cache invalidation tokeni — yeni harita üretildikçe artar,
+  // painter cache'i bozar. Sadece map içeriği değişince invalidate.
+  int _groundVersion = 0;
+
+  // Aktif ışık kaynakları — her tick yeniden hesaplanır (gündüz boş).
+  // Hem renderer hem ileride NPC "ışıkta mı?" sorgusu için ortak kaynak.
+  List<LightSource> _lightSources = const [];
+
   // ──────────────────────────────────────────────────────────────────────────
 
   @override
@@ -217,6 +390,14 @@ class _VillageSceneState extends State<VillageScene>
     super.initState();
     // Gece eşiği geçişi — DayNightCycle edge-trigger eder.
     _cycle.onNightFall = _assignSleepTargets;
+
+    // Tüm worker'ların yol hız çarpanı sorgusu için tek otorite — bir kez set.
+    WorkerEntity.roadSystem = _roadSystem;
+    // A* pathfinding bağlamı — blockedTiles aşağıda spatial cache ile aynı
+    // referansa bind edilir (içerik update, ref sabit).
+    WorkerEntity.pathContext = _pathContext;
+    _pathContext.blockedTiles = _obstacles;
+    _pathContext.squeezeTiles = _squeezeTiles;
 
     _generateWorld();
     _ticker = createTicker(_onTick);
@@ -232,6 +413,10 @@ class _VillageSceneState extends State<VillageScene>
       NatureRenderer.loadAll(),
       MineRenderer.loadAll(),
       ResourceRenderer.loadAll(),
+      RoadRenderer.loadAll(),
+      FlameRenderer.loadAll(),
+      SmokeRenderer.loadAll(),
+      WaterShimmerRenderer.loadAll(),
     ]);
     _assetsReady.then((_) {
       if (!mounted) return;
@@ -240,12 +425,113 @@ class _VillageSceneState extends State<VillageScene>
     });
   }
 
+  /// Yavaş değişen engel/kuyu/yasak set'lerini yeniden doldurur. Container'lar
+  /// yeniden tahsis edilmez (clear + refill) — frame başına GC baskısını keser.
+  void _rebuildSpatialCaches() {
+    _obstacles.clear();
+    // Su tile engel sayılır ama üstünde köprü varsa NPC geçebilir.
+    for (final t in _waterTiles) {
+      if (!_roadSystem.hasBridgeAt(t.$1, t.$2)) _obstacles.add(t);
+    }
+    for (final n in _mineNodes) {
+      if (!n.isDepleted) _obstacles.add((n.col, n.row));
+    }
+    // Solid binalar — BuildingMeta.walkable=false olanlar NPC engel sayar.
+    // (walkable: firepit, well, lamppost, woodenHouse — etrafında/içinde
+    // dolaşılanlar). Pending order'lar engel SAYILMAZ — builder içine girmeli.
+    for (final b in _buildings) {
+      final meta = kBuildingMeta[b.type];
+      if (meta == null || meta.walkable) continue;
+      for (int c = b.col; c < b.col + meta.cols; c++) {
+        for (int r = b.row; r < b.row + meta.rows; r++) {
+          _obstacles.add((c, r));
+        }
+      }
+    }
+
+    _softObs.clear();
+    for (final r in _reeds) {
+      _softObs.add((r.col, r.row));
+      _softObs.add((r.col2, r.row2));
+    }
+
+    _forbiddenForTrees.clear();
+    for (final t in _farmTiles) {
+      _forbiddenForTrees.add((t.col, t.row));
+    }
+    for (final b in _buildings) {
+      for (int c = b.col; c < b.col + b.cols; c++) {
+        for (int r = b.row; r < b.row + b.rows; r++) {
+          _forbiddenForTrees.add((c, r));
+        }
+      }
+    }
+    // Yollar — oduncu yol tile'ına ağaç dikmesin. Lamba zaten bina footprint
+    // içinde (1×1 bina), ek kontrol gerek değil.
+    for (final t in _roadSystem.all) {
+      _forbiddenForTrees.add((t.col, t.row));
+    }
+    // Pending inşaat orderları — yere bir bina düşecek, oraya ağaç dikme.
+    for (final o in _orders) {
+      if (o.completed) continue;
+      final m = kBuildingMeta[o.type]!;
+      for (int c = o.col; c < o.col + m.cols; c++) {
+        for (int r = o.row; r < o.row + m.rows; r++) {
+          _forbiddenForTrees.add((c, r));
+        }
+      }
+    }
+    // Sazlıklar — kıyı bitkisi, ağaç dikilmesin (görsel çakışma).
+    for (final r in _reeds) {
+      _forbiddenForTrees.add((r.col, r.row));
+      _forbiddenForTrees.add((r.col2, r.row2));
+    }
+
+    // Squeeze tile'ları: walkable ama karşılıklı (N+S ya da E+W) komşuları
+    // engelli → 1-tile genişlikte koridor. Bina kümesinin arasında kalan
+    // dar geçitlere NPC sıkışmasın diye pathfinder'a yüksek cost olarak verilir.
+    // Sadece bina engelleri etrafında oluşan koridorlar hedef; su komşuluğu
+    // doğal kıyıda fazla penaltı yaratmasın diye dahil edilse de etkisi az
+    // (NPC zaten kıyıdan kaçınır separation + idleWander su check).
+    _squeezeTiles.clear();
+    for (int c = 0; c < kCols; c++) {
+      for (int r = 0; r < kRows; r++) {
+        if (_obstacles.contains((c, r))) continue; // zaten bloke
+        final n = _obstacles.contains((c, r - 1));
+        final s = _obstacles.contains((c, r + 1));
+        final e = _obstacles.contains((c + 1, r));
+        final w = _obstacles.contains((c - 1, r));
+        if ((n && s) || (e && w)) {
+          _squeezeTiles.add((c, r));
+        }
+      }
+    }
+  }
+
   void _onTick(Duration elapsed) {
-    final dt = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
+    final raw = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _last = elapsed;
-    setState(() {
+    // Karar bekleyen olay açıkken sim durur (sahne kalır, modal odakta).
+    // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
+    // arası DevPanel slider'ından gelir; normal oyunda 1.0.
+    final effectiveScale = _pendingChoice != null
+        ? 0.0
+        : _timeScale * _devSpeedBoost;
+    // Boost ile dt clamp'i de artırıldı (30x'te 0.25'lik tek sıçrama büyük
+    // adım yaratıyor, NPC update'lerinde stability açısından sınırlı tutuldu).
+    final dt = (raw * effectiveScale).clamp(0.0, 0.5);
+    if (dt <= 0) {
+      _frame.value = _frame.value + 1;
+      return;
+    }
+    // setState yerine sim mutate + _frame.value++ → outer ağaç rebuild olmaz,
+    // sadece ListenableBuilder bağlı bölgeler repaint olur.
+    {
       _time += dt;
       _cycle.update(dt);
+      // Gün sayacı — timeOfDay sarınca (örn. 0.98 → 0.02) yeni gün.
+      if (_cycle.timeOfDay < _lastTimeOfDay) _dayCount++;
+      _lastTimeOfDay = _cycle.timeOfDay;
 
       // ── God mode efektleri ────────────────────────────────────────────────────
       if (_godMode) {
@@ -273,8 +559,13 @@ class _VillageSceneState extends State<VillageScene>
 
       // ── Nüfus yiyecek tüketimi ──────────────────────────────────────────────
       // Tüm köylüler + işçiler zamanla yiyecek yer; üretim yetmezse stok azalır.
-      final mouths = _villagers.length + _farmers.length + _woodcutters.length +
-          _miners.length + _fishers.length + _builders.length;
+      final mouths =
+          _villagers.length +
+          _farmers.length +
+          _woodcutters.length +
+          _miners.length +
+          _fishers.length +
+          _builders.length;
       if (!_godMode && mouths > 0) {
         _foodHunger += dt * mouths * (kFoodPerVillagerPerDay / kGameDaySeconds);
         if (_foodHunger >= 1.0) {
@@ -297,11 +588,25 @@ class _VillageSceneState extends State<VillageScene>
           _eventLabel = null;
         }
       }
+      // Pop-up banner countdown — süresi bitince banner kapanır.
+      if (_activeEventLeft > 0) {
+        _activeEventLeft -= dt;
+        if (_activeEventLeft <= 0) {
+          _activeEvent = null;
+        }
+      }
+      // Aktif sahne efektleri — decay + aggregate (tint, rain, mul'lar).
+      _updateActiveFx(dt);
+      // Yağmur boost'u — fırtına, yaz yağmuru efektlerinde rain min yükseltilir.
+      if (_fxRainBoost > _cycle.rainIntensity) {
+        _cycle.rainIntensity = _fxRainBoost;
+      }
       if (!_godMode && _villagers.isNotEmpty) {
         _eventTimer -= dt;
         if (_eventTimer <= 0) {
           _triggerRandomEvent();
-          _eventTimer = kEventMinInterval +
+          _eventTimer =
+              kEventMinInterval +
               _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval);
         }
       }
@@ -343,26 +648,34 @@ class _VillageSceneState extends State<VillageScene>
             );
           case BuildingType.fisherCabin:
             b.isActive = _fishers.any((f) => f.isFishing);
+          case BuildingType.barn:
+            b.isActive = _shepherds.any(
+              (sh) =>
+                  sh.barnCol == b.col &&
+                  sh.barnRow == b.row &&
+                  sh.state != ShepherdState.idle,
+            );
           default:
             break;
         }
       }
-      // Su + aktif maden node'ları → geçilmez alan
-      final obstacles = <(int, int)>{
-        ..._waterTiles,
-        for (final n in _mineNodes)
-          if (!n.isDepleted) (n.col, n.row),
-      };
-      // Sazlık tile'ları → yumuşak engel (tercih edilmez ama geçilebilir)
-      final softObs = <(int, int)>{
-        for (final r in _reeds) ...<(int, int)>[
-          (r.col, r.row),
-          (r.col2, r.row2),
-        ],
-      };
+      // Engel/yumuşak-engel set'leri yavaş değişir → her frame değil, throttle'lı
+      // yeniden kur (su statik; maden/sazlık değişimi kSpatialRebuildInterval
+      // gecikmesiyle yansır — yürüyüş için görünmez).
+      _spatialTimer -= dt;
+      if (_spatialTimer <= 0) {
+        _rebuildSpatialCaches();
+        _spatialTimer = kSpatialRebuildInterval;
+      }
+      final obstacles = _obstacles;
+      final softObs = _softObs;
+      // Sim multiplier'ları — aktif efekt aggregate'inden.
+      final npcDt = dt * _fxNpcSpeedMul;
+      final farmDt = dt * _fxFarmMul;
+      final buildDt = dt * _fxBuilderMul;
       for (final v in _villagers) {
         v.update(
-          dt,
+          npcDt,
           kCols,
           kRows,
           _rng,
@@ -373,89 +686,116 @@ class _VillageSceneState extends State<VillageScene>
       }
       // Doğal ölüm — ömrü dolan yaşlılar köyden ayrılır. Taşıma işi varsa
       // önce bitirsin (yerde öksüz kutu/balya kalmasın). Belediye yerini doldurur.
+      // Aile bağı: ölenin parents listesinden onu kaldır, kendisinin children
+      // listesinde de parent ref'lerini temizle (çocuklar yetim olabilir).
       _villagers.removeWhere((v) {
         if (v.ageDays < v.lifespanDays || v.isCarrying) return false;
-        _showNotification('🕯️ Yaşlı bir köylü hayata veda etti.');
+        for (final p in v.parents) {
+          p.children.remove(v);
+        }
+        for (final c in v.children) {
+          c.parents.remove(v);
+        }
+        final orphans = v.children.where((c) => c.parents.isEmpty).length;
+        final msg = orphans > 0
+            ? '🕯️ ${v.name} hayata veda etti. $orphans çocuk yetim kaldı.'
+            : '🕯️ ${v.name} hayata veda etti.';
+        _showNotification(msg);
         return true;
       });
       for (final b in _builders) {
         b.update(
-          dt,
+          buildDt,
           _orders,
+          _roadOrders,
           _buildings,
+          _roadSystem,
           _rng,
           waterTiles: obstacles,
           softObstacles: softObs,
         );
       }
       // Tamamlanan inşaatlar için özel aksiyonlar
+      bool topologyChanged = false;
       for (final o in _orders) {
-        if (o.completed) _onBuildingCompleted(o);
+        if (o.completed) {
+          _onBuildingCompleted(o);
+          topologyChanged = true;
+        }
       }
+      if (_roadOrders.any((o) => o.completed)) topologyChanged = true;
       _orders.removeWhere((o) => o.completed);
-      for (final t in _farmTiles) {
-        t.update(dt);
+      _roadOrders.removeWhere((o) => o.completed);
+      // World topology değişti → NPC'ler cached path'i invalidate etsin +
+      // anchor sistemi yeni binalara göre slot'ları yenilesin.
+      if (topologyChanged) {
+        _pathContext.bumpVersion();
+        _anchorSystem.rebuild(_buildings);
       }
-      // Kuyu binaları → çiftçilerin su aldığı kaynak (1x1, merkez konum).
-      final wellPositions = <(double, double)>[
-        for (final b in _buildings)
-          if (b.type == BuildingType.well)
-            (b.col + b.cols / 2, b.row + b.rows / 2),
-      ];
+      for (final t in _farmTiles) {
+        t.update(farmDt);
+      }
+      // Kuyu erişimi anchor sistemi üzerinden — çiftçi 4 yönden birinde
+      // boş slot bulur, aynı kuyuda çakışma olmaz.
       for (final f in _farmers) {
         f.update(
-          dt,
+          npcDt,
           _farmTiles,
           _rng,
           waterTiles: obstacles,
           softObstacles: softObs,
-          wellPositions: wellPositions,
+          anchorSystem: _anchorSystem,
         );
         // Çiftçi hasat sonucunu altın olarak değil yiyecek olarak hay pile
         // yığınıyla üretir; piller balya olur, balyalar depoya taşınır.
         if (f.harvestHayPos != null) {
-          _hayEntities.add(
-            HayEntity(
-              type: HayType.pile,
-              gridX: f.harvestHayPos!.$1.toDouble(),
-              gridY: f.harvestHayPos!.$2.toDouble(),
-            ),
+          final hay = HayEntity(
+            type: HayType.pile,
+            gridX: f.harvestHayPos!.$1.toDouble(),
+            gridY: f.harvestHayPos!.$2.toDouble(),
           );
+          ResourcePlacement.placeHay(
+            hay,
+            f.harvestHayPos!.$1.toDouble(),
+            f.harvestHayPos!.$2.toDouble(),
+            _hayEntities,
+            _time,
+          );
+          _hayEntities.add(hay);
           f.harvestHayPos = null;
         }
       }
       processHayPiles(_hayEntities);
       for (final w in _woodcutters) {
         w.update(
-          dt,
+          npcDt,
           _trees,
           _rng,
           waterTiles: obstacles,
           softObstacles: softObs,
         );
         if (w.harvestReady) {
-          // Ağacın çevresine dağıt (ağacın içine değil)
-          final angle = _rng.nextDouble() * 2 * pi;
-          final dist = 0.6 + _rng.nextDouble() * 0.5;
-          _resourceBoxes.add(
-            ResourceBox(
-              type: ResourceBoxType.woodChunk,
-              gridX: w.lastHarvestX + 0.5 + cos(angle) * dist,
-              gridY: w.lastHarvestY + 0.5 + sin(angle) * dist,
-            ),
+          // Kesilen ağacın yanına tile-snap + slot-stack ile yerleştir.
+          final box = ResourceBox(
+            type: ResourceBoxType.woodChunk,
+            gridX: w.lastHarvestX.toDouble(),
+            gridY: w.lastHarvestY.toDouble(),
           );
+          ResourcePlacement.placeBox(
+            box,
+            w.lastHarvestX.toDouble(),
+            w.lastHarvestY.toDouble(),
+            _resourceBoxes,
+            _time,
+          );
+          _resourceBoxes.add(box);
         }
       }
-      // Tarla + bina tile'ları → ağaç dikilemez
-      final forbiddenForTrees = <(int, int)>{
-        for (final t in _farmTiles) (t.col, t.row),
-        for (final b in _buildings)
-          for (int c = b.col; c < b.col + b.cols; c++)
-            for (int r = b.row; r < b.row + b.rows; r++) (c, r),
-      };
+      // Tarla + bina tile'ları → ağaç dikilemez (spatial cache'ten).
+      final forbiddenForTrees = _forbiddenForTrees;
       for (final lc in _lumberCamps) {
         lc.update(
-          dt,
+          npcDt,
           _trees,
           _rng,
           waterTiles: obstacles,
@@ -463,15 +803,19 @@ class _VillageSceneState extends State<VillageScene>
           forbiddenTiles: forbiddenForTrees,
         );
         if (lc.harvestReady) {
-          final angle = _rng.nextDouble() * 2 * pi;
-          final dist = 0.6 + _rng.nextDouble() * 0.5;
-          _resourceBoxes.add(
-            ResourceBox(
-              type: ResourceBoxType.woodChunk,
-              gridX: lc.lastHarvestX + 0.5 + cos(angle) * dist,
-              gridY: lc.lastHarvestY + 0.5 + sin(angle) * dist,
-            ),
+          final box = ResourceBox(
+            type: ResourceBoxType.woodChunk,
+            gridX: lc.lastHarvestX.toDouble(),
+            gridY: lc.lastHarvestY.toDouble(),
           );
+          ResourcePlacement.placeBox(
+            box,
+            lc.lastHarvestX.toDouble(),
+            lc.lastHarvestY.toDouble(),
+            _resourceBoxes,
+            _time,
+          );
+          _resourceBoxes.add(box);
         }
       }
       // Fidan büyümesi güncelle, kesilen ağaçları kaldır
@@ -481,7 +825,7 @@ class _VillageSceneState extends State<VillageScene>
       _trees.removeWhere((t) => t.isFelled);
       for (final m in _miners) {
         m.update(
-          dt,
+          npcDt,
           _mineNodes,
           _rng,
           waterTiles: obstacles,
@@ -493,34 +837,53 @@ class _VillageSceneState extends State<VillageScene>
             OreType.coal => ResourceBoxType.coalBox,
             _ => ResourceBoxType.stoneBox,
           };
-          final angle = _rng.nextDouble() * 2 * pi;
-          final dist = 0.7 + _rng.nextDouble() * 0.4;
-          _resourceBoxes.add(
-            ResourceBox(
-              type: boxType,
-              gridX: m.lastHarvestX + 0.5 + cos(angle) * dist,
-              gridY: m.lastHarvestY + 0.5 + sin(angle) * dist,
-            ),
+          final box = ResourceBox(
+            type: boxType,
+            gridX: m.lastHarvestX.toDouble(),
+            gridY: m.lastHarvestY.toDouble(),
           );
+          ResourcePlacement.placeBox(
+            box,
+            m.lastHarvestX.toDouble(),
+            m.lastHarvestY.toDouble(),
+            _resourceBoxes,
+            _time,
+          );
+          _resourceBoxes.add(box);
         }
       }
       for (final f in _fishers) {
-        f.update(dt, _rng, waterTiles: _waterTiles, softObstacles: softObs);
+        f.update(npcDt, _rng, waterTiles: _waterTiles, softObstacles: softObs);
         // Balıkçı doğrudan stoğa yiyecek üretir — fiziksel kutu yok.
         if (f.harvestReady) _stockpile.food += 1;
       }
+      // Ağıl: inekler otlar, çobanlar sağar. Sağım = +1 food (balıkçı pattern).
+      for (final c in _cows) {
+        c.update(npcDt, _rng, waterTiles: obstacles);
+      }
+      for (final sh in _shepherds) {
+        sh.update(
+          npcDt,
+          _cows,
+          _rng,
+          waterTiles: obstacles,
+          softObstacles: softObs,
+        );
+        if (sh.harvestReady) _stockpile.food += 1;
+      }
+      final mineCountBefore = _mineNodes.length;
       _mineNodes.removeWhere((n) => n.isDepleted);
+      if (_mineNodes.length != mineCountBefore) _pathContext.bumpVersion();
       _carrierTimer -= dt;
       if (_carrierTimer <= 0) {
         _carrierTimer = kCarrierAssignInterval;
         assignCarriers(
           villagers: _villagers,
           buildings: _buildings,
-          firepit: _firepitBuilding,
           resourceBoxes: _resourceBoxes,
           hayEntities: _hayEntities,
           stockpile: _stockpile,
-          rng: _rng,
+          anchorSystem: _anchorSystem,
         );
       }
       applySeparation(
@@ -531,7 +894,11 @@ class _VillageSceneState extends State<VillageScene>
         miners: _miners,
         fishers: _fishers,
         builders: _builders,
-        waterTiles: _waterTiles,
+        shepherds: _shepherds,
+        cows: _cows,
+        // _obstacles: su + maden + solid bina. Separation NPC'leri buraya
+        // itmesin (eski "waterTiles" param adı geçici; pratikte tüm engeller).
+        waterTiles: _obstacles,
       );
 
       // Hareket yumuşatma — renderX/Y ve moveIntensity.
@@ -555,85 +922,108 @@ class _VillageSceneState extends State<VillageScene>
       for (final f in _fishers) {
         f.smoothMotion(dt);
       }
-    });
+      for (final sh in _shepherds) {
+        sh.smoothMotion(dt);
+      }
+
+      // HUD "yolda" kaynak sayımları — tek geçiş (build içinde 5 ayrı
+      // .where().length taraması yerine; her frame allocation'ı keser).
+      _woodInTransit = _stoneInTransit = _ironInTransit = _coalInTransit = 0;
+      for (final b in _resourceBoxes) {
+        if (b.isDelivered) continue;
+        switch (b.type) {
+          case ResourceBoxType.woodChunk:
+            _woodInTransit++;
+          case ResourceBoxType.stoneBox:
+            _stoneInTransit++;
+          case ResourceBoxType.ironBox:
+            _ironInTransit++;
+          case ResourceBoxType.coalBox:
+            _coalInTransit++;
+        }
+      }
+      _foodInTransit = 0;
+      for (final h in _hayEntities) {
+        if (h.isBale && !h.isDelivered) _foodInTransit++;
+      }
+
+      // Işık kaynaklarını topla — render + ileride NPC sorguları için.
+      _lightSources = LightingSystem.collect(
+        buildings: _buildings,
+        villagers: _villagers,
+        dayLight: _cycle.dayLight,
+      );
+
+      // ── Sohbet baloncukları — sosyal canlılık katmanı ───────────────────
+      // Aktif baloncukları decay et + zaman zaman yakın çift için yeni başlat.
+      for (final v in _villagers) {
+        if (v.chatBubbleTime > 0) {
+          v.chatBubbleTime -= dt;
+          if (v.chatBubbleTime <= 0) {
+            v.chatBubbleIcon = '';
+            v.activity = VillagerActivity.none;
+          }
+        }
+      }
+      // Kişisel cooldown'lar her tick decay.
+      for (final v in _villagers) {
+        if (v.socialCooldown > 0) v.socialCooldown -= dt;
+      }
+      _socialScanTimer += dt;
+      if (_socialScanTimer >= _kSocialScanInterval) {
+        _socialScanTimer = 0;
+        _tryStartChats();
+      }
+
+      // Yeni tamamlanan hedef için bildirim (sadece bir kez).
+      final objStates = ObjectiveTracker.evaluate(
+        ObjectiveContext(
+          buildings: _buildings,
+          farmTiles: _farmTiles,
+          population: _villagers.length,
+        ),
+      );
+      for (final s in objStates) {
+        if (s.completed && !_completedObjectives.contains(s.obj.id)) {
+          _completedObjectives.add(s.obj.id);
+          _showNotification('🎯 ${s.obj.label} — tamamlandı!');
+        }
+      }
+
+      // Denge testi snapshot'u — 5 sn'de bir kaynak/nüfus kaydı.
+      _simSnapshotTimer += dt;
+      if (_simSnapshotTimer >= _kSnapshotInterval) {
+        _simSnapshotTimer = 0;
+        _simHistory.add(
+          SimSnapshot(
+            simTime: _time,
+            day: _dayCount,
+            population: _villagers.length,
+            buildings: _buildings.length,
+            wood: _stockpile.wood,
+            stone: _stockpile.stone,
+            iron: _stockpile.iron,
+            coal: _stockpile.coal,
+            food: _stockpile.food,
+            gold: _stockpile.gold,
+          ),
+        );
+        if (_simHistory.length > _kMaxSnapshots) {
+          _simHistory.removeAt(0);
+        }
+      }
+    }
+    _frame.value = _frame.value + 1;
   }
 
   @override
   void dispose() {
     _ticker.dispose();
+    _frame.dispose();
     super.dispose();
   }
 
   // ── Ateşten NPC spawn ────────────────────────────────────────────────────
-
-  void _spawnStartingNPCs(BuildingEntity firepit) {
-    final cx = firepit.col + 0.5;
-    final cy = firepit.row + 0.5;
-
-    // Her NPC ateşin etrafında farklı bir açıdan çıkar
-    final types = [
-      VillagerType.farmer,
-      VillagerType.merchant,
-      VillagerType.blacksmith,
-      VillagerType.guard,
-      VillagerType.mage,
-    ];
-    for (int i = 0; i < types.length; i++) {
-      final angle = i * (2 * pi / types.length);
-      final dist = 1.2 + _rng.nextDouble() * 0.6;
-      // Kurucular yetişkin/yaşlı yaşıyla doğar — köy ilk günden işlevsel.
-      final founderAge =
-          kAdultStartDay + _rng.nextDouble() * (kElderStartDay - kAdultStartDay + 5);
-      _villagers.add(
-        VillagerEntity(
-          type: types[i],
-          startCol: cx + cos(angle) * dist,
-          startRow: cy + sin(angle) * dist,
-          ageDays: founderAge,
-          lifespanDays: _rollLifespan(),
-        ),
-      );
-    }
-
-    // 2 inşaatçı
-    for (int i = 0; i < 2; i++) {
-      final angle = pi / 4 + i * pi;
-      _builders.add(
-        BuilderEntity(
-          startCol: cx + cos(angle) * 1.8,
-          startRow: cy + sin(angle) * 1.8,
-        ),
-      );
-    }
-
-    _fixNpcSpawns();
-  }
-
-  // ── Gece: uyku hedeflerini ata ───────────────────────────────────────────
-
-  void _assignSleepTargets() {
-    int idx = 0;
-    for (final v in _villagers) {
-      if (v.homeBuilding case final home?) {
-        // Eve ata: ev merkezine yürüyüp içeri gir
-        final b = home as BuildingEntity;
-        final meta = kBuildingMeta[b.type]!;
-        v.sleepTarget = (b.col + meta.cols / 2.0, b.row + meta.rows / 2.0);
-        v.sleepIsHome = true;
-      } else if (_firepitBuilding != null) {
-        // Ateş etrafında dağılarak uyu
-        final fp = _firepitBuilding!;
-        final angle = idx * (2 * pi / _villagers.length);
-        final dist = 1.4 + (_rng.nextDouble() * 0.7);
-        v.sleepTarget = (
-          fp.col + 0.5 + cos(angle) * dist,
-          fp.row + 0.5 + sin(angle) * dist,
-        );
-        v.sleepIsHome = false;
-      }
-      idx++;
-    }
-  }
 
   // ── Nüfus & ev kapasitesi ─────────────────────────────────────────────────
 
@@ -652,25 +1042,12 @@ class _VillageSceneState extends State<VillageScene>
 
   /// Rastgele doğal ömür (oyun günü) — yaşlı evresinden sonra biraz daha yaşar.
   double _rollLifespan() =>
-      kElderStartDay + kElderLifeMin +
+      kElderStartDay +
+      kElderLifeMin +
       _rng.nextDouble() * (kElderLifeMax - kElderLifeMin);
 
-  /// Rastgele bir köy olayı tetikler: anlık stok etkisini uygular, geçici
-  /// olaysa moral modifikatörünü süreli olarak aktive eder, bildirim gösterir.
-  void _triggerRandomEvent() {
-    final e = EventSystem.roll(_rng);
-    if (e.foodDelta != 0) {
-      _stockpile.food = (_stockpile.food + e.foodDelta).clamp(0, 1 << 30);
-    }
-    if (e.goldDelta != 0) _stockpile.gold += e.goldDelta;
-    if (e.isTemporary) {
-      _eventMorale     = e.moraleModifier;
-      _eventMoraleLeft = e.duration;
-      _eventLabel      = '${e.icon} ${e.title}';
-    }
-    _showNotification(e.message);
-  }
-
+  /// Rastgele bir köy olayı tetikler. Karar isteyen olaylar modal açar,
+  /// otomatik olanlar anında uygulanır.
   /// Köyün ev tavanı — tüm evlerin sakin kapasitesi toplamı.
   int _populationCap() {
     int cap = 0;
@@ -679,39 +1056,6 @@ class _VillageSceneState extends State<VillageScene>
       if (f != null && f.role == BuildingRole.housing) cap += f.housingCapacity;
     }
     return cap;
-  }
-
-  /// Belediyenin büyüme döngüsü dolunca yeni köylü doğurur, boş eve yerleştirir.
-  void _spawnGrownVillager(BuildingEntity townhall) {
-    BuildingEntity? house;
-    for (final b in _buildings) {
-      final f = b.fn;
-      if (f == null || f.role != BuildingRole.housing) continue;
-      final occ = _villagers.where((v) => v.homeBuilding == b).length;
-      if (occ < f.housingCapacity) {
-        house = b;
-        break;
-      }
-    }
-
-    const civilianTypes = [
-      VillagerType.farmer,
-      VillagerType.merchant,
-      VillagerType.blacksmith,
-      VillagerType.guard,
-      VillagerType.mage,
-    ];
-    final type = civilianTypes[_rng.nextInt(civilianTypes.length)];
-    final (sx, sy) = _nearestLand(
-      townhall.col + townhall.cols / 2.0,
-      townhall.row + townhall.rows.toDouble(),
-    );
-    // Bebek olarak doğar (ageDays=0); büyüdükçe mesleğini (type) edinir.
-    final v = VillagerEntity(
-        type: type, startCol: sx, startRow: sy, lifespanDays: _rollLifespan());
-    if (house != null) v.homeBuilding = house;
-    _villagers.add(v);
-    _showNotification('👶 Köye bir bebek doğdu!');
   }
 
   // ── Bina tile kontrolü ────────────────────────────────────────────────────
@@ -728,6 +1072,26 @@ class _VillageSceneState extends State<VillageScene>
     return null;
   }
 
+  /// Tile merkezine en yakın görünür köylüyü döndür (mesafe < 0.7 tile).
+  /// Bina içindeyse veya çok uzaksa null. Tıklama hedefi olarak kullanılır.
+  VillagerEntity? _villagerAt(int col, int row) {
+    final cx = col + 0.5;
+    final cy = row + 0.5;
+    VillagerEntity? best;
+    double bestD2 = 0.49; // 0.7² eşik
+    for (final v in _villagers) {
+      if (v.isInsideBuilding) continue;
+      final dx = v.gridX - cx;
+      final dy = v.gridY - cy;
+      final d2 = dx * dx + dy * dy;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        best = v;
+      }
+    }
+    return best;
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   (int, int)? _toTile(Offset pos) {
@@ -741,177 +1105,6 @@ class _VillageSceneState extends State<VillageScene>
     return null;
   }
 
-  bool _isValidPlacement(int col, int row, BuildingType type) {
-    final meta = kBuildingMeta[type]!;
-    if (col + meta.cols > kCols || row + meta.rows > kRows) return false;
-    bool overlaps(
-      int c1,
-      int r1,
-      int w1,
-      int h1,
-      int c2,
-      int r2,
-      int w2,
-      int h2,
-    ) => c1 < c2 + w2 && c1 + w1 > c2 && r1 < r2 + h2 && r1 + h1 > r2;
-
-    final farmSet = {for (final t in _farmTiles) (t.col, t.row)};
-    final mineSet = {
-      for (final n in _mineNodes)
-        if (!n.isDepleted) (n.col, n.row),
-    };
-    // Canlı ağaç tile'ları — bina footprint'i bunlara çakışamaz.
-    final treeSet = {
-      for (final t in _trees)
-        if (!t.isFelled) (t.col, t.row),
-    };
-
-    // ── Maden Ocağı: maden tile'ı üzerine kurulmalı ──────────────────────────
-    if (type == BuildingType.mineBuilding) {
-      bool hasMine = false;
-      for (int c = col; c < col + meta.cols; c++) {
-        for (int r = row; r < row + meta.rows; r++) {
-          if (_waterTiles.contains((c, r))) return false;
-          if (farmSet.contains((c, r))) return false;
-          if (treeSet.contains((c, r))) return false;
-          if (mineSet.contains((c, r))) hasMine = true;
-        }
-      }
-      if (!hasMine) return false;
-    }
-    // ── Oduncu Kulübesi: yakında ağaç olmalı (ama üstüne kurulamaz) ─────────
-    else if (type == BuildingType.lumberCamp) {
-      final cx = col + meta.cols / 2.0;
-      final cy = row + meta.rows / 2.0;
-      const radius = LumberCampEntity.kTerritoryRadius;
-      bool hasTree = false;
-      for (final t in _trees) {
-        if (t.isFelled) continue;
-        final dx = t.col + 0.5 - cx;
-        final dy = t.row + 0.5 - cy;
-        if (dx * dx + dy * dy <= radius * radius) {
-          hasTree = true;
-          break;
-        }
-      }
-      if (!hasTree) return false;
-      for (int c = col; c < col + meta.cols; c++) {
-        for (int r = row; r < row + meta.rows; r++) {
-          if (_waterTiles.contains((c, r))) return false;
-          if (farmSet.contains((c, r))) return false;
-          if (treeSet.contains((c, r))) return false;
-          if (mineSet.contains((c, r))) return false;
-        }
-      }
-    }
-    // ── Normal binalar ────────────────────────────────────────────────────────
-    else {
-      for (int c = col; c < col + meta.cols; c++) {
-        for (int r = row; r < row + meta.rows; r++) {
-          if (_waterTiles.contains((c, r))) return false;
-          if (farmSet.contains((c, r))) return false;
-          if (treeSet.contains((c, r))) return false;
-          if (mineSet.contains((c, r))) return false;
-        }
-      }
-    }
-
-    for (final b in _buildings) {
-      if (overlaps(
-        col,
-        row,
-        meta.cols,
-        meta.rows,
-        b.col,
-        b.row,
-        b.cols,
-        b.rows,
-      )) {
-        return false;
-      }
-    }
-    for (final o in _orders) {
-      final om = kBuildingMeta[o.type]!;
-      if (overlaps(
-        col,
-        row,
-        meta.cols,
-        meta.rows,
-        o.col,
-        o.row,
-        om.cols,
-        om.rows,
-      )) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /// İnşaat tamamlandığında çalışır — bina tipine özel aksiyonlar.
-  void _onBuildingCompleted(BuildOrder o) {
-    // Tamamlanan binayı listeden bul (yeni eklendi)
-    final building = _buildings.firstWhere(
-      (b) => b.col == o.col && b.row == o.row && b.type == o.type,
-      orElse: () => BuildingEntity(type: o.type, col: o.col, row: o.row),
-    );
-
-    switch (o.type) {
-      case BuildingType.firepit:
-        _hasFire = true;
-        _firepitBuilding = building;
-        _spawnStartingNPCs(building);
-        _showNotification('Ateş yakıldı! Köy kurulmaya başlıyor...');
-
-      case BuildingType.woodenHouse:
-        // Evsiz köylüleri bu eve ata (max 2)
-        int assigned = 0;
-        for (final v in _villagers) {
-          if (assigned >= 2) break;
-          if (v.homeBuilding == null) {
-            v.homeBuilding = building;
-            assigned++;
-          }
-        }
-        if (assigned > 0) {
-          _showNotification('$assigned köylü eve taşındı.');
-        }
-
-      case BuildingType.lumberCamp:
-        _lumberCamps.add(
-          LumberCampEntity(buildingCol: o.col, buildingRow: o.row),
-        );
-
-      case BuildingType.mineBuilding:
-        // Footprint içindeki maden node'larını otomatik işaretle
-        final meta = kBuildingMeta[o.type]!;
-        for (final n in _mineNodes) {
-          if (n.col >= o.col &&
-              n.col < o.col + meta.cols &&
-              n.row >= o.row &&
-              n.row < o.row + meta.rows) {
-            n.isMarkedForMining = true;
-          }
-        }
-        // Binaya özel madenci oluştur
-        _miners.add(
-          MinerEntity(
-            startCol: o.col + meta.cols / 2.0,
-            startRow: o.row + meta.rows / 2.0,
-          ),
-        );
-
-      case BuildingType.fisherCabin:
-        // Balıkçı kulübesi tamamlandığında balıkçı ekle
-        _fishers.add(
-          FisherEntity(startCol: o.col + 1.0, startRow: o.row + 1.0),
-        );
-
-      default:
-        break;
-    }
-  }
-
   void _generateWorld({int? forceSeed}) {
     _worldSeed = forceSeed ?? Random().nextInt(0x7FFFFFFF);
     final result = WorldGenerator(_worldSeed).generate();
@@ -923,9 +1116,17 @@ class _VillageSceneState extends State<VillageScene>
     _mineNodes.clear();
     _buildings.clear();
     _orders.clear();
+    _roadOrders.clear();
+    _roadSystem.clear();
+    _placingRoad = null;
+    _roadStrokeTiles.clear();
+    _pathContext.bumpVersion(); // yeni harita → tüm cached path'ler iptal
+    _anchorSystem.rebuild(const []); // tüm slot rezervasyonlarını sil
     _lumberCamps.clear();
     _miners.clear();
     _fishers.clear();
+    _shepherds.clear();
+    _cows.clear();
     _farmers.clear();
     _woodcutters.clear();
     _builders.clear();
@@ -934,16 +1135,32 @@ class _VillageSceneState extends State<VillageScene>
     _hayEntities.clear();
 
     _stockpile.clear();
+    // Başlangıç kaynak paketi — oyuncunun erken oyun sıkışmaması için.
+    // Ateş yeri ücretsiz; sonrasında oduncu kulübesi (12 odun) veya bir ev
+    // (18 odun + 4 taş) ya da kuyu (4 odun + 8 taş) kurabilir.
+    // 25/15/25: ilk 1-2 binayı kurmak + ilk günü atlatmak için yeterli.
+    _stockpile.wood = 25;
+    _stockpile.stone = 15;
+    _stockpile.food = 25;
     _hasFire = false;
     _firepitBuilding = null;
     _selectedBuilding = null;
 
-    // Olay durumunu sıfırla
-    _eventTimer      = kEventFirstDelay;
-    _eventMorale     = 0.0;
+    // Olay & gün durumunu sıfırla
+    _eventTimer = kEventFirstDelay;
+    _eventMorale = 0.0;
     _eventMoraleLeft = 0.0;
-    _eventLabel      = null;
-    _foodHunger      = 0.0;
+    _eventLabel = null;
+    _activeEvent = null;
+    _activeEventLeft = 0.0;
+    _pendingChoice = null;
+    _activeFx.clear();
+    _completedObjectives.clear();
+    _foodHunger = 0.0;
+    _dayCount = 1;
+    _lastTimeOfDay = _cycle.timeOfDay;
+    _spatialTimer =
+        0.0; // yeni harita → spatial cache'i ilk tick'te yeniden kur
 
     // Köylülerin ev/uyku atamalarını sıfırla
     for (final v in _villagers) {
@@ -959,54 +1176,13 @@ class _VillageSceneState extends State<VillageScene>
     _trees.addAll(result.trees);
     _mineNodes.addAll(result.mineNodes);
 
+    // Yeni map → ground picture cache invalid.
+    _groundVersion++;
+
     _fixNpcSpawns();
   }
 
   /// Su üzerindeki tüm entity'leri en yakın kuru tile'a taşır.
-  void _fixNpcSpawns() {
-    void fix(double gx, double gy, void Function(double, double) set) {
-      final (nx, ny) = _nearestLand(gx, gy);
-      if (nx != gx || ny != gy) set(nx, ny);
-    }
-
-    for (final v in _villagers) {
-      fix(v.gridX, v.gridY, (x, y) {
-        v.gridX = x;
-        v.gridY = y;
-      });
-    }
-    for (final f in _farmers) {
-      fix(f.gridX, f.gridY, (x, y) {
-        f.gridX = x;
-        f.gridY = y;
-      });
-    }
-    for (final w in _woodcutters) {
-      fix(w.gridX, w.gridY, (x, y) {
-        w.gridX = x;
-        w.gridY = y;
-      });
-    }
-    for (final m in _miners) {
-      fix(m.gridX, m.gridY, (x, y) {
-        m.gridX = x;
-        m.gridY = y;
-      });
-    }
-    for (final b in _builders) {
-      fix(b.gridX, b.gridY, (x, y) {
-        b.gridX = x;
-        b.gridY = y;
-      });
-    }
-    for (final f in _fishers) {
-      fix(f.gridX, f.gridY, (x, y) {
-        f.gridX = x;
-        f.gridY = y;
-      });
-    }
-  }
-
   /// Verilen pozisyona en yakın su-olmayan tile'ı spiral aramayla bulur.
   (double, double) _nearestLand(double gx, double gy) {
     final c0 = gx.round();
@@ -1029,125 +1205,15 @@ class _VillageSceneState extends State<VillageScene>
     return (gx, gy); // fallback (olmamalı)
   }
 
-  void _commitMine((int, int) start, (int, int) end) {
-    final c1 = start.$1 < end.$1 ? start.$1 : end.$1;
-    final c2 = start.$1 < end.$1 ? end.$1 : start.$1;
-    final r1 = start.$2 < end.$2 ? start.$2 : end.$2;
-    final r2 = start.$2 < end.$2 ? end.$2 : start.$2;
-    int marked = 0;
+  void _cycleSpeed() {
     setState(() {
-      for (final n in _mineNodes) {
-        if (n.col >= c1 && n.col <= c2 && n.row >= r1 && n.row <= r2) {
-          if (!n.isMarkedForMining && !n.isDepleted) {
-            n.isMarkedForMining = true;
-            marked++;
-          }
-        }
-      }
-      _mineMode = false;
-      _mineStart = null;
-      _mineEnd = null;
+      _speedIdx = (_speedIdx + 1) % _speedSteps.length;
+      _timeScale = _speedSteps[_speedIdx];
     });
-    if (marked > 0) {
-      _showNotification('$marked maden işaretlendi!');
-    } else {
-      _showNotification('Seçilen alanda maden yok.');
-    }
-  }
-
-  void _commitLumber((int, int) start, (int, int) end) {
-    final c1 = start.$1 < end.$1 ? start.$1 : end.$1;
-    final c2 = start.$1 < end.$1 ? end.$1 : start.$1;
-    final r1 = start.$2 < end.$2 ? start.$2 : end.$2;
-    final r2 = start.$2 < end.$2 ? end.$2 : start.$2;
-    int marked = 0;
-    setState(() {
-      for (final t in _trees) {
-        if (t.col >= c1 && t.col <= c2 && t.row >= r1 && t.row <= r2) {
-          if (!t.isMarkedForCutting && !t.isFelled) {
-            t.isMarkedForCutting = true;
-            marked++;
-          }
-        }
-      }
-      _lumberMode = false;
-      _lumberStart = null;
-      _lumberEnd = null;
-    });
-    if (marked > 0) {
-      _showNotification('$marked ağaç kesilmek üzere işaretlendi!');
-    } else {
-      _showNotification('Seçilen alanda işaretlenecek ağaç yok.');
-    }
-  }
-
-  void _commitFarm((int, int) start, (int, int) end) {
-    final c1 = start.$1 < end.$1 ? start.$1 : end.$1;
-    final c2 = start.$1 < end.$1 ? end.$1 : start.$1;
-    final r1 = start.$2 < end.$2 ? start.$2 : end.$2;
-    final r2 = start.$2 < end.$2 ? end.$2 : start.$2;
-    final existing = {for (final t in _farmTiles) (t.col, t.row)};
-    setState(() {
-      for (int c = c1; c <= c2; c++) {
-        for (int r = r1; r <= r2; r++) {
-          if (!existing.contains((c, r)) && !_waterTiles.contains((c, r))) {
-            _farmTiles.add(FarmTile(c, r));
-          }
-        }
-      }
-      // Her 6 tarla tile'ı için 1 çiftçi — eksik olanları spawn et
-      final needed = (_farmTiles.length / 6).ceil().clamp(1, 4);
-      final centerC = (c1 + c2) / 2.0;
-      final centerR = (r1 + r2) / 2.0;
-      while (_farmers.length < needed) {
-        final angle = _rng.nextDouble() * 2 * pi;
-        _farmers.add(
-          FarmFarmer(
-            startCol: centerC + cos(angle) * 1.5,
-            startRow: centerR + sin(angle) * 1.5,
-          ),
-        );
-      }
-      _farmMode = false;
-      _farmStart = null;
-      _farmEnd = null;
-    });
-  }
-
-  void _tryPlace(Offset pos) {
-    if (_placing == null) return;
-    final tile = _toTile(pos);
-    if (tile == null) return;
-    final (c, r) = tile;
-    if (!_isValidPlacement(c, r, _placing!)) {
-      _showNotification('Bu alana inşa edilemiyor!');
-      return;
-    }
-    final cost = kBuildingMeta[_placing!]!.cost;
-    if (!_stockpile.canAfford(cost)) {
-      _showNotification('Eksik malzeme: ${_stockpile.formatMissing(cost)}');
-      return;
-    }
-    final isFirepit = _placing == BuildingType.firepit;
-    setState(() {
-      _stockpile.spend(cost);
-
-      // Ateş yeri inşaatçısız anında kurulur — NPC'ler buradan doğar
-      if (isFirepit) {
-        final b = BuildingEntity(type: BuildingType.firepit, col: c, row: r);
-        _buildings.add(b);
-        _onBuildingCompleted(
-          BuildOrder(type: BuildingType.firepit, col: c, row: r)
-            ..completed = true,
-        );
-      } else {
-        _orders.add(BuildOrder(type: _placing!, col: c, row: r));
-      }
-
-      _placing = null;
-      _ghost = null;
-    });
-    _showNotification(isFirepit ? 'Ateş yakıldı!' : 'İnşaatçı yola çıkıyor...');
+    final label = _timeScale == 0.0
+        ? 'Duraklatıldı ⏸'
+        : 'Hız: ${_timeScale.toInt()}×';
+    _showNotification(label);
   }
 
   void _showNotification(String msg) {
@@ -1167,26 +1233,12 @@ class _VillageSceneState extends State<VillageScene>
     }
     final screen = MediaQuery.of(context).size;
 
-    // ── Güneş / Ay ark hesabı ─────────────────────────────────────────────
-    // Sağ ufuktan (timeOfDay=0.25) tepeye (0.50) sol ufuka (0.75) yarım daire
+    // ── Güneş / Ay ark sabitleri — ekran boyutuna bağlı (frame'den bağımsız)
     const kSunSize = 32.0;
     const kMoonSize = 24.0;
     final arcCx = screen.width / 2;
-    final arcBy = screen.height * 0.50; // yatay ufuk seviyesi
-    final arcR = screen.width * 0.42; // yarıçap
-
-    // Güneş — timeOfDay 0.25→sağ ufuk  0.50→tepe  0.75→sol ufuk
-    final sunNorm = ((_cycle.timeOfDay - 0.25) / 0.50).clamp(0.0, 1.0);
-    final sunAngle = pi * sunNorm; // 0..π
-    final sunX = arcCx + arcR * cos(sunAngle) - kSunSize / 2;
-    final sunY = arcBy - arcR * sin(sunAngle) - kSunSize / 2;
-
-    // Ay — güneşin tam karşı tarafında (0.5 offset)
-    final moonT = (_cycle.timeOfDay + 0.5) % 1.0;
-    final moonNorm = ((moonT - 0.25) / 0.50).clamp(0.0, 1.0);
-    final moonAngle = pi * moonNorm;
-    final moonX = arcCx + arcR * cos(moonAngle) - kMoonSize / 2;
-    final moonY = arcBy - arcR * sin(moonAngle) - kMoonSize / 2;
+    final arcBy = screen.height * 0.50;
+    final arcR = screen.width * 0.42;
 
     return PopScope(
       canPop: false,
@@ -1197,105 +1249,123 @@ class _VillageSceneState extends State<VillageScene>
         backgroundColor: const Color(0xFF1A3060),
         body: Stack(
           children: [
-            // Gökyüzü
-            PixelSky(topColor: _cycle.skyTop, midColor: _cycle.skyMid),
-
-            // Yıldızlar
+            // ── SKY / SUN / MOON / CLOUDS ──────────────────────────────────
+            // Time-driven katmanlar — ListenableBuilder ile her tick yalnızca
+            // bu blok rebuild olur (RepaintBoundary ile diğer katmanları
+            // etkilemeden). Outer Scaffold/PopScope ağacı tick'te rebuild OLMAZ.
             Positioned.fill(
-              child: StarField(opacity: _cycle.starOpacity, time: _time),
-            ),
-
-            // Güneş — ark boyunca hareket eder
-            Positioned(
-              left: sunX,
-              top: sunY,
-              child: Opacity(
-                opacity: _cycle.sunOpacity,
-                child: PixelSun(color: _cycle.sunColor),
-              ),
-            ),
-
-            // Ay — güneşin peşinden, zıt tarafta (ışık hâlesi ile)
-            Positioned(
-              left: moonX - 58,
-              top: moonY - 58,
-              child: Opacity(
-                opacity: _cycle.moonOpacity,
-                child: SizedBox(
-                  width: 140,
-                  height: 140,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Dış ışık hâlesi
-                      Container(
-                        width: 140,
-                        height: 140,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [Color(0x30C8E8FF), Color(0x00C8E8FF)],
+              child: RepaintBoundary(
+                child: ListenableBuilder(
+                  listenable: _frame,
+                  builder: (context, _) {
+                    final sunNorm = ((_cycle.timeOfDay - 0.25) / 0.50).clamp(
+                      0.0,
+                      1.0,
+                    );
+                    final sunAngle = pi * sunNorm;
+                    final sunX = arcCx + arcR * cos(sunAngle) - kSunSize / 2;
+                    final sunY = arcBy - arcR * sin(sunAngle) - kSunSize / 2;
+                    final moonT = (_cycle.timeOfDay + 0.5) % 1.0;
+                    final moonNorm = ((moonT - 0.25) / 0.50).clamp(0.0, 1.0);
+                    final moonAngle = pi * moonNorm;
+                    final moonX = arcCx + arcR * cos(moonAngle) - kMoonSize / 2;
+                    final moonY = arcBy - arcR * sin(moonAngle) - kMoonSize / 2;
+                    final w = screen.width;
+                    final wrap = w + 240.0;
+                    const clouds =
+                        <(double, double, double, double, double, double)>[
+                          (0.08, 22.0, 0.55, 2.5, 0.30, 0.50),
+                          (0.40, 14.0, 0.60, 2.8, 0.35, 0.40),
+                          (0.76, 32.0, 0.50, 2.2, 0.28, 0.50),
+                          (0.18, 58.0, 0.85, 5.0, 0.65, 0.35),
+                          (0.55, 48.0, 0.95, 5.5, 0.70, 0.30),
+                          (0.88, 68.0, 0.75, 4.5, 0.60, 0.45),
+                          (0.04, 96.0, 1.30, 9.0, 1.00, 0.25),
+                          (0.38, 116.0, 1.45, 9.5, 1.00, 0.20),
+                          (0.72, 88.0, 1.20, 8.5, 1.00, 0.30),
+                        ];
+                    return Stack(
+                      children: [
+                        PixelSky(
+                          topColor: _cycle.skyTop,
+                          midColor: _cycle.skyMid,
+                        ),
+                        Positioned.fill(
+                          child: StarField(
+                            opacity: _cycle.starOpacity,
+                            time: _time,
                           ),
                         ),
-                      ),
-                      // İç parlama
-                      Container(
-                        width: 60,
-                        height: 60,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [Color(0x55DDEEFF), Color(0x00DDEEFF)],
+                        Positioned(
+                          left: sunX,
+                          top: sunY,
+                          child: Opacity(
+                            opacity: _cycle.sunOpacity,
+                            child: PixelSun(color: _cycle.sunColor),
                           ),
                         ),
-                      ),
-                      const PixelMoon(),
-                    ],
-                  ),
+                        Positioned(
+                          left: moonX - 58,
+                          top: moonY - 58,
+                          child: Opacity(
+                            opacity: _cycle.moonOpacity,
+                            child: SizedBox(
+                              width: 140,
+                              height: 140,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: 140,
+                                    height: 140,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: RadialGradient(
+                                        colors: [
+                                          Color(0x30C8E8FF),
+                                          Color(0x00C8E8FF),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: RadialGradient(
+                                        colors: [
+                                          Color(0x55DDEEFF),
+                                          Color(0x00DDEEFF),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const PixelMoon(),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        for (final cfg in clouds)
+                          Positioned(
+                            left:
+                                ((cfg.$1 * w) + (_time * cfg.$4)) % wrap - 120,
+                            top: cfg.$2,
+                            child: Opacity(
+                              opacity: _cycle.cloudOpacity,
+                              child: PixelCloud(
+                                dark: _cycle.rainIntensity > cfg.$6,
+                                scale: cfg.$3,
+                                parallax: cfg.$5,
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
-            ),
-
-            // Bulutlar — 3 katman parallax (uzak/orta/yakın).  Uzak: yavaş+
-            // küçük+soluk, yakın: hızlı+büyük+doygun. Toplam 9 bulut —
-            // atmospheric perspective ile derinlik hissi.
-            Builder(
-              builder: (ctx) {
-                final w    = MediaQuery.of(ctx).size.width;
-                final wrap = w + 240.0;
-                // (baseX_rel, y, scale, speed, parallax, rainAlphaThresh)
-                const clouds = <(double, double, double, double, double, double)>[
-                  // Uzak katman — yavaş, küçük, soluk
-                  (0.08, 22.0,  0.55, 2.5, 0.30, 0.50),
-                  (0.40, 14.0,  0.60, 2.8, 0.35, 0.40),
-                  (0.76, 32.0,  0.50, 2.2, 0.28, 0.50),
-                  // Orta katman
-                  (0.18, 58.0,  0.85, 5.0, 0.65, 0.35),
-                  (0.55, 48.0,  0.95, 5.5, 0.70, 0.30),
-                  (0.88, 68.0,  0.75, 4.5, 0.60, 0.45),
-                  // Yakın katman — hızlı, büyük, doygun
-                  (0.04, 96.0,  1.30, 9.0, 1.00, 0.25),
-                  (0.38, 116.0, 1.45, 9.5, 1.00, 0.20),
-                  (0.72, 88.0,  1.20, 8.5, 1.00, 0.30),
-                ];
-                return Stack(
-                  children: [
-                    for (final cfg in clouds)
-                      Positioned(
-                        left: ((cfg.$1 * w) + (_time * cfg.$4)) % wrap - 120,
-                        top:  cfg.$2,
-                        child: Opacity(
-                          opacity: _cycle.cloudOpacity,
-                          child: PixelCloud(
-                            dark:     _cycle.rainIntensity > cfg.$6,
-                            scale:    cfg.$3,
-                            parallax: cfg.$5,
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
             ),
 
             // Game canvas
@@ -1315,10 +1385,9 @@ class _VillageSceneState extends State<VillageScene>
                           _viewSize.height / 2,
                         );
                         final focal = event.localPosition - center;
-                        setState(() {
-                          _camera = _camera + focal * (1 / newZoom - 1 / _zoom);
-                          _zoom = newZoom;
-                        });
+                        _camera = _camera + focal * (1 / newZoom - 1 / _zoom);
+                        _zoom = newZoom;
+                        _frame.value = _frame.value + 1;
                       }
                     },
                     child: GestureDetector(
@@ -1328,39 +1397,58 @@ class _VillageSceneState extends State<VillageScene>
                         _cameraAnchor = _camera;
                         if (_mineMode) {
                           final tile = _toTile(d.localFocalPoint);
-                          setState(() {
-                            _mineStart = tile;
-                            _mineEnd = tile;
-                          });
+                          _mineStart = tile;
+                          _mineEnd = tile;
+                          _frame.value = _frame.value + 1;
                         } else if (_lumberMode) {
                           final tile = _toTile(d.localFocalPoint);
-                          setState(() {
-                            _lumberStart = tile;
-                            _lumberEnd = tile;
-                          });
+                          _lumberStart = tile;
+                          _lumberEnd = tile;
+                          _frame.value = _frame.value + 1;
                         } else if (_farmMode) {
                           final tile = _toTile(d.localFocalPoint);
-                          setState(() {
-                            _farmStart = tile;
-                            _farmEnd = tile;
-                          });
+                          _farmStart = tile;
+                          _farmEnd = tile;
+                          _frame.value = _frame.value + 1;
+                        } else if (_placingRoad != null) {
+                          // Yol döşeme: stroke başla, basılan tile'ı paint et
+                          _roadStrokeTiles.clear();
+                          final tile = _toTile(d.localFocalPoint);
+                          if (tile != null) _paintRoadTile(tile.$1, tile.$2);
                         }
                       },
                       onScaleUpdate: (d) {
                         if (_mineMode || _lumberMode || _farmMode) {
                           // Seçim modlarında sürükleme; zoom yok
                           final tile = _toTile(d.localFocalPoint);
-                          setState(() {
-                            if (_mineMode && tile != _mineEnd) _mineEnd = tile;
-                            if (_lumberMode && tile != _lumberEnd) {
-                              _lumberEnd = tile;
-                            }
-                            if (_farmMode && tile != _farmEnd) _farmEnd = tile;
-                          });
+                          bool changed = false;
+                          if (_mineMode && tile != _mineEnd) {
+                            _mineEnd = tile;
+                            changed = true;
+                          }
+                          if (_lumberMode && tile != _lumberEnd) {
+                            _lumberEnd = tile;
+                            changed = true;
+                          }
+                          if (_farmMode && tile != _farmEnd) {
+                            _farmEnd = tile;
+                            changed = true;
+                          }
+                          if (changed) _frame.value = _frame.value + 1;
+                        } else if (_placingRoad != null) {
+                          // Yol döşeme: drag boyunca her yeni tile'a paint et
+                          final tile = _toTile(d.localFocalPoint);
+                          if (tile != null &&
+                              !_roadStrokeTiles.contains(tile)) {
+                            _paintRoadTile(tile.$1, tile.$2);
+                          }
                         } else if (_placing != null) {
                           // Bina yerleştirme modunda ghost güncelle
                           final tile = _toTile(d.localFocalPoint);
-                          if (tile != _ghost) setState(() => _ghost = tile);
+                          if (tile != _ghost) {
+                            _ghost = tile;
+                            _frame.value = _frame.value + 1;
+                          }
                         } else {
                           // Serbest mod: kaydır + zoom (focal noktaya doğru)
                           final newZoom = (_scaleStart * d.scale).clamp(
@@ -1372,13 +1460,12 @@ class _VillageSceneState extends State<VillageScene>
                             _viewSize.height / 2,
                           );
                           final focal = _panAnchor! - center;
-                          setState(() {
-                            _zoom = newZoom;
-                            _camera =
-                                _cameraAnchor! +
-                                (d.localFocalPoint - _panAnchor!) +
-                                focal * (1 / newZoom - 1 / _scaleStart);
-                          });
+                          _zoom = newZoom;
+                          _camera =
+                              _cameraAnchor! +
+                              (d.localFocalPoint - _panAnchor!) +
+                              focal * (1 / newZoom - 1 / _scaleStart);
+                          _frame.value = _frame.value + 1;
                         }
                       },
                       onScaleEnd: (_) {
@@ -1417,13 +1504,27 @@ class _VillageSceneState extends State<VillageScene>
                         } else if (_placing != null) {
                           _tryPlace(d.localPosition);
                         } else {
-                          // Bina seçimi
+                          // Seçim: önce bina, yoksa NPC, yoksa hiçbir şey.
                           final tile = _toTile(d.localPosition);
                           if (tile != null) {
                             final b = _buildingAt(tile.$1, tile.$2);
-                            setState(() => _selectedBuilding = b);
+                            if (b != null) {
+                              setState(() {
+                                _selectedBuilding = b;
+                                _selectedVillager = null;
+                              });
+                            } else {
+                              final v = _villagerAt(tile.$1, tile.$2);
+                              setState(() {
+                                _selectedVillager = v;
+                                _selectedBuilding = null;
+                              });
+                            }
                           } else {
-                            setState(() => _selectedBuilding = null);
+                            setState(() {
+                              _selectedBuilding = null;
+                              _selectedVillager = null;
+                            });
                           }
                         }
                       },
@@ -1431,76 +1532,94 @@ class _VillageSceneState extends State<VillageScene>
                         onHover: (e) {
                           if (_placing != null) {
                             final tile = _toTile(e.localPosition);
-                            if (tile != _ghost) setState(() => _ghost = tile);
+                            if (tile != _ghost) {
+                              _ghost = tile;
+                              _frame.value = _frame.value + 1;
+                            }
                           }
                         },
-                        child: CustomPaint(
-                          painter: VillageGamePainter(
-                            villagers: _villagers,
-                            buildings: _buildings,
-                            builders: _builders,
-                            pendingOrders: _orders,
-                            camera: _camera,
-                            ghostType: _placing,
-                            ghostTile: _ghost,
-                            ghostValid: _ghost != null && _placing != null
-                                ? _isValidPlacement(
-                                    _ghost!.$1,
-                                    _ghost!.$2,
-                                    _placing!,
-                                  )
-                                : false,
-                            time: _time,
-                            sceneOverlay: _cycle.sceneOverlay,
-                            rainIntensity: _cycle.rainIntensity,
-                            farmTiles: _farmTiles,
-                            farmers: _farmers,
-                            farmSelection:
-                                (_farmMode &&
-                                    _farmStart != null &&
-                                    _farmEnd != null)
-                                ? (
-                                    _farmStart!.$1,
-                                    _farmStart!.$2,
-                                    _farmEnd!.$1,
-                                    _farmEnd!.$2,
-                                  )
-                                : null,
-                            trees: _trees,
-                            woodcutters: _woodcutters,
-                            lumberSelection:
-                                (_lumberMode &&
-                                    _lumberStart != null &&
-                                    _lumberEnd != null)
-                                ? (
-                                    _lumberStart!.$1,
-                                    _lumberStart!.$2,
-                                    _lumberEnd!.$1,
-                                    _lumberEnd!.$2,
-                                  )
-                                : null,
-                            mineNodes: _mineNodes,
-                            miners: _miners,
-                            mineSelection:
-                                (_mineMode &&
-                                    _mineStart != null &&
-                                    _mineEnd != null)
-                                ? (
-                                    _mineStart!.$1,
-                                    _mineStart!.$2,
-                                    _mineEnd!.$1,
-                                    _mineEnd!.$2,
-                                  )
-                                : null,
-                            waterTiles: _waterTiles,
-                            dayLight: _cycle.dayLight,
-                            lotuses: _lotuses,
-                            reeds: _reeds,
-                            fishers: _fishers,
-                            zoom: _zoom,
-                            resourceBoxes: _resourceBoxes,
-                            hayEntities: _hayEntities,
-                            skyReflection: _cycle.skyMid,
+                        child: RepaintBoundary(
+                          child: ListenableBuilder(
+                            listenable: _frame,
+                            builder: (_, _) => CustomPaint(
+                              painter: VillageGamePainter(
+                                villagers: _villagers,
+                                buildings: _buildings,
+                                builders: _builders,
+                                pendingOrders: _orders,
+                                roadSystem: _roadSystem,
+                                pendingRoadOrders: _roadOrders,
+                                camera: _camera,
+                                ghostType: _placing,
+                                ghostTile: _ghost,
+                                ghostValid: _ghost != null && _placing != null
+                                    ? _isValidPlacement(
+                                        _ghost!.$1,
+                                        _ghost!.$2,
+                                        _placing!,
+                                      )
+                                    : false,
+                                time: _time,
+                                overlayTop: _cycle.overlayTop,
+                                overlayBottom: _cycle.overlayBottom,
+                                rainIntensity: _cycle.rainIntensity,
+                                farmTiles: _farmTiles,
+                                farmers: _farmers,
+                                farmSelection:
+                                    (_farmMode &&
+                                        _farmStart != null &&
+                                        _farmEnd != null)
+                                    ? (
+                                        _farmStart!.$1,
+                                        _farmStart!.$2,
+                                        _farmEnd!.$1,
+                                        _farmEnd!.$2,
+                                      )
+                                    : null,
+                                trees: _trees,
+                                woodcutters: _woodcutters,
+                                lumberSelection:
+                                    (_lumberMode &&
+                                        _lumberStart != null &&
+                                        _lumberEnd != null)
+                                    ? (
+                                        _lumberStart!.$1,
+                                        _lumberStart!.$2,
+                                        _lumberEnd!.$1,
+                                        _lumberEnd!.$2,
+                                      )
+                                    : null,
+                                mineNodes: _mineNodes,
+                                miners: _miners,
+                                mineSelection:
+                                    (_mineMode &&
+                                        _mineStart != null &&
+                                        _mineEnd != null)
+                                    ? (
+                                        _mineStart!.$1,
+                                        _mineStart!.$2,
+                                        _mineEnd!.$1,
+                                        _mineEnd!.$2,
+                                      )
+                                    : null,
+                                waterTiles: _waterTiles,
+                                dayLight: _cycle.dayLight,
+                                lotuses: _lotuses,
+                                reeds: _reeds,
+                                fishers: _fishers,
+                                shepherds: _shepherds,
+                                cows: _cows,
+                                zoom: _zoom,
+                                resourceBoxes: _resourceBoxes,
+                                hayEntities: _hayEntities,
+                                skyReflection: _cycle.skyMid,
+                                groundVersion: _groundVersion,
+                                lightSources: _lightSources,
+                                eventTint: _fxTint,
+                                activeFx: _fxActiveIds,
+                                burningBuildings: _burningBuildings,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1510,83 +1629,53 @@ class _VillageSceneState extends State<VillageScene>
               ),
             ),
 
-            // HUD
-            GameHUD(
-              stockpile: _stockpile,
-              woodInTransit: _resourceBoxes
-                  .where(
+            // HUD — frame'e bağlı (timeOfDay, dayLight, transit sayımları
+            // her tick değişir). ListenableBuilder içinde repaint.
+            RepaintBoundary(
+              child: ListenableBuilder(
+                listenable: _frame,
+                builder: (_, _) => GameHUD(
+                  stockpile: _stockpile,
+                  woodInTransit: _woodInTransit,
+                  stoneInTransit: _stoneInTransit,
+                  ironInTransit: _ironInTransit,
+                  coalInTransit: _coalInTransit,
+                  foodInTransit: _foodInTransit,
+                  villagerCount: _villagers.length,
+                  farmerCount: _farmers.length,
+                  woodcutterCount: _woodcutters.length,
+                  minerCount: _miners.length,
+                  fisherCount: _fishers.length,
+                  builderCount: _builders.length,
+                  busyBuilders: _builders
+                      .where((b) => b.state != BuilderState.idle)
+                      .length,
+                  timeOfDay: _cycle.timeOfDay,
+                  rainIntensity: _cycle.rainIntensity,
+                  dayLight: _cycle.dayLight,
+                  dayCount: _dayCount,
+                  buildingCount: _buildings.length,
+                  pendingOrderCount: _orders.where((o) => !o.completed).length,
+                  morale: _stats.morale,
+                  lowWater: _buildings.any(
                     (b) =>
-                        b.type == ResourceBoxType.woodChunk && !b.isDelivered,
-                  )
-                  .length,
-              stoneInTransit: _resourceBoxes
-                  .where(
-                    (b) => b.type == ResourceBoxType.stoneBox && !b.isDelivered,
-                  )
-                  .length,
-              ironInTransit: _resourceBoxes
-                  .where(
-                    (b) => b.type == ResourceBoxType.ironBox && !b.isDelivered,
-                  )
-                  .length,
-              coalInTransit: _resourceBoxes
-                  .where(
-                    (b) => b.type == ResourceBoxType.coalBox && !b.isDelivered,
-                  )
-                  .length,
-              foodInTransit: _hayEntities
-                  .where((h) => h.isBale && !h.isDelivered)
-                  .length,
-              villagerCount: _villagers.length,
-              farmerCount: _farmers.length,
-              woodcutterCount: _woodcutters.length,
-              minerCount: _miners.length,
-              fisherCount: _fishers.length,
-              builderCount: _builders.length,
-              busyBuilders: _builders
-                  .where((b) => b.state != BuilderState.idle)
-                  .length,
-              timeOfDay: _cycle.timeOfDay,
-              rainIntensity: _cycle.rainIntensity,
-              dayLight: _cycle.dayLight,
-              buildingCount: _buildings.length,
-              pendingOrderCount: _orders.where((o) => !o.completed).length,
-              morale: _stats.morale,
-              lowWater: _buildings.any((b) =>
-                  b.fn?.role == BuildingRole.housing &&
-                  b.occupants > 0 &&
-                  b.waterLevel < 0.3),
-              starving: !_godMode && _stockpile.food < kStarveRampFood,
-              eventLabel: _eventLabel,
-              onNewMap: () => setState(() => _generateWorld()),
-            ),
-
-            // God mode toggle — sağ üst köşe
-            Positioned(
-              top: 10,
-              right: 10,
-              child: GestureDetector(
-                onTap: () => setState(() => _godMode = !_godMode),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
+                        b.fn?.role == BuildingRole.housing &&
+                        b.occupants > 0 &&
+                        b.waterLevel < 0.3,
                   ),
-                  decoration: MedievalTheme.buttonDecoration(
-                    active: _godMode,
-                    accentColor: const Color(0xFFFFAA00),
-                  ),
-                  child: Text(
-                    _godMode ? '⚡ GOD' : '⚡',
-                    style: TextStyle(
-                      color: _godMode
-                          ? MedievalTheme.textAccent
-                          : MedievalTheme.textDim,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
+                  starving: !_godMode && _stockpile.food < kStarveRampFood,
+                  eventLabel: _eventLabel,
+                  effectTimeLeft: _eventMoraleLeft,
+                  effectDuration: _activeEvent?.duration ?? 1,
+                  effectPositive: (_eventMorale >= 0),
+                  onToggleDev: () =>
+                      setState(() => _devPanelOpen = !_devPanelOpen),
+                  godMode: _godMode,
+                  onNewMap: () => setState(() => _generateWorld()),
+                  onToggleGod: () => setState(() => _godMode = !_godMode),
+                  onTriggerEvent: _triggerRandomEvent,
+                  timeScale: _timeScale,
+                  onCycleSpeed: _cycleSpeed,
                 ),
               ),
             ),
@@ -1608,6 +1697,9 @@ class _VillageSceneState extends State<VillageScene>
                         hasFirepit: _hasFire,
                         onSelect: (type) => setState(() {
                           _farmMode = false;
+                          _lumberMode = false;
+                          _mineMode = false;
+                          _placingRoad = null;
                           if (_placing == type) {
                             _placing = null;
                             _ghost = null;
@@ -1615,6 +1707,20 @@ class _VillageSceneState extends State<VillageScene>
                             _placing = type;
                             _ghost = null;
                           }
+                        }),
+                      ),
+                      const SizedBox(width: 6),
+                      RoadPanel(
+                        stockpile: _stockpile,
+                        selected: _placingRoad,
+                        onSelect: (s) => setState(() {
+                          _placing = null;
+                          _ghost = null;
+                          _farmMode = false;
+                          _lumberMode = false;
+                          _mineMode = false;
+                          _placingRoad = _placingRoad == s ? null : s;
+                          _roadStrokeTiles.clear();
                         }),
                       ),
                       const SizedBox(width: 6),
@@ -1627,6 +1733,7 @@ class _VillageSceneState extends State<VillageScene>
                         onTap: () => setState(() {
                           _placing = null;
                           _ghost = null;
+                          _placingRoad = null;
                           _lumberMode = false;
                           _lumberStart = null;
                           _lumberEnd = null;
@@ -1647,6 +1754,7 @@ class _VillageSceneState extends State<VillageScene>
                         onTap: () => setState(() {
                           _placing = null;
                           _ghost = null;
+                          _placingRoad = null;
                           _farmMode = false;
                           _farmStart = null;
                           _farmEnd = null;
@@ -1667,6 +1775,7 @@ class _VillageSceneState extends State<VillageScene>
                         onTap: () => setState(() {
                           _placing = null;
                           _ghost = null;
+                          _placingRoad = null;
                           _farmMode = false;
                           _farmStart = null;
                           _farmEnd = null;
@@ -1701,15 +1810,250 @@ class _VillageSceneState extends State<VillageScene>
                         m.gridY >= b.row - 0.5 &&
                         m.gridY < b.row + b.rows + 0.5;
                   }).toList(),
+                  barnCows: _selectedBuilding!.type == BuildingType.barn
+                      ? _cows
+                            .where(
+                              (c) =>
+                                  c.barnCol == _selectedBuilding!.col &&
+                                  c.barnRow == _selectedBuilding!.row,
+                            )
+                            .toList()
+                      : const [],
+                  barnShepherd: _selectedBuilding!.type == BuildingType.barn
+                      ? _shepherds
+                            .where(
+                              (sh) =>
+                                  sh.barnCol == _selectedBuilding!.col &&
+                                  sh.barnRow == _selectedBuilding!.row,
+                            )
+                            .firstOrNull
+                      : null,
                   stockpile: _stockpile,
                   stats: _stats,
                   population: _villagers.length,
                   populationCap: _populationCap(),
                   onClose: () => setState(() => _selectedBuilding = null),
-                  onSell: (kind) =>
-                      setState(() => sellAtMarket(_stockpile, kind)),
+                  onSell: (kind) => setState(() {
+                    if (sellAtMarket(_stockpile, kind)) {
+                      // Satış oldu → seçili market binasına son satış zamanı
+                      // mühürlenir; _BuildingDrawable 1sn altın parıltısı çizer.
+                      _selectedBuilding?.lastSaleTime = _time;
+                    }
+                  }),
                 ),
               ),
+
+            // Köylü bilgi paneli — bina paneliyle aynı pozisyon, eş zamanlı
+            // ikisi gösterilmez (seçim mantığı tek değer tutuyor).
+            if (_selectedVillager != null)
+              Positioned(
+                bottom: 120,
+                left: 14,
+                child: VillagerInfoPanel(
+                  villager: _selectedVillager!,
+                  homeLabel: _selectedVillager!.homeBuilding == null
+                      ? null
+                      : kBuildingMeta[(_selectedVillager!.homeBuilding
+                                    as BuildingEntity)
+                                .type]
+                            ?.label,
+                  onClose: () => setState(() => _selectedVillager = null),
+                  onSelect: (v) => setState(() => _selectedVillager = v),
+                ),
+              ),
+
+            // Event choice modal — karar bekleyen olaylar için full-screen
+            // karartılmış overlay + zengin seçim kartı. Modal açıkken
+            // simülasyon dt = 0 (tick yarıduraklatılır), oyuncu seçene kadar.
+            if (_pendingChoice != null)
+              Positioned.fill(
+                child: EventChoiceModal(
+                  event: _pendingChoice!,
+                  onChoose: (c) => _applyEventChoice(_pendingChoice!, c),
+                ),
+              ),
+
+            // Geliştirici test paneli — sağdan slide-in.
+            // ListenableBuilder ile her tick'te canlı güncelleniyor (sim
+            // hızı yüksekken kaynak rakamları sahnedeki gibi akıcı değişir).
+            if (_devPanelOpen)
+              Positioned.fill(
+                child: ListenableBuilder(
+                  listenable: _frame,
+                  builder: (_, _) => DevPanel(
+                    godMode: _godMode,
+                    rainIntensity: _cycle.rainIntensity,
+                    timeOfDay: _cycle.timeOfDay,
+                    villagerCount: _villagers.length,
+                    buildingCount: _buildings.length,
+                    onClose: () => setState(() => _devPanelOpen = false),
+                    onToggleGod: () => setState(() => _godMode = !_godMode),
+                    onSetRain: (v) => setState(() => _cycle.rainIntensity = v),
+                    onSetTimeOfDay: (v) => setState(() => _cycle.timeOfDay = v),
+                    onTriggerEvent: (e) {
+                      setState(() {
+                        if (e.needsChoice) {
+                          _pendingChoice = e;
+                          _showNotification(
+                            '${e.icon} ${e.title} — karar bekliyor',
+                          );
+                        } else {
+                          _applyEventAutomatic(e);
+                        }
+                        _devPanelOpen = false;
+                      });
+                    },
+                    onAddResource: (k, n) => setState(() {
+                      _stockpile.add(k, n);
+                      final cur = _stockpile.get(k);
+                      if (cur < 0) _stockpile.add(k, -cur);
+                    }),
+                    onSpawnVillager: () {
+                      final fp = _firepitBuilding;
+                      if (fp != null) setState(() => _spawnGrownVillager(fp));
+                    },
+                    onKillRandomVillager: () {
+                      if (_villagers.isEmpty) return;
+                      setState(() {
+                        final v = _villagers[_rng.nextInt(_villagers.length)];
+                        v.ageDays = v.lifespanDays + 1; // bir sonraki tick ölür
+                      });
+                    },
+                    onClearEffects: () => setState(() {
+                      _activeFx.clear();
+                      _eventMorale = 0;
+                      _eventMoraleLeft = 0;
+                      _eventLabel = null;
+                      _activeEvent = null;
+                      _activeEventLeft = 0;
+                    }),
+                    onNewMap: () => setState(() => _generateWorld()),
+                    onWakeAll: () => setState(() {
+                      for (final v in _villagers) {
+                        v.isInsideBuilding = false;
+                        v.sleepTarget = null;
+                        v.sleepIsHome = false;
+                      }
+                    }),
+                    onSeedLivingVillage: () {
+                      _buildLivingVillage();
+                      setState(() => _devPanelOpen = false);
+                    },
+                    simSpeedBoost: _devSpeedBoost,
+                    simHistory: [
+                      for (final s in _simHistory)
+                        SimSnapshot(
+                          simTime: s.simTime,
+                          day: s.day,
+                          population: s.population,
+                          buildings: s.buildings,
+                          wood: s.wood,
+                          stone: s.stone,
+                          iron: s.iron,
+                          coal: s.coal,
+                          food: s.food,
+                          gold: s.gold,
+                        ),
+                    ],
+                    onSetSimSpeed: (v) => setState(() => _devSpeedBoost = v),
+                    onClearSimHistory: () =>
+                        setState(() => _simHistory.clear()),
+                    activeScenario: _scenarioName,
+                    scenarioProgress: _scenarioProgress,
+                    lastReport: _lastReport == null
+                        ? null
+                        : ScenarioReport(
+                            name: _lastReport!.name,
+                            durationSec: _lastReport!.durationSec,
+                            popStart: _lastReport!.popStart,
+                            popEnd: _lastReport!.popEnd,
+                            resources: _lastReport!.resources,
+                            verdict: _lastReport!.verdict,
+                            warnings: _lastReport!.warnings,
+                          ),
+                    onScenarioBaseline: _scenarioBaseline,
+                    onScenarioPlague: _scenarioPlague,
+                    onScenarioDrought: _scenarioDrought,
+                    onScenarioFire: _scenarioFire,
+                    onPlayMusic: () {
+                      if (!_devStartMusic()) {
+                        _showNotification('Uygun NPC yok');
+                      }
+                    },
+                    onStartDance: () {
+                      if (!_devStartDance()) {
+                        _showNotification(
+                          'Yan yana iki yetişkin NPC bulunamadı',
+                        );
+                      }
+                    },
+                    onStartChat: () {
+                      if (!_devStartChat()) {
+                        _showNotification(
+                          'Yan yana iki yetişkin NPC bulunamadı',
+                        );
+                      }
+                    },
+                    onClearActivities: () => setState(_devClearActivities),
+                  ),
+                ),
+              ),
+
+            // Event banner — pop-up zengin kart, frame'e bağlı (countdown
+            // canlı görünür diye ListenableBuilder altında).
+            Positioned(
+              top: 90,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: RepaintBoundary(
+                  child: ListenableBuilder(
+                    listenable: _frame,
+                    builder: (_, _) {
+                      final e = _activeEvent;
+                      if (e == null) return const SizedBox.shrink();
+                      return EventBanner(
+                        event: e,
+                        timeLeft: _activeEventLeft,
+                        duration: kEventBannerDuration,
+                        onClose: () => setState(() {
+                          _activeEvent = null;
+                          _activeEventLeft = 0;
+                        }),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+
+            // Hedef listesi — sol kolonda HUD'un altında. Oyuncu erken oyun
+            // adımlarını izler. ListenableBuilder ile her tick'te güncellenir.
+            Positioned(
+              left: 14,
+              top: 190,
+              child: RepaintBoundary(
+                child: ListenableBuilder(
+                  listenable: _frame,
+                  builder: (_, _) {
+                    final states = ObjectiveTracker.evaluate(
+                      ObjectiveContext(
+                        buildings: _buildings,
+                        farmTiles: _farmTiles,
+                        population: _villagers.length,
+                      ),
+                    );
+                    return ObjectivePanel(
+                      objectives: states,
+                      collapsed: _objectivesCollapsed,
+                      onToggleCollapse: () => setState(
+                        () => _objectivesCollapsed = !_objectivesCollapsed,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
 
             // Bildirim
             if (_notification != null)
@@ -1739,7 +2083,11 @@ class _VillageSceneState extends State<VillageScene>
               ),
 
             // Yerleştirme ipucu
-            if (_placing != null || _farmMode || _lumberMode || _mineMode)
+            if (_placing != null ||
+                _farmMode ||
+                _lumberMode ||
+                _mineMode ||
+                _placingRoad != null)
               Positioned(
                 top: 52,
                 left: 0,
@@ -1754,6 +2102,8 @@ class _VillageSceneState extends State<VillageScene>
                         ? const Color(0xEE0A0A2A)
                         : _lumberMode
                         ? const Color(0xEE2A1A00)
+                        : _placingRoad != null
+                        ? const Color(0xEE2A1808)
                         : const Color(0xEE1A3A1A),
                     child: Text(
                       _mineMode
@@ -1762,12 +2112,16 @@ class _VillageSceneState extends State<VillageScene>
                           ? 'Oduncu — sürükle seç, bırak ağaçları işaretle'
                           : _farmMode
                           ? 'Tarla — sürükle seç, bırak onayla'
+                          : _placingRoad != null
+                          ? '${_placingRoad!.label} — sürükle döşe'
                           : '${kBuildingMeta[_placing!]!.label} — haritaya tıkla',
                       style: TextStyle(
                         color: _mineMode
                             ? const Color(0xFFAABBFF)
                             : _lumberMode
                             ? const Color(0xFFFFAA44)
+                            : _placingRoad != null
+                            ? const Color(0xFFDDB880)
                             : const Color(0xFF88FF88),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,

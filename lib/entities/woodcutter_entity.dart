@@ -31,7 +31,7 @@ class WoodcutterEntity extends WorkerEntity {
 
     switch (state) {
       case WoodcutterState.idle:
-        _findWork(trees);
+        if (readyToSearchWork(dt)) _findWork(trees);
         if (state == WoodcutterState.idle) {
           idleWander(dt, rng, waterTiles, softObstacles);
         }

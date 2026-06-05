@@ -79,49 +79,55 @@ class TileRenderer {
   }
 
   /// Çim tile çizer. (col, row) → deterministik tint varyantı + dekor.
+  /// [zoom] LOD eşiği: < 0.5 düşük (solid fill), < 0.8 orta (image, dekor yok).
   static void drawGrassTile(Canvas canvas, double px, double py,
-      double hw, double hh, int col, int row) {
+      double hw, double hh, int col, int row, {double zoom = 1.0}) {
     final img = _grass;
 
+    // ── Bleed: tile diamond'ı 1 px dışa taşırılır → komşularla overlap,
+    // zoom transform sonrası sub-pixel kayma olsa bile gap kalmaz, arka plan
+    // (sky/scaffold mavisi) sızmaz.
+    const b = 1.0;
     _diamond
       ..reset()
-      ..moveTo(px,      py)
-      ..lineTo(px + hw, py + hh)
-      ..lineTo(px,      py + hh * 2)
-      ..lineTo(px - hw, py + hh)
+      ..moveTo(px,          py - b)
+      ..lineTo(px + hw + b, py + hh)
+      ..lineTo(px,          py + hh * 2 + b)
+      ..lineTo(px - hw - b, py + hh)
       ..close();
 
-    // ── Variant seçimi: patch (macro) + jitter (micro) hibrid ────────────
-    // Macro hash: 4x4 tile bloklarında sabit → komşu tile'lar benzer
-    // baseTone paylaşır → organik renk lekeleri (uniform halı değil).
-    // Micro hash: tile-spesifik küçük varyasyon (±1 variant kaydır).
     final macro = ((col >> 2) * 7919) ^ ((row >> 2) * 2729);
     final micro = (col * 73856093) ^ (row * 19349663);
     final baseTone = (macro & 0x7FFFFFFF) % _imgVariants.length;
-    // Mikro jitter: %60 ihtimalle aynı, %40 ihtimalle komşu variant
     final jitter = (micro >> 3) & 0xF;
     final variant = jitter < 10
         ? baseTone
         : ((baseTone + (jitter < 13 ? 1 : -1)) % _imgVariants.length + _imgVariants.length) % _imgVariants.length;
-    final hash = micro; // decor için aşağıda kullanılır
+    final hash = micro;
 
-    if (img == null) {
+    // ── LOD 0: çok uzaktan — yalnızca düz dolgu, görsel fark yok ──────────
+    if (zoom < 0.5 || img == null) {
       canvas.drawPath(_diamond, _fillVariants[variant]);
-    } else {
-      canvas.save();
-      canvas.clipPath(_diamond);
-      final dst = Rect.fromLTWH(px - hw, py, hw * 2, hh * 2);
-      final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
-      canvas.drawImageRect(img, src, dst, _imgVariants[variant]);
-      canvas.restore();
+      if (zoom >= 0.3) canvas.drawPath(_diamond, _border);
+      return;
     }
+
+    // ── LOD 1+2: image-clipped tile + border ──────────────────────────────
+    canvas.save();
+    canvas.clipPath(_diamond);
+    final dst = Rect.fromLTWH(px - hw, py, hw * 2, hh * 2);
+    final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
+    canvas.drawImageRect(img, src, dst, _imgVariants[variant]);
+    canvas.restore();
 
     canvas.drawPath(_diamond, _border);
 
-    // ~%24 tile'da dekor (çiçek / çakıl / ot tutamı / ot bıçağı)
-    final decorRoll = ((hash >> 5) & 0xFFFF) % 100;
-    if (decorRoll < 24) {
-      _drawDecor(canvas, px, py, hw, hh, hash);
+    // ── LOD 2: yakından — dekor (zoom < 0.8'de görünmüyor zaten) ──────────
+    if (zoom >= 0.8) {
+      final decorRoll = ((hash >> 5) & 0xFFFF) % 100;
+      if (decorRoll < 24) {
+        _drawDecor(canvas, px, py, hw, hh, hash);
+      }
     }
   }
 
@@ -131,12 +137,13 @@ class TileRenderer {
   static void drawSandOverlay(Canvas canvas, double px, double py,
       double hw, double hh, int sides) {
     if (sides <= 0) return;
+    const b = 1.0;
     _diamond
       ..reset()
-      ..moveTo(px,      py)
-      ..lineTo(px + hw, py + hh)
-      ..lineTo(px,      py + hh * 2)
-      ..lineTo(px - hw, py + hh)
+      ..moveTo(px,          py - b)
+      ..lineTo(px + hw + b, py + hh)
+      ..lineTo(px,          py + hh * 2 + b)
+      ..lineTo(px - hw - b, py + hh)
       ..close();
     final idx = sides >= 3 ? 2 : sides - 1;
     canvas.drawPath(_diamond, _pSand[idx]);

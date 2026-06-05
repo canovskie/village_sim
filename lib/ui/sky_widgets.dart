@@ -17,52 +17,49 @@ class StarPainter extends CustomPainter {
   final double time;
   const StarPainter({required this.opacity, required this.time});
 
+  // Statik Paint havuzu — frame başına 90+ Paint allocation'ı keser.
+  // MaskFilter.blur yerine 2 katmanlı concentric circle ile ışıma → CPU yolu
+  // çok daha ucuz.
+  static final Paint _pGlow = Paint()..isAntiAlias = true;
+  static final Paint _pStar = Paint()..isAntiAlias = false;
+
   @override
   void paint(Canvas canvas, Size size) {
     const kStars = 90;
     for (int i = 0; i < kStars; i++) {
-      // Pseudo-random dağılım — şerit oluşturmaz
       final x = ((i * 1731 + 97) % 1000) / 1000.0 * size.width;
       final y = ((i * 617  + 53) % 1000) / 1000.0 * size.height * 0.70;
 
-      // Her yıldız farklı frekansta titreşir
       final twinkle = (sin(time * (0.8 + (i % 7) * 0.35) + i * 2.3) * 0.25 + 0.75)
           .clamp(0.0, 1.0);
       final a = (opacity * twinkle * 255).round().clamp(0, 255);
 
-      // Büyüklük: her 7'de bir büyük, her 3'te bir orta, geri kalan küçük
       final isBig    = i % 7 == 0;
       final isMedium = i % 3 == 0;
       final sz       = isBig ? 4.0 : isMedium ? 2.0 : 1.5;
+      final isCool   = i % 11 == 0;
 
-      // Çoğu sıcak beyaz, bazıları mavimsi
-      final isCool = i % 11 == 0;
-      final color  = isCool
-          ? Color.fromARGB(a, 200, 220, 255)
-          : Color.fromARGB(a, 255, 255, 230);
-
-      // Hâle (blur ile ışıma) — büyük yıldızlarda daha belirgin
+      // Hâle: 2 katman concentric circle (geniş soluk + dar yarı-parlak)
       if (isBig || isMedium) {
-        final glowR  = isBig ? 8.0 : 4.0;
-        final glowA  = (a * 0.35).round().clamp(0, 255);
-        final glowC  = isCool
-            ? Color.fromARGB(glowA, 180, 210, 255)
-            : Color.fromARGB(glowA, 255, 250, 200);
-        canvas.drawCircle(
-          Offset(x + sz / 2, y + sz / 2),
-          glowR,
-          Paint()
-            ..color      = glowC
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowR * 0.8)
-            ..isAntiAlias = true,
-        );
+        final glowR = isBig ? 8.0 : 4.0;
+        final cx = x + sz / 2;
+        final cy = y + sz / 2;
+        final glowA1 = (a * 0.12).round().clamp(0, 255);
+        final glowA2 = (a * 0.28).round().clamp(0, 255);
+        _pGlow.color = isCool
+            ? Color.fromARGB(glowA1, 180, 210, 255)
+            : Color.fromARGB(glowA1, 255, 250, 200);
+        canvas.drawCircle(Offset(cx, cy), glowR, _pGlow);
+        _pGlow.color = isCool
+            ? Color.fromARGB(glowA2, 180, 210, 255)
+            : Color.fromARGB(glowA2, 255, 250, 200);
+        canvas.drawCircle(Offset(cx, cy), glowR * 0.55, _pGlow);
       }
 
-      // Yıldız kendisi
-      canvas.drawRect(
-        Rect.fromLTWH(x, y, sz, sz),
-        Paint()..color = color..isAntiAlias = false,
-      );
+      _pStar.color = isCool
+          ? Color.fromARGB(a, 200, 220, 255)
+          : Color.fromARGB(a, 255, 255, 230);
+      canvas.drawRect(Rect.fromLTWH(x, y, sz, sz), _pStar);
     }
   }
 

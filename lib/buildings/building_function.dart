@@ -160,4 +160,14 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     civicEffect: CivicEffect.carrierSpeed,
     civicValue: 0.15,
   ),
+
+  BuildingType.barn: BuildingFunction(
+    role: BuildingRole.gathering,
+    summary: 'İnekleri barındırır. Çoban inekleri sağar ve süt → yiyecek üretir.',
+  ),
+
+  BuildingType.lamppost: BuildingFunction(
+    role: BuildingRole.none,
+    summary: 'Geceleri sokağı aydınlatır. Yol kenarına dizilirse köy ışıl ışıl.',
+  ),
 };

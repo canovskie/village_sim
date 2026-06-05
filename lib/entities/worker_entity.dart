@@ -1,5 +1,8 @@
 import 'dart:math';
 import '../core/constants.dart';
+import '../systems/path_context.dart';
+import '../systems/pathfinder.dart';
+import '../systems/road_system.dart';
 
 /// Tüm çalışan NPC'lerin paylaştığı hareket ve dolaşma mantığı.
 ///
@@ -14,6 +17,28 @@ import '../core/constants.dart';
 ///   - [idleSpeedFactor]  : idle hareket hızı (normal hızın çarpanı)
 ///   - [idleIntervalRange]: idle hedef yenileme aralığı (saniye)
 abstract class WorkerEntity {
+  /// Tek otorite — main.dart init'inde set edilir. moveTo/moveTowards üstünde
+  /// yürünen tile road ise hızı çarpar (taş +%30, toprak/köprü +%15).
+  /// null ise (henüz set edilmemiş test ortamı) etkisiz.
+  static RoadSystem? roadSystem;
+
+  /// A* path-aware hareket için ortak otorite. main.dart bir kez set eder.
+  /// null ise pathing devre dışı — moveTo/moveTowards eski (düz çizgi)
+  /// davranışına döner. World version değişimi cached path'leri invalidate
+  /// eder; pathing kısa hop'larda (< 3 tile) atlanır (idle wander vb.).
+  static PathContext? pathContext;
+
+  // ── Per-entity path cache ──────────────────────────────────────────────────
+  // _path: tile waypoint sırası (start dahil değil, goal dahil).
+  // _pathIdx: işlenen sonraki waypoint indeksi.
+  // _pathGoalC/R: en son hedef tile — değişirse path recompute.
+  // _pathVersion: hesaplandığında pathContext.version değeri — eskirse recompute.
+  List<(int, int)>? _path;
+  int _pathIdx     = 0;
+  int _pathGoalC   = -999;
+  int _pathGoalR   = -999;
+  int _pathVersion = -1;
+
   double gridX;
   double gridY;
   bool   facingRight = true;
@@ -37,6 +62,19 @@ abstract class WorkerEntity {
   double _idleTargetX = -1;
   double _idleTargetY = -1;
   double _idleTimer   = 0;
+
+  // ── İş arama throttle ──────────────────────────────────────────────────────
+  double _workSearchCd = 0.0;
+
+  /// Boştaki işçinin her frame tüm hedef listesini taramasını engeller.
+  /// ~[kWorkSearchInterval]'de bir true döner; aradaki frame'lerde işçi
+  /// yalnızca dolaşır. İş anında lazım değilse bu gecikme görünmez.
+  bool readyToSearchWork(double dt) {
+    _workSearchCd -= dt;
+    if (_workSearchCd > 0) return false;
+    _workSearchCd = kWorkSearchInterval;
+    return true;
+  }
 
   WorkerEntity({required double startCol, required double startRow})
       : gridX    = startCol,
@@ -81,31 +119,99 @@ abstract class WorkerEntity {
   (double, double) get idleIntervalRange => (3.0, 7.0);
 
   /// Hedefe `step` kadar ilerle (saniyeden bağımsız mutlak adım).
-  /// Eski API — BuilderEntity ve VillagerEntity hâlâ kullanır.
+  /// Path-aware: uzak hedef (≥ 3 tile) için A* waypoint dizisi izlenir;
+  /// kısa hedefler ve pathContext yokken doğrudan vektör adımı.
   void moveTo(double tx, double ty, double step) {
     final dx   = tx - gridX;
     final dy   = ty - gridY;
     final dist = sqrt(dx * dx + dy * dy);
     if (dist < 0.01) return;
-    final ratio = min(step / dist, 1.0);
+    final next = _nextWaypoint(tx, ty, dist);
+    _stepFixed(next.$1, next.$2, step);
+  }
+
+  /// Hedefe `speed * dt` adımla ilerle. arriveD altına düşünce true döner —
+  /// alt sınıf state geçişi için kullanır. Path-aware (bkz. moveTo).
+  bool moveTowards(double tx, double ty, double dt, {double arriveD = 0.08}) {
+    final dx   = tx - gridX;
+    final dy   = ty - gridY;
+    final dist = sqrt(dx * dx + dy * dy);
+    if (dist <= arriveD) return true;
+    final next = _nextWaypoint(tx, ty, dist);
+    _stepDt(next.$1, next.$2, dt);
+    return false;
+  }
+
+  /// (tx, ty) gerçek hedef; dönüş: bir SONRAKİ adımın hedefi (waypoint ya
+  /// da true goal). Kısa mesafe / no-context → doğrudan true goal.
+  (double, double) _nextWaypoint(double tx, double ty, double dist) {
+    final ctx = pathContext;
+    if (ctx == null || dist < 3.0) return (tx, ty);
+
+    _ensurePath(tx, ty, ctx);
+    final path = _path;
+    if (path == null || path.isEmpty) return (tx, ty);
+
+    // Yaklaşılmış waypoint'leri atla (NPC drift'inde geri dönme yok).
+    while (_pathIdx < path.length) {
+      final wp  = path[_pathIdx];
+      final wpx = wp.$1 + 0.5;
+      final wpy = wp.$2 + 0.5;
+      final wd  = sqrt((wpx - gridX) * (wpx - gridX) +
+                       (wpy - gridY) * (wpy - gridY));
+      if (wd < 0.30) {
+        _pathIdx++;
+        continue;
+      }
+      return (wpx, wpy);
+    }
+    // Path tükendi — sub-tile presizyon için true goal'a yönel.
+    return (tx, ty);
+  }
+
+  void _ensurePath(double tx, double ty, PathContext ctx) {
+    final goalC = tx.round();
+    final goalR = ty.round();
+    final myC   = gridX.round();
+    final myR   = gridY.round();
+
+    final goalChanged  = goalC != _pathGoalC || goalR != _pathGoalR;
+    final versionStale = _pathVersion != ctx.version;
+    final pathExhausted = _path == null || _pathIdx >= (_path?.length ?? 0);
+
+    if (!goalChanged && !versionStale && !pathExhausted) return;
+
+    _pathGoalC   = goalC;
+    _pathGoalR   = goalR;
+    _pathVersion = ctx.version;
+    // findPath başlangıcı içermez, hedef tile'ı içerir.
+    _path = Pathfinder.findPath(myC, myR, goalC, goalR, ctx.costAt, ctx.blocked);
+    _pathIdx = 0;
+  }
+
+  void _stepFixed(double tx, double ty, double step) {
+    final dx   = tx - gridX;
+    final dy   = ty - gridY;
+    final dist = sqrt(dx * dx + dy * dy);
+    if (dist < 0.01) return;
+    final boost = roadSystem?.speedMultiplierAt(gridX, gridY) ?? 1.0;
+    final ratio = min(step * boost / dist, 1.0);
     final prevX = gridX;
     gridX += dx * ratio;
     gridY += dy * ratio;
     facingRight = gridX >= prevX;
   }
 
-  /// Hedefe `speed * dt` adımla ilerle. arriveD altına düşünce true döner —
-  /// alt sınıf state geçişi için kullanır.
-  bool moveTowards(double tx, double ty, double dt, {double arriveD = 0.08}) {
+  void _stepDt(double tx, double ty, double dt) {
     final dx   = tx - gridX;
     final dy   = ty - gridY;
     final dist = sqrt(dx * dx + dy * dy);
-    if (dist <= arriveD) return true;
-    final step = (speed * dt).clamp(0.0, dist);
+    if (dist < 0.001) return;
+    final boost = roadSystem?.speedMultiplierAt(gridX, gridY) ?? 1.0;
+    final step = (speed * boost * dt).clamp(0.0, dist);
     gridX += (dx / dist) * step;
     gridY += (dy / dist) * step;
     facingRight = dx > 0;
-    return false;
   }
 
   /// Boştayken rasgele bir hedefe doğru yavaşça yürür.

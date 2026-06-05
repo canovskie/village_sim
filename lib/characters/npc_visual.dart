@@ -59,9 +59,11 @@ class NpcVisual {
   NpcVisual elderly() =>
       copyWith(hair: Color.lerp(hair, const Color(0xFFDAD8D0), 0.72)!);
 
-  factory NpcVisual.fromSeed(int seed) {
+  /// [forceMale] verilirse cinsiyet rastgele atanmaz, dışarıdan dayatılır.
+  /// İsim ile visual'ın uyumlu olması için spawn akışı bunu kullanır.
+  factory NpcVisual.fromSeed(int seed, {bool? forceMale}) {
     final r       = Random(seed);
-    final isMale  = r.nextBool();
+    final isMale  = forceMale ?? r.nextBool();
     final skin    = _skinTones[r.nextInt(_skinTones.length)];
     final hair    = _hairColors[r.nextInt(_hairColors.length)];
 

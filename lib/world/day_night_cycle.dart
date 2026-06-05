@@ -101,44 +101,98 @@ class DayNightCycle {
     (1.00, 0x08, 0x0C, 0x20),
   ]);
 
-  // ── Scene overlay ─────────────────────────────────────────────────────────
+  // ── Scene overlay (vertical gradient) ────────────────────────────────────
+  // İki bant: üst (gökyüzü yakın) + alt (yer/ufuk yakın). Tek tonlu eski
+  // overlay yerine iki banttan gradient ile sahneye yatay derinlik verir:
+  // - Gece: üst koyu lacivert, alt biraz açık tonda → yer atmosfer hissi.
+  // - Şafak/günbatımı: üst mor-pembe, alt sıcak turuncu → tipik gökyüzü palet.
+  // - Gündüz: her iki bant şeffaf.
+  // - Yağmurda mavi-gri tonu eklenir.
 
-  /// Oyun sahnesi üstüne bindirilir — gece karartır, şafak/gün batımı hafif renklendirir.
+  Color get overlayTop => _composeOverlay(_overlayTopRgb(), _overlayTopAlpha());
+  Color get overlayBottom =>
+      _composeOverlay(_overlayBottomRgb(), _overlayBottomAlpha());
+
+  /// Geriye dönük uyumluluk — eski tek-renk overlay'i isteyen kod için
+  /// gradient'in ortalamasını verir. Yeni kod overlayTop/overlayBottom'a
+  /// geçmelidir.
   Color get sceneOverlay {
-    // Temel karartma (alpha kanalı)
-    final darkA = _lerpScalar([
-      (0.00, 0.62), // gece
-      (0.22, 0.50),
-      (0.25, 0.32), // şafak başlangıcı — yavaş açılır
-      (0.30, 0.12), // şafak ortası
-      (0.38, 0.00), // gündüz — sıfır overlay
-      (0.62, 0.00),
-      (0.70, 0.12), // gün batımı başlangıcı
-      (0.75, 0.32),
-      (0.80, 0.48),
-      (0.92, 0.60),
-      (1.00, 0.62),
-    ]);
+    final top = overlayTop;
+    final bot = overlayBottom;
+    int avg(num a, num b) => ((a + b) / 2).round().clamp(0, 255);
+    return Color.fromARGB(
+      avg(top.a * 255, bot.a * 255),
+      avg(top.r * 255, bot.r * 255),
+      avg(top.g * 255, bot.g * 255),
+      avg(top.b * 255, bot.b * 255),
+    );
+  }
 
-    // Renk: gece lacivert, şafak/gün batımı hafif turuncu, gündüz şeffaf
-    final Color rgb;
-    final t = timeOfDay;
-    if (t < 0.22 || t > 0.80) {
-      rgb = const Color(0xFF060A20); // gece — soğuk lacivert
-    } else if (t < 0.30 || t > 0.73) {
-      rgb = const Color(0xFF882808); // şafak/gün batımı — koyu turuncu (daha az parlak)
-    } else {
-      rgb = const Color(0xFF000000); // gündüz — nötr
-    }
-
+  Color _composeOverlay(Color rgb, double a) {
     final base = Color.fromARGB(
-        (darkA * 255).round().clamp(0, 255),
-        (rgb.r * 255).round(), (rgb.g * 255).round(), (rgb.b * 255).round());
-
+      (a * 255).round().clamp(0, 255),
+      (rgb.r * 255).round(),
+      (rgb.g * 255).round(),
+      (rgb.b * 255).round(),
+    );
     if (rainIntensity <= 0) return base;
     final rainA = (rainIntensity * 0.22 * 255).round().clamp(0, 255);
     return Color.alphaBlend(Color.fromARGB(rainA, 15, 30, 60), base);
   }
+
+  Color _overlayTopRgb() => _lerp([
+        (0.00, 0x05, 0x08, 0x20), // gece — derin lacivert
+        (0.20, 0x10, 0x10, 0x38),
+        (0.25, 0x70, 0x40, 0x60), // şafak — mor-pembe üst bant
+        (0.32, 0x40, 0x40, 0x68),
+        (0.38, 0x00, 0x00, 0x00), // gündüz — şeffaf yapacağız
+        (0.62, 0x00, 0x00, 0x00),
+        (0.70, 0x40, 0x30, 0x60),
+        (0.75, 0x80, 0x28, 0x40), // gün batımı — koyu kırmızı-mor üst
+        (0.82, 0x18, 0x10, 0x40),
+        (1.00, 0x05, 0x08, 0x20),
+      ]);
+
+  Color _overlayBottomRgb() => _lerp([
+        (0.00, 0x0A, 0x14, 0x30), // gece alt — biraz daha açık
+        (0.20, 0x18, 0x18, 0x38),
+        (0.25, 0xC8, 0x68, 0x18), // şafak ufuk — yanık turuncu
+        (0.32, 0xE0, 0xA8, 0x60),
+        (0.38, 0x00, 0x00, 0x00),
+        (0.62, 0x00, 0x00, 0x00),
+        (0.70, 0xE0, 0x80, 0x30),
+        (0.75, 0xE8, 0x48, 0x18), // gün batımı ufuk — ateş turuncu
+        (0.82, 0x20, 0x14, 0x48),
+        (1.00, 0x0A, 0x14, 0x30),
+      ]);
+
+  double _overlayTopAlpha() => _lerpScalar([
+        (0.00, 0.68), // gece üst — koyu ama abartısız
+        (0.22, 0.54),
+        (0.25, 0.40),
+        (0.30, 0.18),
+        (0.38, 0.00),
+        (0.62, 0.00),
+        (0.70, 0.20),
+        (0.75, 0.40),
+        (0.80, 0.54),
+        (0.92, 0.62),
+        (1.00, 0.68),
+      ]);
+
+  double _overlayBottomAlpha() => _lerpScalar([
+        (0.00, 0.54), // gece alt
+        (0.22, 0.42),
+        (0.25, 0.32),
+        (0.30, 0.10),
+        (0.38, 0.00),
+        (0.62, 0.00),
+        (0.70, 0.10),
+        (0.75, 0.34),
+        (0.80, 0.44),
+        (0.92, 0.50),
+        (1.00, 0.54),
+      ]);
 
   // ── Sun / Moon ────────────────────────────────────────────────────────────
 

@@ -7,11 +7,11 @@ import '../core/constants.dart';
 // ── Result ────────────────────────────────────────────────────────────────────
 
 class WorldGeneratorResult {
-  final Set<(int, int)>  waterTiles;
+  final Set<(int, int)> waterTiles;
   final List<LotusEntity> lotuses;
-  final List<ReedClump>   reeds;
-  final List<TreeEntity>  trees;
-  final List<MineNode>    mineNodes;
+  final List<ReedClump> reeds;
+  final List<TreeEntity> trees;
+  final List<MineNode> mineNodes;
 
   const WorldGeneratorResult({
     required this.waterTiles,
@@ -36,19 +36,41 @@ class WorldGenerator {
     _rng = Random(seed);
   }
 
+  /// Haritanın baz alana (48×36) göre alan oranı — entity sayıları bununla
+  /// ölçeklenir. Büyük haritada daha çok orman/maden, küçük haritada daha az.
+  /// min 1.0 — küçük haritada bile orijinal yoğunluk korunur.
+  double get _areaScale {
+    const baseArea = 48.0 * 36.0;
+    final s = (kCols * kRows) / baseArea;
+    return s < 1.0 ? 1.0 : s;
+  }
+
+  /// [lo..hi] aralığında int çek, sonra alan oranıyla ölçekle (min 1).
+  int _scaledRange(int lo, int hi) {
+    final base = lo + _rng.nextInt(hi - lo + 1);
+    final v = (base * _areaScale).round();
+    return v < 1 ? 1 : v;
+  }
+
   WorldGeneratorResult generate() {
-    final water    = _generateWater();
-    final lotuses  = _generateLotuses(water);
-    final reeds    = _generateReeds(water);
-    final trees    = _generateTrees(water);
+    final water = _generateWater();
+    final lotuses = _generateLotuses(water);
+    final reeds = _generateReeds(water);
+    // Reed clump tile'larını topla — ağaç bunlara spawn etmesin (çakışma).
+    final reedTiles = <(int, int)>{};
+    for (final r in reeds) {
+      reedTiles.add((r.col, r.row));
+      reedTiles.add((r.col2, r.row2));
+    }
+    final trees = _generateTrees(water, reedTiles);
     final treeTiles = {for (final t in trees) (t.col, t.row)};
-    final mines    = _generateMines(water, treeTiles);
+    final mines = _generateMines(water, treeTiles);
     return WorldGeneratorResult(
       waterTiles: water,
-      lotuses:    lotuses,
-      reeds:      reeds,
-      trees:      trees,
-      mineNodes:  mines,
+      lotuses: lotuses,
+      reeds: reeds,
+      trees: trees,
+      mineNodes: mines,
     );
   }
 
@@ -56,7 +78,7 @@ class WorldGenerator {
 
   Set<(int, int)> _generateWater() {
     final tiles = <(int, int)>{};
-    final lakeCount = 2 + _rng.nextInt(4); // 2–5 göl
+    final lakeCount = _scaledRange(2, 5); // alan ile ölçekli
 
     for (int l = 0; l < lakeCount; l++) {
       // Merkez — başlangıç bölgesinin dışında, kenara çok yakın değil
@@ -77,8 +99,8 @@ class WorldGenerator {
         for (int r = (cy - ry).floor() - 1; r <= (cy + ry).ceil() + 1; r++) {
           if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
           if (_inSafe(c, r, margin: 2)) continue; // başlangıç bölgesini koru
-          final dx    = (c - cx) / rx;
-          final dy    = (r - cy) / ry;
+          final dx = (c - cx) / rx;
+          final dy = (r - cy) / ry;
           final noise = (_rng.nextDouble() - 0.5) * 0.45;
           if (dx * dx + dy * dy < 1.0 + noise) {
             tiles.add((c, r));
@@ -97,8 +119,10 @@ class WorldGenerator {
   List<LotusEntity> _generateLotuses(Set<(int, int)> water) {
     final result = <LotusEntity>[];
     for (final (c, r) in water) {
-      if (!water.contains((c - 1, r)) || !water.contains((c + 1, r)) ||
-          !water.contains((c, r - 1)) || !water.contains((c, r + 1))) {
+      if (!water.contains((c - 1, r)) ||
+          !water.contains((c + 1, r)) ||
+          !water.contains((c, r - 1)) ||
+          !water.contains((c, r + 1))) {
         continue;
       }
       if (_rng.nextDouble() < 0.12) {
@@ -115,15 +139,18 @@ class WorldGenerator {
     for (final (c, r) in water) {
       for (final (nc, nr) in [(c - 1, r), (c + 1, r), (c, r - 1), (c, r + 1)]) {
         if (!water.contains((nc, nr)) &&
-            nc >= 0 && nc < kCols && nr >= 0 && nr < kRows) {
+            nc >= 0 &&
+            nc < kCols &&
+            nr >= 0 &&
+            nr < kRows) {
           shore.add((nc, nr));
         }
       }
     }
 
-    final used      = <(int, int)>{};
+    final used = <(int, int)>{};
     final shoreList = shore.toList()..shuffle(_rng);
-    final result    = <ReedClump>[];
+    final result = <ReedClump>[];
 
     for (final (c, r) in shoreList) {
       if (used.contains((c, r))) continue;
@@ -144,17 +171,20 @@ class WorldGenerator {
 
   // ── Ağaçlar ──────────────────────────────────────────────────────────────────
 
-  List<TreeEntity> _generateTrees(Set<(int, int)> water) {
-    final trees    = <TreeEntity>[];
+  List<TreeEntity> _generateTrees(
+    Set<(int, int)> water,
+    Set<(int, int)> reedTiles,
+  ) {
+    final trees = <TreeEntity>[];
     final occupied = <(int, int)>{};
 
     // ── 1. Büyük orman bölgeleri (her biri birden fazla alt küme içerir) ──────
-    final forestCount = 4 + _rng.nextInt(3); // 4-6 orman merkezi
+    final forestCount = _scaledRange(4, 6); // 4-6 baz, alan ile ölçekli
 
     for (int f = 0; f < forestCount; f++) {
       // Orman merkezi
-      final fx  = 4 + _rng.nextInt(kCols - 8);
-      final fy  = 4 + _rng.nextInt(kRows - 8);
+      final fx = 4 + _rng.nextInt(kCols - 8);
+      final fy = 4 + _rng.nextInt(kRows - 8);
 
       // Tek tür: çam
       const dominant = TreeType.pine;
@@ -164,12 +194,12 @@ class WorldGenerator {
       for (int s = 0; s < subCount; s++) {
         // Alt küme merkezi, orman merkezine yakın
         final spread = 4.0 + _rng.nextDouble() * 5.0;
-        final angle  = _rng.nextDouble() * 2 * pi;
-        final cx     = (fx + cos(angle) * spread).round().clamp(2, kCols - 3);
-        final cy     = (fy + sin(angle) * spread).round().clamp(2, kRows - 3);
+        final angle = _rng.nextDouble() * 2 * pi;
+        final cx = (fx + cos(angle) * spread).round().clamp(2, kCols - 3);
+        final cy = (fy + sin(angle) * spread).round().clamp(2, kRows - 3);
 
         final rad = 2.0 + _rng.nextDouble() * 2.5; // 2.0–4.5 tile yarıçap
-        final cnt = 5 + _rng.nextInt(6);            // 5–10 ağaç
+        final cnt = 5 + _rng.nextInt(6); // 5–10 ağaç
 
         const type = dominant;
 
@@ -180,7 +210,11 @@ class WorldGenerator {
           final d = _rng.nextDouble() * rad;
           final c = (cx + cos(a) * d).round().clamp(0, kCols - 1);
           final r = (cy + sin(a) * d).round().clamp(0, kRows - 1);
-          if (occupied.contains((c, r)) || water.contains((c, r))) continue;
+          if (occupied.contains((c, r)) ||
+              water.contains((c, r)) ||
+              reedTiles.contains((c, r))) {
+            continue;
+          }
           occupied.add((c, r));
           trees.add(TreeEntity(col: c, row: r, type: type));
           placed++;
@@ -189,10 +223,10 @@ class WorldGenerator {
     }
 
     // ── 2. Dağınık münferit ağaç kümeleri (harita geneline serpili) ───────────
-    final scatterCount = 8 + _rng.nextInt(5); // 8-12 küçük küme
+    final scatterCount = _scaledRange(8, 12); // 8-12 baz, alan ile ölçekli
     for (int i = 0; i < scatterCount; i++) {
-      final cx  = 1 + _rng.nextInt(kCols - 2);
-      final cy  = 1 + _rng.nextInt(kRows - 2);
+      final cx = 1 + _rng.nextInt(kCols - 2);
+      final cy = 1 + _rng.nextInt(kRows - 2);
       final rad = 1.0 + _rng.nextDouble() * 1.5;
       final cnt = 2 + _rng.nextInt(3); // 2-4 ağaç
 
@@ -205,7 +239,11 @@ class WorldGenerator {
         final d = _rng.nextDouble() * rad;
         final c = (cx + cos(a) * d).round().clamp(0, kCols - 1);
         final r = (cy + sin(a) * d).round().clamp(0, kRows - 1);
-        if (occupied.contains((c, r)) || water.contains((c, r))) continue;
+        if (occupied.contains((c, r)) ||
+            water.contains((c, r)) ||
+            reedTiles.contains((c, r))) {
+          continue;
+        }
         occupied.add((c, r));
         trees.add(TreeEntity(col: c, row: r, type: type));
         placed++;
@@ -218,23 +256,26 @@ class WorldGenerator {
   // ── Madenler ────────────────────────────────────────────────────────────────
 
   List<MineNode> _generateMines(
-      Set<(int, int)> water, Set<(int, int)> treeTiles) {
-    final mines    = <MineNode>[];
+    Set<(int, int)> water,
+    Set<(int, int)> treeTiles,
+  ) {
+    final mines = <MineNode>[];
     final occupied = <(int, int)>{};
 
-    // Taş: 3-4 grup
-    final stoneGroups = 3 + _rng.nextInt(2);
+    // Taş: 3-4 grup baz, alan ile ölçekli
+    final stoneGroups = _scaledRange(3, 4);
     for (int i = 0; i < stoneGroups; i++) {
       _placeGroup(OreType.stone, water, treeTiles, occupied, mines);
     }
 
-    // Demir: 2 grup
-    for (int i = 0; i < 2; i++) {
+    // Demir: 2-3 grup baz, alan ile ölçekli
+    final ironGroups = _scaledRange(2, 3);
+    for (int i = 0; i < ironGroups; i++) {
       _placeGroup(OreType.iron, water, treeTiles, occupied, mines);
     }
 
-    // Kömür: 1-2 grup
-    final coalGroups = 1 + _rng.nextInt(2);
+    // Kömür: 1-2 grup baz, alan ile ölçekli
+    final coalGroups = _scaledRange(1, 2);
     for (int i = 0; i < coalGroups; i++) {
       _placeGroup(OreType.coal, water, treeTiles, occupied, mines);
     }
@@ -249,7 +290,7 @@ class WorldGenerator {
     Set<(int, int)> water,
     Set<(int, int)> treeTiles,
     Set<(int, int)> occupied,
-    List<MineNode>  out,
+    List<MineNode> out,
   ) {
     for (int attempt = 0; attempt < 60; attempt++) {
       final col = 3 + _rng.nextInt(kCols - 6); // sol-üst köşe

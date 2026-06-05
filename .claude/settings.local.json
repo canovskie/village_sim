@@ -25,7 +25,25 @@
       "Bash(cp /tmp/new_buildings/lumberjack.png \"/Users/cankaynar/Desktop/FlutterProj/village_sim/assets/buildings/lumberjack.png\")",
       "Bash(cp /tmp/new_buildings/mine.png \"/Users/cankaynar/Desktop/FlutterProj/village_sim/assets/buildings/mine.png\")",
       "Bash(flutter --version)",
-      "Bash(flutter test *)"
+      "Bash(flutter test *)",
+      "Bash(cat)",
+      "Bash(chmod +x /tmp/check_orphans.sh)",
+      "Bash(/tmp/check_orphans.sh)",
+      "Bash(grep -n \"static void\\\\|void .*{$\\\\|static.*{$\" lib/rendering/game_painter.dart)",
+      "Bash(awk '/^[[:space:]]*void paint\\\\\\(Canvas canvas, Size size\\\\\\)/,/^[[:space:]]*\\\\}/' lib/rendering/game_painter.dart)",
+      "Bash(grep *)",
+      "Bash(sed -n '40,75p' lib/rendering/game_painter.dart)",
+      "Bash(sed -n '79,106p' lib/world/day_night_cycle.dart)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(flutter devices *)",
+      "Bash(pkill -f \"flutter run\")",
+      "Bash(pkill -f \"village_sim.app\")",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/cankaynar/Desktop/__TRACKED_VAR__)",
+      "Bash(awk '/^  [a-zA-Z_].* [a-zA-Z_]+\\\\\\(.*\\\\\\) \\\\{|^  void [a-zA-Z_]+\\\\\\(|^  [A-Z][a-zA-Z_]+\\\\??\\\\s+_?[a-zA-Z_]+\\\\\\(|^  Future\\\\<.*\\\\> [a-zA-Z_]+\\\\\\(/{print NR\": \"$0}' lib/main.dart)",
+      "Bash(awk 'NR>=1 && NR<=170' lib/main.dart)",
+      "Bash(sips -g pixelWidth -g pixelHeight ~/Desktop/shimmer.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight ~/Desktop/stone.png)"
     ]
   }
 }

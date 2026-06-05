@@ -120,6 +120,8 @@ enum BuildingType {
   firepit,      // 1x1 — firepit.png
   lumberCamp,   // 2x2 — lumberjack.png  (ağaç keser + diker)
   mineBuilding, // 2x2 — mine.png        (maden ocağı)
+  barn,         // 3x2 — geçici stable.png (TODO: dedicated barn.png)
+  lamppost,     // 1x1 — procedurel çizim (asset yok). Gece ışık kaynağı.
 }
 
 class BuildingMeta {
@@ -130,15 +132,24 @@ class BuildingMeta {
   final double groundY;
   final double groundXCenter;
   final double spriteScale;
+  /// true → NPC bu binanın footprint tile'larından geçebilir (firepit, well,
+  /// lamppost = etrafında durulan dekor; woodenHouse = içine girilen ev).
+  /// false → katı bina, pathfinder + wander engel sayar.
+  final bool walkable;
 
   const BuildingMeta({
     required this.cols,
     required this.rows,
     required this.label,
     required this.cost,
-    this.groundY = 1.0,
+    // groundY 1.0 (sprite alt kenarı = footprint güney köşesi) çoğu PNG'de
+    // floating hissi yaratıyor: pixel art assetlerin altında genelde 2-4 px
+    // şeffaf padding olur. 1.04 → sprite'ı %4 yere doğru iter, padding'i
+    // absorbe eder. Spesifik bir bina daha çok / az iniyorsa per-bina override.
+    this.groundY = 1.04,
     this.groundXCenter = 0.5,
     this.spriteScale = 1.0,
+    this.walkable = false,
   });
 }
 
@@ -159,6 +170,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     cost: ResourceCost.empty, // ücretsiz başlangıç
     groundXCenter: 0.50,
     spriteScale: 0.62,
+    walkable: true, // etrafında toplanılan dekor
   ),
   BuildingType.lumberCamp: BuildingMeta(
     cols: 2,
@@ -182,6 +194,15 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     label: 'Kuyu',
     cost: ResourceCost(wood: 4, stone: 8),
     groundXCenter: 0.5,
+    walkable: true, // su alma noktası — etrafından dolaşılmaz, yanına gelinir
+  ),
+  BuildingType.lamppost: BuildingMeta(
+    cols: 1,
+    rows: 1,
+    label: 'Sokak Feneri',
+    cost: ResourceCost(wood: 2, iron: 1),
+    groundXCenter: 0.50,
+    walkable: true, // 1x1 dekor
   ),
   BuildingType.woodenHouse: BuildingMeta(
     cols: 2,
@@ -189,6 +210,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     label: 'Köy Evi',
     cost: ResourceCost(wood: 18, stone: 4),
     groundXCenter: 0.5,
+    walkable: true, // sakinler içine girip uyur
   ),
   BuildingType.mineBuilding: BuildingMeta(
     cols: 2,
@@ -224,8 +246,15 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
   BuildingType.stable: BuildingMeta(
     cols: 3,
     rows: 2,
-    label: 'Ahır',
+    label: 'Ahır (Yük)',
     cost: ResourceCost(wood: 32, stone: 10),
+    groundXCenter: 0.6,
+  ),
+  BuildingType.barn: BuildingMeta(
+    cols: 3,
+    rows: 2,
+    label: 'Ağıl',
+    cost: ResourceCost(wood: 26, stone: 6),
     groundXCenter: 0.6,
   ),
   BuildingType.market: BuildingMeta(

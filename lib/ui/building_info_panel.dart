@@ -9,6 +9,8 @@ import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
 import '../entities/miner_entity.dart';
+import '../entities/shepherd_entity.dart';
+import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
 import '../systems/building_system.dart';
 import 'game_theme.dart';
@@ -20,6 +22,8 @@ class BuildingInfoPanel extends StatelessWidget {
   final BuildingEntity building;
   final List<VillagerEntity> residents;
   final List<MinerEntity> activeMiners;
+  final List<AnimalEntity> barnCows;
+  final ShepherdEntity? barnShepherd;
   final ResourceBundle stockpile;
   final VillageStats stats;
 
@@ -35,6 +39,8 @@ class BuildingInfoPanel extends StatelessWidget {
     required this.building,
     required this.residents,
     required this.activeMiners,
+    this.barnCows = const [],
+    this.barnShepherd,
     required this.stockpile,
     required this.stats,
     required this.population,
@@ -223,19 +229,45 @@ class BuildingInfoPanel extends StatelessWidget {
     ];
   }
 
-  // ── Toplama (oduncu / maden / balıkçı) ──
+  // ── Toplama (oduncu / maden / balıkçı / ağıl) ──
   List<Widget> _gatheringBody() {
     final isMine = building.type == BuildingType.mineBuilding;
+    final isBarn = building.type == BuildingType.barn;
     return [
       _statusRow(building.isActive),
       if (isMine && activeMiners.isNotEmpty)
         _stat('Madenci', '${activeMiners.length} içeride'),
+      if (isBarn) ..._barnStats(),
       _hint(switch (building.type) {
         BuildingType.lumberCamp => 'Bölgesindeki ağaçları odun olarak toplar.',
         BuildingType.mineBuilding => 'Damardan taş / demir / kömür çıkarır.',
         BuildingType.fisherCabin => 'Sudan balık tutar, yiyecek üretir.',
+        BuildingType.barn =>
+          'İnekler ağılın çevresinde otlar; doyduklarında çoban onları sağar, süt yiyeceğe dönüşür.',
         _ => '',
       }),
+    ];
+  }
+
+  List<Widget> _barnStats() {
+    if (barnCows.isEmpty) {
+      return [_stat('İnek', '0 (henüz spawn olmadı)')];
+    }
+    final avgFull = 1.0 -
+        (barnCows.fold<double>(0, (s, c) => s + c.hunger) / barnCows.length);
+    final readyCount = barnCows.where((c) => c.readyToMilk).length;
+    final shepherdStatus = barnShepherd == null
+        ? '—'
+        : switch (barnShepherd!.state) {
+            ShepherdState.idle => 'boşta',
+            ShepherdState.walkingToCow => 'inek yolunda',
+            ShepherdState.milking => 'sağıyor',
+          };
+    return [
+      _stat('İnek', '${barnCows.length} baş'),
+      _stat('Ortalama tokluk', '${(avgFull * 100).round()}%'),
+      _stat('Sağıma hazır', '$readyCount'),
+      _stat('Çoban', shepherdStatus),
     ];
   }
 
@@ -395,15 +427,26 @@ class BuildingInfoPanel extends StatelessWidget {
 
   Widget _residentChip(VillagerEntity v) {
     final stage = v.lifeStage;
-    final label = v.hasProfession ? v.type.displayName : stage.label;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: MedievalTheme.chipDecoration(),
-      child: Text('${stage.icon} $label',
-          style: const TextStyle(
-              color: MedievalTheme.textPrimary,
-              fontSize: 9,
-              fontFamily: 'monospace')),
+    final role  = v.hasProfession ? v.type.displayName : stage.label;
+    // Aile bilgisi tooltip'te: kim kimin çocuğu / kaç çocuğu var.
+    final lines = <String>['${v.name} — $role'];
+    if (v.parents.isNotEmpty) {
+      lines.add('Ebeveynler: ${v.parents.map((p) => p.name).join(', ')}');
+    }
+    if (v.children.isNotEmpty) {
+      lines.add('Çocuklar: ${v.children.map((c) => c.name).join(', ')}');
+    }
+    return Tooltip(
+      message: lines.join('\n'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: MedievalTheme.chipDecoration(),
+        child: Text('${stage.icon} ${v.name}',
+            style: const TextStyle(
+                color: MedievalTheme.textPrimary,
+                fontSize: 9,
+                fontFamily: 'monospace')),
+      ),
     );
   }
 }

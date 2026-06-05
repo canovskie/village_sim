@@ -91,12 +91,15 @@ class WaterRenderer {
     final dg = (baseG * (1 - mix) + skyG * mix).toInt().clamp(0, 255);
     final db = (baseB * (1 - mix) + skyB * mix).toInt().clamp(0, 255);
 
+    // Bleed: zoom transform sonrası komşu tile'larla 1px overlap → arka plan
+    // sızıntısı yok (bkz. TileRenderer.drawGrassTile).
+    const b = 1.0;
     _diamond
       ..reset()
-      ..moveTo(px,      py)
-      ..lineTo(px + hw, py + hh)
-      ..lineTo(px,      py + hh * 2)
-      ..lineTo(px - hw, py + hh)
+      ..moveTo(px,          py - b)
+      ..lineTo(px + hw + b, py + hh)
+      ..lineTo(px,          py + hh * 2 + b)
+      ..lineTo(px - hw - b, py + hh)
       ..close();
 
     _pFill.color = Color.fromARGB(255, dr, dg, db);

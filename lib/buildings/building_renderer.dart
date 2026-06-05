@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'building_type.dart';
 import '../rendering/asset_style.dart';
+import '../rendering/flame_renderer.dart';
+import '../rendering/smoke_renderer.dart';
 
 class BuildingRenderer {
   // ── Sprite önbelleği ────────────────────────────────────────────────────────
@@ -18,7 +20,6 @@ class BuildingRenderer {
   static final _pGlow1   = Paint()..isAntiAlias = true;
   static final _pGlow2   = Paint()..isAntiAlias = true;
   static final _pGlow3   = Paint()..isAntiAlias = true;
-  static final _pDust    = Paint()..isAntiAlias = true;
 
   // Tüm bina sprite'larını asenkron yükle. main.dart initState'te çağrılır.
   static Future<void> loadAll() async {
@@ -34,6 +35,8 @@ class BuildingRenderer {
     await _loadSprite(BuildingType.firepit,      'assets/buildings/firepit.png');
     await _loadSprite(BuildingType.lumberCamp,   'assets/buildings/lumberjack.png');
     await _loadSprite(BuildingType.mineBuilding, 'assets/buildings/mine.png');
+    // TODO: dedicated barn.png — şimdilik stable.png'yi paylaşır.
+    await _loadSprite(BuildingType.barn,         'assets/buildings/stable.png');
   }
 
   static Future<void> _loadSprite(BuildingType type, String path) async {
@@ -58,7 +61,14 @@ class BuildingRenderer {
   // ── Ana çizim ───────────────────────────────────────────────────────────────
   static void draw(Canvas canvas, BuildingType type,
       Offset back, Offset left, Offset right, Offset front,
-      {double time = 0, int seed = 0, double dayLight = 1.0, bool isActive = false}) {
+      {double time = 0, int seed = 0, double dayLight = 1.0,
+       double rainIntensity = 0.0, bool isActive = false}) {
+    // Lamppost — asset yok, procedurel çizim.
+    if (type == BuildingType.lamppost) {
+      _drawLamppost(canvas, back, left, right, front, time, seed, dayLight);
+      return;
+    }
+
     final img  = _cache[type];
     final meta = kBuildingMeta[type];
     if (img == null || meta == null) return;
@@ -69,11 +79,94 @@ class BuildingRenderer {
 
     final chimneys = kBuildingChimneys[type];
     if (chimneys != null && chimneys.isNotEmpty) {
-      _drawChimneySmoke(canvas, img, left, right, front, meta, time, seed, chimneys, dayLight);
+      _drawChimneySmoke(canvas, img, left, right, front, meta, time, seed,
+          chimneys, dayLight, rainIntensity: rainIntensity);
     }
 
     if (isActive) {
       _drawActiveSmoke(canvas, img, left, right, front, meta, time, seed);
+    }
+
+    // Firepit — yağmur yağmıyorsa animasyonlu alev. Yağmur şiddetli ise
+    // (>0.3) ateş söner, sadece duman kalır.
+    if (type == BuildingType.firepit && rainIntensity < 0.30) {
+      final cx = (back.dx + front.dx) * 0.5;
+      // Footprint y-merkezi alt zemini → biraz yukarı yer ayarı.
+      final cy = (left.dy + right.dy) * 0.5 + 2;
+      // Tile genişliği ile orantılı alev ölçeği.
+      final tileW = (right.dx - left.dx).abs();
+      final s = tileW / 22.0;
+      // Yağmur azalırken alev de yumuşar — intensity 1.0 → 0 (rainIntensity 0 → 0.3).
+      final intensity = (1.0 - rainIntensity / 0.30).clamp(0.0, 1.0);
+      FlameRenderer.draw(canvas, cx, cy, s, time, seed, intensity: intensity);
+    }
+  }
+
+  // ── Sokak feneri (procedurel) ───────────────────────────────────────────────
+  // Asset yok, doğrudan piksel çizimi. Footprint merkezinden yükselen ahşap
+  // direk + üstte demir kafesli lamba. Gece içeriden sıcak alev parlar
+  // (lighting pass ayrıca büyük halo ekler).
+  static final _pLampPostBase = Paint()..color = const Color(0xFF7A6E60)..isAntiAlias = false;
+  static final _pLampPost     = Paint()..color = const Color(0xFF5A3E20)..isAntiAlias = false;
+  static final _pLampCage     = Paint()..color = const Color(0xFF2A1A10)..isAntiAlias = false;
+
+  static void _drawLamppost(Canvas canvas,
+      Offset back, Offset left, Offset right, Offset front,
+      double time, int seed, double dayLight) {
+    // Tile merkezi (footprint orta noktası)
+    final cx = (back.dx + front.dx) / 2;
+    final cy = (back.dy + front.dy) / 2;
+
+    // Boyut diğer 1×1 binalarla orantılı (well/firepit'e yakın)
+    final tileW = (right.dx - left.dx).abs();
+    final scale = tileW / 64.0; // 64 base width → ölçek katsayısı
+
+    final postH = 36.0 * scale;
+    final postW = 2.0  * scale;
+    final baseW = 10.0 * scale;
+    final baseH = 4.0  * scale;
+    final lampW = 9.0  * scale;
+    final lampH = 11.0 * scale;
+    final armW  = 14.0 * scale;
+    final armH  = 1.5  * scale;
+
+    final groundY = cy + 1; // footprint zemin seviyesi
+
+    // 1) Taş kaide
+    canvas.drawRect(
+      Rect.fromLTWH(cx - baseW / 2, groundY - baseH, baseW, baseH),
+      _pLampPostBase);
+    // Kaide gölgesi (sağa hafif düşer)
+    canvas.drawRect(
+      Rect.fromLTWH(cx - baseW / 2 + 1, groundY - baseH + 1, baseW, 1),
+      _pLampPost);
+
+    // 2) Ahşap direk
+    canvas.drawRect(
+      Rect.fromLTWH(cx - postW / 2, groundY - baseH - postH, postW, postH),
+      _pLampPost);
+
+    // 3) Üst yatay kol (estetik destek)
+    canvas.drawRect(
+      Rect.fromLTWH(cx - armW / 2, groundY - baseH - postH + 2 * scale, armW, armH),
+      _pLampPost);
+
+    // 4) Lamba kafesi (demir)
+    final lampX = cx - lampW / 2;
+    final lampY = groundY - baseH - postH - lampH + 2 * scale;
+    canvas.drawRect(Rect.fromLTWH(lampX, lampY, lampW, lampH), _pLampCage);
+    // Kafes üst kapağı (geniş)
+    canvas.drawRect(
+      Rect.fromLTWH(lampX - scale, lampY - 1.5 * scale, lampW + 2 * scale, 2 * scale),
+      _pLampCage);
+
+    // 5) Cam içi alev — gece prosedürel animasyonlu (FlameRenderer).
+    // Lamba kafesinin içinde, scale küçük (1.2 civarı).
+    final darkness = (1.0 - dayLight).clamp(0.0, 1.0);
+    if (darkness > 0.05) {
+      final flameCy = lampY + lampH * 0.85; // kafesin tabanı
+      FlameRenderer.draw(canvas, cx, flameCy, scale * 1.0, time, seed,
+          intensity: darkness, sparks: false);
     }
   }
 
@@ -84,7 +177,8 @@ class BuildingRenderer {
       Canvas canvas, ui.Image img,
       Offset left, Offset right, Offset front,
       BuildingMeta meta, double time, int seed,
-      List<BuildingChimney> chimneys, double dayLight) {
+      List<BuildingChimney> chimneys, double dayLight,
+      {double rainIntensity = 0.0}) {
     final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
     final spriteH = spriteW * img.height / img.width;
     final dstL    = front.dx - spriteW * meta.groundXCenter;
@@ -92,35 +186,28 @@ class BuildingRenderer {
 
     // Gündüz 0.55 → Gece 0.90 alpha çarpanı
     final alphaScale = 0.55 + (1.0 - dayLight) * 0.35;
+    // Yağmurda duman yoğunlaşır + gri-mavi tona kayar (ıslak buhar hissi).
+    final wet = rainIntensity.clamp(0.0, 1.0);
+    final tintR = (200 - wet * 40).round().clamp(80, 220);
+    final tintG = (192 - wet * 32).round().clamp(80, 220);
+    final tintB = (178 + wet * 16).round().clamp(80, 220);
+    final tint  = Color.fromARGB(255, tintR, tintG, tintB);
 
     for (int c = 0; c < chimneys.length; c++) {
       final cm = chimneys[c];
       final cx = dstL + cm.nx * spriteW;
       final cy = dstT + cm.ny * spriteH;
-      final n  = (5 * cm.density).round().clamp(2, 12);
-
-      for (int i = 0; i < n; i++) {
-        // Lifecycle 0..1 — partikül başına farklı offset → akış sürekliliği
-        final phase = (time * 0.42 * cm.rate
-                       + seed * 0.07
-                       + c * 0.31
-                       + i / n) % 1.0;
-        final rise = phase * spriteH * 0.5;
-        // Hafif sin sway — partikülden partiküle faz farkı
-        final sway = sin(time * 1.1 + i * 1.7 + seed * 0.11 + c * 0.9) * 7.0 * phase;
-        // Yükseldikçe büyür
-        final radius = 2.5 + phase * 6.5;
-        // Alpha: 0..0.22 ramp up, 0.22..1 fade out
-        final a = phase < 0.22 ? phase / 0.22 : 1.0 - (phase - 0.22) / 0.78;
-        final alpha = (a * 130 * alphaScale).toInt().clamp(0, 130);
-        if (alpha < 6) continue;
-        _pDust.color = Color.fromARGB(alpha, 195, 190, 180);
-        canvas.drawCircle(Offset(cx + sway, cy - rise), radius, _pDust);
-      }
+      // Sprite scale chimney density'siyle orantılı (firepit 2.0 → büyük
+      // sütun, küçük ev 0.6 → ince izgar). Yağmurda hafif boost (+%20).
+      final dScale = (0.6 + cm.density * 0.45) * (1.0 + wet * 0.20);
+      // Intensity: gündüz/gece + chimney rate.
+      final intensity = (alphaScale * (0.7 + cm.rate * 0.30)).clamp(0.0, 1.0);
+      SmokeRenderer.draw(canvas, cx, cy, dScale, time, seed * 31 + c,
+          tint: tint, intensity: intensity);
     }
   }
 
-  // ── Aktif maden animasyonu: baca dumanı ──────────────────────────────────────
+  // ── Aktif maden animasyonu: baca dumanı (sprite tabanlı) ────────────────────
   static void _drawActiveSmoke(
       Canvas canvas, ui.Image img,
       Offset left, Offset right, Offset front,
@@ -129,28 +216,19 @@ class BuildingRenderer {
     final spriteH = spriteW * img.height / img.width;
     final dstL    = front.dx - spriteW * meta.groundXCenter;
     final dstT    = front.dy - spriteH * meta.groundY;
-
-    // 4 duman parçacığı — baca pozisyonuna göre
-    const smokePts = [(0.38, 0.08), (0.42, 0.06), (0.36, 0.05), (0.44, 0.09)];
-    for (int i = 0; i < smokePts.length; i++) {
-      final (nx, ny) = smokePts[i];
-      final phase    = (time * 0.7 + seed * 0.09 + i * 0.55) % 1.0;
-      final rise     = phase * spriteH * 0.35;
-      final sway     = sin(time * 1.2 + i * 1.7 + seed * 0.05) * 5.0;
-      final alpha    = ((1.0 - phase) * 100).toInt().clamp(0, 100);
-      final radius   = 3.0 + phase * 8.0;
-
-      _pDust.color = Color.fromARGB(alpha, 200, 190, 170);
-      canvas.drawCircle(
-        Offset(dstL + nx * spriteW + sway, dstT + ny * spriteH - rise),
-        radius, _pDust,
-      );
-    }
+    // Maden bacası — orta-gri ton, orta yoğunluk.
+    final cx = dstL + 0.40 * spriteW;
+    final cy = dstT + 0.07 * spriteH;
+    SmokeRenderer.draw(canvas, cx, cy, 0.9, time, seed,
+        tint: const Color(0xFFB0A898), intensity: 0.85);
   }
 
   // ── İnşaat animasyonu: tabandan yukarı açılır ────────────────────────────────
+  // Smoothstep eğri ile başlangıç + son yumuşar (linear pop yerine). Clip
+  // kenarında küçük sin jitter — "tahta yerleşirken sallanıyor" hissi.
+  // Üst kenarda koyu kahve overlay (3-4 px) — yeni dökülen tahta gölgesi.
   static void drawConstruction(Canvas canvas, BuildingType type,
-      Offset left, Offset right, Offset front, double progress) {
+      Offset left, Offset right, Offset front, double progress, double time) {
     final img  = _cache[type];
     final meta = kBuildingMeta[type];
     if (img == null || meta == null) return;
@@ -159,13 +237,34 @@ class BuildingRenderer {
     final spriteH  = spriteW * img.height / img.width;
     final bottom   = (front.dy).roundToDouble();
     final top      = (front.dy - spriteH * meta.groundY).roundToDouble();
-    final clipTop  = (bottom - (bottom - top) * progress).roundToDouble();
+
+    // smoothstep(3t² - 2t³) — başta ve sonda yumuşak, ortada hızlı reveal.
+    final p = progress.clamp(0.0, 1.0);
+    final eased = p * p * (3 - 2 * p);
+    // Sallanan tahta jitter: yalnız aktif inşaatta (0 < progress < 1).
+    final jitter = (progress > 0.02 && progress < 0.98)
+        ? sin(time * 8.0) * 1.2
+        : 0.0;
+    final clipTop = (bottom - (bottom - top) * eased + jitter).roundToDouble();
 
     canvas.save();
     canvas.clipRect(Rect.fromLTRB(-9999, clipTop, 9999, bottom + 1));
     _drawSprite(canvas, img, left, right, front,
         meta.groundY, meta.groundXCenter, meta.spriteScale);
     canvas.restore();
+
+    // Clip kenarı koyu overlay — yalnız aktif inşaatta görsel sınır.
+    if (progress > 0.02 && progress < 0.98) {
+      final shade = Paint()
+        ..color = const Color(0x553A2410)
+        ..isAntiAlias = false;
+      // Sprite genişliği boyunca (ortalanmış) 3 px kalın bant.
+      final dstL = front.dx - spriteW * meta.groundXCenter;
+      canvas.drawRect(
+        Rect.fromLTWH(dstL.roundToDouble(), clipTop, spriteW, 3),
+        shade,
+      );
+    }
   }
 
   // ── Çevre aydınlatması ────────────────────────────────────────────────────

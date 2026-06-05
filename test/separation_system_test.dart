@@ -18,8 +18,8 @@ double _dist(double x1, double y1, double x2, double y2) {
 void main() {
   group('applySeparation', () {
     test('two close villagers get pushed apart', () {
-      final a = VillagerEntity(type: VillagerType.farmer, startCol: 5, startRow: 5);
-      final b = VillagerEntity(type: VillagerType.guard,  startCol: 5.3, startRow: 5);
+      final a = VillagerEntity(type: VillagerType.farmer, name: 'A', male: true, startCol: 5, startRow: 5);
+      final b = VillagerEntity(type: VillagerType.guard, name: 'B', male: false, startCol: 5.3, startRow: 5);
 
       final before = _dist(a.gridX, a.gridY, b.gridX, b.gridY);
       applySeparation(
@@ -39,8 +39,8 @@ void main() {
     });
 
     test('far entities are not pushed', () {
-      final a = VillagerEntity(type: VillagerType.guard, startCol: 5, startRow: 5);
-      final b = VillagerEntity(type: VillagerType.guard, startCol: 12, startRow: 12);
+      final a = VillagerEntity(type: VillagerType.guard, name: 'A', male: true, startCol: 5, startRow: 5);
+      final b = VillagerEntity(type: VillagerType.guard, name: 'B', male: false, startCol: 12, startRow: 12);
       final ax0 = a.gridX, ay0 = a.gridY;
 
       applySeparation(
@@ -59,7 +59,7 @@ void main() {
     });
 
     test('mixed entity types — separation still applies across kinds', () {
-      final v = VillagerEntity(type: VillagerType.farmer,
+      final v = VillagerEntity(type: VillagerType.farmer, name: 'V', male: true,
                                startCol: 5, startRow: 5);
       final w = WoodcutterEntity(startCol: 5.3, startRow: 5);
 
@@ -81,8 +81,8 @@ void main() {
 
     test('water blocks the push — entity stays put if pushed onto water', () {
       // İki farmer çok yakın; biri suya doğru itilecek ama su bloklar.
-      final a = VillagerEntity(type: VillagerType.guard, startCol: 5.0, startRow: 5);
-      final b = VillagerEntity(type: VillagerType.guard, startCol: 5.3, startRow: 5);
+      final a = VillagerEntity(type: VillagerType.guard, name: 'A', male: true, startCol: 5.0, startRow: 5);
+      final b = VillagerEntity(type: VillagerType.guard, name: 'B', male: false, startCol: 5.3, startRow: 5);
       // a'nın itileceği yön: (-x, 0). x=4 tile'ını su yap.
       final water = {(4, 5)};
 
@@ -115,7 +115,7 @@ void main() {
       // Builder building durumunda → workingI=true → push uygulanmaz.
       final builder = BuilderEntity(startCol: 5, startRow: 5)
         ..state = BuilderState.building;
-      final villager = VillagerEntity(type: VillagerType.guard,
+      final villager = VillagerEntity(type: VillagerType.guard, name: 'V', male: true,
                                       startCol: 5.2, startRow: 5);
 
       final bx0 = builder.gridX, by0 = builder.gridY;

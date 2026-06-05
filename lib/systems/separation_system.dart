@@ -4,8 +4,10 @@ import '../entities/builder_entity.dart';
 import '../entities/farm_farmer.dart';
 import '../entities/fisher_entity.dart';
 import '../entities/miner_entity.dart';
+import '../entities/shepherd_entity.dart';
 import '../entities/villager_entity.dart';
 import '../entities/woodcutter_entity.dart';
+import '../world/animal_entity.dart';
 
 /// NPC'lere hafif ayrışma kuvveti uygular — iç içe geçmeyi önler.
 /// Aktif çalışan entity'ler (hasat, kazma, balık tutma, inşa) sabit kalır;
@@ -22,6 +24,8 @@ void applySeparation({
   required List<FisherEntity> fishers,
   required List<BuilderEntity> builders,
   required Set<(int, int)> waterTiles,
+  List<ShepherdEntity> shepherds = const [],
+  List<AnimalEntity>   cows      = const [],
 }) {
   // (gridX, gridY, setter, isWorking) — tüm hareketli entity'ler
   final entities = <(double, double, void Function(double, double), bool)>[
@@ -42,6 +46,12 @@ void applySeparation({
     for (final b in builders)
       (b.gridX, b.gridY, (x, y) { b.gridX = x; b.gridY = y; },
           b.state == BuilderState.building),
+    for (final sh in shepherds)
+      (sh.gridX, sh.gridY, (x, y) { sh.gridX = x; sh.gridY = y; },
+          sh.state == ShepherdState.milking),
+    for (final c in cows)
+      (c.gridX, c.gridY, (x, y) { c.gridX = x; c.gridY = y; },
+          c.isBeingMilked),
   ];
 
   if (entities.length < 2) return;
@@ -83,7 +93,8 @@ void applySeparation({
       }
     }
 
-    // Su üzerine itme
+    // Engel tile'ına itme — waterTiles set'i pratikte _obstacles (su + maden
+    // + solid bina). NPC bu tile'lara separation force ile sokulamaz.
     final cx = nx.clamp(0.0, kCols - 1.0);
     final cy = ny.clamp(0.0, kRows - 1.0);
     if (!waterTiles.contains((cx.round(), cy.round()))) {

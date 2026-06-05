@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 // ─── Harita & izometri ───────────────────────────────────────────────────────
-const int kCols = 48;
-const int kRows = 36;
+const int kCols = 72;
+const int kRows = 54;
 const double kTileW = 64.0;   // piksel sanatı için 2:1 standart (64x32)
 const double kTileH = 32.0;
 const double kCharScale = 0.34;
@@ -18,9 +18,9 @@ const double kFisherSpeed        = 2.5;
 const double kFarmerSpeed        = 3.5;
 
 // ─── Çalışma süreleri (saniye) ───────────────────────────────────────────────
-const double kChopDuration         = 10.0; // woodcutter + lumberCamp ortak
-const double kFishDuration         = 5.0;
-const double kFarmHarvestDuration  = 2.2;
+const double kChopDuration         = 18.0; // woodcutter + lumberCamp ortak — huzurlu tempo
+const double kFishDuration         = 7.0;
+const double kFarmHarvestDuration  = 4.0;
 const double kFarmWaterFetchTime   = 1.5;
 const double kFarmWaterTime        = 1.2;
 const double kFarmWaterCooldown    = 18.0;
@@ -43,7 +43,7 @@ const double kWaterMoralePenalty         = 0.30;  // tamamen susuz köyde moral 
 // Her köylü zamanla yiyecek tüketir; üretim yetmezse stok azalır. Stok
 // [kStarveRampFood] eşiğinin altına inince açlık başlar → moral & büyüme düşer
 // (su sistemine paralel). Kabaca her 8 köylü 1 aktif yiyecek üreticisi ister.
-const double kFoodPerVillagerPerDay = 6.0;  // köylü başına günlük tüketim
+const double kFoodPerVillagerPerDay = 8.0;  // köylü başına günlük tüketim
 const int    kStarveRampFood        = 10;   // bu eşiğin altında açlık morali vurur
 const double kStarvationMoralePenalty = 0.35; // tamamen aç köyde moral cezası
 
@@ -51,6 +51,7 @@ const double kStarvationMoralePenalty = 0.35; // tamamen aç köyde moral cezas�
 const double kEventFirstDelay  = 75.0;  // kuruluştan ilk olaya kadar (sn)
 const double kEventMinInterval = 90.0;  // olaylar arası en kısa süre (sn)
 const double kEventMaxInterval = 180.0; // olaylar arası en uzun süre (sn)
+const double kEventBannerDuration = 6.0; // banner kart ekranda kalma süresi
 
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────
 // dayLight bu eşiklerin altına düşünce "gece"; üstüne çıkınca "gündüz".
@@ -59,11 +60,21 @@ const double kNightThreshold = 0.15;
 const double kDawnThreshold  = 0.25;
 
 // ─── NPC ayrışma (separation) ────────────────────────────────────────────────
-const double kSeparationRadius   = 0.80; // minimum tile mesafesi
-const double kSeparationStrength = 3.5;  // itme gücü (tile/sn²)
+// Hafif itme yerine sert ayrışma — NPC'ler bir tile + tampon kadar uzakta
+// durmak zorunda. Önceden (0.80, 3.5) iç içe geçmeye izin veriyordu; köyün
+// ateş/kuyu/pazar gibi sosyal noktalarında görsel çakışma yaratıyordu.
+const double kSeparationRadius   = 1.10; // minimum tile mesafesi (1 tile + 0.10 tampon)
+const double kSeparationStrength = 7.0;  // itme gücü (tile/sn²)
 
 // ─── Taşıyıcı atama döngüsü ──────────────────────────────────────────────────
 const double kCarrierAssignInterval = 3.0; // saniye
+
+// ─── Performans throttle'ları ────────────────────────────────────────────────
+// Engel/kuyu/yasak tile set'leri her frame yeniden kurulmaz; bu aralıkta bir
+// yenilenir (harita statik, maden/bina değişimi bu gecikmeyle yansır → görünmez).
+const double kSpatialRebuildInterval = 0.3; // saniye
+// Boştaki işçi her frame tüm hedef listesini taramasın; bu sıklıkta arar.
+const double kWorkSearchInterval     = 0.4; // saniye
 
 // ─── Lumber camp bölgesi ─────────────────────────────────────────────────────
 const double kLumberTerritoryRadius   = 6.0; // tile yarıçapı
