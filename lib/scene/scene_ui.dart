@@ -218,6 +218,7 @@ extension _SceneUi on _VillageSceneState {
                       burningBuildings: _burningBuildings,
                       birdFlocks: _birdFlocks,
                       perfMode: _perfMode,
+                      lumberCamps: _lumberCamps,
                     ),
                   ),
                 ),

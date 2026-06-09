@@ -15,6 +15,7 @@ import 'tile_renderer.dart';
 import '../world/tree_entity.dart';
 import 'tree_renderer.dart';
 import '../entities/woodcutter_entity.dart';
+import '../entities/lumber_camp_entity.dart';
 import '../world/mine_node.dart';
 import 'mine_renderer.dart';
 import '../entities/miner_entity.dart';
@@ -731,6 +732,52 @@ class _MineDrawable extends _Drawable {
   }
 }
 
+/// Oduncu kulübesinin otonom NPC'si. WoodcutterEntity'den ayrı bir tip
+/// (LumberCampEntity) ama davranış/sprite birebir aynı → woodcutter sprite'ı
+/// reuse. Önceden painter'a hiç geçirilmemişti — render edilmeden ağaç
+/// kesiyordu (ağaç "kendi kendine düşüyor" bug'ı).
+class _LumberCampDrawable extends _Drawable {
+  final LumberCampEntity lc;
+  _LumberCampDrawable(this.lc);
+  @override double get depth => lc.depth;
+  @override
+  void draw(Canvas canvas, Size size, Offset camera) {
+    final s = gridToScreen(lc.renderX, lc.renderY, size, camera);
+    _drawCharShadow(canvas, s.dx, s.dy);
+    _drawWorkerTorchGlow(canvas, s.dx, s.dy, lc);
+    canvas.save();
+    canvas.translate(s.dx, s.dy);
+    final swayR = lc.idleSwayRotation(_sceneTime);
+    if (swayR != 0) canvas.rotate(swayR);
+    canvas.scale(kCharScale, kCharScale * lc.idleBreathScale(_sceneTime));
+    CharacterRenderer.drawWoodcutter(canvas,
+        flipX:         !lc.effectiveFacingRight,
+        walkPhase:     lc.walkPhase,
+        moveIntensity: lc.moveIntensity,
+        chopping:      lc.isChopping,
+        chopPhase:     lc.chopPhase,
+        visual:        lc.visual,
+        time:          _sceneTime,
+        torchLevel:    lc.torchLevel,
+        torchPhase:    lc.torchPhase);
+    canvas.restore();
+
+    if (lc.isChopping) {
+      const chipWindow = 2 * pi * 0.30;
+      if (lc.chopPhase < chipWindow) {
+        final lt = lc.chopPhase / chipWindow;
+        final dir = lc.facingRight ? 1.0 : -1.0;
+        final seed = lc.gridX.toInt() * 7 + lc.gridY.toInt() * 13;
+        ParticleRenderer.drawChip(canvas,
+            s.dx + dir * 12, s.dy - 18, lt,
+            color: const Color(0xFFCFA060),
+            shade: const Color(0xFF8A6A40),
+            direction: dir, seed: seed);
+      }
+    }
+  }
+}
+
 class _WoodcutterDrawable extends _Drawable {
   final WoodcutterEntity w;
   _WoodcutterDrawable(this.w);
@@ -1237,6 +1284,8 @@ class VillageGamePainter extends CustomPainter {
 
   final List<TreeEntity>       trees;
   final List<WoodcutterEntity> woodcutters;
+  /// Oduncu kulübesinin otonom NPC'leri — woodcutter'dan ayrı tip.
+  final List<LumberCampEntity> lumberCamps;
   /// Oduncu alan seçim önizlemesi: (c1, r1, c2, r2)
   final (int, int, int, int)? lumberSelection;
 
@@ -1304,6 +1353,7 @@ class VillageGamePainter extends CustomPainter {
     this.farmSelection,
     this.trees         = const [],
     this.woodcutters   = const [],
+    this.lumberCamps   = const [],
     this.lumberSelection,
     this.mineNodes     = const [],
     this.miners        = const [],
@@ -1999,6 +2049,11 @@ class VillageGamePainter extends CustomPainter {
     for (final w in woodcutters) {
       if (inView(w.renderX, w.renderY, upChar, sideM)) {
         _sceneBuffer.add(_WoodcutterDrawable(w));
+      }
+    }
+    for (final lc in lumberCamps) {
+      if (inView(lc.renderX, lc.renderY, upChar, sideM)) {
+        _sceneBuffer.add(_LumberCampDrawable(lc));
       }
     }
     // Maden binası dikdörtgenlerini bir kez topla — aşağıdaki miner/mineNode

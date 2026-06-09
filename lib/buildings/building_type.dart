@@ -65,9 +65,23 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.48, 0.42, LightKind.lantern),
     BuildingLight(0.48, 0.54, LightKind.lantern),
   ],
-  // Lantern fener — sprite üst-sağda asılı. Light editor ile rafinasyon.
+  BuildingType.mineBuilding: [
+    BuildingLight(0.57, 0.62, LightKind.lantern),
+  ],
   BuildingType.lamppost: [
-    BuildingLight(0.62, 0.40, LightKind.lantern),
+    BuildingLight(0.64, 0.48, LightKind.lantern),
+    BuildingLight(0.55, 0.47, LightKind.lantern),
+    BuildingLight(0.55, 0.57, LightKind.lantern),
+    BuildingLight(0.63, 0.56, LightKind.lantern),
+  ],
+  BuildingType.floristCottage: [
+    BuildingLight(0.75, 0.62, LightKind.window),
+    BuildingLight(0.20, 0.57, LightKind.window),
+    BuildingLight(0.40, 0.63, LightKind.window),
+  ],
+  BuildingType.chickenCoop: [
+    BuildingLight(0.34, 0.55, LightKind.window),
+    BuildingLight(0.53, 0.63, LightKind.lantern),
   ],
 };
 
@@ -87,24 +101,26 @@ class BuildingChimney {
 /// Her bina için 0..N baca/duman çıkış noktası.
 /// Boş veya tanımsızsa duman çizilmez.
 const Map<BuildingType, List<BuildingChimney>> kBuildingChimneys = {
-  BuildingType.firepit: [
-    BuildingChimney(0.48, 0.20, density: 2.0, rate: 1.7),
-  ],
   BuildingType.woodenHouse: [
-    BuildingChimney(0.30, 0.10, density: 0.6, rate: 0.8),
-  ],
-  BuildingType.tavern: [
-    BuildingChimney(0.34, 0.08, density: 1.0, rate: 1.0),
+    BuildingChimney(0.65, 0.07),
   ],
   BuildingType.mill: [
-    BuildingChimney(0.68, 0.05, density: 0.5, rate: 0.7),
+    BuildingChimney(0.51, 0.05),
   ],
   BuildingType.townhall: [
-    BuildingChimney(0.22, 0.06, density: 0.9),
-    BuildingChimney(0.78, 0.06, density: 0.9),
+    BuildingChimney(0.57, 0.09),
   ],
-  BuildingType.lumberCamp: [
-    BuildingChimney(0.42, 0.14, density: 0.7),
+  BuildingType.tavern: [
+    BuildingChimney(0.60, 0.03),
+  ],
+  BuildingType.fisherCabin: [
+    BuildingChimney(0.63, 0.04),
+  ],
+  BuildingType.firepit: [
+    BuildingChimney(0.48, 0.20, density: 2.00, rate: 1.70),
+  ],
+  BuildingType.floristCottage: [
+    BuildingChimney(0.79, 0.16),
   ],
 };
 
