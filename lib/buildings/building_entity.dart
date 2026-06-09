@@ -9,6 +9,10 @@ class BuildingEntity {
   /// Maden ocağı gibi içeride çalışma olan binalar için
   bool isActive = false;
 
+  /// Oyuncu binayı manuel olarak duraklattıysa true — gathering/processing
+  /// rolündeki binalar tick'te bu bayrağa göre işçi/üretim çalıştırmayı atlar.
+  bool userPaused = false;
+
   // ── İşlevsel durum (building_system tarafından yönetilir) ──────────────────
 
   /// Nüfus büyüme ilerlemesi 0..1 (yalnızca belediye).
@@ -32,6 +36,10 @@ class BuildingEntity {
   /// Son satış anındaki sahne zamanı (yalnız market). 0 = hiç satış yok.
   /// _BuildingDrawable bunu okuyup 1 sn'lik altın parıltısı animasyonu çizer.
   double lastSaleTime = 0;
+
+  /// Tavuk kümesi yumurta zamanlayıcısı (saniye). Her tick artar; eşiği
+  /// aşınca +1 food üretir, sıfırlanır. main.dart update loop yönetir.
+  double eggTimer = 0.0;
 
   BuildingEntity({required this.type, required this.col, required this.row});
 

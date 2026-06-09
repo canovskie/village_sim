@@ -6,10 +6,9 @@ class FarmTile {
 
   bool beingHarvested = false;
 
-  /// Aşama başına büyüme süresi (saniye). 4 aşama × 10 sn = 40 sn/hasat;
-  /// 4 hasat × 40 = 160 sn/balya × 6 yiyecek = ~2.25/dk/tarla.
-  /// Huzurlu tempo — ekin yavaş yeşerir, çiftçi koşturmaz. Denge balya
-  /// değerinde tutulur (carrier_system.dart).
+  /// Aşama başına büyüme süresi (saniye). 4 aşama × 10 sn = 40 sn/hasat.
+  /// Huzurlu tempo — ekin yavaş yeşerir, çiftçi koşturmaz. Saman yığınları
+  /// harmanda 6'lı dönüşür: 6 hasat = 1 balya = 6 yiyecek (hay_processor).
   static const double growthTimePerStage = 10.0;
 
   FarmTile(this.col, this.row);

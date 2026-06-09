@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../systems/objective_tracker.dart';
-import 'game_theme.dart';
+import 'cozy_theme.dart';
 
-/// Hedef listesi — köyün gelişim adımları, ekranın sol alt köşesinde küçük
-/// panel. Tamamlananlar ✓ ile soluk, aktif hedef vurgulu (amber border +
-/// hint satırı). Tümü tamamlanınca panel daralır, "Köy kuruldu" özetiyle.
+/// Köyün gelişim adımları — parşömen şeklinde "dilek listesi". Tamamlananlar
+/// ✓ ile mürekkep solar; aktif hedef ember rengi vurgu + el yazısı ipucu;
+/// tümü tamamlanınca panel daralır.
 class ObjectivePanel extends StatelessWidget {
   final List<ObjectiveState> objectives;
   final bool collapsed;
@@ -17,89 +17,62 @@ class ObjectivePanel extends StatelessWidget {
     required this.onToggleCollapse,
   });
 
-  static const _accent = Color(0xFFE9A23B);
-  static const _success = Color(0xFF6FC07A);
-
   @override
   Widget build(BuildContext context) {
     final activeIdx = objectives.indexWhere((o) => o.active);
     final allDone = activeIdx == -1;
     final doneCount = objectives.where((o) => o.completed).length;
 
-    return Container(
-      width: 220,
-      decoration: BoxDecoration(
-        color: const Color(0xEE12161D),
-        border: Border.all(
-            color: allDone
-                ? _success.withValues(alpha: 0.55)
-                : _accent.withValues(alpha: 0.55),
-            width: 1.5),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _header(doneCount, objectives.length, allDone),
-          if (!collapsed) ...[
-            const SizedBox(height: 2),
-            for (int i = 0; i < objectives.length; i++)
-              _row(objectives[i]),
-            if (activeIdx >= 0) ...[
-              const SizedBox(height: 4),
-              _hintBar(objectives[activeIdx]),
+    return SizedBox(
+      width: 218,
+      child: ParchmentPanel(
+        pinned: true,
+        padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _header(doneCount, objectives.length, allDone),
+            if (!collapsed) ...[
+              const SizedBox(height: 5),
+              for (int i = 0; i < objectives.length; i++)
+                _row(objectives[i]),
+              if (activeIdx >= 0) ...[
+                const SizedBox(height: 6),
+                _hintBar(objectives[activeIdx]),
+              ],
             ],
-            const SizedBox(height: 6),
           ],
-        ],
+        ),
       ),
     );
   }
 
   Widget _header(int done, int total, bool allDone) {
+    final color = allDone ? CozyUi.sage : CozyUi.ember;
     return GestureDetector(
       onTap: onToggleCollapse,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
-        decoration: BoxDecoration(
-          color: (allDone ? _success : _accent).withValues(alpha: 0.12),
-          border: Border(
-            bottom: BorderSide(
-                color: (allDone ? _success : _accent).withValues(alpha: 0.4),
-                width: 1),
+      child: Row(
+        children: [
+          Text(allDone ? '✓' : '🎯',
+              style: TextStyle(fontSize: 13, color: color)),
+          const SizedBox(width: 6),
+          Text(allDone ? 'KÖY KURULDU' : 'HEDEFLER',
+              style: CozyUi.inkTitle.copyWith(
+                color: color,
+                fontSize: 11,
+                letterSpacing: 1.8,
+              )),
+          const Spacer(),
+          Text('$done/$total',
+              style: CozyUi.inkLabel.copyWith(fontSize: 10)),
+          const SizedBox(width: 4),
+          Icon(
+            collapsed ? Icons.expand_more : Icons.expand_less,
+            size: 14,
+            color: CozyUi.parchmentInk2,
           ),
-        ),
-        child: Row(
-          children: [
-            Text(allDone ? '✓' : '🎯',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: allDone ? _success : _accent,
-                )),
-            const SizedBox(width: 6),
-            Text(allDone ? 'KÖY KURULDU' : 'HEDEFLER',
-                style: TextStyle(
-                  color: allDone ? _success : _accent,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                  fontFamily: 'monospace',
-                )),
-            const Spacer(),
-            Text('$done/$total',
-                style: const TextStyle(
-                  color: MedievalTheme.textSecondary,
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                )),
-            const SizedBox(width: 5),
-            Icon(
-              collapsed ? Icons.expand_more : Icons.expand_less,
-              size: 14,
-              color: MedievalTheme.textSecondary,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -107,21 +80,20 @@ class ObjectivePanel extends StatelessWidget {
   Widget _row(ObjectiveState s) {
     Color labelColor;
     Color iconColor;
+    FontStyle italic = FontStyle.normal;
     if (s.completed) {
-      labelColor = MedievalTheme.textSecondary;
-      iconColor  = _success;
+      labelColor = CozyUi.parchmentInk2;
+      iconColor  = CozyUi.sage;
     } else if (s.active) {
-      labelColor = MedievalTheme.textPrimary;
-      iconColor  = _accent;
+      labelColor = CozyUi.parchmentInk;
+      iconColor  = CozyUi.ember;
     } else {
-      labelColor = MedievalTheme.textDim;
-      iconColor  = MedievalTheme.textDim;
+      labelColor = CozyUi.parchmentInk2.withValues(alpha: 0.55);
+      iconColor  = CozyUi.parchmentInk2.withValues(alpha: 0.55);
+      italic = FontStyle.italic;
     }
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 3, 10, 3),
-      decoration: s.active
-          ? BoxDecoration(color: _accent.withValues(alpha: 0.08))
-          : null,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.5),
       child: Row(
         children: [
           SizedBox(
@@ -132,16 +104,17 @@ class ObjectivePanel extends StatelessWidget {
                   color: iconColor,
                 )),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 5),
           Expanded(
             child: Text(s.obj.label,
                 style: TextStyle(
                   color: labelColor,
                   fontSize: 10,
                   fontFamily: 'monospace',
-                  fontWeight: s.active ? FontWeight.bold : FontWeight.w500,
+                  fontWeight: s.active ? FontWeight.w800 : FontWeight.w600,
+                  fontStyle: italic,
                   decoration: s.completed ? TextDecoration.lineThrough : null,
-                  decorationColor: MedievalTheme.textDim,
+                  decorationColor: CozyUi.parchmentInk2,
                 )),
           ),
         ],
@@ -151,19 +124,18 @@ class ObjectivePanel extends StatelessWidget {
 
   Widget _hintBar(ObjectiveState active) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(10, 4, 10, 0),
-      padding: const EdgeInsets.fromLTRB(7, 5, 7, 5),
+      margin: const EdgeInsets.only(top: 2),
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
       decoration: BoxDecoration(
-        color: _accent.withValues(alpha: 0.10),
-        border: Border.all(color: _accent.withValues(alpha: 0.30), width: 1),
+        color: CozyUi.ember.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: CozyUi.ember.withValues(alpha: 0.40), width: 1),
       ),
       child: Text(active.obj.hint,
-          style: const TextStyle(
-            color: MedievalTheme.textPrimary,
-            fontSize: 9,
+          style: CozyUi.inkMuted.copyWith(
+            color: CozyUi.parchmentInk,
+            fontSize: 9.5,
             height: 1.4,
-            fontFamily: 'monospace',
-            fontStyle: FontStyle.italic,
           )),
     );
   }

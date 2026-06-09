@@ -27,10 +27,14 @@ void applySeparation({
   List<ShepherdEntity> shepherds = const [],
   List<AnimalEntity>   cows      = const [],
 }) {
-  // (gridX, gridY, setter, isWorking) — tüm hareketli entity'ler
+  // (gridX, gridY, setter, isWorking) — tüm hareketli entity'ler.
+  // VillagerEntity için sitClaimed=true → "working" sayılır: ateş başında
+  // oturan ya da slota yürüyen NPC kendi pozisyonunda kalır, separation
+  // perturbasyonu olmaz. Başkaları onların etrafında dönmeye devam eder.
+  // Aksi takdirde seated NPC drift → isSeatedAtFire toggle → sitYScale flicker.
   final entities = <(double, double, void Function(double, double), bool)>[
     for (final v in villagers)
-      (v.gridX, v.gridY, (x, y) { v.gridX = x; v.gridY = y; }, false),
+      (v.gridX, v.gridY, (x, y) { v.gridX = x; v.gridY = y; }, v.sitClaimed),
     for (final f in farmers)
       (f.gridX, f.gridY, (x, y) { f.gridX = x; f.gridY = y; },
           f.state == FarmerState.harvesting),
@@ -86,8 +90,16 @@ void applySeparation({
           if (dist < kSeparationRadius && dist > 0.001) {
             final push = (kSeparationRadius - dist) /
                 kSeparationRadius * kSeparationStrength * dt;
-            nx += (dx / dist) * push;
-            ny += (dy / dist) * push;
+            // Radyal — birbirinden uzaklaştırma.
+            final radX = dx / dist;
+            final radY = dy / dist;
+            // Tanjantsal (sabit +90° rot) — head-on deadlock'ı kırmak için.
+            // İki entity için (dx, dy) işaretleri zıt → tangential bileşen de zıt
+            // → biri kuzeye, diğeri güneye sapıp pas geçer; dans yapmazlar.
+            final tanX = -dy / dist;
+            final tanY =  dx / dist;
+            nx += (radX + tanX * 0.35) * push;
+            ny += (radY + tanY * 0.35) * push;
           }
         }
       }

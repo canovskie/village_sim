@@ -12,6 +12,10 @@ class WoodcutterEntity extends WorkerEntity {
   TreeEntity? _target;
   double      _chopTimer = 0.0;
 
+  /// Çıkış hızı çarpanı — `treePlanting` politikası açıkken scene 0.85 yapar
+  /// (oduncu kestiği ağacın yanına fidan dikme süresi). Side channel pattern.
+  static double kChopSpeedScale = 1.0;
+
   /// Hasat tamamlandığında bir kare true kalır (parent kutuyu spawn eder).
   bool   harvestReady = false;
   double lastHarvestX = 0;
@@ -59,7 +63,7 @@ class WoodcutterEntity extends WorkerEntity {
           chopPhase = 0;
           break;
         }
-        _chopTimer += dt;
+        _chopTimer += dt * kChopSpeedScale;
         // Bağımsız döngü: 1.1 darbe/sn — renderer chopPhase'i okur.
         chopPhase = (chopPhase + dt * 2 * pi * 1.1) % (2 * pi);
         _target!.chopPhase = chopPhase;

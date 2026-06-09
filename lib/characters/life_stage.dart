@@ -21,13 +21,22 @@ const double kElderStartDay = 12.0;
 const double kElderLifeMin = 8.0;
 const double kElderLifeMax = 18.0;
 
-LifeStage lifeStageForDays(double days) => days < kYouthStartDay
-    ? LifeStage.child
-    : days < kAdultStartDay
-        ? LifeStage.youth
-        : days < kElderStartDay
-            ? LifeStage.adult
-            : LifeStage.elder;
+/// Yaşam evresi geçiş hızı çarpanı — `slowMaturity` politikası açıkken
+/// scene 1/1.6 (~0.625) yapar, böylece eşik karşılaştırmasında ageDays
+/// "küçültülmüş" gibi davranır → evreler 1.6× daha geç başlar. Default 1.0.
+/// VillagerEntity policy'ye doğrudan erişmesin diye side channel.
+double kMaturityScale = 1.0;
+
+LifeStage lifeStageForDays(double days) {
+  final d = days * kMaturityScale;
+  return d < kYouthStartDay
+      ? LifeStage.child
+      : d < kAdultStartDay
+          ? LifeStage.youth
+          : d < kElderStartDay
+              ? LifeStage.adult
+              : LifeStage.elder;
+}
 
 extension LifeStageX on LifeStage {
   /// Türkçe etiket — panel ve bilgi gösterimleri.

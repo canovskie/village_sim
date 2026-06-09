@@ -1,46 +1,94 @@
+import '../farm/farm_tile.dart';
 import '../world/hay_entity.dart';
 
-/// 4 saman yığını (pile) yan yana toplandığında balyaya (bale) dönüştürür.
-/// Çağıran tarafın `update` döngüsünde her tick'te çağırılması beklenir.
+/// Tarladan toplanan saman yığınları (pile) belirli bir **harman** noktasında
+/// balyaya (bale) dönüşür. Her 6 yığın → 1 balya. Balyalar harman ve etrafında
+/// 2×2 grid'de düzenli dizilir, harman dolarsa komşu tile'lara taşar.
 ///
-/// Cluster detection: 1.5 tile yarıçap, en fazla 4 pile alınır.
-/// Balya konumu: tile başına 2 slot (arka + ön). Slot'lar dolduğunda
-/// bir sonraki balya bir sonraki tile'a düşer.
-void processHayPiles(List<HayEntity> hayEntities) {
+/// Harman = tüm farm tile'larının centroid'ine en yakın farm tile.
+/// Birden çok kopuk tarla olsa bile şimdilik tek harman paylaşılır (basit).
+///
+/// Yığın seçimi FIFO: en eski 6 pile dönüştürülür → tahmin edilebilir akış.
+void processHayPiles(List<HayEntity> hayEntities, List<FarmTile> farmTiles) {
+  if (farmTiles.isEmpty) return;
+
   final piles = hayEntities
       .where((h) => !h.isBale && !h.isBeingCarried && !h.isDelivered)
       .toList();
-  for (int i = 0; i < piles.length; i++) {
-    final cluster = piles.where((p) {
-      final dx = p.gridX - piles[i].gridX;
-      final dy = p.gridY - piles[i].gridY;
-      return dx * dx + dy * dy <= 1.5 * 1.5;
-    }).take(4).toList();
+  if (piles.length < 6) return;
 
-    if (cluster.length >= 4) {
-      final rawCx = cluster.map((p) => p.gridX).reduce((a, b) => a + b) / 4;
-      final rawCy = cluster.map((p) => p.gridY).reduce((a, b) => a + b) / 4;
+  piles.sort((a, b) => a.spawnTime.compareTo(b.spawnTime));
+  for (int i = 0; i < 6; i++) {
+    piles[i].isDelivered = true;
+  }
 
-      // Her balya 0.5×0.5 birim, alt alta dizilir.
-      // Slot 0: (0, 0)       → arka (ekranda üst)
-      // Slot 1: (0.58, 0.42) → ön   (ekranda alt, biraz sağa kayık)
-      final tileC = rawCx.floor().toDouble();
-      final tileR = rawCy.floor().toDouble();
-      final balesInTile = hayEntities.where((h) =>
-        h.isBale && !h.isDelivered &&
-        h.gridX >= tileC && h.gridX < tileC + 1.0 &&
-        h.gridY >= tileR && h.gridY < tileR + 1.0,
-      ).length;
-      final slot = balesInTile == 0 ? 0 : 1;
-      final cx = tileC + (slot == 0 ? 0.0 : 0.58);
-      final cy = tileR + (slot == 0 ? 0.0 : 0.42);
+  final (hc, hr) = _harmanPos(farmTiles);
+  final (bx, by) = _findFreeBaleSpot(hayEntities, hc, hr);
+  hayEntities.add(HayEntity(type: HayType.bale, gridX: bx, gridY: by));
 
-      for (final p in cluster) {
-        p.isDelivered = true;
-      }
-      hayEntities.add(HayEntity(type: HayType.bale, gridX: cx, gridY: cy));
-      break; // Bir tick'te bir cluster yeter — sonraki tick'te diğeri.
+  hayEntities.removeWhere((h) => h.isDelivered);
+}
+
+(int, int) _harmanPos(List<FarmTile> tiles) {
+  double sc = 0, sr = 0;
+  for (final t in tiles) {
+    sc += t.col;
+    sr += t.row;
+  }
+  final cx = sc / tiles.length;
+  final cy = sr / tiles.length;
+  var best = tiles.first;
+  var bestD = double.infinity;
+  for (final t in tiles) {
+    final dx = t.col - cx;
+    final dy = t.row - cy;
+    final d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = t;
     }
   }
-  hayEntities.removeWhere((h) => h.isDelivered);
+  return (best.col, best.row);
+}
+
+// Harman tile'ı içinde 2×2 yerleşim (balya ~0.5×0.5 birim).
+// İzometride sağa+aşağı = ön; back-row (slot 0,1) önce çizilir.
+const _baleSlots = <(double, double)>[
+  (0.05, 0.05), // back-left
+  (0.55, 0.05), // back-right
+  (0.05, 0.55), // front-left
+  (0.55, 0.55), // front-right
+];
+
+// Harman tile'ı önce, sonra çevresi.
+const _harmanTileOffsets = <(int, int)>[
+  (0, 0),
+  (1, 0), (0, 1), (1, 1),
+  (-1, 0), (0, -1), (-1, 1), (1, -1), (-1, -1),
+];
+
+(double, double) _findFreeBaleSpot(
+    List<HayEntity> all, int hc, int hr) {
+  for (final (dc, dr) in _harmanTileOffsets) {
+    final tc = hc + dc;
+    final tr = hr + dr;
+    for (final slot in _baleSlots) {
+      final bx = tc + slot.$1;
+      final by = tr + slot.$2;
+      if (_isFree(all, bx, by)) return (bx, by);
+    }
+  }
+  return (hc + 0.25, hr + 0.25); // her şey dolu — overlap fallback (çok nadir)
+}
+
+bool _isFree(List<HayEntity> all, double x, double y) {
+  // Balya 0.5×0.5 birim; merkezler 0.45+ uzaksa görsel overlap olmaz.
+  const minDistSq = 0.45 * 0.45;
+  for (final h in all) {
+    if (!h.isBale || h.isDelivered || h.isBeingCarried) continue;
+    final dx = h.gridX - x;
+    final dy = h.gridY - y;
+    if (dx * dx + dy * dy < minDistSq) return false;
+  }
+  return true;
 }

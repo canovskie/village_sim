@@ -106,8 +106,8 @@ void assignCarriers({
             point.release(slot, v);
             bale.isDelivered = true;
             hayEntities.remove(bale);
-            // 1 balya = 4 hay pile (= 4 hasat). Tarla yavaşlatıldığı için
-            // balya değeri 6'ya çıkarıldı — denge korunur. Değirmen +2 bonus.
+            // 1 balya = 6 hay pile (= 6 hasat). Balya başına 6 yiyecek;
+            // değirmen +2 bonus.
             final hasMill = buildings.any((b) => b.type == BuildingType.mill);
             stockpile.food += hasMill ? 8 : 6;
           },

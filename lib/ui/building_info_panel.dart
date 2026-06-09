@@ -12,12 +12,14 @@ import '../entities/miner_entity.dart';
 import '../entities/shepherd_entity.dart';
 import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
+import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
-import 'game_theme.dart';
+import 'cozy_theme.dart';
 
-/// Bir binaya tıklanınca açılan zengin yönetim/detay paneli.
-/// Binanın rolüne göre farklı gövde gösterir; satış aksiyonunu [onSell] ile
-/// üst katmana iletir.
+/// Bir binaya tıklanınca açılan diegetic "köy defteri" sayfası.
+/// Üstte ahşap başlık + portre, altta parşömen üstü hızlı veriler ve büyük
+/// deri sekme aksiyon kuşağı (Şenlik / Sat / Yık / vb). Stat dump değil,
+/// karar masası gibi davranır.
 class BuildingInfoPanel extends StatelessWidget {
   final BuildingEntity building;
   final List<VillagerEntity> residents;
@@ -27,12 +29,34 @@ class BuildingInfoPanel extends StatelessWidget {
   final ResourceBundle stockpile;
   final VillageStats stats;
 
-  /// Köyün toplam nüfusu ve ev tavanı (belediye gövdesi için).
   final int population;
   final int populationCap;
 
   final VoidCallback onClose;
   final void Function(ResourceKind kind) onSell;
+
+  /// Yeni aksiyonlar — null olabilir; null ise buton görünmez.
+  final VoidCallback? onFestival;
+  final VoidCallback? onDemolish;
+  final VoidCallback? onTogglePaused;
+  final VoidCallback? onCollectTax;
+  final VoidCallback? onRefillWater;
+
+  /// Şenlik maliyeti — buton üstündeki rozet için.
+  final int festivalFoodCost;
+  final int festivalGoldCost;
+
+  /// Belediye nüfus planlama dashboard verisi — yalnız townhall seçili iken
+  /// dolu gelir. Yaş dağılımı, çiftler, hamile sayımı, yiyecek tüketimi.
+  final PopulationPlanning? planning;
+  /// Belediye politikaları — toggle'lar üzerinden değiştirilir.
+  final VillagePolicies? policies;
+  /// Politika toggle callback'i — scene tarafı setState'ler.
+  final void Function(String key)? onTogglePolicy;
+  /// Aile planlaması mutex setter (radio).
+  final void Function(FamilyPolicy fp)? onSetFamilyPolicy;
+  /// Karar değişikliği cooldown'unda kalan saniye (0 = serbest).
+  final double policyCooldownSec;
 
   const BuildingInfoPanel({
     super.key,
@@ -47,6 +71,18 @@ class BuildingInfoPanel extends StatelessWidget {
     required this.populationCap,
     required this.onClose,
     required this.onSell,
+    this.onFestival,
+    this.onDemolish,
+    this.onTogglePaused,
+    this.onCollectTax,
+    this.onRefillWater,
+    this.festivalFoodCost = 8,
+    this.festivalGoldCost = 5,
+    this.planning,
+    this.policies,
+    this.onTogglePolicy,
+    this.onSetFamilyPolicy,
+    this.policyCooldownSec = 0,
   });
 
   BuildingFunction? get _fn => building.fn;
@@ -55,83 +91,91 @@ class BuildingInfoPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final meta = kBuildingMeta[building.type]!;
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 280),
-      decoration: MedievalTheme.panelDecoration(),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _header(meta.label),
-          if (_fn != null && _fn!.summary.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 7, 12, 3),
-              child: Text(
-                _fn!.summary,
-                style: const TextStyle(
-                  color: MedievalTheme.textSecondary,
-                  fontSize: 9.5,
-                  height: 1.3,
-                  fontFamily: 'monospace',
+    // Tap dışı backdrop paneli kapatır, ama panelin kendine tıklama bunu
+    // tetiklemesin diye absorbing.
+    return GestureDetector(
+      onTap: () {}, // event'i absorb et
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _header(meta.label),
+            // Başlık altına parşömen — overlap için negatif margin yok,
+            // ahşap header parşömene bağlanmış gibi.
+            Transform.translate(
+              offset: const Offset(0, -2),
+              child: ParchmentPanel(
+                pinned: false,
+                padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ..._vital(_fn),
+                    if (_actions().isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      _actionStrip(),
+                    ],
+                    if (_fn?.summary.isNotEmpty == true) ...[
+                      const SizedBox(height: 12),
+                      Text(_fn!.summary, style: CozyUi.inkMuted),
+                    ],
+                  ],
                 ),
               ),
             ),
-          MedievalTheme.divider(),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(2, 2, 2, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: _body(_fn),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ─── Başlık ────────────────────────────────────────────────────────────────
+  // ─── Başlık (ahşap pano + portre) ────────────────────────────────────────
 
   Widget _header(String label) {
     final thumb = BuildingRenderer.thumbnails[building.type];
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [MedievalTheme.panelBgLight, MedievalTheme.panelBg],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border(
-          bottom: BorderSide(color: MedievalTheme.panelHighlight, width: 1),
-        ),
+    return WoodPlankPanel(
+      padding: const EdgeInsets.fromLTRB(11, 9, 9, 11),
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(4),
+        topRight: Radius.circular(4),
+        bottomLeft: Radius.zero,
+        bottomRight: Radius.zero,
       ),
       child: Row(
         children: [
-          // Bina portresi — çerçeveli kutu
+          // Portre — koyu çerçeve içinde
           Container(
-            width: 42,
-            height: 32,
+            width: 44,
+            height: 36,
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
-              color: MedievalTheme.chipBg,
-              border: Border.all(color: MedievalTheme.chipBorder, width: 1),
+              color: const Color(0xFF1A0E04),
+              border: Border.all(color: const Color(0xFF2E1A08), width: 1),
+              boxShadow: const [
+                BoxShadow(color: Color(0x88000000), blurRadius: 2, offset: Offset(0, 1)),
+              ],
             ),
             child: thumb != null
                 ? CustomPaint(painter: _ThumbPainter(thumb))
                 : const Center(
                     child: Text('⌂',
-                        style: TextStyle(fontSize: 20, color: MedievalTheme.textPrimary)),
+                        style: TextStyle(fontSize: 22, color: Color(0xFFE5C58A))),
                   ),
           ),
-          const SizedBox(width: 9),
-          Flexible(
+          const SizedBox(width: 10),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label, style: MedievalTheme.titleStyle, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 3),
+                Text(label,
+                    style: CozyUi.carvedTitle.copyWith(
+                        fontSize: 13, letterSpacing: 1.6, color: const Color(0xFFF1D89A)),
+                    overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
                 _roleTag(),
               ],
             ),
@@ -140,13 +184,22 @@ class BuildingInfoPanel extends StatelessWidget {
           GestureDetector(
             onTap: onClose,
             child: Container(
-              padding: const EdgeInsets.all(3),
-              decoration: MedievalTheme.chipDecoration(),
+              width: 22, height: 22,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A0E04),
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: const Color(0xFF3A2410), width: 1),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x88000000), blurRadius: 2, offset: Offset(0, 1)),
+                ],
+              ),
               child: const Text('✕',
                   style: TextStyle(
-                    color: MedievalTheme.textSecondary,
+                    color: Color(0xFFD2B679),
                     fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
+                    height: 1.0,
                   )),
             ),
           ),
@@ -159,276 +212,491 @@ class BuildingInfoPanel extends StatelessWidget {
     final (label, _) = _roleLabel(_fn);
     if (label.isEmpty) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
       decoration: BoxDecoration(
-        color: Color.alphaBlend(_accent.withValues(alpha: 0.18), MedievalTheme.chipBg),
-        border: Border.all(color: _accent.withValues(alpha: 0.6), width: 1),
+        color: Color.alphaBlend(_accent.withValues(alpha: 0.30), const Color(0xFF1A0E04)),
+        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: _accent.withValues(alpha: 0.7), width: 1),
       ),
       child: Text(label.toUpperCase(),
           style: TextStyle(
             color: _accent,
-            fontSize: 8,
-            fontWeight: FontWeight.bold,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
             fontFamily: 'monospace',
-            letterSpacing: 1.0,
+            letterSpacing: 1.6,
+            shadows: const [
+              Shadow(color: Color(0xAA000000), blurRadius: 0, offset: Offset(0, 1)),
+            ],
           )),
     );
   }
 
-  // ─── Role özgü gövde ─────────────────────────────────────────────────────────
+  // ─── Vital (parşömen üstü hızlı veriler) ─────────────────────────────────
 
-  List<Widget> _body(BuildingFunction? fn) {
-    if (fn == null) return [_stat('Boyut', '${building.cols}×${building.rows}')];
+  List<Widget> _vital(BuildingFunction? fn) {
+    if (fn == null) {
+      return [_inkRow('Boyut', '${building.cols}×${building.rows}')];
+    }
     switch (fn.role) {
       case BuildingRole.housing:
-        return _housingBody(fn);
+        return _housingVital(fn);
       case BuildingRole.gathering:
-        return _gatheringBody();
+        return _gatheringVital();
       case BuildingRole.processing:
-        return _processingBody(fn);
+        return _processingVital();
       case BuildingRole.trade:
-        return _tradeBody(fn);
+        return _tradeVital(fn);
       case BuildingRole.storage:
-        return _storageBody(fn);
+        return _storageVital(fn);
       case BuildingRole.civic:
-        return _civicBody(fn);
+        return _civicVital(fn);
       case BuildingRole.none:
-        return [_stat('Boyut', '${building.cols}×${building.rows}')];
+        return [_inkRow('Boyut', '${building.cols}×${building.rows}')];
     }
   }
 
-  // ── Ev ──
-  List<Widget> _housingBody(BuildingFunction fn) {
+  List<Widget> _housingVital(BuildingFunction fn) {
     final water = building.waterLevel.clamp(0.0, 1.0);
+    final occ = residents.length / fn.housingCapacity.clamp(1, 99);
     return [
-      _stat('Sakinler', '${residents.length} / ${fn.housingCapacity}',
-          valueColor: residents.length >= fn.housingCapacity
-              ? MedievalTheme.successColor
-              : MedievalTheme.textPrimary),
-      if (residents.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-          child: Wrap(
-            spacing: 5,
-            runSpacing: 4,
-            children: residents.map(_residentChip).toList(),
-          ),
-        )
-      else
-        _hint('Boş — belediye yeni köylüler yerleştirecek.'),
-      _sectionLabel('Su deposu'),
-      _progress(
-        water,
-        water > 0.66
-            ? 'Su deposu dolu'
-            : water > 0.25
-                ? 'Su azalıyor — kuyu gerekli'
-                : 'Susuz — sakinler mutsuz, moral düşer',
-        color: const Color(0xFF5BA6D8),
-      ),
+      _vitalBar('Sakinler', occ, '${residents.length}/${fn.housingCapacity}',
+          color: residents.length >= fn.housingCapacity ? CozyUi.sage : CozyUi.ember),
+      const SizedBox(height: 5),
+      _vitalBar('Su deposu', water, '${(water * 100).round()}%',
+          color: water > 0.5
+              ? const Color(0xFF4A7AA8)
+              : water > 0.25
+                  ? CozyUi.emberSoft
+                  : CozyUi.rust),
+      if (residents.isNotEmpty) ...[
+        const SizedBox(height: 7),
+        _residentRow(),
+      ],
     ];
   }
 
-  // ── Toplama (oduncu / maden / balıkçı / ağıl) ──
-  List<Widget> _gatheringBody() {
+  List<Widget> _gatheringVital() {
     final isMine = building.type == BuildingType.mineBuilding;
     final isBarn = building.type == BuildingType.barn;
-    return [
+    final out = <Widget>[
       _statusRow(building.isActive),
-      if (isMine && activeMiners.isNotEmpty)
-        _stat('Madenci', '${activeMiners.length} içeride'),
-      if (isBarn) ..._barnStats(),
-      _hint(switch (building.type) {
-        BuildingType.lumberCamp => 'Bölgesindeki ağaçları odun olarak toplar.',
-        BuildingType.mineBuilding => 'Damardan taş / demir / kömür çıkarır.',
-        BuildingType.fisherCabin => 'Sudan balık tutar, yiyecek üretir.',
-        BuildingType.barn =>
-          'İnekler ağılın çevresinde otlar; doyduklarında çoban onları sağar, süt yiyeceğe dönüşür.',
-        _ => '',
-      }),
     ];
+    if (isMine && activeMiners.isNotEmpty) {
+      out.add(_inkRow('Madenci', '${activeMiners.length} içeride'));
+    }
+    if (isBarn) {
+      out.addAll(_barnVital());
+    }
+    return out;
   }
 
-  List<Widget> _barnStats() {
+  List<Widget> _barnVital() {
     if (barnCows.isEmpty) {
-      return [_stat('İnek', '0 (henüz spawn olmadı)')];
+      return [_inkRow('İnek', '0')];
     }
     final avgFull = 1.0 -
         (barnCows.fold<double>(0, (s, c) => s + c.hunger) / barnCows.length);
     final readyCount = barnCows.where((c) => c.readyToMilk).length;
-    final shepherdStatus = barnShepherd == null
-        ? '—'
-        : switch (barnShepherd!.state) {
-            ShepherdState.idle => 'boşta',
-            ShepherdState.walkingToCow => 'inek yolunda',
-            ShepherdState.milking => 'sağıyor',
-          };
     return [
-      _stat('İnek', '${barnCows.length} baş'),
-      _stat('Ortalama tokluk', '${(avgFull * 100).round()}%'),
-      _stat('Sağıma hazır', '$readyCount'),
-      _stat('Çoban', shepherdStatus),
+      _inkRow('İnek', '${barnCows.length} baş'),
+      _vitalBar('Tokluk', avgFull, '${(avgFull * 100).round()}%',
+          color: CozyUi.sage),
+      _inkRow('Sağıma hazır', '$readyCount'),
     ];
   }
 
-  // ── İşleme (değirmen) — tarladan gelen balyaların verimini artırır. ──
-  List<Widget> _processingBody(BuildingFunction fn) => [
+  List<Widget> _processingVital() => [
         _statusRow(true),
-        _stat('Balya verimi', '+1${ResourceKind.food.icon} / balya',
-            valueColor: MedievalTheme.successColor),
-        _hint('Tarladan depoya gelen her balya öğütülür → +1 fazla yiyecek.'),
+        _inkRow('Balya verimi', '+1${ResourceKind.food.icon} / balya'),
       ];
 
-  // ── Ticaret (pazar) ──
-  List<Widget> _tradeBody(BuildingFunction fn) {
+  List<Widget> _tradeVital(BuildingFunction fn) => [
+        _inkRow('Kasa', '${stockpile.gold} ${ResourceKind.gold.icon}',
+            accent: true),
+        _inkRow('Pasif gelir',
+            '+${fn.civicValue.round()}${ResourceKind.gold.icon} / ${kMarketIncomeInterval.toStringAsFixed(0)}sn'),
+      ];
+
+  List<Widget> _storageVital(BuildingFunction fn) {
     return [
-      _stat('Kasa', '${stockpile.gold} ${ResourceKind.gold.icon}',
-          valueColor: MedievalTheme.textAccent),
-      _stat('Pasif gelir',
-          '+${fn.civicValue.round()}${ResourceKind.gold.icon} / ${kMarketIncomeInterval.toStringAsFixed(0)}sn'),
-      _sectionLabel('Kaynak sat'),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(8, 2, 8, 5),
-        child: Wrap(
-          spacing: 5,
-          runSpacing: 5,
-          children: [
-            for (final e in kMarketSellRates.entries)
-              _SellButton(
-                kind: e.key,
-                batch: e.value.$1,
-                gold: e.value.$2,
-                enabled: stockpile.get(e.key) >= e.value.$1,
-                onTap: () => onSell(e.key),
-              ),
-          ],
-        ),
-      ),
+      _inkRow('Bu deponun katkısı', '+${fn.storageCapacity}'),
+      _inkRow('Köy kapasitesi', '${stats.stockCapacity}/kaynak', accent: true),
+      const SizedBox(height: 6),
+      _CapacityBars(stockpile: stockpile, cap: stats.stockCapacity),
     ];
   }
 
-  // ── Depo ──
-  List<Widget> _storageBody(BuildingFunction fn) {
-    return [
-      _stat('Bu deponun katkısı', '+${fn.storageCapacity}'),
-      _stat('Köy kapasitesi', '${stats.stockCapacity} / kaynak',
-          valueColor: MedievalTheme.textAccent),
-      _sectionLabel('Doluluk'),
-      Padding(
-        padding: const EdgeInsets.fromLTRB(10, 2, 10, 5),
-        child: _CapacityBars(stockpile: stockpile, cap: stats.stockCapacity),
-      ),
-    ];
-  }
-
-  // ── Civic (belediye / kuyu / taverna / ahır) ──
-  List<Widget> _civicBody(BuildingFunction fn) {
+  List<Widget> _civicVital(BuildingFunction fn) {
     switch (fn.civicEffect) {
       case CivicEffect.populationGrowth:
-        final ready = stockpile.food >= kPopulationGrowthFoodFloor;
-        final hasRoom = population < populationCap;
+        // Köy defteri — yazı odaklı, sade. Headline + section'lar + tek moral bar.
+        final p = planning;
+        if (p == null) {
+          return [_inkRow('Nüfus', '$population')];
+        }
+        final total = p.children + p.adults + p.elders;
+        final foodColor = p.daysOfFoodLeft >= 6.0
+            ? CozyUi.sage
+            : p.daysOfFoodLeft >= 3.0
+                ? CozyUi.ember
+                : CozyUi.rust;
         return [
-          _stat('Nüfus', '$population / $populationCap',
-              valueColor: hasRoom ? MedievalTheme.textPrimary : MedievalTheme.dangerColor),
-          _stat('Köy morali', '${(stats.morale * 100).round()}%',
-              valueColor: stats.morale >= 0.6
-                  ? MedievalTheme.successColor
-                  : MedievalTheme.textPrimary),
-          _stat('Köylü maliyeti', '$kPopulationGrowthFoodCost${ResourceKind.food.icon}'),
-          _progress(
-            building.growthProgress.clamp(0.0, 1.0),
-            !hasRoom
-                ? 'Ev gerekli — büyüme durdu'
-                : !ready
-                    ? 'Yiyecek gerekli ($kPopulationGrowthFoodFloor${ResourceKind.food.icon})'
-                    : 'Yeni köylü yetişiyor…',
-          ),
+          // Headline — büyük, sakin tek cümle
+          Text('Köyünde $total kişi yaşıyor.',
+              style: TextStyle(
+                  color: CozyUi.parchmentInk,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.25)),
+          const SizedBox(height: 14),
+          _section('YAŞ', [
+            _ledgerRow('Yetişkin', '${p.adults}'),
+            _ledgerRow('Çocuk', '${p.children}'),
+            _ledgerRow('Yaşlı', '${p.elders}'),
+          ]),
+          _section('AİLE', [
+            _ledgerRow(p.couples == 1 ? 'Çift' : 'Çift', '${p.couples}'),
+            if (p.pregnantSoon > 0)
+              _ledgerRow('Yakında bebek', '${p.pregnantSoon}',
+                  accent: CozyUi.ember),
+          ]),
+          _section('KONUT', [
+            _ledgerRow('Dolu', '${p.housedSlots} / ${p.totalHousing}',
+                accent: p.housedSlots < p.totalHousing ? null : CozyUi.rust),
+          ]),
+          _section('YİYECEK', [
+            _ledgerRow('Günlük tüketim',
+                p.foodPerDay.toStringAsFixed(0)),
+            _ledgerRow('Stok yeter',
+                p.daysOfFoodLeft.isFinite
+                    ? '${p.daysOfFoodLeft.toStringAsFixed(1)} gün'
+                    : '∞',
+                accent: foodColor),
+          ]),
+          const SizedBox(height: 6),
+          _vitalBar('Moral', stats.morale,
+              '${(stats.morale * 100).round()}%',
+              color: stats.morale > 0.6 ? CozyUi.sage : foodColor),
+          if (policies != null && onTogglePolicy != null) ...[
+            const SizedBox(height: 14),
+            _PolicyEditor(
+              policies: policies!,
+              onToggle: onTogglePolicy!,
+              onSetFamily: onSetFamilyPolicy,
+              cooldownSec: policyCooldownSec,
+            ),
+          ],
         ];
       case CivicEffect.morale:
         return [
-          _stat('Moral katkısı', '+${(fn.civicValue * 100).round()}%',
-              valueColor: MedievalTheme.successColor),
-          _stat('Köy morali', '${(stats.morale * 100).round()}%'),
-          if (building.type == BuildingType.well)
-            _hint('Evlerin su deposunu doldurur, çiftçiler ekinleri sular.'),
-          _progress(stats.morale, 'Mutlu köy daha hızlı büyür'),
+          _inkRow('Moral katkısı',
+              '+${(fn.civicValue * 100).round()}%', accent: true),
+          _inkRow('Köy morali', '${(stats.morale * 100).round()}%'),
         ];
       case CivicEffect.carrierSpeed:
         return [
-          _stat('Bu ahrın katkısı', '+${(fn.civicValue * 100).round()}%'),
-          _stat('Taşıyıcı hızı', '×${stats.carrierSpeedMultiplier.toStringAsFixed(2)}',
-              valueColor: MedievalTheme.successColor),
-          _hint('Köylüler kaynakları daha hızlı taşır.'),
+          _inkRow('Bu ahrın katkısı', '+${(fn.civicValue * 100).round()}%'),
+          _inkRow('Taşıyıcı hızı',
+              '×${stats.carrierSpeedMultiplier.toStringAsFixed(2)}',
+              accent: true),
         ];
       case CivicEffect.none:
-        return [_stat('Boyut', '${building.cols}×${building.rows}')];
+        return [_inkRow('Boyut', '${building.cols}×${building.rows}')];
     }
   }
 
-  // ─── Ortak küçük widgetlar ────────────────────────────────────────────────────
+  // ─── Aksiyon kuşağı ──────────────────────────────────────────────────────
 
-  /// İkon + etiket + değer satırı; zebra bantlı arka plan.
-  Widget _stat(String label, String value, {Color? valueColor}) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1.5),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: MedievalTheme.chipBg.withValues(alpha: 0.45),
-          border: Border(left: BorderSide(color: _accent.withValues(alpha: 0.5), width: 2)),
+  /// Role özgü aksiyon listesi — null olanlar buton üretmez.
+  List<_Action> _actions() {
+    final fn = _fn;
+    final out = <_Action>[];
+
+    // Trade → mevcut market sell
+    if (fn?.role == BuildingRole.trade) {
+      for (final e in kMarketSellRates.entries) {
+        final enabled = stockpile.get(e.key) >= e.value.$1;
+        out.add(_Action(
+          icon: e.key.icon,
+          label: '${e.value.$1}→${e.value.$2}${ResourceKind.gold.icon}',
+          tint: const Color(0xFFE0C040),
+          onTap: enabled ? () => onSell(e.key) : null,
+        ));
+      }
+    }
+
+    // Festival — housing / civic-morale / civic-population
+    if (onFestival != null) {
+      final role = fn?.role;
+      final ok = role == BuildingRole.housing ||
+          (role == BuildingRole.civic &&
+              (fn?.civicEffect == CivicEffect.morale ||
+                  fn?.civicEffect == CivicEffect.populationGrowth));
+      if (ok) {
+        final canAfford = stockpile.food >= festivalFoodCost &&
+            stockpile.gold >= festivalGoldCost;
+        out.add(_Action(
+          icon: '🎉',
+          label: 'Şenlik',
+          tint: CozyUi.ember,
+          sub: '$festivalFoodCost🌾 $festivalGoldCost★',
+          onTap: canAfford ? onFestival : null,
+        ));
+      }
+    }
+
+    // Su servisi — well only
+    if (onRefillWater != null &&
+        fn?.role == BuildingRole.civic &&
+        fn?.civicEffect == CivicEffect.morale &&
+        building.type == BuildingType.well) {
+      out.add(_Action(
+        icon: '💧',
+        label: 'Su Servisi',
+        tint: const Color(0xFF4A7AA8),
+        onTap: onRefillWater,
+      ));
+    }
+
+    // Vergi — townhall
+    if (onCollectTax != null &&
+        fn?.civicEffect == CivicEffect.populationGrowth) {
+      out.add(_Action(
+        icon: '💰',
+        label: 'Vergi',
+        tint: const Color(0xFFB59030),
+        onTap: onCollectTax,
+      ));
+    }
+
+    // Pause/Resume — gathering/processing
+    if (onTogglePaused != null &&
+        (fn?.role == BuildingRole.gathering ||
+            fn?.role == BuildingRole.processing)) {
+      out.add(_Action(
+        icon: building.userPaused ? '▶' : '⏸',
+        label: building.userPaused ? 'Sürdür' : 'Durdur',
+        tint: const Color(0xFFB59030),
+        onTap: onTogglePaused,
+      ));
+    }
+
+    // Demolish — universal son aksiyon
+    if (onDemolish != null) {
+      out.add(_Action(
+        icon: '✕',
+        label: 'Yık',
+        tint: CozyUi.rust,
+        onTap: onDemolish,
+      ));
+    }
+
+    return out;
+  }
+
+  Widget _actionStrip() {
+    final actions = _actions();
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [for (final a in actions) _actionButton(a)],
+    );
+  }
+
+  Widget _actionButton(_Action a) {
+    final disabled = a.onTap == null;
+    return Opacity(
+      opacity: disabled ? 0.45 : 1.0,
+      child: GestureDetector(
+        onTap: a.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color.alphaBlend(a.tint.withValues(alpha: 0.20),
+                    const Color(0xFF6B3E18)),
+                CozyUi.leather,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: a.tint.withValues(alpha: 0.9),
+              width: 1.4,
+            ),
+            boxShadow: const [
+              BoxShadow(color: Color(0x55000000), blurRadius: 3, offset: Offset(0, 1)),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(a.icon, style: const TextStyle(fontSize: 13)),
+              const SizedBox(width: 5),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(a.label,
+                      style: TextStyle(
+                        color: const Color(0xFFF1D89A),
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'monospace',
+                        shadows: const [
+                          Shadow(color: Color(0xCC000000), blurRadius: 0, offset: Offset(0, 1)),
+                        ],
+                      )),
+                  if (a.sub != null)
+                    Text(a.sub!,
+                        style: TextStyle(
+                          color: a.tint,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'monospace',
+                          shadows: const [
+                            Shadow(color: Color(0xAA000000), blurRadius: 0, offset: Offset(0, 1)),
+                          ],
+                        )),
+                ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  // ─── Parçacıklar ─────────────────────────────────────────────────────────
+
+  Widget _inkRow(String label, String value, {bool accent = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5),
         child: Row(
           children: [
-            Text(label,
-                style: const TextStyle(
-                    color: MedievalTheme.textSecondary,
-                    fontSize: 11,
-                    fontFamily: 'monospace')),
+            Text(label, style: CozyUi.inkLabel),
             const Spacer(),
             Text(value,
-                style: TextStyle(
-                    color: valueColor ?? MedievalTheme.textPrimary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace')),
+                style: CozyUi.inkBody.copyWith(
+                  color: accent ? const Color(0xFF8A4A18) : CozyUi.parchmentInk,
+                  fontWeight: FontWeight.w800,
+                )),
           ],
         ),
       );
 
-  Widget _statusRow(bool active) => _stat(
+  Widget _statusRow(bool active) => _inkRow(
         'Durum',
-        active ? '⚙ Çalışıyor' : '💤 Boşta',
-        valueColor: active ? MedievalTheme.successColor : MedievalTheme.textSecondary,
+        active ? '⚙ Çalışıyor' : building.userPaused ? '⏸ Duruşta' : '💤 Boşta',
+        accent: active,
       );
 
-  Widget _sectionLabel(String text) => Padding(
-        padding: const EdgeInsets.fromLTRB(11, 6, 10, 1),
-        child: Text(text.toUpperCase(),
-            style: const TextStyle(
-                color: MedievalTheme.textDim,
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-                fontFamily: 'monospace')),
+  Widget _vitalBar(String label, double value, String tail, {required Color color}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 78,
+              child: Text(label, style: CozyUi.inkLabel),
+            ),
+            Expanded(
+              child: Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  color: const Color(0x33000000),
+                  borderRadius: BorderRadius.circular(2),
+                  border: Border.all(color: CozyUi.parchmentEdge, width: 0.6),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: value.clamp(0.0, 1.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(colors: [
+                            color.withValues(alpha: 0.85),
+                            color,
+                            Color.lerp(color, Colors.white, 0.30)!,
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 7),
+            SizedBox(
+              width: 42,
+              child: Text(tail,
+                  textAlign: TextAlign.right,
+                  style: CozyUi.inkBody.copyWith(fontSize: 9.5)),
+            ),
+          ],
+        ),
       );
 
-  Widget _hint(String text) => Padding(
-        padding: const EdgeInsets.fromLTRB(11, 3, 11, 4),
-        child: Text(text,
-            style: const TextStyle(
-                color: MedievalTheme.textDim,
-                fontSize: 9,
-                fontStyle: FontStyle.italic,
-                fontFamily: 'monospace')),
+  /// Köy defteri section — küçük başlık + içerik + ince ayraç.
+  /// Border/box yok; sadece typografi ile hiyerarşi. Şık + sade tasarım.
+  Widget _section(String label, List<Widget> rows) {
+    if (rows.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  color: CozyUi.inkLabel.color,
+                  fontSize: 8.5,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2)),
+          const SizedBox(height: 4),
+          // Hairline ayraç — neredeyse görünmez parşömen mürekkebi.
+          Container(height: 0.6, color: CozyUi.parchmentEdge),
+          const SizedBox(height: 4),
+          ...rows,
+        ],
+      ),
+    );
+  }
+
+  /// Sade defter satırı: solda etiket, sağda değer. Box yok.
+  Widget _ledgerRow(String label, String value, {Color? accent}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.5),
+        child: Row(
+          children: [
+            Text(label,
+                style: TextStyle(
+                    color: CozyUi.parchmentInk.withValues(alpha: 0.75),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500)),
+            const Spacer(),
+            Text(value,
+                style: TextStyle(
+                    color: accent ?? CozyUi.parchmentInk,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+          ],
+        ),
       );
 
-  Widget _progress(double value, String label, {Color? color}) => Padding(
-        padding: const EdgeInsets.fromLTRB(10, 4, 10, 5),
-        child: _ProgressBar(value: value, color: color ?? _accent, label: label),
+  Widget _residentRow() => Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: residents.map(_residentChip).toList(),
       );
 
   Widget _residentChip(VillagerEntity v) {
     final stage = v.lifeStage;
     final role  = v.hasProfession ? v.type.displayName : stage.label;
-    // Aile bilgisi tooltip'te: kim kimin çocuğu / kaç çocuğu var.
     final lines = <String>['${v.name} — $role'];
     if (v.parents.isNotEmpty) {
       lines.add('Ebeveynler: ${v.parents.map((p) => p.name).join(', ')}');
@@ -439,47 +707,61 @@ class BuildingInfoPanel extends StatelessWidget {
     return Tooltip(
       message: lines.join('\n'),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: MedievalTheme.chipDecoration(),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: const Color(0x55000000),
+          borderRadius: BorderRadius.circular(2),
+          border: Border.all(color: CozyUi.parchmentEdge, width: 0.6),
+        ),
         child: Text('${stage.icon} ${v.name}',
             style: const TextStyle(
-                color: MedievalTheme.textPrimary,
+                color: CozyUi.parchmentInk,
                 fontSize: 9,
-                fontFamily: 'monospace')),
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w700)),
       ),
     );
   }
 }
 
-// ─── Renk + etiket eşlemeleri ──────────────────────────────────────────────────
+class _Action {
+  final String icon;
+  final String label;
+  final String? sub;
+  final Color tint;
+  final VoidCallback? onTap;
+  _Action({required this.icon, required this.label, required this.tint, this.onTap, this.sub});
+}
+
+// ─── Renk + etiket eşlemeleri ──────────────────────────────────────────────
 
 Color _accentFor(BuildingFunction? fn) {
-  if (fn == null) return MedievalTheme.panelHighlight;
+  if (fn == null) return CozyUi.emberSoft;
   switch (fn.role) {
     case BuildingRole.housing:
-      return const Color(0xFF88BB55);
+      return CozyUi.sage;
     case BuildingRole.gathering:
-      return const Color(0xFFD08840);
+      return CozyUi.ember;
     case BuildingRole.processing:
-      return const Color(0xFFDDAA22);
+      return const Color(0xFFE0C040);
     case BuildingRole.trade:
       return const Color(0xFFE0C040);
     case BuildingRole.storage:
-      return const Color(0xFFB08850);
+      return CozyUi.emberSoft;
     case BuildingRole.civic:
       return switch (fn.civicEffect) {
-        CivicEffect.populationGrowth => const Color(0xFF6ABB44),
-        CivicEffect.morale => const Color(0xFFE08855),
+        CivicEffect.populationGrowth => CozyUi.sage,
+        CivicEffect.morale => CozyUi.emberSoft,
         CivicEffect.carrierSpeed => const Color(0xFF66A0CC),
-        CivicEffect.none => MedievalTheme.panelHighlight,
+        CivicEffect.none => CozyUi.emberSoft,
       };
     case BuildingRole.none:
-      return MedievalTheme.panelHighlight;
+      return CozyUi.emberSoft;
   }
 }
 
 (String, Color) _roleLabel(BuildingFunction? fn) {
-  if (fn == null) return ('', MedievalTheme.panelHighlight);
+  if (fn == null) return ('', CozyUi.emberSoft);
   final c = _accentFor(fn);
   switch (fn.role) {
     case BuildingRole.housing:
@@ -504,51 +786,7 @@ Color _accentFor(BuildingFunction? fn) {
   }
 }
 
-// ─── İlerleme çubuğu (gradient) ────────────────────────────────────────────────
-
-class _ProgressBar extends StatelessWidget {
-  final double value; // 0..1
-  final Color color;
-  final String label;
-  const _ProgressBar({required this.value, required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          height: 10,
-          decoration: BoxDecoration(
-            color: MedievalTheme.chipBg,
-            border: Border.all(color: MedievalTheme.chipBorder, width: 1),
-          ),
-          child: FractionallySizedBox(
-            alignment: Alignment.centerLeft,
-            widthFactor: value.clamp(0.0, 1.0),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  Color.lerp(color, Colors.black, 0.25)!,
-                  color,
-                  Color.lerp(color, Colors.white, 0.35)!,
-                ]),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 3),
-        Text(label,
-            style: const TextStyle(
-                color: MedievalTheme.textDim,
-                fontSize: 8.5,
-                fontFamily: 'monospace')),
-      ],
-    );
-  }
-}
-
-// ─── Kapasite çubukları (depo) ──────────────────────────────────────────────────
+// ─── Kapasite çubukları ──────────────────────────────────────────────────
 
 class _CapacityBars extends StatelessWidget {
   final ResourceBundle stockpile;
@@ -574,27 +812,28 @@ class _CapacityBars extends StatelessWidget {
                 SizedBox(width: 16, child: Text(kind.icon, style: const TextStyle(fontSize: 11))),
                 Expanded(
                   child: Container(
-                    height: 7,
+                    height: 6,
                     decoration: BoxDecoration(
-                      color: MedievalTheme.chipBg,
-                      border: Border.all(color: MedievalTheme.chipBorder, width: 1),
+                      color: const Color(0x33000000),
+                      borderRadius: BorderRadius.circular(2),
+                      border: Border.all(color: CozyUi.parchmentEdge, width: 0.6),
                     ),
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: (stockpile.get(kind) / cap).clamp(0.0, 1.0),
-                      child: Container(color: color),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: (stockpile.get(kind) / cap).clamp(0.0, 1.0),
+                        child: Container(color: color),
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 5),
                 SizedBox(
-                  width: 30,
+                  width: 28,
                   child: Text('${stockpile.get(kind)}',
                       textAlign: TextAlign.right,
-                      style: const TextStyle(
-                          color: MedievalTheme.textSecondary,
-                          fontSize: 9,
-                          fontFamily: 'monospace')),
+                      style: CozyUi.inkBody.copyWith(fontSize: 9.5)),
                 ),
               ],
             ),
@@ -604,47 +843,7 @@ class _CapacityBars extends StatelessWidget {
   }
 }
 
-// ─── Satış butonu (pazar) ─────────────────────────────────────────────────────
-
-class _SellButton extends StatelessWidget {
-  final ResourceKind kind;
-  final int batch;
-  final int gold;
-  final bool enabled;
-  final VoidCallback onTap;
-  const _SellButton({
-    required this.kind,
-    required this.batch,
-    required this.gold,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Opacity(
-        opacity: enabled ? 1.0 : 0.4,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-          decoration: MedievalTheme.buttonDecoration(
-            active: enabled,
-            accentColor: const Color(0xFFE0C040),
-          ),
-          child: Text('$batch${kind.icon} → $gold${ResourceKind.gold.icon}',
-              style: const TextStyle(
-                  color: MedievalTheme.textPrimary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace')),
-        ),
-      ),
-    );
-  }
-}
-
-// ─── Thumbnail painter (başlık) ────────────────────────────────────────────────
+// ─── Thumbnail painter ────────────────────────────────────────────────────
 
 class _ThumbPainter extends CustomPainter {
   final ui.Image img;
@@ -673,4 +872,486 @@ class _ThumbPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ThumbPainter old) => old.img != img;
+}
+
+// ─── POLITIKA EDİTÖRÜ ──────────────────────────────────────────────────────
+// Tab bar + custom ikonlu satırlar + aktif politika rozet stripi + dairesel
+// cooldown indicator. Stateful — tab seçimi kendi state'inde tutulur, panel
+// yeniden açılınca varsayılan AİLE tab'ine döner (kısa kullanıcı bağlamı).
+
+class _PolicyEditor extends StatefulWidget {
+  final VillagePolicies policies;
+  final void Function(String key) onToggle;
+  final void Function(FamilyPolicy fp)? onSetFamily;
+  final double cooldownSec;
+  const _PolicyEditor({
+    required this.policies,
+    required this.onToggle,
+    required this.cooldownSec,
+    this.onSetFamily,
+  });
+
+  @override
+  State<_PolicyEditor> createState() => _PolicyEditorState();
+}
+
+class _PolicyEditorState extends State<_PolicyEditor> {
+  PolicyCategory _tab = PolicyCategory.family;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.policies;
+    final cd = widget.cooldownSec;
+    final locked = cd > 0;
+    final cdFrac = (cd / 240.0).clamp(0.0, 1.0); // 1 oyun günü = 240sn
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Başlık + cooldown ring ─────────────────────────────────────────
+        Row(
+          children: [
+            Text('KARAR DEFTERİ',
+                style: TextStyle(
+                    color: CozyUi.inkLabel.color,
+                    fontSize: 8.5,
+                    fontFamily: 'monospace',
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.6)),
+            const Spacer(),
+            if (locked) _cooldownRing(cdFrac, cd),
+          ],
+        ),
+        const SizedBox(height: 6),
+
+        // ── Aktif politika rozet stripi (size animate, chip eklenince yumuşak)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topLeft,
+          child: _activeChips(p),
+        ),
+        const SizedBox(height: 8),
+
+        // ── Tab bar ────────────────────────────────────────────────────────
+        _tabBar(),
+        const SizedBox(height: 6),
+        Container(height: 0.6, color: CozyUi.parchmentEdge),
+        const SizedBox(height: 8),
+
+        // ── Tab içeriği — fade + slide transition + size morph ────────────
+        AnimatedSize(
+          duration: const Duration(milliseconds: 230),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) {
+              final slide = Tween<Offset>(
+                begin: const Offset(0.06, 0),
+                end: Offset.zero,
+              ).animate(anim);
+              return FadeTransition(
+                opacity: anim,
+                child: SlideTransition(position: slide, child: child),
+              );
+            },
+            child: KeyedSubtree(
+              key: ValueKey(_tab),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: _tabContent(p, locked),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _cooldownRing(double frac, double sec) {
+    // TweenAnimationBuilder: yeni cooldown başlatıldığında progress 1.0'dan
+    // hızla mevcut frac'a yumuşak iner; sonra panel her frame zaten yeniler.
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: frac, end: frac),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+      builder: (context, value, _) => SizedBox(
+        width: 22, height: 22,
+        child: Stack(alignment: Alignment.center, children: [
+          SizedBox(
+            width: 22, height: 22,
+            child: CircularProgressIndicator(
+              value: value,
+              strokeWidth: 2.4,
+              valueColor: AlwaysStoppedAnimation(CozyUi.rust),
+              backgroundColor: CozyUi.parchmentEdge,
+            ),
+          ),
+          Text('${sec.ceil()}',
+              style: TextStyle(
+                  color: CozyUi.rust,
+                  fontSize: 8.5,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w800)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _activeChips(VillagePolicies p) {
+    final active = <Widget>[];
+    if (p.family != FamilyPolicy.open) {
+      active.add(_chip('${_familyIcon(p.family)} ${p.family.label}'));
+    }
+    for (final def in kPolicyDefs) {
+      if (p.isOn(def.id)) active.add(_chip('${def.icon} ${def.label}'));
+    }
+    if (active.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text('Henüz yürürlükte karar yok.',
+            style: TextStyle(
+                color: CozyUi.parchmentInk.withValues(alpha: 0.5),
+                fontSize: 10,
+                fontStyle: FontStyle.italic)),
+      );
+    }
+    return Wrap(spacing: 4, runSpacing: 4, children: active);
+  }
+
+  Widget _chip(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+        decoration: BoxDecoration(
+          color: CozyUi.ember.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: CozyUi.ember.withValues(alpha: 0.55), width: 0.7),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                color: CozyUi.parchmentInk,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700)),
+      );
+
+  Widget _tabBar() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        for (final c in PolicyCategory.values) _tabPill(c),
+      ],
+    );
+  }
+
+  Widget _tabPill(PolicyCategory c) {
+    final selected = _tab == c;
+    return InkWell(
+      onTap: () => setState(() => _tab = c),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected
+              ? CozyUi.ember.withValues(alpha: 0.22)
+              : Colors.transparent,
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? CozyUi.ember : Colors.transparent,
+              width: 1.6,
+            ),
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(c.icon, style: const TextStyle(fontSize: 14)),
+            const SizedBox(height: 1),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              style: TextStyle(
+                  color: selected
+                      ? CozyUi.parchmentInk
+                      : CozyUi.parchmentInk.withValues(alpha: 0.55),
+                  fontSize: 7.5,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5),
+              child: Text(c.label),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _tabContent(VillagePolicies p, bool locked) {
+    final widgets = <Widget>[];
+    // Aile sekmesi: mutex radyo + toggle politikalar bir arada
+    if (_tab == PolicyCategory.family) {
+      widgets.add(_subHeader('DOĞURGANLIK SINIRI'));
+      for (final fp in FamilyPolicy.values) {
+        widgets.add(_familyRadio(p, fp, locked));
+      }
+      widgets.add(const SizedBox(height: 6));
+      widgets.add(_subHeader('BONUS'));
+    }
+    final defs = kPolicyDefs.where((d) => d.category == _tab).toList();
+    for (final d in defs) {
+      widgets.add(_policyTile(d, p.isOn(d.id), locked));
+    }
+    return widgets;
+  }
+
+  Widget _subHeader(String label) => Padding(
+        padding: const EdgeInsets.only(bottom: 3, top: 1),
+        child: Text(label,
+            style: TextStyle(
+                color: CozyUi.parchmentInk.withValues(alpha: 0.5),
+                fontSize: 7.5,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0)),
+      );
+
+  Widget _policyTile(PolicyDef d, bool on, bool locked) {
+    const dur = Duration(milliseconds: 240);
+    const curve = Curves.easeOutCubic;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: locked ? null : () => widget.onToggle(d.id),
+        borderRadius: BorderRadius.circular(4),
+        child: AnimatedOpacity(
+          duration: dur,
+          opacity: locked ? 0.5 : 1.0,
+          child: AnimatedContainer(
+            duration: dur,
+            curve: curve,
+            padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+            margin: const EdgeInsets.symmetric(vertical: 1.5),
+            decoration: BoxDecoration(
+              color: on
+                  ? CozyUi.ember.withValues(alpha: 0.10)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+              border: Border(
+                left: BorderSide(
+                  color: on ? CozyUi.ember : Colors.transparent,
+                  width: 2.5,
+                ),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AnimatedContainer(
+                  duration: dur,
+                  curve: curve,
+                  width: 26, height: 26,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: on
+                        ? CozyUi.ember.withValues(alpha: 0.22)
+                        : const Color(0x18000000),
+                    boxShadow: on
+                        ? [
+                            BoxShadow(
+                                color: CozyUi.ember.withValues(alpha: 0.45),
+                                blurRadius: 6,
+                                spreadRadius: 0)
+                          ]
+                        : null,
+                  ),
+                  child: Text(d.icon, style: const TextStyle(fontSize: 14)),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AnimatedDefaultTextStyle(
+                        duration: dur,
+                        style: TextStyle(
+                            color: on
+                                ? CozyUi.parchmentInk
+                                : CozyUi.parchmentInk
+                                    .withValues(alpha: 0.7),
+                            fontSize: 11.5,
+                            fontWeight:
+                                on ? FontWeight.w800 : FontWeight.w600),
+                        child: Text(d.label),
+                      ),
+                      const SizedBox(height: 1),
+                      _consequenceLine('↑', d.benefit, CozyUi.sage),
+                      if (d.cost != null)
+                        _consequenceLine('↓', d.cost!, CozyUi.rust),
+                    ],
+                  ),
+                ),
+                // Sağda slim switch çubuğu — dot animasyonlu sağdan/soldan kayar
+                AnimatedContainer(
+                  duration: dur,
+                  curve: curve,
+                  width: 18, height: 8,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(4),
+                    color: on
+                        ? CozyUi.ember
+                        : CozyUi.parchmentInk.withValues(alpha: 0.18),
+                  ),
+                  alignment:
+                      on ? Alignment.centerRight : Alignment.centerLeft,
+                  child: AnimatedAlign(
+                    duration: dur,
+                    curve: curve,
+                    alignment:
+                        on ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      width: 7, height: 7,
+                      margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: CozyUi.parchment,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _familyRadio(VillagePolicies p, FamilyPolicy fp, bool locked) {
+    const dur = Duration(milliseconds: 220);
+    const curve = Curves.easeOutCubic;
+    final selected = p.family == fp;
+    final cb = widget.onSetFamily;
+    return InkWell(
+      onTap: (locked || cb == null) ? null : () => cb(fp),
+      borderRadius: BorderRadius.circular(4),
+      child: AnimatedOpacity(
+        duration: dur,
+        opacity: locked ? 0.5 : 1.0,
+        child: AnimatedContainer(
+          duration: dur,
+          curve: curve,
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          decoration: BoxDecoration(
+            color: selected
+                ? CozyUi.ember.withValues(alpha: 0.10)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(4),
+            border: Border(
+              left: BorderSide(
+                color: selected ? CozyUi.ember : Colors.transparent,
+                width: 2.5,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Text(_familyIcon(fp), style: const TextStyle(fontSize: 14)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AnimatedDefaultTextStyle(
+                      duration: dur,
+                      style: TextStyle(
+                          color: selected
+                              ? CozyUi.parchmentInk
+                              : CozyUi.parchmentInk
+                                  .withValues(alpha: 0.7),
+                          fontSize: 11.5,
+                          fontWeight: selected
+                              ? FontWeight.w800
+                              : FontWeight.w600),
+                      child: Text(fp.label),
+                    ),
+                    const SizedBox(height: 1),
+                    _consequenceLine('↑', fp.benefit, CozyUi.sage),
+                    if (fp.cost != null)
+                      _consequenceLine('↓', fp.cost!, CozyUi.rust),
+                  ],
+                ),
+              ),
+              // Radio button — scale-in dot when selected
+              AnimatedContainer(
+                duration: dur,
+                curve: curve,
+                width: 12, height: 12,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: selected
+                          ? CozyUi.ember
+                          : CozyUi.parchmentInk.withValues(alpha: 0.45),
+                      width: 1.5),
+                  color: selected ? CozyUi.ember : Colors.transparent,
+                ),
+                child: AnimatedScale(
+                  duration: dur,
+                  curve: Curves.easeOutBack,
+                  scale: selected ? 1.0 : 0.0,
+                  child: const Center(
+                    child: Text('•',
+                        style: TextStyle(
+                            color: CozyUi.parchment,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w900,
+                            height: 0.7)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _familyIcon(FamilyPolicy fp) => switch (fp) {
+        FamilyPolicy.open => '🌍',
+        FamilyPolicy.oneChild => '1️⃣',
+        FamilyPolicy.twoChild => '2️⃣',
+      };
+
+  /// Fayda/bedel satırı — sol oka göre yeşil (↑ fayda) ya da rust (↓ bedel).
+  /// Her politika bir bütün: ne kazanırsın + neyi feda edersin görünür.
+  Widget _consequenceLine(String prefix, String text, Color color) => Padding(
+        padding: const EdgeInsets.only(top: 1),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(prefix,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    height: 1.1)),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(text,
+                  style: TextStyle(
+                      color: color.withValues(alpha: 0.92),
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      height: 1.2)),
+            ),
+          ],
+        ),
+      );
 }

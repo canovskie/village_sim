@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../characters/npc_visual.dart';
 import '../core/constants.dart';
 import '../systems/path_context.dart';
 import '../systems/pathfinder.dart';
@@ -58,6 +59,20 @@ abstract class WorkerEntity {
   final double spawnCol;
   final double spawnRow;
 
+  /// Per-NPC kalıcı görsel kimlik — ten/saç/göz/kıyafet tonu. Renderer bunu
+  /// okuyup aynı meslekten NPC'lerin tıpatıp aynı görünmesini engeller.
+  /// Constructor'da `visual` verilmediyse spawn pos hash'inden otomatik üretilir.
+  final NpcVisual visual;
+
+  // ── Meşale (gece dış mekan) — tek karar noktası, smooth fade ─────────────
+  /// 0..1 yumuşatılmış meşale parlaklığı. `tickTorch` ile her tick güncellenir.
+  /// Lighting + sprite + glow hepsi bu değeri okur (tek doğruluk).
+  double torchLevel = 0.0;
+  /// Per-NPC sabit flicker fazı — spawn pos hash'inden lazy. Tüm meşalelerin
+  /// aynı anda titrememesi için.
+  double? _torchPhase;
+  double get torchPhase => _torchPhase ??= (spawnCol * 0.41 + spawnRow * 0.73);
+
   // ── Idle wander state (idleWander tarafından yönetilir) ────────────────────
   double _idleTargetX = -1;
   double _idleTargetY = -1;
@@ -65,6 +80,25 @@ abstract class WorkerEntity {
 
   // ── İş arama throttle ──────────────────────────────────────────────────────
   double _workSearchCd = 0.0;
+
+  // ── Stuck-detect + yield ───────────────────────────────────────────────────
+  // Düz çizgi hareket + separation iki NPC'yi tam karşıdan kilitleyebilir;
+  // tangential bias çoğu durumu çözer ama dar koridor + 3+ entity yığını
+  // hâlâ tıkayabilir. Bu sistem fallback: isWalking olmasına rağmen yer
+  // değişimi yoksa NPC kısa süreliğine durur → komşulardan biri pas geçer.
+  double _stuckPollTimer = 0.0;
+  double _stuckRefX = 0.0;
+  double _stuckRefY = 0.0;
+  /// > 0 iken hareket no-op (deadlock kırma için yer veriyor).
+  double _yieldTimer = 0.0;
+
+  // ── Micro-idle: nefes, sway, contextual glance ───────────────────────────
+  // NPC dururken sin-bazlı zar zor belirgin gövde sallanması + bağlamsal
+  // "etrafa bakma" anları (yoldan çıkarken, yieldden çıkarken, yeni hedef
+  // seçince, yolculuk bitince). Random timer YOK — her bakış bir olaya bağlı.
+  double _glanceTimer = 0.0;
+  bool   _prevOnRoad  = false;
+  bool   _prevIsWalking = false;
 
   /// Boştaki işçinin her frame tüm hedef listesini taramasını engeller.
   /// ~[kWorkSearchInterval]'de bir true döner; aradaki frame'lerde işçi
@@ -76,19 +110,31 @@ abstract class WorkerEntity {
     return true;
   }
 
-  WorkerEntity({required double startCol, required double startRow})
-      : gridX    = startCol,
+  WorkerEntity({
+    required double startCol,
+    required double startRow,
+    NpcVisual? visual,
+  })  : gridX    = startCol,
         gridY    = startRow,
         renderX  = startCol,
         renderY  = startRow,
         spawnCol = startCol,
-        spawnRow = startRow;
+        spawnRow = startRow,
+        visual   = visual ?? NpcVisual.fromSeed(_workerAutoSeed(startCol, startRow));
+
+  static int _workerAutoSeed(double c, double r) =>
+      ((c * 1009).toInt() * 13) ^
+      ((r * 1031).toInt() * 31) ^
+      (DateTime.now().microsecondsSinceEpoch & 0xFFFF);
 
   /// Her tick ana loop çağırır.  Render pozisyonu ve hareket yoğunluğunu
   /// günceller.
   /// - Render exp-smoothing: ~0.15 sn'de gridX/Y'ye yetişir
   /// - moveIntensity: 0.20 sn'de isWalking'e yetişir
   void smoothMotion(double dt) {
+    _tickStuck(dt);
+    _tickIdleAnim(dt);
+
     final kPos  = 1 - exp(-dt * 14.0);
     renderX += (gridX - renderX) * kPos;
     renderY += (gridY - renderY) * kPos;
@@ -96,6 +142,106 @@ abstract class WorkerEntity {
     final targetIntensity = isWalking ? 1.0 : 0.0;
     final kInt = 1 - exp(-dt * 8.0);
     moveIntensity += (targetIntensity - moveIntensity) * kInt;
+  }
+
+  /// 0.7s aralıkla yer değişimini ölç; isWalking olmasına rağmen <0.10 tile
+  /// ilerlemediyse NPC kilitlenmiş → hash-bazlı desync ile 0.5-1.2s yield.
+  /// Yield sırasında _stepDt/_stepFixed no-op; komşulardan biri pas geçer.
+  void _tickStuck(double dt) {
+    if (_yieldTimer > 0) {
+      _yieldTimer -= dt;
+      return;
+    }
+    _stuckPollTimer -= dt;
+    if (_stuckPollTimer > 0) return;
+    _stuckPollTimer = 0.7;
+
+    if (!isWalking) {
+      _stuckRefX = gridX;
+      _stuckRefY = gridY;
+      return;
+    }
+
+    final dxR = gridX - _stuckRefX;
+    final dyR = gridY - _stuckRefY;
+    if (dxR * dxR + dyR * dyR < 0.01) {
+      // Hash-desync — komşu NPC'lerin aynı anda yield edip aynı anda
+      // çıkmaması için her entity'nin yield süresi farklı.
+      final seed = (identityHashCode(this) & 0xFF) / 255.0;
+      _yieldTimer = 0.5 + seed * 0.7;
+      // Engelle karşılaşan NPC "etrafa bakıp" başka yol arar gibi görünür.
+      glanceAround(duration: _yieldTimer);
+    }
+    _stuckRefX = gridX;
+    _stuckRefY = gridY;
+  }
+
+  /// Glance state'i decrement eder + walking→idle geçişinde bir kez bakış.
+  /// Diğer trigger'lar (yol bitimi, yield, yeni hedef) ilgili call site'lardan
+  /// `glanceAround()`'u çağırır.
+  void _tickIdleAnim(double dt) {
+    if (_glanceTimer > 0) _glanceTimer -= dt;
+    // Yolculuk yeni bitti (walking → idle) → varış kontrolü bakışı.
+    if (_prevIsWalking && !isWalking) {
+      glanceAround(duration: 0.9);
+    }
+    _prevIsWalking = isWalking;
+  }
+
+  /// Bağlamsal "etrafa bak" — geçici süreyle facingRight'ı ters gösterir.
+  /// Yol bitiminde, yieldden çıkarken, yeni hedef seçildiğinde, varışta vb.
+  /// çağrılır. Hash-bazlı süre varyasyonu desync sağlar.
+  void glanceAround({double duration = 1.0}) {
+    final seed = (identityHashCode(this) & 0xFF) / 255.0;
+    final dur = duration * (0.85 + seed * 0.3);
+    if (_glanceTimer < dur) _glanceTimer = dur;
+  }
+
+  /// Her NPC'ye özgü deterministik faz offset'i (hashCode'dan). Nefes/sway
+  /// rastgele görünür ama frame-to-frame stable.
+  double get _idlePhaseSeed =>
+      (identityHashCode(this) & 0xFFFF) / 65535.0 * 6.28318;
+
+  /// Idle gövde scale Y modülasyonu — nefes (% 1.2 maks). Yürürken etkisiz.
+  double idleBreathScale(double time) {
+    final idleAmt = 1.0 - moveIntensity;
+    if (idleAmt < 0.05) return 1.0;
+    return 1.0 + sin(time * 0.7 + _idlePhaseSeed) * 0.012 * idleAmt;
+  }
+
+  /// Idle gövde rotation — hafif yan-yana sallanma (~%1.3 rad ≈ 0.75°).
+  double idleSwayRotation(double time) {
+    final idleAmt = 1.0 - moveIntensity;
+    if (idleAmt < 0.05) return 0.0;
+    return sin(time * 0.45 + _idlePhaseSeed * 1.7) * 0.022 * idleAmt;
+  }
+
+  /// Render tarafı facing — bağlamsal glance sırasında ters çevirir.
+  bool get effectiveFacingRight =>
+      _glanceTimer > 0 ? !facingRight : facingRight;
+
+  /// Meşale eligibility — subclass override edebilir. Worker'lar (oduncu,
+  /// madenci, çoban, vd) her zaman dışarıda → gece torch hep yanmalı.
+  /// isWalking koşulu çoğu state'i (chopping/mining/idle/sleeping ileride)
+  /// dışarıda bırakıyordu → meşale neredeyse hiç görünmüyordu (user bug).
+  /// VillagerEntity uyku/iç mekan/ateşte oturma için override eder.
+  bool get torchEligibleDefault => true;
+
+  /// Meşale fade tick — scene tarafı her tick çağırır (dayLight + rain ile).
+  /// Smooth lerp: fadeIn 0.6/s, fadeOut 0.35/s. dlFade penceresi 0.40→0.20
+  /// (alacakaranlık başında yanar, gecede tam). Yağmur 0..0.35 söndürür.
+  void tickTorch(double dt, double dayLight, double rainIntensity,
+      {bool? eligibleOverride}) {
+    final eligible = eligibleOverride ?? torchEligibleDefault;
+    final dlFade = (1.0 - (dayLight - 0.20) / 0.20).clamp(0.0, 1.0);
+    final rainFade = (1.0 - rainIntensity / 0.35).clamp(0.0, 1.0);
+    final target = (eligible ? dlFade * rainFade : 0.0).clamp(0.0, 1.0);
+    final rate = (target > torchLevel) ? 0.6 : 0.35;
+    final delta = target - torchLevel;
+    final step = rate * dt;
+    torchLevel = (delta.abs() < step)
+        ? target
+        : torchLevel + (delta > 0 ? step : -step);
   }
 
   double get depth => gridX + gridY;
@@ -190,6 +336,7 @@ abstract class WorkerEntity {
   }
 
   void _stepFixed(double tx, double ty, double step) {
+    if (_yieldTimer > 0) return; // deadlock yield
     final dx   = tx - gridX;
     final dy   = ty - gridY;
     final dist = sqrt(dx * dx + dy * dy);
@@ -203,6 +350,7 @@ abstract class WorkerEntity {
   }
 
   void _stepDt(double tx, double ty, double dt) {
+    if (_yieldTimer > 0) return; // deadlock yield
     final dx   = tx - gridX;
     final dy   = ty - gridY;
     final dist = sqrt(dx * dx + dy * dy);
@@ -212,6 +360,14 @@ abstract class WorkerEntity {
     gridX += (dx / dist) * step;
     gridY += (dy / dist) * step;
     facingRight = dx > 0;
+
+    // Yol bitimi tetiği — yoldan toprağa geçişte ve hedef hâlâ uzaktaysa
+    // NPC bir an "şimdi nereden gideyim" bakışı atar.
+    final onRoad = roadSystem?.has(gridX.round(), gridY.round()) ?? false;
+    if (_prevOnRoad && !onRoad && dist > 1.5) {
+      glanceAround(duration: 1.1);
+    }
+    _prevOnRoad = onRoad;
   }
 
   /// Boştayken rasgele bir hedefe doğru yavaşça yürür.
@@ -230,6 +386,8 @@ abstract class WorkerEntity {
       if (result != null) {
         _idleTargetX = result.$1;
         _idleTargetY = result.$2;
+        // Yeni hedef → kısa "nereye gideyim" bakışı.
+        glanceAround(duration: 0.75);
       }
       final (lo, hi) = idleIntervalRange;
       _idleTimer = lo + rng.nextDouble() * (hi - lo);

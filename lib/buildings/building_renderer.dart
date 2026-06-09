@@ -37,6 +37,9 @@ class BuildingRenderer {
     await _loadSprite(BuildingType.mineBuilding, 'assets/buildings/mine.png');
     // TODO: dedicated barn.png — şimdilik stable.png'yi paylaşır.
     await _loadSprite(BuildingType.barn,         'assets/buildings/stable.png');
+    await _loadSprite(BuildingType.floristCottage, 'assets/buildings/floristcottage.png');
+    await _loadSprite(BuildingType.chickenCoop,    'assets/buildings/chickencoop.png');
+    await _loadSprite(BuildingType.lamppost,       'assets/buildings/lamppost.png');
   }
 
   static Future<void> _loadSprite(BuildingType type, String path) async {
@@ -63,9 +66,16 @@ class BuildingRenderer {
       Offset back, Offset left, Offset right, Offset front,
       {double time = 0, int seed = 0, double dayLight = 1.0,
        double rainIntensity = 0.0, bool isActive = false}) {
-    // Lamppost — asset yok, procedurel çizim.
-    if (type == BuildingType.lamppost) {
+    // Lamppost — PNG yüklendiyse normal asset yolu; yoksa procedurel fallback.
+    if (type == BuildingType.lamppost && !_cache.containsKey(type)) {
       _drawLamppost(canvas, back, left, right, front, time, seed, dayLight);
+      return;
+    }
+    // Çiçekçi Kulübesi — PNG asset gelene kadar procedurel placeholder çizilir
+    // (küçük ahşap kulübe + diamond planter). PNG yüklendiğinde _cache hit ile
+    // bu dal otomatik atlanır.
+    if (type == BuildingType.floristCottage && !_cache.containsKey(type)) {
+      _drawFlowerGarden(canvas, back, left, right, front, time, seed);
       return;
     }
 
@@ -109,6 +119,108 @@ class BuildingRenderer {
   static final _pLampPostBase = Paint()..color = const Color(0xFF7A6E60)..isAntiAlias = false;
   static final _pLampPost     = Paint()..color = const Color(0xFF5A3E20)..isAntiAlias = false;
   static final _pLampCage     = Paint()..color = const Color(0xFF2A1A10)..isAntiAlias = false;
+
+  // ── Çiçek bahçesi (procedurel) ──────────────────────────────────────────────
+  // Küçük ahşap planter "kutu" — diamond izometri çerçevesinde. Üstünde
+  // toprak + birkaç renkli çiçek noktası. Asıl çiçek demetleri scene'in
+  // spawn ettiği gerçek DecorEntity'lerle çevreye serpilir.
+  static final _pPlanterWood   = Paint()..color = const Color(0xFF7A5A32)..isAntiAlias = true;
+  static final _pPlanterShade  = Paint()..color = const Color(0xFF5A3E20)..isAntiAlias = true;
+  static final _pPlanterSoil   = Paint()..color = const Color(0xFF4A3018)..isAntiAlias = true;
+  static final _pPlanterMoss   = Paint()..color = const Color(0xFF6B8A4A)..isAntiAlias = true;
+
+  static void _drawFlowerGarden(Canvas canvas,
+      Offset back, Offset left, Offset right, Offset front,
+      double time, int seed) {
+    // Izometrik diamond — 4 köşesi tile sınırına yakın küçültülmüş
+    final cx = (back.dx + front.dx) / 2;
+    final cy = (back.dy + front.dy) / 2;
+    final tileW = (right.dx - left.dx).abs();
+    final s = tileW / 64.0;
+    // Planter boyut — tile'ın iç ~%65'i, yüksekliği isometric yarısı + kalınlık
+    final halfW = tileW * 0.32;
+    final halfH = halfW * 0.5; // 2:1 iso
+    final depth = 4.0 * s; // ahşap kenar yüksekliği
+
+    // Üst diamond (planter ağzı — toprak)
+    final topPath = Path()
+      ..moveTo(cx, cy - halfH)
+      ..lineTo(cx + halfW, cy)
+      ..lineTo(cx, cy + halfH)
+      ..lineTo(cx - halfW, cy)
+      ..close();
+    // Alt diamond (depth ofsetli — gölgeli kenar)
+    final botPath = Path()
+      ..moveTo(cx, cy - halfH + depth)
+      ..lineTo(cx + halfW, cy + depth)
+      ..lineTo(cx, cy + halfH + depth)
+      ..lineTo(cx - halfW, cy + depth)
+      ..close();
+
+    // 1) Ahşap "yan duvarlar" — front-left ve front-right yamuk
+    final wallL = Path()
+      ..moveTo(cx - halfW, cy)
+      ..lineTo(cx, cy + halfH)
+      ..lineTo(cx, cy + halfH + depth)
+      ..lineTo(cx - halfW, cy + depth)
+      ..close();
+    final wallR = Path()
+      ..moveTo(cx, cy + halfH)
+      ..lineTo(cx + halfW, cy)
+      ..lineTo(cx + halfW, cy + depth)
+      ..lineTo(cx, cy + halfH + depth)
+      ..close();
+    canvas.drawPath(wallL, _pPlanterShade);
+    canvas.drawPath(wallR, _pPlanterWood);
+
+    // 2) Üst toprak (planter içi)
+    canvas.drawPath(topPath, _pPlanterSoil);
+    // Toprak üstüne hafif yeşil tüy (moss/grass)
+    final mossPath = Path()
+      ..moveTo(cx, cy - halfH * 0.7)
+      ..lineTo(cx + halfW * 0.7, cy)
+      ..lineTo(cx, cy + halfH * 0.7)
+      ..lineTo(cx - halfW * 0.7, cy)
+      ..close();
+    canvas.drawPath(mossPath, _pPlanterMoss);
+
+    // 3) Üst çerçeve hairline — diamond outline (ahşap üst kenar)
+    final framePaint = Paint()
+      ..color = const Color(0xFF8A6840)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2 * s
+      ..isAntiAlias = true;
+    canvas.drawPath(topPath, framePaint);
+
+    // 4) Birkaç çiçek noktası — seed bazlı renk varyantı
+    final rng = (seed * 9973) & 0xFFFF;
+    final colors = const [
+      Color(0xFFD94833), // gelincik kırmızı
+      Color(0xFFE6B54A), // buttercup sarı
+      Color(0xFFB39AC9), // lavanta mor
+      Color(0xFFF0E6D2), // papatya cream
+    ];
+    final dotR = 1.8 * s;
+    // 4 simetrik konum + offset
+    final dots = <Offset>[
+      Offset(cx, cy - halfH * 0.35),
+      Offset(cx + halfW * 0.35, cy),
+      Offset(cx, cy + halfH * 0.35),
+      Offset(cx - halfW * 0.35, cy),
+    ];
+    for (int i = 0; i < dots.length; i++) {
+      final col = colors[(rng + i) % colors.length];
+      canvas.drawCircle(dots[i], dotR, Paint()..color = col..isAntiAlias = true);
+      // Hafif yaprak — küçük yeşil nokta yanda
+      canvas.drawCircle(
+          dots[i] + Offset(-2 * s, 1 * s),
+          1.2 * s,
+          Paint()..color = const Color(0xFF6B8A4A)..isAntiAlias = true);
+    }
+    // Suppress unused warnings
+    if (botPath.getBounds().width < 0) canvas.drawPath(botPath, _pPlanterShade);
+    if (time < 0) {} // tick unused
+  }
 
   static void _drawLamppost(Canvas canvas,
       Offset back, Offset left, Offset right, Offset front,

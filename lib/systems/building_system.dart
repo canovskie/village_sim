@@ -117,7 +117,6 @@ VillageStats updateBuildings({
 }) {
   final stats = computeVillageStats(buildings,
       starvation: starvation, eventMorale: eventMorale);
-  int remainingHousing = freeHousingSlots;
 
   for (final b in buildings) {
     final f = b.fn;
@@ -129,11 +128,11 @@ VillageStats updateBuildings({
       case BuildingRole.trade:
         _tickMarket(dt, b, f, stockpile);
       case BuildingRole.civic:
-        if (f.civicEffect == CivicEffect.populationGrowth) {
-          remainingHousing = _tickGrowth(
-            dt, b, f, stockpile, stats, remainingHousing, onSpawnVillager,
-          );
-        }
+        // Nüfus büyümesi artık belediye-bazlı pump değil; doğal doğum
+        // (couple → fertilityDays → scene._tickReproduction) ile geliyor.
+        // Belediye binası civic role'unu sürdürür (moral/kapasite katkısı
+        // computeVillageStats üzerinden), bu döngüde özel iş yapmaz.
+        break;
       default:
         break;
     }
@@ -179,41 +178,6 @@ bool sellAtMarket(ResourceBundle stockpile, ResourceKind kind) {
   stockpile.add(kind, -batch);
   stockpile.gold += gold;
   return true;
-}
-
-// ─── Nüfus büyümesi (belediye) ───────────────────────────────────────────────
-
-int _tickGrowth(
-  double dt,
-  BuildingEntity b,
-  BuildingFunction f,
-  ResourceBundle stockpile,
-  VillageStats stats,
-  int remainingHousing,
-  void Function(BuildingEntity) onSpawnVillager,
-) {
-  final canGrow = remainingHousing > 0 &&
-      stockpile.food >= kPopulationGrowthFoodFloor;
-
-  if (!canGrow) {
-    // İhtiyaç karşılanmıyorsa ilerleme yavaşça gerilesin.
-    b.growthProgress = (b.growthProgress - dt * 0.05).clamp(0.0, 1.0);
-    return remainingHousing;
-  }
-
-  // Süre: temel saniye / moral çarpanı → mutlu köy daha hızlı büyür.
-  final growthTime = f.civicValue / stats.growthMultiplier;
-  b.growthProgress += dt / growthTime;
-
-  if (b.growthProgress >= 1.0) {
-    b.growthProgress = 0.0;
-    if (stockpile.food >= kPopulationGrowthFoodCost) {
-      stockpile.food -= kPopulationGrowthFoodCost;
-      onSpawnVillager(b);
-      remainingHousing -= 1;
-    }
-  }
-  return remainingHousing;
 }
 
 // ─── Kapasite kırpma ─────────────────────────────────────────────────────────

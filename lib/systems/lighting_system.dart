@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../buildings/building_entity.dart';
 import '../buildings/building_function.dart';
@@ -41,27 +42,37 @@ class LightingSystem {
   /// Gündüz (dayLight ≈ 1) liste neredeyse boş döner; karardıkça önce ateş
   /// yeri, sonra fenerler, sonra ev pencereleri ve aktif işyerleri devreye
   /// girer. Meşaleli yürüyen NPC'ler tam karanlıkta eklenir.
+  /// [rainIntensity] — ateş yeri ışığı yağmurla sönen alevle aynı eğride
+  /// kısılır (alev `building_renderer` 0..0.30 → 1..0 fade).
   static List<LightSource> collect({
     required List<BuildingEntity> buildings,
     required List<VillagerEntity> villagers,
     required double dayLight,
+    double rainIntensity = 0.0,
+    double time = 0.0,
   }) {
     final result = <LightSource>[];
     final darkness = (1.0 - dayLight).clamp(0.0, 1.0);
     if (darkness < 0.05) return result;
+
+    // Ateş alevi rainIntensity 0..0.30 arasında 1→0 sönüyor (building_renderer).
+    // Işık da aynı eğride sönsün — alev yoksa halo da yok.
+    final fireRainFade = (1.0 - rainIntensity / 0.30).clamp(0.0, 1.0);
 
     for (final b in buildings) {
       final cx = b.col + b.cols / 2.0;
       final cy = b.row + b.rows / 2.0;
 
       if (b.type == BuildingType.firepit) {
+        // Yağmur alevi söndürdüyse halo da atlanır.
+        if (fireRainFade < 0.02) continue;
         // Ateş yeri — sıcak ama göz almasın. Core alpha = intensity × 190
         // (painter); intensity 0.55'e çekildi → peak ~105 alpha, yumuşak.
         // Radius da kısaldı: dış halo bina ölçeğinde kalır, "dev güneş" değil.
         result.add(LightSource(
           gx: cx, gy: cy,
-          radius: 3.8 + darkness * 0.8, // 3.8–4.6 tile (önceden 5.5–7.0)
-          intensity: 0.55,              // önceden 1.0
+          radius: (3.8 + darkness * 0.8) * fireRainFade,
+          intensity: 0.55 * fireRainFade,
           warm: const Color(0xFFFF9540),
         ));
       } else if (b.type == BuildingType.lamppost) {
@@ -93,17 +104,23 @@ class LightingSystem {
       }
     }
 
-    // Meşaleli yürüyen NPC — yalnız gece, sınırlı alan.
-    if (darkness > 0.40) {
-      for (final v in villagers) {
-        if (v.isInsideBuilding || v.isSleeping || !v.isWalking) continue;
-        result.add(LightSource(
-          gx: v.renderX, gy: v.renderY,
-          radius: 1.6 + darkness * 0.4,
-          intensity: darkness * 0.85,
-          warm: const Color(0xFFFF8A30),
-        ));
-      }
+    // Meşaleli NPC — yalnız `torchLevel > epsilon` olanlar (entity update'te
+    // hesaplanmış smooth değer; eligibility + dayLight + rain hep oradan).
+    // Pozisyon: NPC merkezinden hafif yukarı (torch ucu sprite'ın baş üstü;
+    // grid uzayında ~0.45 tile yukarı). Per-NPC flicker fazıyla intensity
+    // hafifçe nabız atar — tek tip parıltı yerine canlı topluluk hissi.
+    for (final v in villagers) {
+      if (v.torchLevel < 0.05) continue;
+      // Flicker: ±%8 intensity wobble, per-NPC sabit fazda.
+      final flicker = 1.0 + sin(time * 4.3 + v.torchPhase) * 0.08;
+      final lv = v.torchLevel * flicker;
+      result.add(LightSource(
+        gx: v.renderX,
+        gy: v.renderY - 0.45,             // torch head ~yarım tile yukarı
+        radius: (1.7 + darkness * 0.5) * v.torchLevel,
+        intensity: (0.85 * lv).clamp(0.0, 1.0),
+        warm: const Color(0xFFFF8A30),
+      ));
     }
 
     return result;

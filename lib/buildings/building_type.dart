@@ -65,6 +65,10 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.48, 0.42, LightKind.lantern),
     BuildingLight(0.48, 0.54, LightKind.lantern),
   ],
+  // Lantern fener — sprite üst-sağda asılı. Light editor ile rafinasyon.
+  BuildingType.lamppost: [
+    BuildingLight(0.62, 0.40, LightKind.lantern),
+  ],
 };
 
 // ─── Baca / duman noktaları ────────────────────────────────────────────────
@@ -122,6 +126,8 @@ enum BuildingType {
   mineBuilding, // 2x2 — mine.png        (maden ocağı)
   barn,         // 3x2 — geçici stable.png (TODO: dedicated barn.png)
   lamppost,     // 1x1 — procedurel çizim (asset yok). Gece ışık kaynağı.
+  floristCottage, // 2x2 — floristcottage.png. Çiçekçi kulübesi: çevreye çiçek spawn + Florist NPC sular.
+  chickenCoop,    // 2x2 — chickencoop.png. Tavuk kümesi: 3-4 tavuk spawn + periyodik yumurta (food).
 }
 
 class BuildingMeta {
@@ -136,6 +142,12 @@ class BuildingMeta {
   /// lamppost = etrafında durulan dekor; woodenHouse = içine girilen ev).
   /// false → katı bina, pathfinder + wander engel sayar.
   final bool walkable;
+  /// Bina merkezinden tile cinsinden etki yarıçapı (Öklid mesafesi).
+  /// 0 → etkisiz. Çiçek bahçesi gibi dekoratif etki, well için su erişimi,
+  /// tavern için moral menzili, firepit için ısı/ışık menzili vs.
+  /// Sistemler bu alanı bina-özel yorumlar (place hook'unda çiçek dağıtma,
+  /// civic effect bir radius içindeki villager'a uygulama, vb.).
+  final double effectRadius;
 
   const BuildingMeta({
     required this.cols,
@@ -150,6 +162,7 @@ class BuildingMeta {
     this.groundXCenter = 0.5,
     this.spriteScale = 1.0,
     this.walkable = false,
+    this.effectRadius = 0.0,
   });
 }
 
@@ -168,9 +181,12 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     rows: 1,
     label: 'Ateş Yeri',
     cost: ResourceCost.empty, // ücretsiz başlangıç
-    groundXCenter: 0.50,
+    // Asset 1179×1136 → 1134×1064 trimlendi; anchor pixel sabit, oran güncel.
+    groundXCenter: 0.5066,
+    groundY: 1.069,
     spriteScale: 0.62,
     walkable: true, // etrafında toplanılan dekor
+    effectRadius: 4.0, // ısı + ışık menzili, gece toplanma noktası
   ),
   BuildingType.lumberCamp: BuildingMeta(
     cols: 2,
@@ -195,6 +211,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     cost: ResourceCost(wood: 4, stone: 8),
     groundXCenter: 0.5,
     walkable: true, // su alma noktası — etrafından dolaşılmaz, yanına gelinir
+    effectRadius: 5.0, // su erişimi: yakın evler/farmlar otomatik sulanır
   ),
   BuildingType.lamppost: BuildingMeta(
     cols: 1,
@@ -203,6 +220,25 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     cost: ResourceCost(wood: 2, iron: 1),
     groundXCenter: 0.50,
     walkable: true, // 1x1 dekor
+    effectRadius: 3.5, // gece ışık menzili
+  ),
+  BuildingType.floristCottage: BuildingMeta(
+    cols: 2,
+    rows: 2,
+    label: 'Çiçekçi Kulübesi',
+    cost: ResourceCost(wood: 16, stone: 4),
+    groundXCenter: 0.50,
+    spriteScale: 1.0,
+    effectRadius: 4.5, // çiçekçi bu menzilde dolaşır + çevreye çiçek serpilir
+  ),
+  BuildingType.chickenCoop: BuildingMeta(
+    cols: 2,
+    rows: 2,
+    label: 'Tavuk Kümesi',
+    cost: ResourceCost(wood: 14, stone: 2),
+    groundXCenter: 0.50,
+    spriteScale: 1.0,
+    effectRadius: 3.5, // tavukların dolaştığı menzil
   ),
   BuildingType.woodenHouse: BuildingMeta(
     cols: 2,
@@ -226,6 +262,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     label: 'Taverna',
     cost: ResourceCost(wood: 22, stone: 10, food: 6),
     groundXCenter: 0.51,
+    effectRadius: 6.0, // moral menzili
   ),
   BuildingType.mill: BuildingMeta(
     cols: 2,

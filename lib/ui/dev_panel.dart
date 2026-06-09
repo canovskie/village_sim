@@ -53,6 +53,18 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onStartChat;
   final VoidCallback onClearActivities;
 
+  // Görsel test "full performans" godmode aksiyonları
+  final VoidCallback onSeedShowcase;
+  final VoidCallback onSetDawn;
+  final VoidCallback onSetNoon;
+  final VoidCallback onSetDusk;
+  final VoidCallback onSetNight;
+  final VoidCallback onToggleRain;
+  final VoidCallback onAllPolicies;
+  final VoidCallback onClearPolicies;
+  final VoidCallback onMakeSage;
+  final VoidCallback onSpawnMigrant;
+
   const DevPanel({
     super.key,
     required this.godMode,
@@ -88,6 +100,16 @@ class DevPanel extends StatelessWidget {
     required this.onStartDance,
     required this.onStartChat,
     required this.onClearActivities,
+    required this.onSeedShowcase,
+    required this.onSetDawn,
+    required this.onSetNoon,
+    required this.onSetDusk,
+    required this.onSetNight,
+    required this.onToggleRain,
+    required this.onAllPolicies,
+    required this.onClearPolicies,
+    required this.onMakeSage,
+    required this.onSpawnMigrant,
   });
 
   static const _accent = Color(0xFFE9A23B);
@@ -117,6 +139,33 @@ class DevPanel extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        _section('Görsel Test (Full Godmode)'),
+                        _bigPrimaryBtn(
+                          '🎭  Showcase Köyü',
+                          'GodMode + tüm bina tipleri + tarla + ahır + 12 NPC + yaşlılar',
+                          onSeedShowcase,
+                        ),
+                        const SizedBox(height: 5),
+                        _wrapButtons([
+                          _DevBtn(godMode ? '⚡ GodMode AÇIK' : '⚡ GodMode',
+                              onToggleGod, active: godMode),
+                          _DevBtn('🌅 Şafak', onSetDawn),
+                          _DevBtn('☀ Öğle', onSetNoon),
+                          _DevBtn('🌆 Akşam', onSetDusk),
+                          _DevBtn('🌙 Gece', onSetNight),
+                          _DevBtn(rainIntensity > 0.05
+                              ? '☂ Yağmur KAPAT'
+                              : '🌧 Yağmur AÇ', onToggleRain,
+                              active: rainIntensity > 0.05),
+                        ]),
+                        const SizedBox(height: 5),
+                        _wrapButtons([
+                          _DevBtn('📜 Tüm Yasaları Aç', onAllPolicies),
+                          _DevBtn('🗒 Yasaları Sıfırla', onClearPolicies),
+                          _DevBtn('👵 Bilge Yap', onMakeSage),
+                          _DevBtn('🚶 Göçmen Çağır', onSpawnMigrant),
+                        ]),
+                        const SizedBox(height: 14),
                         _section('Hızlı Kurulum'),
                         _bigPrimaryBtn(
                           '🏡  Yaşayan Köy Kur',
@@ -170,8 +219,6 @@ class DevPanel extends StatelessWidget {
                         const SizedBox(height: 14),
                         _section('Diğer'),
                         _wrapButtons([
-                          _DevBtn(godMode ? '⚡ GodMode AÇIK' : '⚡ GodMode',
-                              onToggleGod, active: godMode),
                           _DevBtn('🧹 Efektleri Temizle', onClearEffects),
                         ]),
                       ],

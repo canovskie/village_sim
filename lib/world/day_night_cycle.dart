@@ -18,6 +18,23 @@ class DayNightCycle {
   /// Edge-trigger için saklanır — onNightFall yalnız geçiş anında çağrılır.
   bool _wasNight = false;
 
+  /// "Berrak gece" katsayısı — 0 (default puslu/sisli) → 1 (temiz/berrak).
+  /// Her gece başında rastgele rolled (~%30 olasılıkla 1.0), gün ağarınca 0'a
+  /// reset. Smooth lerp ile yumuşatılır → ani değişim olmaz. Consumer'lar:
+  ///  • Overlay alpha (top/bottom): berrakta hafifler → sahne daha okunur.
+  ///  • Ambient strength: berrakta hafifler → mavi mehtap modulate'ı çekilir.
+  ///  • Star opacity: berrakta yıldızlar parlar.
+  ///  • Kıyı sisi (game_painter): berrakta belirgin azalır.
+  double _nightClarity = 0.0;
+  /// Bu gecenin hedef berraklığı — _emitDayNightEdges'in night ledge'inde
+  /// rng'den yazılır. Day ledge'inde 0'a düşer.
+  double _nightClarityTarget = 0.0;
+
+  /// Public: anlık berraklık (renderer'a geçer).
+  double get nightClarity => _nightClarity;
+  /// Public: bu gece random ile berrak mı seçildi (notif/HUD için).
+  bool get isClearNight => _nightClarityTarget > 0.5;
+
   /// Gece başladığında bir kez tetiklenir.
   /// Kullanım: oyun loop'unda uyku hedefi atama gibi tek seferlik aksiyonlar.
   VoidCallback? onNightFall;
@@ -33,15 +50,23 @@ class DayNightCycle {
     timeOfDay = (timeOfDay + dt / dayDuration) % 1.0;
     _updateRain(dt);
     _emitDayNightEdges();
+    // Berraklık yumuşak yaklaşır — gece başında ~25 sn'de stabilize, gündüze
+    // dönerken erkenden 0'a iner. dt'ye dayalı lerp → fps bağımsız.
+    final rate = (1.0 - 1.0 / (1.0 + 1.4 * dt)).clamp(0.0, 1.0);
+    _nightClarity += (_nightClarityTarget - _nightClarity) * rate;
   }
 
   void _emitDayNightEdges() {
     final light = dayLight;
     if (!_wasNight && light < kNightThreshold) {
       _wasNight = true;
+      // %30 berrak gece, %70 normal (puslu) — özel hissi koru, sıradanlaştırma.
+      _nightClarityTarget = _rng.nextDouble() < 0.30 ? 1.0 : 0.0;
       onNightFall?.call();
     } else if (_wasNight && light >= kDawnThreshold) {
       _wasNight = false;
+      // Gündüze geçişte berraklık reset → bir sonraki gece taze roll.
+      _nightClarityTarget = 0.0;
       onMorning?.call();
     }
   }
@@ -166,33 +191,98 @@ class DayNightCycle {
         (1.00, 0x0A, 0x14, 0x30),
       ]);
 
-  double _overlayTopAlpha() => _lerpScalar([
-        (0.00, 0.68), // gece üst — koyu ama abartısız
-        (0.22, 0.54),
-        (0.25, 0.40),
-        (0.30, 0.18),
-        (0.38, 0.00),
-        (0.62, 0.00),
-        (0.70, 0.20),
-        (0.75, 0.40),
-        (0.80, 0.54),
-        (0.92, 0.62),
-        (1.00, 0.68),
-      ]);
+  // NOT: ambientTint (modulate) sahneye kendi başına gece tonunu zaten
+  // çekiyor → buradaki alpha'lar daha önce "tek darkening kaynağı" olduğunda
+  // ayarlanmıştı. Modulate eklendiğinde double-darkening olmasın diye gece
+  // ve gün batımı tepelerinde ~%20 düşürüldü. Geçiş kuşaklarında (alaca-
+  // karanlık) modulate strength düşük olduğundan overlay'in payı korunur.
+  double _overlayTopAlpha() {
+    final base = _lerpScalar([
+      (0.00, 0.52), // gece üst — modulate ile birleşince doğru koyuluk
+      (0.22, 0.42),
+      (0.25, 0.36),
+      (0.30, 0.18),
+      (0.38, 0.00),
+      (0.62, 0.00),
+      (0.70, 0.20),
+      (0.75, 0.36),
+      (0.80, 0.44),
+      (0.92, 0.50),
+      (1.00, 0.52),
+    ]);
+    // Berrak gecede üst overlay hafifler → gökyüzü/sahne daha okunur.
+    // dayLight düşükken (gece tarafında) tam etki; gündüze sızmasın diye
+    // dayLight ile maskelenir.
+    final nightWeight = (1.0 - dayLight.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+    return (base - _nightClarity * nightWeight * 0.18).clamp(0.0, 1.0);
+  }
 
-  double _overlayBottomAlpha() => _lerpScalar([
-        (0.00, 0.54), // gece alt
-        (0.22, 0.42),
-        (0.25, 0.32),
-        (0.30, 0.10),
-        (0.38, 0.00),
-        (0.62, 0.00),
-        (0.70, 0.10),
-        (0.75, 0.34),
-        (0.80, 0.44),
-        (0.92, 0.50),
-        (1.00, 0.54),
-      ]);
+  double _overlayBottomAlpha() {
+    final base = _lerpScalar([
+      (0.00, 0.40), // gece alt
+      (0.22, 0.32),
+      (0.25, 0.28),
+      (0.30, 0.10),
+      (0.38, 0.00),
+      (0.62, 0.00),
+      (0.70, 0.10),
+      (0.75, 0.28),
+      (0.80, 0.36),
+      (0.92, 0.40),
+      (1.00, 0.40),
+    ]);
+    final nightWeight = (1.0 - dayLight.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+    return (base - _nightClarity * nightWeight * 0.14).clamp(0.0, 1.0);
+  }
+
+  // ── Ambient color grade ──────────────────────────────────────────────────
+  // Sahnenin "içinde bulunduğu ışık tonu". game_painter bunu fullscreen
+  // BlendMode.modulate ile sprite katmanına uygular — her sprite zamanın
+  // rengini içer. Modulate fiziksel: az ışık = koyu + tinted, beyaz = nötr.
+  //
+  // Gece: soğuk mavi mehtap (kanalları 0.6×0.7×0.8 oranında düşürür).
+  // Şafak/akşam: amber/şeftali (mavi kanalı düşür, kırmızıyı koru).
+  // Öğle: neredeyse beyaz — sahneye dokunmaz.
+  //
+  // [ambientStrength] 0..1 — game_painter strength=0'da identity'e (beyaz)
+  // lerp eder. Önceden hesaplanmış efektif renk = lerp(white, tint, strength).
+  Color get ambientTint => _lerp([
+    (0.00, 0x76, 0x8C, 0xB8), // gece — soğuk mavi mehtap
+    (0.18, 0x82, 0x80, 0xAC), // gece sonu — mor-mavi
+    (0.25, 0xE8, 0xA8, 0x80), // şafak — şeftali
+    (0.32, 0xFF, 0xE4, 0xC8), // sabah — soluk sıcak
+    (0.42, 0xFF, 0xF6, 0xE8), // öğleye yakın — nötre yakın
+    (0.50, 0xFF, 0xFA, 0xEE), // öğle — nötr-sıcak
+    (0.58, 0xFF, 0xF4, 0xE2), // öğleden sonra
+    (0.68, 0xFF, 0xDC, 0xA8), // altın saat öncesi — amber
+    (0.75, 0xFF, 0x96, 0x4C), // altın saat — sıcak amber
+    (0.82, 0x6C, 0x5C, 0xA0), // alacakaranlık — mor
+    (0.92, 0x68, 0x78, 0xAC), // gece başı
+    (1.00, 0x76, 0x8C, 0xB8),
+  ]);
+
+  /// Ambient tint'in sahneye ne kadar baskın uygulanacağı (0 = identity).
+  /// Modulate tek başına çok güçlü olabilir → gece/altın saatte güçlü, öğle
+  /// neredeyse 0. Berrak gecede modulate hafifler → mavi mehtap perdesi
+  /// çekilir, sprite'lar daha temiz okunur.
+  double get ambientStrength {
+    final base = _lerpScalar([
+      (0.00, 0.62),
+      (0.20, 0.50),
+      (0.25, 0.55),
+      (0.32, 0.30),
+      (0.40, 0.10),
+      (0.50, 0.05), // öğle — neredeyse identity
+      (0.60, 0.12),
+      (0.68, 0.36),
+      (0.75, 0.58), // altın saat — güçlü
+      (0.82, 0.50),
+      (0.92, 0.56),
+      (1.00, 0.62),
+    ]);
+    final nightWeight = (1.0 - dayLight.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+    return (base - _nightClarity * nightWeight * 0.16).clamp(0.0, 1.0);
+  }
 
   // ── Sun / Moon ────────────────────────────────────────────────────────────
 
@@ -216,8 +306,9 @@ class DayNightCycle {
     return ((timeOfDay - 0.78) / 0.12).clamp(0, 1);
   }
 
-  /// Yıldızlar — ay ile aynı görünürlük (gece)
-  double get starOpacity => moonOpacity;
+  /// Yıldızlar — ay ile aynı görünürlük (gece). Berrak gecede ~%45 parlar.
+  double get starOpacity =>
+      (moonOpacity * (1.0 + _nightClarity * 0.45)).clamp(0.0, 1.0);
 
   /// 0.0 = gece (su koyu), 1.0 = tam gündüz (su parlak)
   double get dayLight => _lerpScalar([

@@ -1,0 +1,1017 @@
+part of '../main.dart';
+
+/// Komşuluk/birleşim spatial hash buffer — top-level reused (her poll'da
+/// clear+refill, allocate yok). Bucket key = (gridX~/2, gridY~/2).
+final Map<(int, int), List<int>> _greetBuckets = {};
+
+/// Sahne game loop — `_onTick` orijinal davranışla aynı sırada alt-metotlara
+/// bölünmüş halde. part of main.dart — State'in tüm private alanlarına erişim.
+extension _SceneTick on _VillageSceneState {
+  void _onTick(Duration elapsed) {
+    final raw = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
+    _last = elapsed;
+    // Karar bekleyen olay açıkken sim durur (sahne kalır, modal odakta).
+    // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
+    // arası DevPanel slider'ından gelir; normal oyunda 1.0.
+    final effectiveScale = _pendingChoice != null
+        ? 0.0
+        : _timeScale * _devSpeedBoost;
+    // Boost ile dt clamp'i de artırıldı (30x'te 0.25'lik tek sıçrama büyük
+    // adım yaratıyor, NPC update'lerinde stability açısından sınırlı tutuldu).
+    final dt = (raw * effectiveScale).clamp(0.0, 0.5);
+    if (dt <= 0) {
+      _frame.value = _frame.value + 1;
+      return;
+    }
+    // setState yerine sim mutate + _frame.value++ → outer ağaç rebuild olmaz,
+    // sadece ListenableBuilder bağlı bölgeler repaint olur.
+    _advanceWorldClock(dt);
+    _applyGodModeRefill();
+    final starvation = _tickPopulationAndHunger(dt);
+    _tickEventsAndFx(dt);
+    _tickBuildingSystems(dt, starvation);
+    _maybeRebuildSpatialCache(dt);
+    _tickEntities(dt);
+    _tickPostMotion(dt);
+    _tickDerivedAndMeta(dt);
+    _frame.value = _frame.value + 1;
+  }
+
+  // ── Saat / gün ─────────────────────────────────────────────────────────────
+
+  void _advanceWorldClock(double dt) {
+    _time += dt;
+    _cycle.update(dt);
+    // Gün sayacı — timeOfDay sarınca (örn. 0.98 → 0.02) yeni gün.
+    if (_cycle.timeOfDay < _lastTimeOfDay) _dayCount++;
+    _lastTimeOfDay = _cycle.timeOfDay;
+  }
+
+  // ── God mode refill ───────────────────────────────────────────────────────
+
+  void _applyGodModeRefill() {
+    if (!_godMode) return;
+    _stockpile.wood = 9999;
+    _stockpile.stone = 9999;
+    _stockpile.iron = 9999;
+    _stockpile.coal = 9999;
+    _stockpile.food = 9999;
+    _stockpile.gold = 9999;
+    _hasFire = true;
+    // İnşaatları anında tamamla
+    for (final o in _orders) {
+      o.progress = 1.0;
+      o.completed = true;
+    }
+  }
+
+  // ── Nüfus & yiyecek tüketimi ──────────────────────────────────────────────
+
+  /// Housing occupancy recount + tüm "ağızların" yiyecek tüketimi. Açlık
+  /// durumunu 0..1 döndürür (kStarveRampFood altında devreye girer).
+  double _tickPopulationAndHunger(double dt) {
+    // Konut doluluğunu güncelle — ev su tüketimi sakin sayısına bağlı.
+    for (final b in _buildings) {
+      if (b.fn?.role == BuildingRole.housing) b.occupants = 0;
+    }
+    for (final v in _villagers) {
+      if (v.homeBuilding case final h?) (h as BuildingEntity).occupants++;
+    }
+
+    // Tüm köylüler + işçiler zamanla yiyecek yer; üretim yetmezse stok azalır.
+    // Yaşlıya saygı politikası açıksa yaşlılar tüketmez.
+    final exemptElders = _policies.eldersExemptFromFood
+        ? _villagers.where((v) => v.lifeStage == LifeStage.elder).length
+        : 0;
+    final mouths =
+        _villagers.length - exemptElders +
+        _farmers.length +
+        _woodcutters.length +
+        _miners.length +
+        _fishers.length +
+        _builders.length;
+    if (!_godMode && mouths > 0) {
+      _foodHunger += dt * mouths * (kFoodPerVillagerPerDay / kGameDaySeconds);
+      if (_foodHunger >= 1.0) {
+        final eat = _foodHunger.floor();
+        _foodHunger -= eat;
+        _stockpile.food = (_stockpile.food - eat).clamp(0, 1 << 30);
+      }
+    }
+    // Açlık 0..1: stok kStarveRampFood altına inince devreye girer (moral düşer).
+    return _stockpile.food >= kStarveRampFood
+        ? 0.0
+        : (1.0 - _stockpile.food / kStarveRampFood);
+  }
+
+  // ── Olaylar & efektler ────────────────────────────────────────────────────
+
+  void _tickEventsAndFx(double dt) {
+    // Aktif geçici etki sönümlenir; zamanlayıcı dolunca yeni olay tetiklenir.
+    if (_eventMoraleLeft > 0) {
+      _eventMoraleLeft -= dt;
+      if (_eventMoraleLeft <= 0) {
+        _eventMorale = 0;
+        _eventLabel = null;
+      }
+    }
+    // Pop-up banner countdown — süresi bitince banner kapanır.
+    if (_activeEventLeft > 0) {
+      _activeEventLeft -= dt;
+      if (_activeEventLeft <= 0) {
+        _activeEvent = null;
+      }
+    }
+    // Aktif sahne efektleri — decay + aggregate (tint, rain, mul'lar).
+    _updateActiveFx(dt);
+    // Yağmur boost'u — fırtına, yaz yağmuru efektlerinde rain min yükseltilir.
+    if (_fxRainBoost > _cycle.rainIntensity) {
+      _cycle.rainIntensity = _fxRainBoost;
+    }
+    if (!_godMode && _villagers.isNotEmpty) {
+      _eventTimer -= dt;
+      if (_eventTimer <= 0) {
+        _triggerRandomEvent();
+        _eventTimer =
+            kEventMinInterval +
+            _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval);
+      }
+    }
+  }
+
+  // ── Bina sistemleri (üretim/ticaret/stat + aktiflik bayrakları) ───────────
+
+  void _tickBuildingSystems(double dt, double starvation) {
+    // Üretim, ticaret, nüfus büyümesi, stok kapasitesi.
+    _stats = updateBuildings(
+      dt: dt,
+      buildings: _buildings,
+      stockpile: _stockpile,
+      freeHousingSlots: _freeHousingSlots(),
+      onSpawnVillager: _spawnGrownVillager,
+      enforceCapacity: !_godMode,
+      starvation: starvation,
+      // Politika morali — kalıcı bedeller + bilge bonusu + geçici efektler
+      // (göçmen uyumu, aile birleşimi). Toplam eventMorale'ye katılır.
+      eventMorale: _eventMorale +
+          (_villagers.any((v) => v.isSage) ? 0.08 : 0.0) +
+          _policyMoralePermanent() +
+          _policyMoraleTemporary(),
+    );
+    // Ahır bonusunu taşıyıcılara uygula
+    for (final v in _villagers) {
+      v.carrySpeedMultiplier = _stats.carrierSpeedMultiplier;
+    }
+
+    // Toplama binaları çalışıyor mu? (panel durumu)
+    for (final b in _buildings) {
+      switch (b.type) {
+        case BuildingType.mineBuilding:
+          b.isActive = _miners.any(
+            (m) =>
+                m.isMining &&
+                m.gridX >= b.col - 0.5 &&
+                m.gridX < b.col + b.cols + 0.5 &&
+                m.gridY >= b.row - 0.5 &&
+                m.gridY < b.row + b.rows + 0.5,
+          );
+        case BuildingType.lumberCamp:
+          b.isActive = _lumberCamps.any(
+            (lc) =>
+                lc.buildingCol == b.col &&
+                lc.buildingRow == b.row &&
+                lc.state != LumberCampState.idle,
+          );
+        case BuildingType.fisherCabin:
+          b.isActive = _fishers.any((f) => f.isFishing);
+        case BuildingType.barn:
+          b.isActive = _shepherds.any(
+            (sh) =>
+                sh.barnCol == b.col &&
+                sh.barnRow == b.row &&
+                sh.state != ShepherdState.idle,
+          );
+        default:
+          break;
+      }
+    }
+  }
+
+  // ── Spatial cache (throttled) ──────────────────────────────────────────────
+
+  void _maybeRebuildSpatialCache(double dt) {
+    // Engel/yumuşak-engel set'leri yavaş değişir → her frame değil, throttle'lı
+    // yeniden kur (su statik; maden/sazlık değişimi kSpatialRebuildInterval
+    // gecikmesiyle yansır — yürüyüş için görünmez).
+    _spatialTimer -= dt;
+    if (_spatialTimer <= 0) {
+      _rebuildSpatialCaches();
+      _spatialTimer = kSpatialRebuildInterval;
+    }
+  }
+
+  // ── Entity tick (villager, worker, animal, üretim) ─────────────────────────
+
+  void _tickEntities(double dt) {
+    final obstacles = _obstacles;
+    final softObs = _softObs;
+    // Sim multiplier'ları — aktif efekt aggregate'inden.
+    final npcDt = dt * _fxNpcSpeedMul;
+    final farmDt = dt * _fxFarmMul;
+    final buildDt = dt * _fxBuilderMul;
+
+    for (final v in _villagers) {
+      v.update(
+        npcDt,
+        kCols,
+        kRows,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+        dayLight: _cycle.dayLight,
+        rainIntensity: _cycle.rainIntensity,
+      );
+    }
+    // Doğal ölüm — ömrü dolan yaşlılar köyden ayrılır. Taşıma işi varsa
+    // önce bitirsin (yerde öksüz kutu/balya kalmasın). Belediye yerini doldurur.
+    // Aile bağı: ölenin parents listesinden onu kaldır, kendisinin children
+    // listesinde de parent ref'lerini temizle (çocuklar yetim olabilir).
+    // Yaşlıya huzur: lifespan'in son %5'inde aging 5× hızlanır → birkaç günde
+    // sakince ayrılır, uzun bekleme olmaz.
+    if (_policies.peacefulEnd) {
+      for (final v in _villagers) {
+        if (v.lifeStage == LifeStage.elder &&
+            v.ageDays > v.lifespanDays * 0.95 &&
+            v.ageDays < v.lifespanDays) {
+          v.ageDays += dt * 4.0 / kGameDaySeconds;
+        }
+      }
+    }
+
+    _villagers.removeWhere((v) {
+      if (v.ageDays < v.lifespanDays || v.isCarrying) return false;
+      for (final p in v.parents) {
+        p.children.remove(v);
+      }
+      for (final c in v.children) {
+        c.parents.remove(v);
+      }
+      final orphans = v.children.where((c) => c.parents.isEmpty).length;
+      // Yaşlıya huzur açıksa drama dilini yumuşat — yetim sayısı bildirilmez.
+      final msg = _policies.peacefulEnd
+          ? '🕯️ ${v.name} huzura kavuştu.'
+          : orphans > 0
+              ? '🕯️ ${v.name} hayata veda etti. $orphans çocuk yetim kaldı.'
+              : '🕯️ ${v.name} hayata veda etti.';
+      _showNotification(msg);
+      return true;
+    });
+
+    // Doğal doğum — fertility timer'ı dolan kadınlar için partner + yatak
+    // kontrolü, varsa bebek spawn. Maliyet yok (chill-gameplay).
+    // Throttle: her frame full villager scan gereksiz; 0.5s polling oyuncu
+    // tarafından hissedilmez (anne hâlâ aynı tick'te doğurur).
+    _reproPollSec -= dt;
+    if (_reproPollSec <= 0) {
+      _reproPollSec = 0.5;
+      _tickReproduction();
+    }
+    _tickMigration(dt);
+    _tickNeighborGreet(dt);
+    _tickFamilyReunion(dt);
+    _tickSharedHarvest(dt);
+    _tickSageEmergence(dt);
+    for (final b in _builders) {
+      b.update(
+        buildDt,
+        _orders,
+        _roadOrders,
+        _buildings,
+        _roadSystem,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+      );
+    }
+    // Tamamlanan inşaatlar için özel aksiyonlar
+    bool topologyChanged = false;
+    for (final o in _orders) {
+      if (o.completed) {
+        _onBuildingCompleted(o);
+        topologyChanged = true;
+      }
+    }
+    if (_roadOrders.any((o) => o.completed)) topologyChanged = true;
+    _orders.removeWhere((o) => o.completed);
+    _roadOrders.removeWhere((o) => o.completed);
+    // World topology değişti → NPC'ler cached path'i invalidate etsin +
+    // anchor sistemi yeni binalara göre slot'ları yenilesin.
+    if (topologyChanged) {
+      _pathContext.bumpVersion();
+      _anchorSystem.rebuild(_buildings);
+    }
+    for (final t in _farmTiles) {
+      t.update(farmDt);
+    }
+    // Kuyu erişimi anchor sistemi üzerinden — çiftçi 4 yönden birinde
+    // boş slot bulur, aynı kuyuda çakışma olmaz.
+    for (final f in _farmers) {
+      f.update(
+        npcDt,
+        _farmTiles,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+        anchorSystem: _anchorSystem,
+      );
+      // Çiftçi hasat sonucunu altın olarak değil yiyecek olarak hay pile
+      // yığınıyla üretir; piller balya olur, balyalar depoya taşınır.
+      if (f.harvestHayPos != null) {
+        final hay = HayEntity(
+          type: HayType.pile,
+          gridX: f.harvestHayPos!.$1.toDouble(),
+          gridY: f.harvestHayPos!.$2.toDouble(),
+        );
+        ResourcePlacement.placeHay(
+          hay,
+          f.harvestHayPos!.$1.toDouble(),
+          f.harvestHayPos!.$2.toDouble(),
+          _hayEntities,
+          _time,
+        );
+        _hayEntities.add(hay);
+        f.harvestHayPos = null;
+      }
+    }
+    processHayPiles(_hayEntities, _farmTiles);
+    for (final w in _woodcutters) {
+      w.update(
+        npcDt,
+        _trees,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+      );
+      if (w.harvestReady) {
+        // Kesilen ağacın yanına tile-snap + slot-stack ile yerleştir.
+        final box = ResourceBox(
+          type: ResourceBoxType.woodChunk,
+          gridX: w.lastHarvestX.toDouble(),
+          gridY: w.lastHarvestY.toDouble(),
+        );
+        ResourcePlacement.placeBox(
+          box,
+          w.lastHarvestX.toDouble(),
+          w.lastHarvestY.toDouble(),
+          _resourceBoxes,
+          _time,
+        );
+        _resourceBoxes.add(box);
+      }
+    }
+    // Tarla + bina tile'ları → ağaç dikilemez (spatial cache'ten).
+    final forbiddenForTrees = _forbiddenForTrees;
+    for (final lc in _lumberCamps) {
+      lc.update(
+        npcDt,
+        _trees,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+        forbiddenTiles: forbiddenForTrees,
+      );
+      if (lc.harvestReady) {
+        final box = ResourceBox(
+          type: ResourceBoxType.woodChunk,
+          gridX: lc.lastHarvestX.toDouble(),
+          gridY: lc.lastHarvestY.toDouble(),
+        );
+        ResourcePlacement.placeBox(
+          box,
+          lc.lastHarvestX.toDouble(),
+          lc.lastHarvestY.toDouble(),
+          _resourceBoxes,
+          _time,
+        );
+        _resourceBoxes.add(box);
+      }
+    }
+    // Fidan büyümesi güncelle. Doğa dostu açıksa kesilen her ağacın yanına
+    // bir fidan dik — sustainable. removeWhere'den ÖNCE: felled tile'ları
+    // bilelim.
+    for (final t in _trees) {
+      t.update(dt);
+    }
+    if (_policies.treePlanting) {
+      final felled = _trees.where((t) => t.isFelled).toList();
+      for (final f in felled) {
+        _plantSaplingNear(f.col, f.row);
+      }
+    }
+    _trees.removeWhere((t) => t.isFelled);
+    for (final m in _miners) {
+      m.update(
+        npcDt,
+        _mineNodes,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+      );
+      if (m.harvestReady) {
+        final boxType = switch (m.lastOreType) {
+          OreType.iron => ResourceBoxType.ironBox,
+          OreType.coal => ResourceBoxType.coalBox,
+          _ => ResourceBoxType.stoneBox,
+        };
+        final box = ResourceBox(
+          type: boxType,
+          gridX: m.lastHarvestX.toDouble(),
+          gridY: m.lastHarvestY.toDouble(),
+        );
+        ResourcePlacement.placeBox(
+          box,
+          m.lastHarvestX.toDouble(),
+          m.lastHarvestY.toDouble(),
+          _resourceBoxes,
+          _time,
+        );
+        _resourceBoxes.add(box);
+      }
+    }
+    for (final f in _fishers) {
+      f.update(npcDt, _rng, waterTiles: _waterTiles, softObstacles: softObs);
+      // Balıkçı doğrudan stoğa yiyecek üretir — fiziksel kutu yok.
+      if (f.harvestReady) _stockpile.food += 1;
+    }
+    // Çiçekçiler: etki alanlarındaki çiçek decor'larını dolaşır, sular.
+    // Sulama olayı sırasında ek mantık (parlama/moral) burada.
+    for (final fl in _florists) {
+      fl.update(npcDt, _rng,
+          decor: _decor,
+          waterTiles: obstacles,
+          softObstacles: softObs);
+    }
+    // Ağıl: inekler otlar, çobanlar sağar. Sağım = +1 food (balıkçı pattern).
+    for (final c in _cows) {
+      c.update(npcDt, _rng, waterTiles: obstacles);
+    }
+    // Tavuk Kümesi: pasif yumurta (food) üretimi. Her kümes kEggInterval'de
+    // 1 food spawnlar — çoban gibi NPC iş yapmaya gerek yok, tavuk otonom.
+    // _buildings yalnız tamamlanmış binaları içerir (inşaat _orders'ta).
+    for (final b in _buildings) {
+      if (b.type != BuildingType.chickenCoop) continue;
+      b.eggTimer += dt;
+      if (b.eggTimer >= kEggInterval) {
+        b.eggTimer = 0.0;
+        _stockpile.food += 1;
+      }
+    }
+    for (final sh in _shepherds) {
+      sh.update(
+        npcDt,
+        _cows,
+        _rng,
+        waterTiles: obstacles,
+        softObstacles: softObs,
+      );
+      if (sh.harvestReady) _stockpile.food += 1;
+    }
+    final mineCountBefore = _mineNodes.length;
+    _mineNodes.removeWhere((n) => n.isDepleted);
+    if (_mineNodes.length != mineCountBefore) _pathContext.bumpVersion();
+    _carrierTimer -= dt;
+    if (_carrierTimer <= 0) {
+      _carrierTimer = kCarrierAssignInterval;
+      assignCarriers(
+        villagers: _villagers,
+        buildings: _buildings,
+        resourceBoxes: _resourceBoxes,
+        hayEntities: _hayEntities,
+        stockpile: _stockpile,
+        anchorSystem: _anchorSystem,
+      );
+    }
+  }
+
+  // ── Hareket yumuşatma & separation ────────────────────────────────────────
+
+  void _tickPostMotion(double dt) {
+    applySeparation(
+      dt: dt,
+      villagers: _villagers,
+      farmers: _farmers,
+      woodcutters: _woodcutters,
+      miners: _miners,
+      fishers: _fishers,
+      builders: _builders,
+      shepherds: _shepherds,
+      cows: _cows,
+      // _obstacles: su + maden + solid bina. Separation NPC'leri buraya
+      // itmesin (eski "waterTiles" param adı geçici; pratikte tüm engeller).
+      waterTiles: _obstacles,
+    );
+
+    // Hareket yumuşatma — renderX/Y ve moveIntensity.
+    // AI'ın gridX/Y sıçramaları animasyona anlık değil, exp-lerp ile
+    // yansır → donuk değil akıcı.
+    for (final v in _villagers) {
+      v.smoothMotion(dt);
+    }
+    for (final f in _farmers) {
+      f.smoothMotion(dt);
+    }
+    for (final w in _woodcutters) {
+      w.smoothMotion(dt);
+    }
+    for (final m in _miners) {
+      m.smoothMotion(dt);
+    }
+    for (final b in _builders) {
+      b.smoothMotion(dt);
+    }
+    for (final f in _fishers) {
+      f.smoothMotion(dt);
+    }
+    for (final fl in _florists) {
+      fl.smoothMotion(dt);
+    }
+    for (final sh in _shepherds) {
+      sh.smoothMotion(dt);
+    }
+
+    // Meşale fade — tüm WorkerEntity gece dışarıda dolaşırken torch yansın.
+    // dlFade/rainFade tek yerden hesaplanır (8 ayrı list de aynı sonuç verir);
+    // tek pass ile her worker'a uygulanır → branch + loop overhead azalır.
+    final dl = _cycle.dayLight;
+    final rain = _cycle.rainIntensity;
+    void doTorch(WorkerEntity e) => e.tickTorch(dt, dl, rain);
+    _villagers.forEach(doTorch);
+    _farmers.forEach(doTorch);
+    _woodcutters.forEach(doTorch);
+    _miners.forEach(doTorch);
+    _builders.forEach(doTorch);
+    _fishers.forEach(doTorch);
+    _florists.forEach(doTorch);
+    _shepherds.forEach(doTorch);
+
+    // Ambient kuş sürüleri — gündüzleri 35-90s aralıkla bir kenardan girer,
+    // karşıya uçar, off-grid olunca temizlenir. Etkileşim yok, pure atmosfer.
+    if (_cycle.dayLight > 0.35) {
+      _birdFlockSpawnTimer -= dt;
+      if (_birdFlockSpawnTimer <= 0) {
+        _birdFlocks.add(BirdFlock.spawnRandomEdge(_rng));
+        _birdFlockSpawnTimer = 35.0 + _rng.nextDouble() * 55.0;
+      }
+    }
+    for (final f in _birdFlocks) {
+      f.update(dt);
+    }
+    _birdFlocks.removeWhere((f) => f.isDead);
+  }
+
+  // ── Türetilmiş HUD sayımları + sosyal + objektif + snapshot ───────────────
+
+  void _tickDerivedAndMeta(double dt) {
+    // HUD "yolda" kaynak sayımları — tek geçiş (build içinde 5 ayrı
+    // .where().length taraması yerine; her frame allocation'ı keser).
+    _woodInTransit = _stoneInTransit = _ironInTransit = _coalInTransit = 0;
+    for (final b in _resourceBoxes) {
+      if (b.isDelivered) continue;
+      switch (b.type) {
+        case ResourceBoxType.woodChunk:
+          _woodInTransit++;
+        case ResourceBoxType.stoneBox:
+          _stoneInTransit++;
+        case ResourceBoxType.ironBox:
+          _ironInTransit++;
+        case ResourceBoxType.coalBox:
+          _coalInTransit++;
+      }
+    }
+    _foodInTransit = 0;
+    for (final h in _hayEntities) {
+      if (h.isBale && !h.isDelivered) _foodInTransit++;
+    }
+
+    // Işık kaynaklarını topla — her tick güncel. Throttle DENENDİ AMA GERİ
+    // ALINDI: LightingSystem.collect içinde yağmur fade (fireRainFade),
+    // NPC torch flicker (sin(time*4.3)), ve hareketli torch konumu
+    // (renderX/Y) hepsi anlık değişir → 100ms cache yağmurda ateşi step-jump
+    // ettiriyor, meşale glow'u NPC'den geri kalıyor. Görsel bug riskine
+    // performans kazancı değmez (asıl kazanç repro throttle + spatial hash).
+    _lightSources = LightingSystem.collect(
+      buildings: _buildings,
+      villagers: _villagers,
+      dayLight: _cycle.dayLight,
+      rainIntensity: _cycle.rainIntensity,
+      time: _time,
+    );
+
+    // ── Sohbet baloncukları — sosyal canlılık katmanı ───────────────────
+    // Aktif baloncukları decay et + zaman zaman yakın çift için yeni başlat.
+    for (final v in _villagers) {
+      if (v.chatBubbleTime > 0) {
+        v.chatBubbleTime -= dt;
+        if (v.chatBubbleTime <= 0) {
+          v.chatBubbleIcon = '';
+          // Anlatıcı hala oturuyorsa warm'a düş (story bitti, ısınıyor).
+          v.activity = v.sitClaimed
+              ? VillagerActivity.warm
+              : VillagerActivity.none;
+        }
+      }
+    }
+    // Kişisel cooldown'lar her tick decay.
+    for (final v in _villagers) {
+      if (v.socialCooldown > 0) v.socialCooldown -= dt;
+    }
+    _socialScanTimer += dt;
+    if (_socialScanTimer >= _VillageSceneState._kSocialScanInterval) {
+      _socialScanTimer = 0;
+      _tryStartChats();
+    }
+    // Ateş başı toplanma + hikaye saati taramaları.
+    _tickFirepitGather(dt);
+
+    // Yeni tamamlanan hedef için bildirim (sadece bir kez).
+    final objStates = ObjectiveTracker.evaluate(
+      ObjectiveContext(
+        buildings: _buildings,
+        farmTiles: _farmTiles,
+        population: _villagers.length,
+      ),
+    );
+    for (final s in objStates) {
+      if (s.completed && !_completedObjectives.contains(s.obj.id)) {
+        _completedObjectives.add(s.obj.id);
+        _showNotification('🎯 ${s.obj.label} — tamamlandı!');
+      }
+    }
+
+    // Denge testi snapshot'u — 5 sn'de bir kaynak/nüfus kaydı.
+    _simSnapshotTimer += dt;
+    if (_simSnapshotTimer >= _VillageSceneState._kSnapshotInterval) {
+      _simSnapshotTimer = 0;
+      _simHistory.add(
+        SimSnapshot(
+          simTime: _time,
+          day: _dayCount,
+          population: _villagers.length,
+          buildings: _buildings.length,
+          wood: _stockpile.wood,
+          stone: _stockpile.stone,
+          iron: _stockpile.iron,
+          coal: _stockpile.coal,
+          food: _stockpile.food,
+          gold: _stockpile.gold,
+        ),
+      );
+      if (_simHistory.length > _VillageSceneState._kMaxSnapshots) {
+        _simHistory.removeAt(0);
+      }
+    }
+
+    // ── Kamera takibi ───────────────────────────────────────────────────────
+    // Köylü kartından "Takip et" açılırsa kamera her tick NPC merkezine
+    // yumuşak çekilir. NPC eve girince/uyuyunca/silinince takip otomatik düşer.
+    _tickCameraFollow(dt);
+  }
+
+  void _tickCameraFollow(double dt) {
+    final v = _followedVillager;
+    if (v == null) return;
+    // İçeride/listede yoksa takibi düşür.
+    if (v.isInsideBuilding || !_villagers.contains(v)) {
+      _followedVillager = null;
+      return;
+    }
+    if (_viewSize.width <= 0 || _viewSize.height <= 0) return;
+    // gridToScreen'i ekran merkezine sabitleyecek camera offset (zoom pivot
+    // ekran merkezi olduğu için zoom değerinden bağımsız çalışır).
+    final targetX = -(v.gridX - v.gridY) * kTileW / 2;
+    final targetY = _viewSize.height * 0.22 - (v.gridX + v.gridY) * kTileH / 2;
+    // Smooth yakınsama — dt'ye duyarlı (low/high fps fark etmez).
+    final lerpT = (1.0 - 1.0 / (1.0 + 4.0 * dt)).clamp(0.0, 1.0);
+    _camera = Offset.lerp(_camera, Offset(targetX, targetY), lerpT) ?? _camera;
+  }
+
+  // ── Doğal doğum ───────────────────────────────────────────────────────────
+  // Fertility timer'ı dolan kadınlar için partner + boş yatak kontrol.
+  // chill-gameplay: food cost yok. Partner: aynı homeBuilding'de yaşayan
+  // yetişkin erkek (yaşlı değil, kan bağı YOK — parent/child/sibling değil).
+  void _tickReproduction() {
+    if (_godMode == false && _villagers.isEmpty) return;
+    // Köyde boş yatak var mı? Yoksa hiç doğum olmaz.
+    if (_freeHousingSlots() <= 0) return;
+
+    // Ev → adult erkekler index (couple search için tek pass). Eski O(n²)
+    // versiyon her hazır mother için tüm villager'ı tarıyordu.
+    Map<Object, List<VillagerEntity>>? maleByHome;
+
+    // Mevcut adult kadınlar üzerinden geçiyoruz. Bir tick'te birden fazla
+    // doğum mümkün ama her doğum housing slot tüketir → kapasite zinciri
+    // doğal sınır.
+    for (final mother in _villagers) {
+      // NaN = eligible değil, > 0 = hâlâ counting → atla; ≤ 0 = hazır.
+      if (mother.fertilityDays.isNaN || mother.fertilityDays > 0) continue;
+      // Aile planlaması sınırı aşıldıysa fertility frozen.
+      if (mother.birthCount >= _policies.maxChildren) {
+        mother.fertilityDays = double.nan;
+        continue;
+      }
+      final home = mother.homeBuilding;
+      if (home == null) continue;
+
+      // Index lazy-build — sadece ilk hazır mother'da bir kez.
+      if (maleByHome == null) {
+        maleByHome = {};
+        for (final v in _villagers) {
+          if (!v.isMale || v.lifeStage != LifeStage.adult) continue;
+          final h = v.homeBuilding;
+          if (h == null) continue;
+          (maleByHome[h] ??= []).add(v);
+        }
+      }
+
+      // Partner ara — aynı evdeki erkekler arasında kan bağı olmayan.
+      VillagerEntity? father;
+      final mates = maleByHome[home];
+      if (mates != null) {
+        Set<VillagerEntity>? motherParents;
+        for (final cand in mates) {
+          if (identical(cand, mother)) continue;
+          if (mother.parents.contains(cand)) continue;
+          if (mother.children.contains(cand)) continue;
+          motherParents ??= mother.parents.toSet();
+          final shareParent = cand.parents.any(motherParents.contains);
+          if (shareParent) continue;
+          father = cand;
+          break;
+        }
+      }
+
+      if (father == null) {
+        // Partner yok — kısa süre sonra tekrar dene (her tick scan etmemek için)
+        mother.fertilityDays = 0.5 + _rng.nextDouble() * 0.8;
+        continue;
+      }
+
+      // Free housing check tekrar (önceki doğumlar tüketmiş olabilir)
+      if (_freeHousingSlots() <= 0) return;
+
+      _spawnBabyFromParents(mother, father);
+      // Post-partum cooldown: aile teşviki açıksa yarıya iner.
+      final base = _policies.familyEncouragement ? 2.5 : 5.0;
+      final span = _policies.familyEncouragement ? 1.5 : 4.0;
+      mother.fertilityDays = base + _rng.nextDouble() * span;
+    }
+  }
+
+  /// Misafirperverlik politikası açıkken periyodik gezgin spawn'ı. Boş ev
+  /// gerekir. Timer 3-6 oyun günü randomize, spawn olunca yeniden roll.
+  /// Policy kapalıyken timer dondurulur.
+  void _tickMigration(double dt) {
+    if (!_policies.hospitality) {
+      _migrationTimerSec = 0; // kapalıyken sıfırla, yeniden açılınca fresh roll
+      return;
+    }
+    if (_migrationTimerSec <= 0) {
+      _migrationTimerSec = (3.0 + _rng.nextDouble() * 3.0) * kGameDaySeconds;
+    }
+    _migrationTimerSec -= dt;
+    if (_migrationTimerSec > 0) return;
+    if (_freeHousingSlots() <= 0) {
+      // Yatak yoksa kısa retry
+      _migrationTimerSec = 0.5 * kGameDaySeconds;
+      return;
+    }
+    _spawnMigrant();
+    _migrationTimerSec = (3.0 + _rng.nextDouble() * 3.0) * kGameDaySeconds;
+  }
+
+  // ── Komşuluk: NPC'ler birbirine selam verir ──────────────────────────────
+  // 1.2s aralıkla poll; her villager için yakındaki bir uygun komşu varsa
+  // %25 ihtimal selam (👋 chat bubble + glance). Per-villager greet cooldown
+  // (8-14s) spam'ı engeller.
+  // Spatial hash (2-tile bucket): O(n²) yerine O(n). Search radius 1.6 tile
+  // → 3×3 komşu bucket araması yeterli. Bucket map reused across polls.
+  void _tickNeighborGreet(double dt) {
+    if (!_policies.neighborliness) return;
+    _greetPollSec -= dt;
+    if (_greetPollSec > 0) return;
+    _greetPollSec = 1.2;
+
+    // Bucket grid — 2-tile cell, eligible villager indekslerini gruplar.
+    _greetBuckets.clear();
+    for (int i = 0; i < _villagers.length; i++) {
+      final v = _villagers[i];
+      if (v.lifeStage == LifeStage.child) continue;
+      if (v.chatBubbleTime > 0) continue;
+      if (v.greetCooldown > 0) continue;
+      final key = (v.gridX.floor() ~/ 2, v.gridY.floor() ~/ 2);
+      (_greetBuckets[key] ??= []).add(i);
+    }
+
+    for (final v in _villagers) {
+      if (v.lifeStage == LifeStage.child) continue;
+      if (v.chatBubbleTime > 0) continue;
+      if (v.greetCooldown > 0) {
+        v.greetCooldown -= 1.2;
+        continue;
+      }
+      if (_rng.nextDouble() > 0.25) continue;
+
+      // En yakın uygun komşu — 1.6 tile içinde, 3×3 komşu bucket'tan ara.
+      VillagerEntity? near;
+      double bestD = 2.56; // 1.6²
+      final bx = v.gridX.floor() ~/ 2;
+      final by = v.gridY.floor() ~/ 2;
+      for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -1; dy <= 1; dy++) {
+          final neighbors = _greetBuckets[(bx + dx, by + dy)];
+          if (neighbors == null) continue;
+          for (final j in neighbors) {
+            final o = _villagers[j];
+            if (identical(o, v)) continue;
+            final ddx = v.gridX - o.gridX;
+            final ddy = v.gridY - o.gridY;
+            final d2 = ddx * ddx + ddy * ddy;
+            if (d2 < bestD) {
+              bestD = d2;
+              near = o;
+            }
+          }
+        }
+      }
+      if (near == null) continue;
+
+      // Karşılıklı selam — kısa baloncuk + glance, ikisi de cooldown'a girer.
+      const icon = '👋';
+      const dur  = 1.6;
+      v.chatBubbleIcon = icon;
+      v.chatBubbleTime = dur;
+      near.chatBubbleIcon = icon;
+      near.chatBubbleTime = dur;
+      v.greetCooldown = 8.0 + _rng.nextDouble() * 6.0;
+      near.greetCooldown = 8.0 + _rng.nextDouble() * 6.0;
+      v.glanceAround(duration: 0.7);
+      near.glanceAround(duration: 0.7);
+    }
+  }
+
+  // ── Aile birleşimi: solo yetişkinleri eşleştir ──────────────────────────
+  // Bekar yetişkin (ev'inde zıt cinsiyetli yetişkin yok) iki kişiyi
+  // birleştirir: birini diğerinin evine taşır (yatak boş olanına). Tetik
+  // periyodik (~15s) — agresif değil, organik.
+  // Optim: ev → yetişkin listesi index tek pass. Eski versiyon O(n²) iki kez
+  // (her single check ev sakinlerini tekrar tarıyordu); şimdi O(n).
+  void _tickFamilyReunion(double dt) {
+    if (!_policies.familyReunion) return;
+    _reunionPollSec -= dt;
+    if (_reunionPollSec > 0) return;
+    _reunionPollSec = 15.0;
+
+    // Ev → yetişkin sakinler index (single pass).
+    final adultsByHome = <Object, List<VillagerEntity>>{};
+    for (final v in _villagers) {
+      if (v.lifeStage != LifeStage.adult) continue;
+      final h = v.homeBuilding;
+      if (h == null) continue;
+      (adultsByHome[h] ??= []).add(v);
+    }
+
+    // Bekar = ev'inde uygun partner (zıt cins + kan bağı yok) bulunmayan
+    // yetişkin. Index üstünden kontrol → tek pass.
+    bool isSingle(VillagerEntity p) {
+      final mates = adultsByHome[p.homeBuilding];
+      if (mates == null) return false;
+      for (final c in mates) {
+        if (identical(c, p)) continue;
+        if (c.isMale == p.isMale) continue;
+        if (p.parents.contains(c) || p.children.contains(c)) continue;
+        final shareParent = c.parents.any(p.parents.toSet().contains);
+        if (!shareParent) return false; // uygun partner var
+      }
+      return true;
+    }
+
+    final singleW = <VillagerEntity>[];
+    final singleM = <VillagerEntity>[];
+    for (final v in _villagers) {
+      if (v.lifeStage != LifeStage.adult || v.homeBuilding == null) continue;
+      if (!isSingle(v)) continue;
+      (v.isMale ? singleM : singleW).add(v);
+    }
+    if (singleW.isEmpty || singleM.isEmpty) return;
+
+    singleW.shuffle(_rng);
+    singleM.shuffle(_rng);
+    final w = singleW.first;
+    final m = singleM.first;
+
+    // Hangi evde yatak var? Index'ten occupancy direkt.
+    BuildingEntity? targetHome;
+    for (final cand in [w.homeBuilding, m.homeBuilding]) {
+      if (cand == null) continue;
+      final b = cand as BuildingEntity;
+      final f = b.fn;
+      if (f == null) continue;
+      final occ = adultsByHome[b]?.length ?? 0;
+      if (occ < f.housingCapacity) {
+        targetHome = b;
+        break;
+      }
+    }
+    if (targetHome == null) return; // her iki ev de dolu — başka tur
+
+    // Taşı: hangisi targetHome'da değilse onu oraya geçir.
+    if (w.homeBuilding != targetHome) w.homeBuilding = targetHome;
+    if (m.homeBuilding != targetHome) m.homeBuilding = targetHome;
+    // Aile birleşim ödülü — köy 5 gün boyunca +%2 moral hisseder.
+    pushPolicyMorale(0.02, 5.0);
+    _showNotification('💞 ${w.name} & ${m.name} aile kurdu.');
+  }
+
+  // ── Müşterek hasat: dengeleme (iki yönlü) ──────────────────────────────
+  // Geride kalan tarla +50% boost, ileri olan progress'i geri çekilir
+  // (büyüme yavaşlar). Toplam çıktı korunur ama eş zamanlı olgunlaşma →
+  // bedel: hızlı tarla öne çıkamaz, oyuncu agresif sulamayla farkı açamaz.
+  void _tickSharedHarvest(double dt) {
+    if (!_policies.sharedHarvest) return;
+    if (_farmTiles.isEmpty) return;
+    final avg = _farmTiles.fold<double>(0, (s, t) => s + t.growthProgress) /
+        _farmTiles.length;
+    final farmDt = dt * _fxFarmMul;
+    // Aynı ölçüde t.update(...) increment'i ile orantılı kanca.
+    final unit = farmDt * 0.5 / FarmTile.growthTimePerStage;
+    for (final t in _farmTiles) {
+      if (!t.isGrowing) continue;
+      if (t.growthProgress < avg - 0.10) {
+        t.update(farmDt * 0.5); // geride kalan +%50
+      } else if (t.growthProgress > avg + 0.10) {
+        t.growthProgress = (t.growthProgress - unit).clamp(0.0, 1.0);
+      }
+    }
+  }
+
+  // ── Bilge yaşlı: random event ───────────────────────────────────────────
+  // Koşullar: 2+ yaşlı yaşıyor, mevcut bilge yok. Her ~60s'de düşük şansla
+  // (%8) bir yaşlı bilge ilan edilir. Bilge yaşadığı sürece köyde +%8
+  // moral bonus (computeVillageStats'a eventMorale üstüne eklenir).
+  void _tickSageEmergence(double dt) {
+    _sageCheckSec -= dt;
+    if (_sageCheckSec > 0) return;
+    _sageCheckSec = 60.0;
+    if (_villagers.any((v) => v.isSage)) return;
+    final elders = _villagers
+        .where((v) => v.lifeStage == LifeStage.elder && !v.isSage)
+        .toList();
+    if (elders.length < 2) return;
+    // Yaşlıya huzur açıksa bilge çıkma şansı yarıya iner (uzun yaşlılık
+    // olmadan bilgelik zor olgunlaşır — gerçek bir bedel).
+    final chance = _policies.peacefulEnd ? 0.04 : 0.08;
+    if (_rng.nextDouble() > chance) return;
+    final sage = elders[_rng.nextInt(elders.length)];
+    sage.isSage = true;
+    _showNotification(
+        '👵 ${sage.name} köyün bilgesi oldu — herkes ondan ilham alıyor.');
+  }
+
+  // ── Politika morali — kalıcı bedeller ────────────────────────────────────
+  // Politikaların düz toplam etkisi (her tick aynı). Açıkken eventMorale'ye
+  // negatif/pozitif eklenir, oyuncu kararının ağırlığı barda görünür.
+  double _policyMoralePermanent() {
+    double m = 0;
+    // Aile planlaması mutex
+    switch (_policies.family) {
+      case FamilyPolicy.open: break;
+      case FamilyPolicy.oneChild: m -= 0.05;
+      case FamilyPolicy.twoChild: m -= 0.02;
+    }
+    if (_policies.familyEncouragement) m -= 0.02;
+    if (_policies.peacefulEnd)          m += 0.03;
+    if (_policies.eldersExemptFromFood) m -= 0.04;
+    return m;
+  }
+
+  // Geçici efektler — göçmen uyumu (-3%, 2 gün), aile birleşimi (+2%, 5 gün).
+  // _policyMoraleEffects listesindeki süresi geçmemişlerin toplamı.
+  double _policyMoraleTemporary() {
+    _policyMoraleEffects.removeWhere((e) => e.untilSim <= _time);
+    double sum = 0;
+    for (final e in _policyMoraleEffects) {
+      sum += e.amount;
+    }
+    return sum;
+  }
+
+  /// Geçici moral efekti pushla — UI'da görünmesi için. Doğal kullanım:
+  /// - Göçmen geldi → push(-0.03, 2 gün)
+  /// - Aile kuruldu → push(+0.02, 5 gün)
+  void pushPolicyMorale(double amount, double durationDays) {
+    _policyMoraleEffects.add((
+      untilSim: _time + durationDays * kGameDaySeconds,
+      amount: amount,
+    ));
+  }
+}

@@ -170,4 +170,18 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     role: BuildingRole.none,
     summary: 'Geceleri sokağı aydınlatır. Yol kenarına dizilirse köy ışıl ışıl.',
   ),
+
+  BuildingType.floristCottage: BuildingFunction(
+    role: BuildingRole.civic,
+    summary: 'Çiçekçi kadın etki alanındaki çiçekleri sular ve bakar; köy '
+        'morali sürekli yüksek kalır. Kulübenin etrafına doğal çiçek demetleri biter.',
+    civicEffect: CivicEffect.morale,
+    civicValue: 0.10,
+  ),
+
+  BuildingType.chickenCoop: BuildingFunction(
+    role: BuildingRole.gathering,
+    summary: '3-4 tavuk barındırır. Tavuklar dolaşır ve periyodik olarak '
+        'yumurta yumurtlar — kümes düzenli olarak yiyecek üretir.',
+  ),
 };

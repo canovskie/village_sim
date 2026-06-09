@@ -75,6 +75,10 @@ class AnchorSystem {
   final List<AnchorPoint> warehousePoints = [];
   /// Ateş yeri — taşıyıcı teslim fallback'i (depo yoksa) + gece toplanma.
   final List<AnchorPoint> firepitPoints = [];
+  /// Ateş yeri — akşam toplanıp ısınma/hikaye dinleme oturma yerleri.
+  /// Carrier slot'larından bağımsız: aynı anda hem teslim hem oturma olabilir.
+  /// İç halka (radius 1.15) — sitter alev'e daha yakın, carrier dış halkada.
+  final List<AnchorPoint> firepitSitPoints = [];
 
   /// Tüm noktaları siler ve binalardan yeniden üretir.
   /// Eski slot rezervasyonları kaybolur — NPC bir sonraki claim'inde
@@ -83,6 +87,7 @@ class AnchorSystem {
     wellPoints.clear();
     warehousePoints.clear();
     firepitPoints.clear();
+    firepitSitPoints.clear();
     for (final b in buildings) {
       switch (b.type) {
         case BuildingType.well:
@@ -123,6 +128,15 @@ class AnchorSystem {
                 _ringSlot(cx, cy, 1.4, i, 6),
             ],
           ));
+          // Aynı ateşin iç halkası — akşam oturma için. Carrier slot'larıyla
+          // çakışmasın diye 30°/0.25 tile offset.
+          firepitSitPoints.add(AnchorPoint(
+            building: b,
+            slots: [
+              for (int i = 0; i < 6; i++)
+                _ringSlotOffset(cx, cy, 1.15, i, 6, 0.5),
+            ],
+          ));
         default:
           break;
       }
@@ -134,10 +148,27 @@ class AnchorSystem {
     return AnchorSlot(cx + r * cos(a), cy + r * sin(a));
   }
 
+  /// [_ringSlot] varyantı — açıyı [offsetSteps] adım kaydırır (1 step = 1/n).
+  /// Sit halkasını carrier halkasından açı olarak ofsetlemek için.
+  static AnchorSlot _ringSlotOffset(double cx, double cy, double r,
+      int i, int n, double offsetSteps) {
+    final a = (i + offsetSteps) * (2 * pi / n);
+    return AnchorSlot(cx + r * cos(a), cy + r * sin(a));
+  }
+
   /// Verilen NPC'ye en yakın boş kuyu slot'u — claim'i yapar.
   (AnchorPoint, AnchorSlot)? claimNearestWell(
       double npcCol, double npcRow, Object owner) =>
       _claimNearestFrom(wellPoints, npcCol, npcRow, owner);
+
+  /// Ateş başında oturma slot'u — akşam toplanma için.
+  /// Sadece [npcCol,npcRow] çevresinde [maxDist] tile'dan yakın ateşleri arar
+  /// (uzaktaki ateşe yürüyüp bütün sahneyi kateden NPC olmasın).
+  (AnchorPoint, AnchorSlot)? claimNearestFirepitSit(
+      double npcCol, double npcRow, Object owner,
+      {double maxDist = 14.0}) =>
+      _claimNearestFromWithin(
+          firepitSitPoints, npcCol, npcRow, owner, maxDist);
 
   /// Carrier teslim slot'u — önce warehouse'tan, yoksa firepit'ten.
   /// Tek API: assignCarriers bunu çağırır, fallback chain burada.
@@ -146,6 +177,35 @@ class AnchorSystem {
     final fromWh = _claimNearestFrom(warehousePoints, npcCol, npcRow, owner);
     if (fromWh != null) return fromWh;
     return _claimNearestFrom(firepitPoints, npcCol, npcRow, owner);
+  }
+
+  /// [_claimNearestFrom] varyantı — yalnızca [maxDist] tile içindeki noktaları
+  /// değerlendirir. Uzaktaki sosyal noktaya kalkışmamak için.
+  (AnchorPoint, AnchorSlot)? _claimNearestFromWithin(
+      List<AnchorPoint> points, double npcCol, double npcRow,
+      Object owner, double maxDist) {
+    final maxD2 = maxDist * maxDist;
+    AnchorPoint? bestPoint;
+    AnchorSlot? bestSlot;
+    double bestD2 = double.infinity;
+    for (final p in points) {
+      for (final s in p.slots) {
+        if (s._taken) continue;
+        final dx = s.col - npcCol;
+        final dy = s.row - npcRow;
+        final d2 = dx * dx + dy * dy;
+        if (d2 > maxD2) continue;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          bestPoint = p;
+          bestSlot = s;
+        }
+      }
+    }
+    if (bestPoint == null || bestSlot == null) return null;
+    bestSlot._taken = true;
+    bestSlot._owner = owner;
+    return (bestPoint, bestSlot);
   }
 
   /// Liste içinden NPC'ye en yakın boş slot'u claim eder. Boş yoksa null.

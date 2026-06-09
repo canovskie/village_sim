@@ -23,6 +23,14 @@ class _Anim {
                this.legLiftL = 0, this.legLiftR = 0,
                this.torsoTwist = 0});
 
+  /// Tek parametre değiştirip kopya — meşale taşıyan sol kolu yukarı sabit
+  /// tutmak gibi durumlar için. Diğer alanlar korunur.
+  _Anim copyWith({double? armL}) => _Anim(
+      legL, legR, armL ?? this.armL, armR, bob,
+      sway: sway, lean: lean,
+      legLiftL: legLiftL, legLiftR: legLiftR,
+      torsoTwist: torsoTwist);
+
   /// Karakter idle/walking/carrying için kol-bacak-bob salınımı.
   ///
   /// [moveIntensity] 0..1 sürekli — walking ↔ idle smooth blend.
@@ -94,14 +102,20 @@ class CharacterRenderer {
     double walkPhase = 0,
     double moveIntensity = 0.0,
     bool carrying = false,
-    bool torch = false,
+    /// 0..1 — Entity.torchLevel ile birebir. Sprite alpha ve hafif scale
+    /// flicker bu değere bağlı; eski `bool torch` parametresinin yerine geçer.
+    double torchLevel = 0.0,
+    /// Per-NPC sabit flicker fazı (ToolRenderer.drawTorch sapın titreşmesi için).
+    double torchPhase = 0.0,
     NpcVisual? visual,
     double time = 0,
     LifeStage stage = LifeStage.adult,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
-    final anim = _Anim.compute(walkPhase, moveIntensity, carrying: carrying);
+    var anim = _Anim.compute(walkPhase, moveIntensity, carrying: carrying);
+    // Meşale taşıyorsa sol kol yukarı kilitlenir → el ve meşale tek birim.
+    if (torchLevel > 0.02) anim = anim.copyWith(armL: _kTorchArmAngle);
 
     // Çocuk/genç henüz meslek edinmemiş → standart köylü görünümü, tipten
     // bağımsız. Yetişkin/yaşlı meslek görünür; yaşlıda saç kıra döner.
@@ -136,15 +150,10 @@ class CharacterRenderer {
       }
     }
 
-    // Gece yürüyüşünde torch — sağ kola yapıştırılır, kol açısıyla sallanır.
-    // Omuz x'i tipe göre alınır → torch farklı gövde genişliklerinde de ele oturur.
-    if (torch) {
-      canvas.save();
-      canvas.translate(_rightShoulderX(type), -68);  // sağ omuz pivotu
-      canvas.rotate(anim.armR);   // kol açısı
-      ToolRenderer.drawTorch(canvas);
-      canvas.restore();
-    }
+    // Gece dışarıda meşale — sol omuz (off-hand), tüm character render
+    // yolları aynı helper'ı kullanır → civilian + worker pattern tutarlı.
+    _torchInLeftHand(canvas, torchLevel,
+        time: time, torchPhase: torchPhase);
     canvas.restore();
   }
 
@@ -215,6 +224,31 @@ class CharacterRenderer {
           ? _skin2
           : _skin1;
 
+  /// Meşale taşıyan sol kolun sabit açısı — yukarı kaldırılmış, baş hizasında.
+  /// Gerçek meşale duruşu: kol aşağı sallanmaz, alev yukarıda durur.
+  /// Hem helper rotate hem body sol kol bu açıya kilitlenir → kol + meşale
+  /// tek birim olarak hareket eder.
+  static const double _kTorchArmAngle = -2.55;
+
+  /// Tek meşale helper — civilian + tüm worker tipleri buradan geçer.
+  /// Sol omuz pivotu (off-hand); sağ kolda alet olabilir (balta/kazma/...).
+  /// Kol açısı sabit `_kTorchArmAngle` (drawX'ler armL'yi de bu değere
+  /// kilitler → el meşaleden ayrı görünmez). flicker scale tek varyasyon.
+  static void _torchInLeftHand(Canvas c, double torchLevel,
+      {double shoulderX = -15,
+       double shoulderY = -68,
+       double time = 0,
+       double torchPhase = 0}) {
+    if (torchLevel <= 0.02) return;
+    c.save();
+    c.translate(shoulderX, shoulderY);
+    c.rotate(_kTorchArmAngle);
+    final flick = 1.0 + sin(time * 5.2 + torchPhase) * 0.04;
+    c.scale(flick, flick);
+    ToolRenderer.drawTorch(c, alpha: torchLevel);
+    c.restore();
+  }
+
   static void drawFarmer(Canvas canvas, {
     bool   flipX         = false,
     double walkPhase     = 0,
@@ -222,11 +256,15 @@ class CharacterRenderer {
     bool   harvesting    = false,
     double harvestPhase  = 0,
     bool   carryingWater = false,
+    NpcVisual? visual,
+    double time = 0,
+    double torchLevel = 0,
+    double torchPhase = 0,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
-    final _Anim anim;
+    _Anim anim;
     if (harvesting) {
       final t = harvestPhase / (2 * pi);
       final double swing;
@@ -241,8 +279,15 @@ class CharacterRenderer {
     } else {
       anim = _Anim.compute(walkPhase, moveIntensity);
     }
+    // Meşale yanıyorsa sol kol yukarı sabit kilitlenir (kol + meşale tek birim).
+    final showTorch = torchLevel > 0.02 && !carryingWater && !harvesting;
+    if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
 
-    _farmer(canvas, anim, carryingWater: carryingWater);
+    _farmer(canvas, anim, carryingWater: carryingWater, v: visual, time: time);
+    if (showTorch) {
+      _torchInLeftHand(canvas, torchLevel,
+          time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
   }
 
@@ -251,17 +296,27 @@ class CharacterRenderer {
     double walkPhase = 0,
     double moveIntensity = 0.0,
     bool working = false,
+    NpcVisual? visual,
+    double time = 0,
+    double torchLevel = 0,
+    double torchPhase = 0,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
-    final _Anim anim;
+    _Anim anim;
     if (working) {
       final s = sin(walkPhase);
       anim = _Anim(0, 0, s * 0.10, s * 0.52, 0);
     } else {
       anim = _Anim.compute(walkPhase, moveIntensity);
     }
-    _builder(canvas, anim, working: working);
+    final showTorch = torchLevel > 0.02 && !working;
+    if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
+    _builder(canvas, anim, working: working, v: visual, time: time);
+    if (showTorch) {
+      _torchInLeftHand(canvas, torchLevel,
+          time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
   }
 
@@ -347,18 +402,6 @@ class CharacterRenderer {
     c.restore();
   }
 
-  /// Tipe göre sağ omuz x'i — torch/alet bağlama pivotu için.
-  /// Render fonksiyonlarındaki sağ kol shoulderX değerleriyle aynı tutulmalı.
-  static double _rightShoulderX(VillagerType t) => switch (t) {
-        VillagerType.guard      => 20,
-        VillagerType.blacksmith => 18,
-        VillagerType.mage       => 18,
-        VillagerType.merchant   => 16,
-        VillagerType.miner      => 16,
-        VillagerType.farmer     => 15,
-        VillagerType.fisher     => 15,
-      };
-
   /// Tunik gövde + kemer.
   static void _tunic(Canvas c, Color col, Color shade) {
     c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(col));
@@ -371,22 +414,31 @@ class CharacterRenderer {
   }
 
   // ─── 1. ÇIFTÇI ────────────────────────────────────────────────────────────
-  static void _farmer(Canvas c, _Anim anim, {bool carryingWater = false}) {
+  static void _farmer(Canvas c, _Anim anim,
+      {bool carryingWater = false, NpcVisual? v, double time = 0}) {
+    final tunic = v != null ? tintCloth(_linen, v.clothingShift) : _linen;
+    final hose  = v != null ? tintCloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
+    final hat   = v != null ? tintCloth(_straw, v.clothingShift * 0.4) : _straw;
+    final skin  = v?.skin ?? _skin1;
     _shadow(c);
-    _leg(c, -6, anim.legL, _woolBrown, _leatherDk);
-    _leg(c,  6, anim.legR, _woolBrown, _leatherDk);
+    _leg(c, -6, anim.legL, hose, _leatherDk);
+    _leg(c,  6, anim.legR, hose, _leatherDk);
     c.save();
     _applyTorsoTransform(c, anim);
-    _tunic(c, _linen, _woolBrown);
-    _arm(c, -15, anim.armL, _linen);
+    _tunic(c, tunic, _woolBrown);
+    _arm(c, -15, anim.armL, tunic);
     // Sulama turunda sağ elde su kovası; değilse boş el (idle/hasat).
-    _arm(c, 15, anim.armR, _linen,
+    _arm(c, 15, anim.armR, tunic,
         carryingWater ? (a) => ToolRenderer.drawWaterbucket(a) : null);
-    _head(c, _skin1);
+    if (v != null) {
+      _shadedHead(c, v, time);
+    } else {
+      _head(c, skin);
+    }
     // Hasır şapka (yassı brim + kule)
-    c.drawRect(const Rect.fromLTWH(-17, -98, 34, 8), _f(_straw));
+    c.drawRect(const Rect.fromLTWH(-17, -98, 34, 8), _f(hat));
     c.drawRect(const Rect.fromLTWH(-17, -98, 34, 8), _s(const Color(0xFF8A6820)));
-    c.drawRect(const Rect.fromLTWH(-7,  -114, 14, 16), _f(_straw));
+    c.drawRect(const Rect.fromLTWH(-7,  -114, 14, 16), _f(hat));
     c.drawRect(const Rect.fromLTWH(-7,  -114, 14, 16), _s(const Color(0xFF8A6820)));
     c.restore();
   }
@@ -586,11 +638,15 @@ class CharacterRenderer {
     double moveIntensity = 0.0,
     bool mining = false,
     double chopPhase = 0,
+    NpcVisual? visual,
+    double time = 0,
+    double torchLevel = 0,
+    double torchPhase = 0,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
-    final _Anim anim;
+    _Anim anim;
     if (mining) {
       final t = chopPhase / (2 * pi);
       final double swing;
@@ -605,21 +661,32 @@ class CharacterRenderer {
     } else {
       anim = _Anim.compute(walkPhase, moveIntensity);
     }
+    final showTorch = torchLevel > 0.02 && !mining;
+    if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
     final armRAngle = anim.armR;
     final armLAngle = anim.armL;
 
-    const shirtCol  = Color(0xFF4A4840);
+    final shirtCol  = visual != null
+        ? tintCloth(const Color(0xFF4A4840), visual.clothingShift)
+        : const Color(0xFF4A4840);
     const shirtDark = Color(0xFF2A2820);
+    final vestCol = visual != null
+        ? tintCloth(const Color(0xFF6A4A28), visual.clothingShift * 0.5)
+        : const Color(0xFF6A4A28);
+    final hoseCol = visual != null
+        ? tintCloth(const Color(0xFF3A3028), visual.clothingShift * 0.4)
+        : const Color(0xFF3A3028);
+    final skin = visual?.skin ?? _skin2;
 
     _shadow(canvas);
-    _leg(canvas, -6, anim.legL, const Color(0xFF3A3028), _leatherDk);
-    _leg(canvas,  6, anim.legR, const Color(0xFF3A3028), _leatherDk);
+    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
+    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
     canvas.save();
     _applyTorsoTransform(canvas, anim);
     canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtCol));
     canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
     // Deri yelek
-    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 30), _f(const Color(0xFF6A4A28)));
+    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 30), _f(vestCol));
     canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 30), _s(_leatherDk));
     canvas.drawRect(const Rect.fromLTWH(-2, -58, 4, 14),   _f(_leatherDk));
 
@@ -627,7 +694,11 @@ class CharacterRenderer {
     _arm(canvas,  16, armRAngle, shirtCol,
         (arm) => ToolRenderer.drawPickaxe(arm));
 
-    _head(canvas, _skin2);
+    if (visual != null) {
+      _shadedHead(canvas, visual, time);
+    } else {
+      _head(canvas, skin);
+    }
     // Kask
     canvas.drawRect(const Rect.fromLTWH(-12, -96, 24,  6), _f(const Color(0xFF2A2010)));
     canvas.drawRect(const Rect.fromLTWH(-12, -96, 24,  6), _s(const Color(0xFF1A1008)));
@@ -636,6 +707,10 @@ class CharacterRenderer {
     canvas.drawRect(const Rect.fromLTWH( -3,-108,  6,  4), _f(const Color(0xFFFFDD44)));
     canvas.restore();
 
+    if (showTorch) {
+      _torchInLeftHand(canvas, torchLevel,
+          shoulderX: -16, time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
   }
 
@@ -647,13 +722,17 @@ class CharacterRenderer {
     double moveIntensity = 0.0,
     bool chopping = false,
     double chopPhase = 0,
+    NpcVisual? visual,
+    double time = 0,
+    double torchLevel = 0,
+    double torchPhase = 0,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
     // Walking/idle iken standart _Anim (lean/sway/bob dahil).
     // Chopping iken sadece kol açıları custom; lean/sway/bob = 0.
-    final _Anim anim;
+    _Anim anim;
     if (chopping) {
       final t = chopPhase / (2 * pi);
       final double swing;
@@ -668,18 +747,24 @@ class CharacterRenderer {
     } else {
       anim = _Anim.compute(walkPhase, moveIntensity);
     }
+    final showTorch = torchLevel > 0.02 && !chopping;
+    if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
     final armRAngle = anim.armR;
     final armLAngle = anim.armL;
 
+    final hoseCol = visual != null
+        ? tintCloth(_woolDark, visual.clothingShift * 0.5) : _woolDark;
+    final shirtColor = visual != null
+        ? tintCloth(const Color(0xFF8B2020), visual.clothingShift) : const Color(0xFF8B2020);
+    const shirtDark  = Color(0xFF5A1010);
+    final skin = visual?.skin ?? _skin1;
+
     _shadow(canvas);
-    _leg(canvas, -6, anim.legL, _woolDark, _leatherDk);
-    _leg(canvas,  6, anim.legR, _woolDark, _leatherDk);
+    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
+    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
 
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    // Gömlek: kırmızı-kahverengi ekose
-    const shirtColor = Color(0xFF8B2020);
-    const shirtDark  = Color(0xFF5A1010);
     canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtColor));
     canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
     for (final v in [-62.0, -54.0, -46.0]) {
@@ -693,12 +778,20 @@ class CharacterRenderer {
     // Sağ kol + balta PNG
     _arm(canvas, 16, armRAngle, shirtColor, (arm) => ToolRenderer.drawAxe(arm));
 
-    _head(canvas, _skin1);
+    if (visual != null) {
+      _shadedHead(canvas, visual, time);
+    } else {
+      _head(canvas, skin);
+    }
     // Basit bere / bandana
     canvas.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _f(const Color(0xFF4A3010)));
     canvas.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _s(const Color(0xFF2A1A08)));
     canvas.restore();
 
+    if (showTorch) {
+      _torchInLeftHand(canvas, torchLevel,
+          shoulderX: -16, time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
   }
 
@@ -734,14 +827,25 @@ class CharacterRenderer {
     double moveIntensity = 0.0,
     bool   fishing       = false,
     double fishPhase     = 0,
+    NpcVisual? visual,
+    double time = 0,
+    double torchLevel = 0,
+    double torchPhase = 0,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
+    final shirtCol = visual != null
+        ? tintCloth(const Color(0xFF5A7888), visual.clothingShift) : const Color(0xFF5A7888);
+    final vestCol  = visual != null
+        ? tintCloth(const Color(0xFF2A3840), visual.clothingShift * 0.5) : const Color(0xFF2A3840);
+    final hoseCol  = visual != null
+        ? tintCloth(const Color(0xFF3A5060), visual.clothingShift * 0.4) : const Color(0xFF3A5060);
+    final skin = visual?.skin ?? _skin1;
 
-    final _Anim anim;
+    _Anim anim;
     final double armRAngle;
     final double castAngle;
-    final double leftSwing;
+    double leftSwing;
     if (fishing) {
       final t = fishPhase / (2 * pi);
       final double swing;
@@ -764,21 +868,26 @@ class CharacterRenderer {
       castAngle = 0;
       leftSwing = anim.armL;
     }
+    final showTorch = torchLevel > 0.02 && !fishing;
+    if (showTorch) {
+      anim = anim.copyWith(armL: _kTorchArmAngle);
+      leftSwing = _kTorchArmAngle;
+    }
 
     _shadow(canvas);
-    _leg(canvas, -6, anim.legL, const Color(0xFF3A5060), _leatherDk);
-    _leg(canvas,  6, anim.legR, const Color(0xFF3A5060), _leatherDk);
+    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
+    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
 
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    canvas.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(const Color(0xFF5A7888)));
+    canvas.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(shirtCol));
     canvas.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _s(const Color(0xFF3A5060)));
-    canvas.drawRect(const Rect.fromLTWH(-9, -67, 18, 30), _f(const Color(0xFF2A3840)));
+    canvas.drawRect(const Rect.fromLTWH(-9, -67, 18, 30), _f(vestCol));
     canvas.drawRect(const Rect.fromLTWH(-9, -67, 18, 30), _s(const Color(0xFF1A2830)));
 
-    _arm(canvas, -15, leftSwing, const Color(0xFF5A7888));
+    _arm(canvas, -15, leftSwing, shirtCol);
     // Sağ kol + olta
-    _arm(canvas,  15, armRAngle, const Color(0xFF5A7888),
+    _arm(canvas,  15, armRAngle, shirtCol,
         (arm) => ToolRenderer.drawRod(arm, castAngle: castAngle));
 
     // Olta ipi (fishing sırasında)
@@ -795,7 +904,11 @@ class CharacterRenderer {
       );
     }
 
-    _head(canvas, _skin1);
+    if (visual != null) {
+      _shadedHead(canvas, visual, time);
+    } else {
+      _head(canvas, skin);
+    }
     // Şapka
     canvas.drawRect(const Rect.fromLTWH(-14, -98, 28, 6),   _f(const Color(0xFF4A3A20)));
     canvas.drawRect(const Rect.fromLTWH(-14, -98, 28, 6),   _s(const Color(0xFF2A1A08)));
@@ -803,6 +916,10 @@ class CharacterRenderer {
     canvas.drawRect(const Rect.fromLTWH( -8, -110, 16, 12), _s(const Color(0xFF2A1A08)));
     canvas.restore();
 
+    if (showTorch) {
+      _torchInLeftHand(canvas, torchLevel,
+          shoulderX: -15, time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
   }
 
@@ -815,13 +932,17 @@ class CharacterRenderer {
     double moveIntensity = 0.0,
     bool   milking       = false,
     double milkPhase     = 0,
+    NpcVisual? visual,
+    double time = 0,
+    double torchLevel = 0,
+    double torchPhase = 0,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
-    final _Anim anim;
+    _Anim anim;
     final double armRAngle;
-    final double armLAngle;
+    double armLAngle;
     if (milking) {
       // Eller aşağı sabit, hafif ritmik salınım (sağım hareketi)
       final wobble = sin(milkPhase * 2) * 0.12;
@@ -833,21 +954,30 @@ class CharacterRenderer {
       armRAngle = anim.armR;
       armLAngle = anim.armL;
     }
+    final showTorch = torchLevel > 0.02 && !milking;
+    if (showTorch) {
+      anim = anim.copyWith(armL: _kTorchArmAngle);
+      armLAngle = _kTorchArmAngle;
+    }
+
+    final hoseCol = visual != null
+        ? tintCloth(const Color(0xFF4A3818), visual.clothingShift * 0.4) : const Color(0xFF4A3818);
+    final shirtColor = visual != null
+        ? tintCloth(const Color(0xFFC8B080), visual.clothingShift) : const Color(0xFFC8B080);
+    const shirtDark  = Color(0xFF8A6C40);
+    final vestColor = visual != null
+        ? tintCloth(const Color(0xFF3A6A40), visual.clothingShift * 0.6) : const Color(0xFF3A6A40);
+    const vestDark  = Color(0xFF1E3A22);
+    final skin = visual?.skin ?? _skin1;
 
     _shadow(canvas);
-    _leg(canvas, -6, anim.legL, const Color(0xFF4A3818), _leatherDk);
-    _leg(canvas,  6, anim.legR, const Color(0xFF4A3818), _leatherDk);
+    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
+    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
 
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    // Bej keten gömlek
-    const shirtColor = Color(0xFFC8B080);
-    const shirtDark  = Color(0xFF8A6C40);
     canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtColor));
     canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
-    // Yeşil yelek üstte
-    const vestColor = Color(0xFF3A6A40);
-    const vestDark  = Color(0xFF1E3A22);
     canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 28), _f(vestColor));
     canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 28), _s(vestDark));
     // Kemer
@@ -865,7 +995,11 @@ class CharacterRenderer {
       _arm(canvas, 16, armRAngle, shirtColor);
     }
 
-    _head(canvas, _skin1);
+    if (visual != null) {
+      _shadedHead(canvas, visual, time);
+    } else {
+      _head(canvas, skin);
+    }
     // Hasır şapka (geniş kenar + üst)
     canvas.drawRect(const Rect.fromLTWH(-14, -94, 28, 4), _f(_straw));
     canvas.drawRect(const Rect.fromLTWH(-14, -94, 28, 4), _s(const Color(0xFF6A4A18)));
@@ -873,6 +1007,10 @@ class CharacterRenderer {
     canvas.drawRect(const Rect.fromLTWH(-9, -104, 18, 10), _s(const Color(0xFF6A4A18)));
     canvas.restore();
 
+    if (showTorch) {
+      _torchInLeftHand(canvas, torchLevel,
+          shoulderX: -16, time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
   }
 
@@ -1434,27 +1572,38 @@ class CharacterRenderer {
   }
 
   // ─── 11. İNŞAATÇI ──────────────────────────────────────────────────────────
-  static void _builder(Canvas c, _Anim anim, {bool working = false}) {
+  static void _builder(Canvas c, _Anim anim,
+      {bool working = false, NpcVisual? v, double time = 0}) {
+    final hose = v != null ? tintCloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
+    final tulum = v != null
+        ? tintCloth(const Color(0xFF9A7840), v.clothingShift) : const Color(0xFF9A7840);
+    final bere = v != null
+        ? tintCloth(const Color(0xFFBEA870), v.clothingShift * 0.6) : const Color(0xFFBEA870);
+    final skin = v?.skin ?? _skin1;
     _shadow(c);
-    _leg(c, -6, anim.legL, _woolBrown, _leatherDk);
-    _leg(c,  6, anim.legR, _woolBrown, _leatherDk);
+    _leg(c, -6, anim.legL, hose, _leatherDk);
+    _leg(c,  6, anim.legR, hose, _leatherDk);
     c.save();
     _applyTorsoTransform(c, anim);
     // Çalışma tulumu
-    c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(const Color(0xFF9A7840)));
+    c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(tulum));
     c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _s(_outline));
     // Önlük
     c.drawRect(const Rect.fromLTWH(-8, -66, 16, 28), _f(_leather));
     c.drawRect(const Rect.fromLTWH(-8, -66, 16, 28), _s(_leatherDk));
     // Omuz askısı
     c.drawRect(const Rect.fromLTWH(-13, -50, 26, 4), _f(_leatherDk));
-    _arm(c, -15, anim.armL, const Color(0xFF9A7840));
+    _arm(c, -15, anim.armL, tulum);
     // Sağ kol + çekiç (PNG)
-    _arm(c, 15, anim.armR, const Color(0xFF9A7840),
+    _arm(c, 15, anim.armR, tulum,
         (arm) => ToolRenderer.drawHammer(arm));
-    _head(c, _skin1);
+    if (v != null) {
+      _shadedHead(c, v, time);
+    } else {
+      _head(c, skin);
+    }
     // Bere
-    c.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _f(const Color(0xFFBEA870)));
+    c.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _f(bere));
     c.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _s(const Color(0xFF8A7040)));
     c.restore();
   }

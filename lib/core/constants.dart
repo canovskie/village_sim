@@ -20,6 +20,10 @@ const double kFarmerSpeed        = 3.5;
 // ─── Çalışma süreleri (saniye) ───────────────────────────────────────────────
 const double kChopDuration         = 18.0; // woodcutter + lumberCamp ortak — huzurlu tempo
 const double kFishDuration         = 7.0;
+/// Tavuk kümesi başına bir yumurta (1 food) üretim aralığı (saniye).
+/// Balıkçı bir tutuşta ~7 sn'de 1 food üretir; kümes pasif olduğu için biraz
+/// daha yavaş — 3-4 tavuk birlikte ~ortalama bir balıkçıya yakın çıktı verir.
+const double kEggInterval          = 32.0;
 const double kFarmHarvestDuration  = 4.0;
 const double kFarmWaterFetchTime   = 1.5;
 const double kFarmWaterTime        = 1.2;

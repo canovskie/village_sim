@@ -124,7 +124,10 @@ class ToolRenderer {
   // PNG: 1254×1254 — torch.png, kare.
   // Çağrı: arm-local uzayda; CharacterRenderer.draw torch:true durumunda
   // sağ omuz pivotuna translate + arm rotate uygulayıp çağırır.
-  static void drawTorch(Canvas canvas) {
+  /// [alpha] 0..1 — Entity.torchLevel ile fade in/out (sabah söndürüp sokağa
+  /// çıkma hissi, ani snap yok). Asset paint'inden ayrı bir alpha-tinted
+  /// paint kullanılır ki shared static paint'in alpha'sı bozulmasın.
+  static void drawTorch(Canvas canvas, {double alpha = 1.0}) {
     final img = _imgs[_Tool.torch];
     if (img == null) return;
     const w = 14.0;
@@ -132,10 +135,16 @@ class ToolRenderer {
     canvas.save();
     canvas.translate(3, 14);   // arm-local: elin pozisyonu (kol y=0..20)
     canvas.rotate(-0.15);      // sapı hafif geriye eğ
+    final paint = (alpha >= 0.99)
+        ? _pTool
+        : (_pTorchSprite..color = Color.fromRGBO(255, 255, 255,
+            alpha.clamp(0.0, 1.0)));
     canvas.drawImageRect(img, _src(img),
-        Rect.fromLTWH(-w * 0.50, -h * 0.85, w, h), _paint());
+        Rect.fromLTWH(-w * 0.50, -h * 0.85, w, h), paint);
     canvas.restore();
   }
+  // Alpha-modülasyonlu torch paint — shared _pTool'un alpha'sını kirletmez.
+  static final Paint _pTorchSprite = AssetStyle.paint();
 
   // ── SAZ / BAĞLAMA (procedurel — asset yok) ─────────────────────────────────
   // Ortam: NPC eli hizasında save/translate ile çağrılır; gövde alt-orta
@@ -174,30 +183,35 @@ class ToolRenderer {
     canvas.drawRect(const Rect.fromLTWH(-1, -3, 2, 2), _pSazHole);
   }
 
-  /// Draw ambient torch glow in WORLD space at (cx, cy).
-  /// Call this BEFORE drawing the character (lower depth layer).
+  /// Meşalenin gerçek ucunda lokal glow + animasyonlu alev. Karakter
+  /// sprite'ından ÖNCE çağrılır (alt katman). [cx,cy] meşale ucu pozisyonu
+  /// (karakter merkezi değil — game_painter sağ omuz + baş üstü hesaplar).
   ///
-  /// Yumuşak halo (3 katman concentric) + üstünde küçük animasyonlu alev
-  /// (FlameRenderer). Lighting pass büyük halo'yu zaten veriyor; bu sadece
-  /// yerel parlama ile torch'un ucunda gerçek alev hissi.
+  /// [intensity] 0..1 — Entity.torchLevel ile birebir, fade in/out yapar.
+  /// [phase] per-NPC sabit flicker fazı: tüm meşaleler aynı anda titremesin.
+  ///
+  /// Lighting pass büyük halo'yu zaten veriyor; bu yalnız alev/ısı odağı için
+  /// 3 katmanlı concentric glow + alev sprite.
   static void drawTorchGlow(Canvas canvas, double cx, double cy,
-      double time, int seed) {
-    final flicker = sin(time * 3.7 + seed * 0.731);
+      double time, double phase, {double intensity = 1.0}) {
+    if (intensity <= 0.02) return;
+    final flicker = sin(time * 3.7 + phase);
+    final f = intensity.clamp(0.0, 1.0);
 
     _pTorchGlow1.color = Color.fromARGB(
-        ((12 + flicker * 5).round()).clamp(0, 28), 255, 160, 40);
+        ((12 + flicker * 5) * f).round().clamp(0, 28), 255, 160, 40);
     _pTorchGlow2.color = Color.fromARGB(
-        ((22 + flicker * 8).round()).clamp(0, 50), 255, 140, 20);
+        ((22 + flicker * 8) * f).round().clamp(0, 50), 255, 140, 20);
     _pTorchGlow3.color = Color.fromARGB(
-        ((36 + flicker * 12).round()).clamp(0, 72), 255, 120, 0);
+        ((36 + flicker * 12) * f).round().clamp(0, 72), 255, 120, 0);
 
-    canvas.drawCircle(Offset(cx, cy - 10), 36, _pTorchGlow1);
-    canvas.drawCircle(Offset(cx, cy - 10), 22, _pTorchGlow2);
-    canvas.drawCircle(Offset(cx, cy - 10), 11, _pTorchGlow3);
+    canvas.drawCircle(Offset(cx, cy), 32 * f.clamp(0.4, 1.0), _pTorchGlow1);
+    canvas.drawCircle(Offset(cx, cy), 20 * f.clamp(0.4, 1.0), _pTorchGlow2);
+    canvas.drawCircle(Offset(cx, cy), 10 * f.clamp(0.4, 1.0), _pTorchGlow3);
 
-    // Karakterin elindeki torch ucunda animasyonlu alev — küçük scale.
-    FlameRenderer.draw(canvas, cx + 4, cy - 6, 0.9, time, seed,
-        intensity: 0.95, sparks: true);
+    // Alev — meşale ucunda, hafif yukarıda. FlameRenderer intensity de scaled.
+    FlameRenderer.draw(canvas, cx, cy - 3, 0.85 * f.clamp(0.6, 1.0),
+        time, (phase * 1000).toInt(), intensity: 0.95 * f, sparks: f > 0.7);
   }
 
   // ── WATERBUCKET (çiftçi sulama) ───────────────────────────────────────────

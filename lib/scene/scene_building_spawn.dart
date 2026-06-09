@@ -127,6 +127,138 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _showNotification(msg);
   }
 
+  /// Doğal doğum — anne+baba'dan bebek üretir, parents ref'leri kurulur,
+  /// evin yakınında spawn. Anne fertilityDays resetlenir. Maliyet yok.
+  /// Bebek `LifeStage.child` evresinde — büyüdükçe `hasProfession` olur.
+  void _spawnBabyFromParents(VillagerEntity mother, VillagerEntity father) {
+    final home = mother.homeBuilding as BuildingEntity?;
+    if (home == null) return;
+
+    const civilianTypes = [
+      VillagerType.farmer,
+      VillagerType.merchant,
+      VillagerType.blacksmith,
+      VillagerType.guard,
+      VillagerType.mage,
+    ];
+    // Çıraklık politikası: bebek 2/3 ihtimal anne/baba mesleğini öğrenir,
+    // 1/3 ihtimal soy kırılır (rastgele meslek). Tam mirasilik soy zinciri
+    // çeşitliliğini öldürür — bedel hafif tutuldu.
+    final type = (_policies.apprenticeship && _rng.nextInt(3) != 0)
+        ? (_rng.nextBool() ? mother.type : father.type)
+        : civilianTypes[_rng.nextInt(civilianTypes.length)];
+    final male = _rng.nextBool();
+    final (sx, sy) = _nearestLand(
+      home.col + home.cols / 2.0,
+      home.row + home.rows.toDouble(),
+    );
+    final baby = VillagerEntity(
+      type: type,
+      name: randomVillagerName(_rng, male: male),
+      male: male,
+      startCol: sx,
+      startRow: sy,
+      lifespanDays: _rollLifespan(),
+      // ageDays = 0 → LifeStage.child evresinde başlar
+    );
+    baby.homeBuilding = home;
+    baby.parents.addAll([mother, father]);
+    mother.children.add(baby);
+    father.children.add(baby);
+    mother.birthCount++;
+    father.birthCount++;
+    _villagers.add(baby);
+
+    _showNotification(
+        '👶 ${mother.name} & ${father.name} ailesine ${baby.name} doğdu!');
+  }
+
+  /// Misafirperverlik politikasıyla periyodik tetiklenir: bir gezgin
+  /// haritanın kenarında doğar, boş bir eve yerleşir. Aile bağı yok
+  /// (yapayalnız yetişkin gelir). Notification çağrılır.
+  void _spawnMigrant() {
+    // Boş ev seç
+    BuildingEntity? house;
+    for (final b in _buildings) {
+      final f = b.fn;
+      if (f == null || f.role != BuildingRole.housing) continue;
+      final occ = _villagers.where((v) => v.homeBuilding == b).length;
+      if (occ < f.housingCapacity) {
+        house = b;
+        break;
+      }
+    }
+    if (house == null) return; // boş yatak yoksa zaten gelmez
+
+    // Edge spawn pos — kenar randomu
+    final edge = _rng.nextInt(4);
+    late double sx, sy;
+    switch (edge) {
+      case 0:
+        sx = _rng.nextDouble() * (kCols - 4) + 2;
+        sy = 1;
+      case 1:
+        sx = kCols - 2.0;
+        sy = _rng.nextDouble() * (kRows - 4) + 2;
+      case 2:
+        sx = _rng.nextDouble() * (kCols - 4) + 2;
+        sy = kRows - 2.0;
+      default:
+        sx = 1;
+        sy = _rng.nextDouble() * (kRows - 4) + 2;
+    }
+    final (lx, ly) = _nearestLand(sx, sy);
+
+    const civilianTypes = [
+      VillagerType.farmer,
+      VillagerType.merchant,
+      VillagerType.blacksmith,
+      VillagerType.guard,
+      VillagerType.mage,
+    ];
+    final type = civilianTypes[_rng.nextInt(civilianTypes.length)];
+    final male = _rng.nextBool();
+    // Yetişkin başlasın — bebek değil, hayatta tecrübeli (göç anlamlı olsun).
+    final ageDays = 20.0 + _rng.nextDouble() * 30.0;
+    final migrant = VillagerEntity(
+      type: type,
+      name: randomVillagerName(_rng, male: male),
+      male: male,
+      startCol: lx,
+      startRow: ly,
+      lifespanDays: _rollLifespan(),
+      ageDays: ageDays,
+    );
+    migrant.homeBuilding = house;
+    _villagers.add(migrant);
+    // Uyum süreci bedeli — köy 2 gün boyunca −%3 moral.
+    pushPolicyMorale(-0.03, 2.0);
+    _showNotification(
+        '🚶 ${migrant.name} köye katıldı (köy alışırken hafif gerilim).');
+  }
+
+  /// Doğa dostu politikası: kesilen ağacın yakınına bir fidan dik.
+  /// 1-3 tile yarıçaplı candidate ara, ilk uygun tile'a fidan kondur.
+  /// Uygun = grid içinde, su/bina/maden/ağaç/yol değil.
+  void _plantSaplingNear(int felledCol, int felledRow) {
+    final treeSet = {for (final t in _trees) (t.col, t.row)};
+    for (int attempt = 0; attempt < 12; attempt++) {
+      final dc = _rng.nextInt(5) - 2; // -2..+2
+      final dr = _rng.nextInt(5) - 2;
+      if (dc == 0 && dr == 0) continue;
+      final c = felledCol + dc;
+      final r = felledRow + dr;
+      if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
+      if (_obstacles.contains((c, r))) continue;
+      if (treeSet.contains((c, r))) continue;
+      if (_forbiddenForTrees.contains((c, r))) continue;
+      _trees.add(TreeEntity(
+        col: c, row: r, type: TreeType.pine, isGrowing: true,
+      ));
+      return;
+    }
+  }
+
   /// İnşaat tamamlandığında çalışır — bina tipine özel aksiyonlar.
   void _onBuildingCompleted(BuildOrder o) {
     final building = _buildings.firstWhere(
@@ -186,8 +318,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         );
 
       case BuildingType.barn:
-        // Ağıl tamamlanınca bir çoban + 3 inek spawn et. Her inek farklı,
-        // footprint dışı bir slot'a — yığılma yok, bina blok'unda spawn yok.
+        // Ağıl tamamlanınca bir çoban + 3 inek + 2 koyun spawn et.
+        // Footprint dışı slotlara — yığılma yok, bina blok'unda spawn yok.
         _shepherds.add(
           ShepherdEntity(barnCol: o.col, barnRow: o.row),
         );
@@ -207,10 +339,183 @@ extension _SceneBuildingSpawn on _VillageSceneState {
             startRow: o.row + dr + jy,
           ));
         }
+        const sheepOffsets = [
+          ( 0.4, 3.2),
+          ( 2.6, 2.6),
+        ];
+        for (final (dc, dr) in sheepOffsets) {
+          final jx = (_rng.nextDouble() - 0.5) * 0.4;
+          final jy = (_rng.nextDouble() - 0.5) * 0.4;
+          _cows.add(AnimalEntity(
+            kind: AnimalKind.sheep,
+            barnCol: o.col,
+            barnRow: o.row,
+            startCol: o.col + dc + jx,
+            startRow: o.row + dr + jy,
+          ));
+        }
+
+      case BuildingType.floristCottage:
+        _spawnFlowerGardenDecor(o);
+        // Çiçekçi NPC kulübeden çıkar. Spawn pozisyonu footprint güney kenarı.
+        final meta = kBuildingMeta[BuildingType.floristCottage]!;
+        _florists.add(FloristEntity(
+          startCol: o.col + meta.cols / 2.0,
+          startRow: o.row + meta.rows + 0.3,
+          cottageCol: o.col,
+          cottageRow: o.row,
+          effectRadius: meta.effectRadius,
+        ));
+
+      case BuildingType.chickenCoop:
+        // Tavuk kümesi: 3-4 tavuk spawn et, footprint güney/yan kenarına.
+        // Yumurta üretimi main update loop'unda timer'la — kümes pasif food.
+        const chickenOffsets = [
+          (0.4, 2.3),
+          (1.6, 2.5),
+          (2.5, 1.4),
+          (-0.4, 1.5),
+        ];
+        for (final (dc, dr) in chickenOffsets) {
+          final jx = (_rng.nextDouble() - 0.5) * 0.3;
+          final jy = (_rng.nextDouble() - 0.5) * 0.3;
+          _cows.add(AnimalEntity(
+            kind: AnimalKind.chicken,
+            barnCol: o.col,
+            barnRow: o.row,
+            startCol: o.col + dc + jx,
+            startRow: o.row + dr + jy,
+          ));
+        }
 
       default:
         break;
     }
+
+    // Yeşil köy politikası: tamamlanan her binanın çevresine 2-4 küçük decor
+    // (çiçek/çalı) serpiştir. Florist cottage zaten kendi geniş bahçesini
+    // yaptığı için onu atla.
+    if (_policies.greenVillage && o.type != BuildingType.floristCottage) {
+      _sprinkleGreenAround(building);
+    }
+  }
+
+  /// Yeşil köy: bina çevresine 2-4 rastgele çiçek/çalı/buttercup decor ekler.
+  /// 2-tile radius footprint dışından sample, su/bina/dekor çakışmasız.
+  void _sprinkleGreenAround(BuildingEntity b) {
+    const kinds = [
+      DecorKind.daisy,
+      DecorKind.buttercup,
+      DecorKind.bushSmall,
+      DecorKind.clover,
+      DecorKind.lavender,
+    ];
+    final candidates = <(int, int)>[];
+    for (int dr = -2; dr <= b.rows + 1; dr++) {
+      for (int dc = -2; dc <= b.cols + 1; dc++) {
+        final c = b.col + dc;
+        final r = b.row + dr;
+        if (c < 0 || c >= kCols || r < 0 || r >= kRows) continue;
+        if (c >= b.col && c < b.col + b.cols &&
+            r >= b.row && r < b.row + b.rows) {
+          continue;
+        }
+        if (_waterTiles.contains((c, r))) continue;
+        if (_isOccupiedByBuilding(c, r)) continue;
+        if (_decor.any((d) => d.col == c && d.row == r)) continue;
+        if (_trees.any((t) => t.col == c && t.row == r)) continue;
+        candidates.add((c, r));
+      }
+    }
+    if (candidates.isEmpty) return;
+    candidates.shuffle(_rng);
+    final pick = 2 + _rng.nextInt(3); // 2-4
+    for (int i = 0; i < pick && i < candidates.length; i++) {
+      final (c, r) = candidates[i];
+      _decor.add(DecorEntity(
+        col: c,
+        row: r,
+        kind: kinds[_rng.nextInt(kinds.length)],
+        variant: _rng.nextInt(3),
+        jitterX: (_rng.nextDouble() - 0.5) * 0.5,
+        jitterY: (_rng.nextDouble() - 0.5) * 0.5,
+        swaySeed: _rng.nextInt(1000),
+      ));
+    }
+  }
+
+  /// Çiçek bahçesi etki alanı içinde RANDOM tile'lara çiçek demeti dağıtır.
+  /// "Aşırı kalabalık olmasın" hedefi: radius içindeki uygun tile'ların
+  /// yalnızca yaklaşık %35'i çiçeklenir, gerisi çim kalır → boşluklu, doğal.
+  void _spawnFlowerGardenDecor(BuildOrder o) {
+    final meta = kBuildingMeta[BuildingType.floristCottage]!;
+    final radius = meta.effectRadius;
+    if (radius <= 0) return;
+
+    // Bina merkezi (1×1 footprint'in iç koordinatı)
+    final cx = o.col + meta.cols * 0.5;
+    final cy = o.row + meta.rows * 0.5;
+    final rTiles = radius.ceil();
+
+    // Çiçek türü havuzu — bahçe wildflower karışımı
+    const kinds = [
+      DecorKind.daisy,
+      DecorKind.poppy,
+      DecorKind.buttercup,
+      DecorKind.lavender,
+    ];
+
+    // Etki alanındaki ekilebilir tile'ları topla
+    final candidates = <(int, int)>[];
+    for (int dr = -rTiles; dr <= rTiles; dr++) {
+      for (int dc = -rTiles; dc <= rTiles; dc++) {
+        final c = o.col + dc;
+        final r = o.row + dr;
+        if (c < 0 || c >= kCols || r < 0 || r >= kRows) continue;
+        // Bina footprint'i hariç tut — planter ortayı kapsıyor zaten
+        if (c == o.col && r == o.row) continue;
+        // Yarıçap içinde mi (Öklid)
+        final dx = (c + 0.5) - cx;
+        final dy = (r + 0.5) - cy;
+        if (dx * dx + dy * dy > radius * radius) continue;
+        // Su / bina / mevcut dekor / ağaç çakışması yok
+        if (_waterTiles.contains((c, r))) continue;
+        if (_isOccupiedByBuilding(c, r)) continue;
+        if (_decor.any((d) => d.col == c && d.row == r)) continue;
+        if (_trees.any((t) => t.col == c && t.row == r)) continue;
+        candidates.add((c, r));
+      }
+    }
+    candidates.shuffle(_rng);
+
+    // Yalnızca yaklaşık 1/3'ünü çiçeklendir → seyrek, doğal hava.
+    // Üst limit 7: bahçe etrafı tıka basa dolmasın.
+    final pick = (candidates.length * 0.35).round().clamp(3, 7);
+    for (int i = 0; i < pick && i < candidates.length; i++) {
+      final (c, r) = candidates[i];
+      _decor.add(DecorEntity(
+        col: c,
+        row: r,
+        kind: kinds[_rng.nextInt(kinds.length)],
+        variant: _rng.nextInt(3),
+        jitterX: (_rng.nextDouble() - 0.5) * 0.5,
+        jitterY: (_rng.nextDouble() - 0.5) * 0.5,
+        swaySeed: _rng.nextInt(1000),
+      ));
+    }
+  }
+
+  /// Verilen tile herhangi bir bina footprint'inin içinde mi?
+  bool _isOccupiedByBuilding(int col, int row) {
+    for (final b in _buildings) {
+      final m = kBuildingMeta[b.type];
+      if (m == null) continue;
+      if (col >= b.col && col < b.col + m.cols &&
+          row >= b.row && row < b.row + m.rows) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// NPC'leri su tile'larından kara üzerine taşı (spawn safety).
@@ -302,5 +607,104 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       _fixNpcSpawns();
     });
     _showNotification('🏡 Yaşayan köy kuruldu!');
+  }
+
+  /// Görsel showcase — godmode için "her şeyi görmek istiyorum" tek tıkla.
+  /// Tüm bina tipleri grid'de yerleşir, ahır+kümes+çiçekçi+barn dolu, her
+  /// meslekten en az 1 NPC + bir bilge yaşlı + boş yataklara dolanan NPC'ler.
+  /// _buildLivingVillage'in genişletilmiş hali — test odaklı, denge umrunda
+  /// değil.
+  void _buildShowcaseVillage() {
+    setStateHere(() {
+      _generateWorld();
+      _stockpile.wood  = 9999;
+      _stockpile.stone = 9999;
+      _stockpile.iron  = 999;
+      _stockpile.coal  = 999;
+      _stockpile.food  = 9999;
+      _stockpile.gold  = 999;
+
+      // Grid layout — tüm bina tipleri, çakışmasız. Safe area (col 1..22,
+      // row 1..18). Sıra: erken/orta/ileri oyun + dekoratif.
+      const layout = <(BuildingType, int, int)>[
+        // Sıra 1: ateş yeri + temel
+        (BuildingType.firepit,         10, 2),
+        (BuildingType.well,             9, 4),
+        (BuildingType.lamppost,        12, 2),
+        (BuildingType.lamppost,         8, 2),
+        // Sıra 2: evler — solda ev kümesi
+        (BuildingType.woodenHouse,      2, 4),
+        (BuildingType.woodenHouse,      2, 7),
+        (BuildingType.woodenHouse,      2, 10),
+        (BuildingType.woodenHouse,      2, 13),
+        // Üretim — orta sütun
+        (BuildingType.lumberCamp,       5, 4),
+        (BuildingType.fisherCabin,      5, 7),
+        (BuildingType.mineBuilding,     5, 10),
+        (BuildingType.chickenCoop,      5, 13),
+        // Civic — sağ sütun
+        (BuildingType.townhall,        11, 6),
+        (BuildingType.tavern,          11, 10),
+        (BuildingType.market,          15, 4),
+        (BuildingType.warehouse,       15, 8),
+        // Ahır + Ağıl — alt sıra
+        (BuildingType.stable,          15, 12),
+        (BuildingType.barn,            19, 4),
+        // Diğer
+        (BuildingType.mill,            19, 8),
+        (BuildingType.floristCottage,  19, 12),
+        // Ekstra fenerler
+        (BuildingType.lamppost,         8, 8),
+        (BuildingType.lamppost,        14, 8),
+      ];
+      for (final (type, col, row) in layout) {
+        if (!_isValidPlacement(col, row, type)) continue;
+        final b = BuildingEntity(type: type, col: col, row: row);
+        _buildings.add(b);
+        _onBuildingCompleted(
+          BuildOrder(type: type, col: col, row: row)..completed = true,
+        );
+      }
+
+      // Tarla + 2 çiftçi — pazarın üstü
+      const farmC1 = 14, farmR1 = 1, farmC2 = 20, farmR2 = 3;
+      for (int c = farmC1; c <= farmC2; c++) {
+        for (int r = farmR1; r <= farmR2; r++) {
+          if (_waterTiles.contains((c, r))) continue;
+          bool overlap = false;
+          for (final b in _buildings) {
+            if (c >= b.col && c < b.col + b.cols &&
+                r >= b.row && r < b.row + b.rows) {
+              overlap = true; break;
+            }
+          }
+          if (!overlap) _farmTiles.add(FarmTile(c, r));
+        }
+      }
+      while (_farmers.length < 2) {
+        _farmers.add(FarmFarmer(
+          startCol: 17 + _rng.nextDouble() * 2,
+          startRow: 5 + _rng.nextDouble() * 1,
+        ));
+      }
+      _fixNpcSpawns();
+
+      // Ekstra köylüler — yataklar dolsun, sokakta canlılık olsun.
+      // _spawnGrownVillager townhall ile çalışır.
+      final townhall = _buildings.firstWhere(
+        (b) => b.type == BuildingType.townhall,
+        orElse: () => _buildings.first,
+      );
+      for (int i = 0; i < 10; i++) {
+        _spawnGrownVillager(townhall);
+      }
+
+      // Bir yaşlı spawn et — bilge yapılabilir hale gelsin.
+      for (int i = 0; i < 2; i++) {
+        _spawnGrownVillager(townhall);
+        _villagers.last.ageDays = kElderStartDay + 1.0;
+      }
+    });
+    _showNotification('🎭 Showcase köyü kuruldu — her tip görsel test için hazır');
   }
 }
