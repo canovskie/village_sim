@@ -93,7 +93,9 @@
       "Bash(awk NR==891 || NR==892 || NR==893 *)",
       "Bash(awk '$1 > 870 && $1 < 920')",
       "Bash(awk -F: '{print $1}')",
-      "Bash(awk '$1 > 950 && $1 < 1010')"
+      "Bash(awk '$1 > 950 && $1 < 1010')",
+      "Bash(git branch *)",
+      "Bash(git tag *)"
     ]
   }
 }

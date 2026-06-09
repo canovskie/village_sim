@@ -217,6 +217,7 @@ extension _SceneUi on _VillageSceneState {
                       activeFx: _fxActiveIds,
                       burningBuildings: _burningBuildings,
                       birdFlocks: _birdFlocks,
+                      perfMode: _perfMode,
                     ),
                   ),
                 ),
@@ -908,6 +909,8 @@ extension _SceneUi on _VillageSceneState {
             }
           }),
           onSpawnMigrant: () => setStateHere(_spawnMigrant),
+          perfMode: _perfMode,
+          onTogglePerf: () => setStateHere(() => _perfMode = !_perfMode),
           simSpeedBoost: _devSpeedBoost,
           simHistory: [
             for (final s in _simHistory)

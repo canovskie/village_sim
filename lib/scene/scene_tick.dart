@@ -16,9 +16,12 @@ extension _SceneTick on _VillageSceneState {
     final effectiveScale = _pendingChoice != null
         ? 0.0
         : _timeScale * _devSpeedBoost;
-    // Boost ile dt clamp'i de artırıldı (30x'te 0.25'lik tek sıçrama büyük
-    // adım yaratıyor, NPC update'lerinde stability açısından sınırlı tutuldu).
-    final dt = (raw * effectiveScale).clamp(0.0, 0.5);
+    // dt clamp scaling: boost 1x ise 50ms hard cap (spiral koruma — render
+    // yavaşlasa bile sim sıçramaz). Boost > 1.5x ise kullanıcı bilerek hızlı
+    // sim istiyor, clamp gevşek (boost × 0.05) → hızlandırma çalışır.
+    // Bu sayede normal oynanış güvenli, denge testi 30x'te tam hızlı.
+    final clampMax = effectiveScale > 1.5 ? effectiveScale * 0.05 : 0.05;
+    final dt = (raw * effectiveScale).clamp(0.0, clampMax);
     if (dt <= 0) {
       _frame.value = _frame.value + 1;
       return;

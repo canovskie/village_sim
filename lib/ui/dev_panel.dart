@@ -64,6 +64,8 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onClearPolicies;
   final VoidCallback onMakeSage;
   final VoidCallback onSpawnMigrant;
+  final bool perfMode;
+  final VoidCallback onTogglePerf;
 
   const DevPanel({
     super.key,
@@ -110,6 +112,8 @@ class DevPanel extends StatelessWidget {
     required this.onClearPolicies,
     required this.onMakeSage,
     required this.onSpawnMigrant,
+    required this.perfMode,
+    required this.onTogglePerf,
   });
 
   static const _accent = Color(0xFFE9A23B);
@@ -164,6 +168,12 @@ class DevPanel extends StatelessWidget {
                           _DevBtn('🗒 Yasaları Sıfırla', onClearPolicies),
                           _DevBtn('👵 Bilge Yap', onMakeSage),
                           _DevBtn('🚶 Göçmen Çağır', onSpawnMigrant),
+                          _DevBtn(
+                              perfMode
+                                  ? '🚀 Perf Modu AÇIK'
+                                  : '🐢 Perf Modu',
+                              onTogglePerf,
+                              active: perfMode),
                         ]),
                         const SizedBox(height: 14),
                         _section('Hızlı Kurulum'),

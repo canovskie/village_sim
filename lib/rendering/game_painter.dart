@@ -273,10 +273,35 @@ int _gcVersion = -1;
 double _gcWidth = -1;
 double _gcHeight = -1;
 
+// Yollar cache — tamamlanmış road tile'ları statik (autotile mask topology'ye
+// bağlı). Her road add/remove'da roadSystem.version++ → cache invalidate.
+// Pending road order'lar dinamik (progress fade) → ayrı çizilir, cache dışı.
+ui.Picture? _roadsCache;
+int _rcVersion = -1;
+double _rcWidth = -1;
+double _rcHeight = -1;
+double _rcZoom = -1;
+
 // Maden binası dikdörtgenleri (col, row, cols, rows) — miner/mineNode gizleme
 // kontrolü için frame başına bir kez doldurulur; her entity tüm binaları (ve
 // kBuildingMeta lookup'ını) taramasın diye scratch.
 final List<(int, int, int, int)> _mineRects = [];
+
+// Static entity spatial bucket grid — decor/tree/lotus/reed/mine.
+// 8-tile bucket cell, key = (col >> 3, row >> 3). Topology değişmedikçe
+// (list length aynı) viewport içinde olan bucket'lar iterate edilir; çok
+// büyük listeler için her frame full scan'i atlar.
+// Invalidate: list length değişimi (entity eklendi/silindi).
+final Map<(int, int), List<DecorEntity>>  _decorBuckets   = {};
+int _decorBucketsLen = -1;
+final Map<(int, int), List<TreeEntity>>   _treeBuckets    = {};
+int _treeBucketsLen = -1;
+final Map<(int, int), List<LotusEntity>>  _lotusBuckets   = {};
+int _lotusBucketsLen = -1;
+final Map<(int, int), List<ReedClump>>    _reedBuckets    = {};
+int _reedBucketsLen = -1;
+final Map<(int, int), List<MineNode>>     _mineNodeBuckets = {};
+int _mineNodeBucketsLen = -1;
 
 // ── Lighting buffer ──────────────────────────────────────────────────────────
 // Lokal ışık kaynakları (firepit, ev pencereleri, meşaleli NPC). Her frame
@@ -967,8 +992,9 @@ class _BuildingDrawable extends _Drawable {
   final double rainIntensity;
   /// fireOutbreak event'inde bu bina yanıyor mu — sprite üstüne alev + duman.
   final bool burning;
+  final bool perfMode;
   _BuildingDrawable(this.b, this.time, this.dayLight, this.rainIntensity,
-      this.burning);
+      this.burning, this.perfMode);
   // Painter's algorithm: bina ön-en (frontmost) tile'ının diagonal sum'ı.
   // (col+cols-1, row+rows-1) bina footprint'inin güney-doğu (ön) tile'ı.
   // Eski formül (col+row + (cols+rows)/2 = orta) → bina arkasındaki NPC önde
@@ -999,13 +1025,13 @@ class _BuildingDrawable extends _Drawable {
       BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
           time: time, seed: b.col * 17 + b.row * 31,
           dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive);
+          isActive: b.isActive, perfMode: perfMode);
       canvas.restore();
     } else {
       BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
           time: time, seed: b.col * 17 + b.row * 31,
           dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive);
+          isActive: b.isActive, perfMode: perfMode);
     }
 
     // Toz bulutu — ilk 0.4 sn footprint kenarlarında 3 partikül. Açık bej ton.
@@ -1251,6 +1277,9 @@ class VillageGamePainter extends CustomPainter {
   final Set<BuildingEntity> burningBuildings;
   /// Ambient gökyüzü kuş sürüleri — sahnenin üstüne, son katman olarak çizilir.
   final List<BirdFlock> birdFlocks;
+  /// Performans modu — true ise pahalı ambient/light effect pass'leri atlanır
+  /// (fireflies, polen, kuş, bina shadow refinement, light pass detayı).
+  final bool perfMode;
 
   const VillageGamePainter({
     required this.villagers,
@@ -1298,6 +1327,7 @@ class VillageGamePainter extends CustomPainter {
     this.activeFx      = const {},
     this.burningBuildings = const {},
     this.birdFlocks    = const [],
+    this.perfMode      = false,
   });
 
   @override
@@ -1316,7 +1346,8 @@ class VillageGamePainter extends CustomPainter {
     _drawWaterFoam(canvas, size);
     // Bina gölgeleri — sahne sprite'larından ÖNCE, zemin üstüne. Bu sayede
     // hiçbir bina gölgesi başka sprite'ın üstüne taşıyamaz.
-    _drawBuildingShadows(canvas, size);
+    // PerfMode: light aggregation iteration ağır; basit drop-shadow yeterli.
+    if (!perfMode) _drawBuildingShadows(canvas, size);
     _drawRoads(canvas, size);
     if (farmSelection   != null) _drawFarmSelection(canvas, size);
     if (lumberSelection != null) _drawLumberSelection(canvas, size);
@@ -1333,9 +1364,12 @@ class VillageGamePainter extends CustomPainter {
     // ── Ekran uzayı efektleri (zoom'dan etkilenmez) ──────────────────────────
     // Lighting pass: gradient karanlık + vignette + lokal ışık + sıcak halo.
     _drawLightingPass(canvas, size);
-    _drawFireflies(canvas, size);
-    _drawPollen(canvas, size);
-    _drawBirdFlocks(canvas, size);
+    // PerfMode: ambient partikül pass'lerini atla (her frame yüzlerce circle).
+    if (!perfMode) {
+      _drawFireflies(canvas, size);
+      _drawPollen(canvas, size);
+      _drawBirdFlocks(canvas, size);
+    }
     _drawRain(canvas, size);
     // Event overlay — aktif olayların ekran toneu + olaya özel partiküller.
     _drawEventOverlay(canvas, size);
@@ -1646,34 +1680,66 @@ class VillageGamePainter extends CustomPainter {
     if (roadSystem.count == 0 && pendingRoadOrders.isEmpty) return;
     final hw = kTileW / 2;
     final hh = kTileH / 2;
-    final (minX, maxX, minY, maxY) = _visBounds(size);
 
-    // Tamamlanmış yollar
+    // Tamamlanmış yollar — cached Picture (ground gibi camera-bağımsız).
+    // Zoom karşılaştırması tolerance'lı: ScaleUpdate.scale floating-point
+    // mikro değişim yapıyor (1.0 → 1.000001) → her pan frame'inde Picture
+    // rebuild oluyordu. 0.05 tolerance ile zoom kademe görsel olarak fark
+    // edilmeyen aralıkta rebuild'i atlar, pan kasması biter.
+    if (roadSystem.count > 0) {
+      final zoomChanged = (_rcZoom - zoom).abs() > 0.05;
+      if (_roadsCache == null ||
+          _rcVersion != roadSystem.version ||
+          _rcWidth   != size.width ||
+          _rcHeight  != size.height ||
+          zoomChanged) {
+        _buildRoadsCache(size);
+      }
+      canvas.save();
+      canvas.translate(camera.dx, camera.dy);
+      canvas.drawPicture(_roadsCache!);
+      canvas.restore();
+    }
+
+    // Bekleyen orderlar — preview, progress fade her frame değişir, cache dışı.
+    if (pendingRoadOrders.isNotEmpty) {
+      final (minX, maxX, minY, maxY) = _visBounds(size);
+      for (final o in pendingRoadOrders) {
+        if (o.completed) continue;
+        final s  = gridToScreen(o.col.toDouble(), o.row.toDouble(), size, camera);
+        final px = s.dx.roundToDouble();
+        final py = s.dy.roundToDouble();
+        if (px < minX || px > maxX) continue;
+        if (py < minY || py > maxY) continue;
+        // Stabil hash (col, row) — RoadTile.hash ile aynı formül
+        final hash = (o.col * 73856093) ^ (o.row * 19349663);
+        final opacity = 0.3 + 0.55 * o.progress;
+        RoadRenderer.drawRoadTile(canvas, px, py, hw, hh,
+            o.surface, 0, hash, zoom: zoom, opacity: opacity);
+      }
+    }
+  }
+
+  void _buildRoadsCache(Size size) {
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder);
+    const cam0 = Offset.zero;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
     for (final t in roadSystem.all) {
-      final s  = gridToScreen(t.col.toDouble(), t.row.toDouble(), size, camera);
+      final s  = gridToScreen(t.col.toDouble(), t.row.toDouble(), size, cam0);
       final px = s.dx.roundToDouble();
       final py = s.dy.roundToDouble();
-      if (px < minX || px > maxX) continue;
-      if (py < minY || py > maxY) continue;
       final mask = roadSystem.neighborMask(t.col, t.row);
-      RoadRenderer.drawRoadTile(canvas, px, py, hw, hh,
+      RoadRenderer.drawRoadTile(c, px, py, hw, hh,
           t.surface, mask, t.hash, zoom: zoom);
     }
-
-    // Bekleyen orderlar — preview
-    for (final o in pendingRoadOrders) {
-      if (o.completed) continue;
-      final s  = gridToScreen(o.col.toDouble(), o.row.toDouble(), size, camera);
-      final px = s.dx.roundToDouble();
-      final py = s.dy.roundToDouble();
-      if (px < minX || px > maxX) continue;
-      if (py < minY || py > maxY) continue;
-      // Stabil hash (col, row) — RoadTile.hash ile aynı formül
-      final hash = (o.col * 73856093) ^ (o.row * 19349663);
-      final opacity = 0.3 + 0.55 * o.progress;
-      RoadRenderer.drawRoadTile(canvas, px, py, hw, hh,
-          o.surface, 0, hash, zoom: zoom, opacity: opacity);
-    }
+    _roadsCache?.dispose();
+    _roadsCache = recorder.endRecording();
+    _rcVersion = roadSystem.version;
+    _rcWidth   = size.width;
+    _rcHeight  = size.height;
+    _rcZoom    = zoom;
   }
 
   // ── Tarla seçim önizlemesi ────────────────────────────────────────────────
@@ -1802,27 +1868,104 @@ class VillageGamePainter extends CustomPainter {
              sy >= minY - up   && sy <= maxY + kTileH;
     }
 
-    const upChar  = 72.0;
-    const upTall  = 256.0;
-    const upSmall = 32.0;
-    const sideS   = 48.0;
-    const sideL   = 160.0;
+    // Culling sınırları sprite tipine göre kalibre edilmiş — gevşek tutmak
+    // ekran kenarında scrolling sırasında popping önler, ama her +1 ekstra
+    // entity drawable allocation × sort cost demek.
+    const upChar  = 72.0;     // karakter ~64 + margin
+    const upTall  = 180.0;    // ağaç sprite ~118 + margin (eski 256 cömert)
+    // Decor margin: jitter ±26px + drawW/2 max ~20 = ±46. 48 güvenli sınır.
+    // (32 dene ANCAK fallen_log + jitter köşede pop edebilir.)
+    const upSmall = 32.0;     // decor/lotus/reed üst kenar
+    const sideS   = 48.0;     // decor küçük sprite + jitter
+    const sideM   = 48.0;     // karakter sprite yan kenar
+    const sideL   = 160.0;    // bina + scaffold
 
     _sceneBuffer.clear();
 
-    for (final d in decor) {
-      if (inView(d.col + 0.5, d.row + 0.5, upSmall, sideS)) {
-        _sceneBuffer.add(_DecorDrawable(d));
+    // Spatial bucket grid — 8-tile cell. Topology değişmedikçe cache geçerli,
+    // viewport içinde olan bucket'lar iterate edilir. Çok yoğun haritalarda
+    // (200+ decor + 100+ ağaç) her frame full scan'i atlar.
+    const kBucket = 3; // bit shift: cell size = 1 << 3 = 8 tile
+    // Viewport bucket range — ekran köşelerinin grid karşılıkları + 1 margin.
+    final tlG = screenToGrid(Offset(minX, minY), size, camera);
+    final trG = screenToGrid(Offset(maxX, minY), size, camera);
+    final brG = screenToGrid(Offset(maxX, maxY), size, camera);
+    final blG = screenToGrid(Offset(minX, maxY), size, camera);
+    int cMinB = ((tlG.$1 < trG.$1 ? tlG.$1 : trG.$1) < (brG.$1 < blG.$1 ? brG.$1 : blG.$1)
+        ? (tlG.$1 < trG.$1 ? tlG.$1 : trG.$1)
+        : (brG.$1 < blG.$1 ? brG.$1 : blG.$1)).floor() >> kBucket;
+    int cMaxB = ((tlG.$1 > trG.$1 ? tlG.$1 : trG.$1) > (brG.$1 > blG.$1 ? brG.$1 : blG.$1)
+        ? (tlG.$1 > trG.$1 ? tlG.$1 : trG.$1)
+        : (brG.$1 > blG.$1 ? brG.$1 : blG.$1)).ceil() >> kBucket;
+    int rMinB = ((tlG.$2 < trG.$2 ? tlG.$2 : trG.$2) < (brG.$2 < blG.$2 ? brG.$2 : blG.$2)
+        ? (tlG.$2 < trG.$2 ? tlG.$2 : trG.$2)
+        : (brG.$2 < blG.$2 ? brG.$2 : blG.$2)).floor() >> kBucket;
+    int rMaxB = ((tlG.$2 > trG.$2 ? tlG.$2 : trG.$2) > (brG.$2 > blG.$2 ? brG.$2 : blG.$2)
+        ? (tlG.$2 > trG.$2 ? tlG.$2 : trG.$2)
+        : (brG.$2 > blG.$2 ? brG.$2 : blG.$2)).ceil() >> kBucket;
+    cMinB--; cMaxB++; rMinB--; rMaxB++;
+
+    // Decor bucket build (if topology değişti).
+    if (_decorBucketsLen != decor.length) {
+      _decorBuckets.clear();
+      for (final d in decor) {
+        final key = (d.col >> kBucket, d.row >> kBucket);
+        (_decorBuckets[key] ??= []).add(d);
+      }
+      _decorBucketsLen = decor.length;
+    }
+    for (int by = rMinB; by <= rMaxB; by++) {
+      for (int bx = cMinB; bx <= cMaxB; bx++) {
+        final list = _decorBuckets[(bx, by)];
+        if (list == null) continue;
+        for (final d in list) {
+          if (inView(d.col + 0.5, d.row + 0.5, upSmall, sideS)) {
+            _sceneBuffer.add(_DecorDrawable(d));
+          }
+        }
       }
     }
-    for (final l in lotuses) {
-      if (inView(l.col + 0.5, l.row + 0.5, upSmall, sideS)) {
-        _sceneBuffer.add(_LotusDrawable(l, time));
+
+    // Lotus bucket
+    if (_lotusBucketsLen != lotuses.length) {
+      _lotusBuckets.clear();
+      for (final l in lotuses) {
+        final key = (l.col >> kBucket, l.row >> kBucket);
+        (_lotusBuckets[key] ??= []).add(l);
+      }
+      _lotusBucketsLen = lotuses.length;
+    }
+    for (int by = rMinB; by <= rMaxB; by++) {
+      for (int bx = cMinB; bx <= cMaxB; bx++) {
+        final list = _lotusBuckets[(bx, by)];
+        if (list == null) continue;
+        for (final l in list) {
+          if (inView(l.col + 0.5, l.row + 0.5, upSmall, sideS)) {
+            _sceneBuffer.add(_LotusDrawable(l, time));
+          }
+        }
       }
     }
-    for (final r in reeds) {
-      if (inView(r.col + 0.5, r.row + 0.5, upSmall, sideS)) {
-        _sceneBuffer.add(_ReedDrawable(r, time));
+
+    // Reed bucket — ReedClump iki yan tile kapsar, baz col,row yeterli
+    // (col2,row2 8-tile cell içinde aynı bucket'ta kalır pratikte).
+    if (_reedBucketsLen != reeds.length) {
+      _reedBuckets.clear();
+      for (final r in reeds) {
+        final key = (r.col >> kBucket, r.row >> kBucket);
+        (_reedBuckets[key] ??= []).add(r);
+      }
+      _reedBucketsLen = reeds.length;
+    }
+    for (int by = rMinB; by <= rMaxB; by++) {
+      for (int bx = cMinB; bx <= cMaxB; bx++) {
+        final list = _reedBuckets[(bx, by)];
+        if (list == null) continue;
+        for (final r in list) {
+          if (inView(r.col + 0.5, r.row + 0.5, upSmall, sideS)) {
+            _sceneBuffer.add(_ReedDrawable(r, time));
+          }
+        }
       }
     }
     for (final b in resourceBoxes) {
@@ -1839,22 +1982,22 @@ class VillageGamePainter extends CustomPainter {
     }
     for (final e in villagers) {
       if (e.isInsideBuilding) continue;
-      if (inView(e.renderX, e.renderY, upChar, sideS)) {
+      if (inView(e.renderX, e.renderY, upChar, sideM)) {
         _sceneBuffer.add(_VillagerDrawable(e, time, dayLight));
       }
     }
     for (final f in farmers) {
-      if (inView(f.renderX, f.renderY, upChar, sideS)) {
+      if (inView(f.renderX, f.renderY, upChar, sideM)) {
         _sceneBuffer.add(_FarmerDrawable(f));
       }
     }
     for (final b in builders) {
-      if (inView(b.renderX, b.renderY, upChar, sideS)) {
+      if (inView(b.renderX, b.renderY, upChar, sideM)) {
         _sceneBuffer.add(_BuilderDrawable(b));
       }
     }
     for (final w in woodcutters) {
-      if (inView(w.renderX, w.renderY, upChar, sideS)) {
+      if (inView(w.renderX, w.renderY, upChar, sideM)) {
         _sceneBuffer.add(_WoodcutterDrawable(w));
       }
     }
@@ -1880,27 +2023,27 @@ class VillageGamePainter extends CustomPainter {
         }
         if (inside) continue;
       }
-      if (inView(m.renderX, m.renderY, upChar, sideS)) {
+      if (inView(m.renderX, m.renderY, upChar, sideM)) {
         _sceneBuffer.add(_MinerDrawable(m));
       }
     }
     for (final f in fishers) {
-      if (inView(f.renderX, f.renderY, upChar, sideS)) {
+      if (inView(f.renderX, f.renderY, upChar, sideM)) {
         _sceneBuffer.add(_FisherDrawable(f));
       }
     }
     for (final fl in florists) {
-      if (inView(fl.renderX, fl.renderY, upChar, sideS)) {
+      if (inView(fl.renderX, fl.renderY, upChar, sideM)) {
         _sceneBuffer.add(_FloristDrawable(fl));
       }
     }
     for (final sh in shepherds) {
-      if (inView(sh.renderX, sh.renderY, upChar, sideS)) {
+      if (inView(sh.renderX, sh.renderY, upChar, sideM)) {
         _sceneBuffer.add(_ShepherdDrawable(sh));
       }
     }
     for (final c in cows) {
-      if (inView(c.renderX, c.renderY, upChar, sideS)) {
+      if (inView(c.renderX, c.renderY, upChar, sideM)) {
         switch (c.kind) {
           case AnimalKind.cow:
             _sceneBuffer.add(_CowDrawable(c));
@@ -1914,18 +2057,33 @@ class VillageGamePainter extends CustomPainter {
         }
       }
     }
-    for (final n in mineNodes) {
-      if (n.isDepleted) continue;
-      bool hidden = false;
-      for (final mr in _mineRects) {
-        if (n.col >= mr.$1 && n.col < mr.$1 + mr.$3 &&
-            n.row >= mr.$2 && n.row < mr.$2 + mr.$4) {
-          hidden = true; break;
-        }
+    // MineNode bucket — yoğun maden alanında her tile'da node olabilir.
+    if (_mineNodeBucketsLen != mineNodes.length) {
+      _mineNodeBuckets.clear();
+      for (final n in mineNodes) {
+        final key = (n.col >> kBucket, n.row >> kBucket);
+        (_mineNodeBuckets[key] ??= []).add(n);
       }
-      if (hidden) continue;
-      if (inView(n.col + 0.5, n.row + 0.5, upSmall, sideS)) {
-        _sceneBuffer.add(_MineDrawable(n));
+      _mineNodeBucketsLen = mineNodes.length;
+    }
+    for (int by = rMinB; by <= rMaxB; by++) {
+      for (int bx = cMinB; bx <= cMaxB; bx++) {
+        final list = _mineNodeBuckets[(bx, by)];
+        if (list == null) continue;
+        for (final n in list) {
+          if (n.isDepleted) continue;
+          bool hidden = false;
+          for (final mr in _mineRects) {
+            if (n.col >= mr.$1 && n.col < mr.$1 + mr.$3 &&
+                n.row >= mr.$2 && n.row < mr.$2 + mr.$4) {
+              hidden = true; break;
+            }
+          }
+          if (hidden) continue;
+          if (inView(n.col + 0.5, n.row + 0.5, upSmall, sideS)) {
+            _sceneBuffer.add(_MineDrawable(n));
+          }
+        }
       }
     }
     for (final b in buildings) {
@@ -1934,7 +2092,7 @@ class VillageGamePainter extends CustomPainter {
       if (inView(cx, cy, upTall, sideL)) {
         final isBurning = burningBuildings.contains(b);
         _sceneBuffer.add(_BuildingDrawable(
-            b, time, dayLight, rainIntensity, isBurning));
+            b, time, dayLight, rainIntensity, isBurning, perfMode));
       }
     }
     for (final o in pendingOrders) {
@@ -1946,9 +2104,24 @@ class VillageGamePainter extends CustomPainter {
         _sceneBuffer.add(_ScaffoldDrawable(o, time));
       }
     }
-    for (final t in trees) {
-      if (inView(t.col + 0.5, t.row + 0.5, upTall, sideS)) {
-        _sceneBuffer.add(_TreeDrawable(t, time));
+    // Tree bucket — yoğun ormanda %80+ ağaç viewport dışında olur.
+    if (_treeBucketsLen != trees.length) {
+      _treeBuckets.clear();
+      for (final t in trees) {
+        final key = (t.col >> kBucket, t.row >> kBucket);
+        (_treeBuckets[key] ??= []).add(t);
+      }
+      _treeBucketsLen = trees.length;
+    }
+    for (int by = rMinB; by <= rMaxB; by++) {
+      for (int bx = cMinB; bx <= cMaxB; bx++) {
+        final list = _treeBuckets[(bx, by)];
+        if (list == null) continue;
+        for (final t in list) {
+          if (inView(t.col + 0.5, t.row + 0.5, upTall, sideS)) {
+            _sceneBuffer.add(_TreeDrawable(t, time));
+          }
+        }
       }
     }
 
@@ -2039,6 +2212,22 @@ class VillageGamePainter extends CustomPainter {
       return;
     }
 
+    // PerfMode fast path — tek vertical gradient overlay, ışık cutout / halo
+    // saveLayer × 3 + 7-stop gradient × N tamamen atlanır. Gece basit dark
+    // overlay olur, sokak feneri/ateş ışığı yok. Görsel atmosfer feda, FPS
+    // büyük kazanç.
+    if (perfMode) {
+      final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+      _pLighting.shader = ui.Gradient.linear(
+        const Offset(0, 0),
+        Offset(0, size.height),
+        [overlayTop, overlayBottom],
+      );
+      canvas.drawRect(rect, _pLighting);
+      _pLighting.shader = null;
+      return;
+    }
+
     _projectLights(size);
 
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
@@ -2102,6 +2291,11 @@ class VillageGamePainter extends CustomPainter {
         ..blendMode = BlendMode.dstOut
         ..imageFilter = ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6));
       for (final l in _lightBuffer) {
+        // Viewport reject — ekran dışı ışıkların gradient + drawCircle pahalı.
+        // Core radius * 1.5 (gradient buffer'ı için biraz fazla margin).
+        final rCheck = l.radius * 1.5;
+        if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
+        if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
         final coreA = (l.intensity * 130).round().clamp(0, 140);
         final r = l.radius * 0.45;
         _pLightMask
@@ -2143,6 +2337,10 @@ class VillageGamePainter extends CustomPainter {
         ..isAntiAlias = true
         ..imageFilter = ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8));
       for (final l in _lightBuffer) {
+        // Viewport reject (warm wash pass)
+        final rCheck = l.radius * 2.0;
+        if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
+        if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
         final innerA = (l.intensity * darkness * 55).round().clamp(0, 65);
         if (innerA < 4) continue;
         final wr = (l.warm.r * 255).round();
@@ -2184,6 +2382,10 @@ class VillageGamePainter extends CustomPainter {
         ..blendMode = BlendMode.plus
         ..imageFilter = ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18));
       for (final l in _lightBuffer) {
+        // Viewport reject (outer halo pass) — radius 2.5× drawing
+        final rCheck = l.radius * 2.5;
+        if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
+        if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
         final haloAlpha =
             (l.intensity * darkness * 28).round().clamp(0, 35);
         if (haloAlpha < 3) continue;

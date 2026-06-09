@@ -12,6 +12,11 @@ import '../world/road_surface.dart';
 class RoadSystem {
   final Map<(int, int), RoadTile> _tiles = {};
 
+  /// Topology değişim sayacı — add/remove/clear her çağrıldığında ++.
+  /// Painter'ın roads cache'i bu değer üzerinden invalidate olur.
+  int _version = 0;
+  int get version => _version;
+
   Iterable<RoadTile> get all => _tiles.values;
   int get count => _tiles.length;
 
@@ -70,11 +75,15 @@ class RoadSystem {
 
   void add(RoadTile t) {
     _tiles[(t.col, t.row)] = t;
+    _version++;
   }
 
   void remove(int col, int row) {
-    _tiles.remove((col, row));
+    if (_tiles.remove((col, row)) != null) _version++;
   }
 
-  void clear() => _tiles.clear();
+  void clear() {
+    if (_tiles.isNotEmpty) _version++;
+    _tiles.clear();
+  }
 }

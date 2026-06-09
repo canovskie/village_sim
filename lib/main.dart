@@ -397,6 +397,11 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── God mode ───────────────────────────────────────────────────────────────
   bool _godMode = false;
+  /// Performans modu — pahalı ambient efektleri (fireflies, polen, kuş sürüleri,
+  /// gölge refinement, light pass detayı) tek tıkla kapatır. Görsel atmosfer
+  /// kaybı karşılığında dev FPS kazancı. Test/oynanış sırasında zayıf donanım
+  /// yardımı.
+  bool _perfMode = false;
 
   // ── Zaman yönetimi ─────────────────────────────────────────────────────────
   // Simülasyon hızı çarpanı. 0.0 = duraklatılmış (sahne animasyonları da

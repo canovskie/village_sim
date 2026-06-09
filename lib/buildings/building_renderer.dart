@@ -65,7 +65,8 @@ class BuildingRenderer {
   static void draw(Canvas canvas, BuildingType type,
       Offset back, Offset left, Offset right, Offset front,
       {double time = 0, int seed = 0, double dayLight = 1.0,
-       double rainIntensity = 0.0, bool isActive = false}) {
+       double rainIntensity = 0.0, bool isActive = false,
+       bool perfMode = false}) {
     // Lamppost — PNG yüklendiyse normal asset yolu; yoksa procedurel fallback.
     if (type == BuildingType.lamppost && !_cache.containsKey(type)) {
       _drawLamppost(canvas, back, left, right, front, time, seed, dayLight);
@@ -83,22 +84,30 @@ class BuildingRenderer {
     final meta = kBuildingMeta[type];
     if (img == null || meta == null) return;
 
-    _drawAmbientGlow(canvas, type, img, left, right, front, meta, dayLight, time, seed);
+    // PerfMode: ambient glow ve light points atlanır — her bina × her ışık
+    // noktası × 3 drawCircle inanılmaz pahalı (5 ev = 15+ ışık × 3 = 45/frame).
+    if (!perfMode) {
+      _drawAmbientGlow(canvas, type, img, left, right, front, meta, dayLight, time, seed);
+    }
     _drawSprite(canvas, img, left, right, front, meta.groundY, meta.groundXCenter, meta.spriteScale);
-    _drawLights(canvas, type, img, left, right, front, meta, dayLight, time, seed);
-
-    final chimneys = kBuildingChimneys[type];
-    if (chimneys != null && chimneys.isNotEmpty) {
-      _drawChimneySmoke(canvas, img, left, right, front, meta, time, seed,
-          chimneys, dayLight, rainIntensity: rainIntensity);
+    if (!perfMode) {
+      _drawLights(canvas, type, img, left, right, front, meta, dayLight, time, seed);
     }
 
-    if (isActive) {
-      _drawActiveSmoke(canvas, img, left, right, front, meta, time, seed);
+    // PerfMode: smoke partikül loop'ları atlanır (her chimney × N partikül).
+    if (!perfMode) {
+      final chimneys = kBuildingChimneys[type];
+      if (chimneys != null && chimneys.isNotEmpty) {
+        _drawChimneySmoke(canvas, img, left, right, front, meta, time, seed,
+            chimneys, dayLight, rainIntensity: rainIntensity);
+      }
+
+      if (isActive) {
+        _drawActiveSmoke(canvas, img, left, right, front, meta, time, seed);
+      }
     }
 
-    // Firepit — yağmur yağmıyorsa animasyonlu alev. Yağmur şiddetli ise
-    // (>0.3) ateş söner, sadece duman kalır.
+    // Firepit alev — perf mode'da bile çizilir (köy odak noktası, atlamayalım).
     if (type == BuildingType.firepit && rainIntensity < 0.30) {
       final cx = (back.dx + front.dx) * 0.5;
       // Footprint y-merkezi alt zemini → biraz yukarı yer ayarı.
