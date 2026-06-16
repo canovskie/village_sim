@@ -24,6 +24,11 @@ const double kFishDuration         = 7.0;
 /// Balıkçı bir tutuşta ~7 sn'de 1 food üretir; kümes pasif olduğu için biraz
 /// daha yavaş — 3-4 tavuk birlikte ~ortalama bir balıkçıya yakın çıktı verir.
 const double kEggInterval          = 32.0;
+/// Arı kovanı baz bal üretim aralığı (saniye) — çiçeksiz, tek başına yavaş.
+/// Menzildeki her çiçek üretim hızını çarpar (bkz. scene_tick bal döngüsü),
+/// florist'in yanına kovan koymak ödüllendirilir. Bal lüks/moral kaynağı,
+/// hayatta kalma zorunluluğu değil → bilinçli yavaş.
+const double kHoneyInterval        = 50.0;
 const double kFarmHarvestDuration  = 4.0;
 const double kFarmWaterFetchTime   = 1.5;
 const double kFarmWaterTime        = 1.2;
@@ -41,15 +46,22 @@ const double kFarmWellMaxDistance    = 14.0; // bundan uzak kuyuya gidilmez (til
 // köy moralini düşürür (→ nüfus büyümesi yavaşlar). Kuyu yoksa depo boşalır.
 const double kHouseWaterDrainPerOccupant = 0.012; // /sn, sakin başına tüketim
 const double kWellWaterRefill            = 0.05;  // /sn, kuyu başına ev doldurma
-const double kWaterMoralePenalty         = 0.30;  // tamamen susuz köyde moral cezası
+
+// Köy morali — PASİF GÖSTERGE süzülme hızı (1/sn). _morale her tick hedefe
+// `dt * kMoraleEaseRate` oranında yaklaşır; ~%6.7/sn → görünür ama yumuşak.
+const double kMoraleEaseRate = 0.067;
+
+// Sürekli baseline canlılık — köy çapında ~bu aralıkta bir rastgele NPC kısa
+// bir gövde refleksi verir (huzur/merak). Ortam hiç durağan kalmasın diye.
+const double kSpontaneousLifeMin = 2.0; // sn
+const double kSpontaneousLifeMax = 4.0; // sn
 
 // ─── Nüfus yiyecek tüketimi & açlık ───────────────────────────────────────────
 // Her köylü zamanla yiyecek tüketir; üretim yetmezse stok azalır. Stok
-// [kStarveRampFood] eşiğinin altına inince açlık başlar → moral & büyüme düşer
-// (su sistemine paralel). Kabaca her 8 köylü 1 aktif yiyecek üreticisi ister.
+// [kStarveRampFood] eşiğinin altına inince açlık başlar → köy görünür tedirgin
+// olur (bir kerelik moral nudge + gövde dili reaksiyonu; formül değil).
 const double kFoodPerVillagerPerDay = 8.0;  // köylü başına günlük tüketim
-const int    kStarveRampFood        = 10;   // bu eşiğin altında açlık morali vurur
-const double kStarvationMoralePenalty = 0.35; // tamamen aç köyde moral cezası
+const int    kStarveRampFood        = 10;   // bu eşiğin altında açlık reaksiyonu
 
 // ─── Rastgele olaylar ─────────────────────────────────────────────────────────
 const double kEventFirstDelay  = 75.0;  // kuruluştan ilk olaya kadar (sn)

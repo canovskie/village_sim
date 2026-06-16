@@ -11,17 +11,19 @@ enum EventCategory { positive, negative, neutral }
 /// Her id painter içinde özel partikül/overlay pass'e karşılık gelir.
 enum EventFx {
   none,
-  celebration,    // ateş çevresinde kalp/nota partikülleri
+  festival,       // BESPOKE şenlik: flama/çelenk + konfeti yağmuru + yükselen fener
+  cropBlight,     // BESPOKE: tarlalarda yayılan mantar lekesi + şapka + spor
+  vigil,          // BESPOKE: ateş çevresinde mum halkası + yükselen ruh kıvılcımı (matem)
+  cultRite,       // BESPOKE: parlayan ayin çemberi + dönen rünler + okült ışıltı
+  meteorShower,   // BESPOKE: gece gökten süzülen kayan yıldızlar + köye düşen göktaşı flaşı
+  wedding,        // BESPOKE: ateş başında dans eden çift + yükselen kalpler + yaprak/konfeti yağmuru
+  harvestBounty,  // BESPOKE: tarlalarda altın ışıltı + olgunlaşan başak + yukarı süzülen bereket zerresi
   plagueAura,     // NPC'lerin üstünde yeşil hastalık ikonu
-  harvestSparkle, // tarla/ambar üstünde altın yıldız parıltı
   fireOutbreak,   // rastgele bina üstünde alev + yoğun duman
   storm,          // yağmur boost + ekran maviye kayar
   droughtHaze,    // ekran sarımsı, hava sıcak hissi
-  treasureGlow,   // köy meydanına altın parlama
-  miracleLight,   // gökten ışın hüzmesi
   thiefDash,      // ekran kenarından koşan koyu silüet
   beastEyes,      // gece ateş etrafında çift kırmızı göz
-  visitorArrived, // dışarıdan giren NPC silueti
 }
 
 /// Bir olayın aktifken sahneye uyguladığı görsel + simülasyon etkileri.
@@ -216,131 +218,11 @@ class EventOutcome {
 }
 
 class EventSystem {
-  /// 15+ olay — pozitif ve negatif dengeli, koşullu tetiklenme ile.
+  /// Dramatik, animasyonlu olaylar — her birinin görünür bir dünya etkisi +
+  /// bespoke fx'i var (kullanıcı kararı: "sadece hareketli şeyler"). Pozitif
+  /// coşkuyu artık dilekçe/ambient sistemi taşır (şenlik, düğün, göktaşı).
   static const events = <EventOutcome>[
-    // ─── POZİTİF ────────────────────────────────────────────────────────────
-    EventOutcome(
-      title: 'Bereketli Hasat', icon: '🌾',
-      message: 'Tarlalar dolup taştı — ambarlara bol yiyecek geldi.',
-      category: EventCategory.positive,
-      foodDelta: 28, weight: 1.0,
-      effect: EventEffect(
-        fx: EventFx.harvestSparkle,
-        farmGrowthMul: 1.5,
-        duration: 20,
-      ),
-    ),
-    EventOutcome(
-      title: 'Gezgin Tüccar', icon: '🪙',
-      message: 'Yabancı bir tüccar köye uğradı. Pazarlık başlayabilir.',
-      category: EventCategory.positive,
-      weight: 1.0,
-      effect: EventEffect(fx: EventFx.visitorArrived, duration: 18),
-      choices: [
-        EventChoice(
-          label: 'Mal sat',
-          detail: 'Ahşap stoğundan 10 birim ver, karşılığında bol altın al.',
-          resolutionMessage: 'Tüccarla anlaştın — yüklü ahşap, dolu kese.',
-          woodDelta: -10, goldDelta: 38,
-        ),
-        EventChoice(
-          label: 'Sadece selamla',
-          detail: 'Bir küçük hediye yeter; tüccar gönülden ayrılır.',
-          resolutionMessage: 'Tüccar hediyeni alıp yola devam etti.',
-          goldDelta: 8,
-        ),
-        EventChoice(
-          label: 'Geri çevir',
-          detail: 'Köy şu an alışveriş ortamında değil.',
-          resolutionMessage: 'Tüccar surat asıp gitti.',
-          moraleModifier: -0.05, duration: 15,
-        ),
-      ],
-    ),
-    EventOutcome(
-      title: 'Şenlik', icon: '🎉',
-      message: 'Meydanda şenlik kuruldu, herkes moral buldu.',
-      category: EventCategory.positive,
-      moraleModifier: 0.20, duration: 45,
-      weight: 1.0,
-      effect: EventEffect(
-        fx: EventFx.celebration,
-        npcSpeedMul: 1.15,
-        duration: 45,
-      ),
-    ),
-    EventOutcome(
-      title: 'Balık Sürüsü', icon: '🐟',
-      message: 'Göle büyük bir balık sürüsü geldi — ağlar doldu.',
-      category: EventCategory.positive,
-      foodDelta: 22, weight: 0.9,
-      effect: EventEffect(fx: EventFx.harvestSparkle, duration: 14),
-    ),
-    EventOutcome(
-      title: 'Mucize', icon: '✨',
-      message: 'Kıtlığın ortasında köye gizemli bir yardım ulaştı.',
-      category: EventCategory.positive,
-      severity: EventSeverity.major,
-      foodDelta: 18, moraleModifier: 0.15, duration: 30,
-      weight: 0.6,
-      effect: EventEffect(
-        fx: EventFx.miracleLight,
-        screenTint: Color(0x22FFE8B0),
-        duration: 12,
-      ),
-    ),
-    EventOutcome(
-      title: 'Eski Hazine', icon: '💎',
-      message: 'Köylüler tarlada toprağa gömülü altın küpü buldu!',
-      category: EventCategory.positive,
-      severity: EventSeverity.major,
-      goldDelta: 55, weight: 0.5,
-      effect: EventEffect(fx: EventFx.treasureGlow, duration: 14),
-    ),
-    EventOutcome(
-      title: 'Gezgin Şifacı', icon: '🌿',
-      message: 'Otacı bir kadın köye uğradı — yardım istiyor.',
-      category: EventCategory.positive,
-      weight: 0.8,
-      effect: EventEffect(fx: EventFx.visitorArrived, duration: 20),
-      choices: [
-        EventChoice(
-          label: 'Misafir et',
-          detail: '8 yiyecek harca, şifacı köyde kalsın; huzur uzun sürer.',
-          resolutionMessage: 'Şifacı sofrana oturdu — köy ruhu rahatladı.',
-          foodDelta: -8, moraleModifier: 0.22, duration: 45,
-        ),
-        EventChoice(
-          label: 'Yolu üzerinde uğurla',
-          detail: 'Küçük yardım, kısa moral artışı.',
-          resolutionMessage: 'Şifacı duayla yola devam etti.',
-          moraleModifier: 0.08, duration: 18,
-        ),
-      ],
-    ),
-    EventOutcome(
-      title: 'Cömert Yolcu', icon: '🧳',
-      message: 'Yolu düşen bir yolcu, yardımları için köye altın bıraktı.',
-      category: EventCategory.positive,
-      goldDelta: 12, moraleModifier: 0.08, duration: 18,
-      weight: 0.9,
-      effect: EventEffect(fx: EventFx.visitorArrived, duration: 16),
-    ),
-    EventOutcome(
-      title: 'Yaz Yağmuru', icon: '🌦',
-      message: 'Bereketli bir yağmur tarlalara can verdi.',
-      category: EventCategory.positive,
-      foodDelta: 10, moraleModifier: 0.10, duration: 25,
-      weight: 0.9,
-      effect: EventEffect(
-        fx: EventFx.none,
-        rainBoost: 0.5,
-        farmGrowthMul: 1.3,
-        duration: 25,
-      ),
-    ),
-
-    // ─── NEGATİF ────────────────────────────────────────────────────────────
+    // ─── NEGATİF (afet/tehdit — hepsi bespoke fx) ─────────────────────────────
     EventOutcome(
       title: 'Kuraklık', icon: '☀',
       message: 'Kuraklık bastı — ekinler soldu, moral düştü.',
@@ -475,29 +357,14 @@ class EventSystem {
         ),
       ],
     ),
-
-    // ─── NÖTR ───────────────────────────────────────────────────────────────
-    EventOutcome(
-      title: 'Yolcu Geçti', icon: '🚶',
-      message: 'Yolu düşen biri kısa bir mola verdi, gitti.',
-      category: EventCategory.neutral,
-      moraleModifier: 0.05, duration: 15,
-      weight: 0.7,
-      effect: EventEffect(fx: EventFx.visitorArrived, duration: 12),
-    ),
   ];
 
   /// Verilen bağlamda uygun olan olaylar arasından ağırlıklı rastgele seçim.
   /// Koşullar:
-  /// - Balık sürüsü → balıkçı kulübesi gerekir
-  /// - Mucize → yiyecek stoğu kıtlığa yaklaşmış olmalı (< 12)
-  /// - Eski hazine → en az 8 köylü
   /// - Salgın → en az 6 köylü
-  /// - Yangın → en az 5 köylü ve odun stoğu ≥ 28
+  /// - Ev Yangını → en az 5 köylü ve odun stoğu ≥ 28
   /// - Hırsız → mevcut altın ≥ 22 veya pazar var
-  /// - Yaz yağmuru → en az 1 tarla (farm tile zorunlu değil; basitleştirme:
-  ///   en az 1 değirmen veya ahır → çiftçilik var sayılır). Şimdilik tek
-  ///   koşul: nüfus ≥ 3.
+  /// Diğerleri (Kuraklık, Hayvan Baskını, Fırtına) koşulsuz uygundur.
   static EventOutcome roll(Random rng, EventContext ctx) {
     final viable = <EventOutcome>[];
     final weights = <double>[];
@@ -516,12 +383,6 @@ class EventSystem {
 
   static bool _canFire(EventOutcome e, EventContext ctx) {
     switch (e.title) {
-      case 'Balık Sürüsü':
-        return ctx.hasBuilding(BuildingType.fisherCabin);
-      case 'Mucize':
-        return ctx.stockpile.food < 12;
-      case 'Eski Hazine':
-        return ctx.population >= 8;
       case 'Salgın':
         return ctx.population >= 6;
       case 'Ev Yangını':
@@ -529,10 +390,6 @@ class EventSystem {
       case 'Hırsız':
         return ctx.stockpile.gold >= 22 ||
                ctx.hasBuilding(BuildingType.market);
-      case 'Yaz Yağmuru':
-        return ctx.population >= 3;
-      case 'Gezgin Tüccar':
-        return ctx.hasBuilding(BuildingType.market);
       default:
         return true;
     }

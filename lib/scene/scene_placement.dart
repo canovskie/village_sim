@@ -235,6 +235,10 @@ extension _ScenePlacement on _VillageSceneState {
           BuildOrder(type: _placing!, col: c, row: r)..completed = true,
         );
         _pathContext.bumpVersion();
+        // Anlık kurulum order completion loop'unu atlar → anchor slot'larını
+        // (kuyu/ateş oturma) + arı sürülerini elle yenile.
+        _anchorSystem.rebuild(_buildings);
+        _rebuildBeeSwarms();
       } else {
         _orders.add(BuildOrder(type: _placing!, col: c, row: r));
       }

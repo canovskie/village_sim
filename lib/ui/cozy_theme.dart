@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'ui_icon.dart';
 
 /// Diegetic "köy panosu" görsel sözlüğü — HUD ve seçim panellerini ortak
 /// bir el yapımı dilde toplar. Plank (ahşap), parşömen, çakılı çivi, deri
@@ -557,12 +558,15 @@ class WaxBadge extends StatelessWidget {
 /// Tek bir kaynak göstergesi — ikon + sayı, oyma metin gibi gözükür.
 class CarvedResource extends StatelessWidget {
   final String icon;
+  /// Pixel-art ikon dosya çekirdeği (UiIcon) — null ise emoji [icon] çizilir.
+  final String? asset;
   final int stored;
   final int transit;
   final bool accent;
   const CarvedResource({
     super.key,
     required this.icon,
+    this.asset,
     required this.stored,
     this.transit = 0,
     this.accent = false,
@@ -582,7 +586,9 @@ class CarvedResource extends StatelessWidget {
       children: [
         Opacity(
           opacity: empty ? 0.70 : 1.0,
-          child: Text(icon, style: const TextStyle(fontSize: 15)),
+          child: asset != null
+              ? UiIcon(asset!, fallback: icon, size: 16)
+              : Text(icon, style: const TextStyle(fontSize: 15)),
         ),
         const SizedBox(width: 5),
         Text(

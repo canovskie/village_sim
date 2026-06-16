@@ -95,7 +95,9 @@
       "Bash(awk -F: '{print $1}')",
       "Bash(awk '$1 > 950 && $1 < 1010')",
       "Bash(git branch *)",
-      "Bash(git tag *)"
+      "Bash(git tag *)",
+      "Bash(sed -n '14,32p' lib/scene/scene_tick.dart)",
+      "Bash(sed -n '62,95p' lib/scene/scene_events.dart)"
     ]
   }
 }

@@ -1,8 +1,10 @@
+import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../world/decor_entity.dart';
 import 'asset_style.dart';
+import 'wind.dart';
 
 /// Çimen üstü dekor sprite'larını yükler ve çizer.
 /// Her kind için 2-3 varyant; world generator önceden seçtiği variant'ı kullanırız.
@@ -51,9 +53,32 @@ class DecorRenderer {
     }
   }
 
+  /// Bitki türünün rüzgârda esneme genliği — düz/ağır objeler (yosun, çakıl,
+  /// kütük, kütük) sallanmaz; çiçekler en çok, çalı/mantar daha az.
+  static double _swayAmp(DecorKind k) {
+    switch (k) {
+      case DecorKind.daisy:
+      case DecorKind.poppy:
+      case DecorKind.lavender:
+      case DecorKind.buttercup:
+        return 0.055;
+      case DecorKind.bushSmall:
+        return 0.032;
+      case DecorKind.mushroomRed:
+      case DecorKind.mushroomBrown:
+        return 0.018;
+      case DecorKind.clover:
+      case DecorKind.pebble:
+      case DecorKind.fallenLog:
+      case DecorKind.stump:
+        return 0.0; // yere yatık / ağır → rüzgâr etkilemez
+    }
+  }
+
   /// Tile merkezinden çizim. [center] = gridToScreen(col+0.5, row+0.5).
   /// Kütük gibi geniş objeler için draw boyutu kind'a göre ayarlanır.
-  static void draw(Canvas canvas, Offset center, DecorEntity d) {
+  /// [time] verilirse esnek bitkiler ortak rüzgâr alanıyla (Wind) sallanır.
+  static void draw(Canvas canvas, Offset center, DecorEntity d, {double time = 0}) {
     final list = _imgs[d.kind];
     if (list == null || list.isEmpty) return;
     final variant = d.variant.clamp(0, list.length - 1);
@@ -124,6 +149,21 @@ class DecorRenderer {
       drawH,
     );
     final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
-    canvas.drawImageRect(img, src, dst, _pSprite);
+
+    // Rüzgâr sallantısı — ortak rüzgâr alanı (ağaç/sazla aynı dalga). Taban
+    // sabit (baseY), tepe sallanır; düz/ağır objelerde amp=0 → skew yok.
+    final amp = _swayAmp(d.kind);
+    if (amp > 0) {
+      final sway = Wind.swayAt(d.col.toDouble(), d.row.toDouble(), time,
+          amp: amp, jitter: (d.swaySeed * 1.618) % (2 * pi));
+      canvas.save();
+      canvas.translate(center.dx, baseY);
+      canvas.skew(sway, 0);
+      canvas.translate(-center.dx, -baseY);
+      canvas.drawImageRect(img, src, dst, _pSprite);
+      canvas.restore();
+    } else {
+      canvas.drawImageRect(img, src, dst, _pSprite);
+    }
   }
 }

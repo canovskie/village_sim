@@ -54,6 +54,7 @@ extension _SceneEvents on _VillageSceneState {
       _attachFxTargets(e.effect!);
     }
 
+    _reactToEvent(e); // köy gövde diliyle tepki verir (emoji yok, postür)
     _showNotification(e.message);
   }
 
@@ -119,8 +120,39 @@ extension _SceneEvents on _VillageSceneState {
       effect:         fx,
     );
     _activeEventLeft = kEventBannerDuration;
+    _reactToEvent(_activeEvent!); // çözüm sonrası köy gövde diliyle tepki verir
     _showNotification(c.resolutionMessage);
     setStateHere(() => _pendingChoice = null);
+  }
+
+  /// Bir olayı köy çapı gövde-dili tepkisine çevirir (baş üstü emoji YOK).
+  /// Önce belirli fx'ler ince ayar, sonra kategori/şiddet.
+  void _reactToEvent(EventOutcome e) {
+    final NpcEmotion emotion;
+    double dur, mood;
+    switch (e.effect?.fx) {
+      case EventFx.thiefDash:
+        emotion = NpcEmotion.anger; dur = 6; mood = -0.02;
+      case EventFx.beastEyes:
+        emotion = NpcEmotion.fear; dur = 7; mood = -0.03;
+      case EventFx.meteorShower:
+        emotion = NpcEmotion.wonder; dur = 8; mood = 0.03;
+      case EventFx.harvestBounty:
+        emotion = NpcEmotion.joy; dur = 8; mood = 0.05;
+      default:
+        switch (e.category) {
+          case EventCategory.positive:
+            emotion = NpcEmotion.joy; dur = 6; mood = 0.04;
+          case EventCategory.negative:
+            final major = e.severity == EventSeverity.major;
+            emotion = NpcEmotion.fear;
+            dur = major ? 8 : 5;
+            mood = major ? -0.05 : -0.03;
+          case EventCategory.neutral:
+            emotion = NpcEmotion.wonder; dur = 6; mood = 0.0;
+        }
+    }
+    _feelVillage(emotion, dur, mood);
   }
 
   /// Aktif efektleri her tick decay et + aggregate. Sonra tint/rain/sim

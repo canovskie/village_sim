@@ -52,6 +52,7 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onStartDance;
   final VoidCallback onStartChat;
   final VoidCallback onClearActivities;
+  final VoidCallback onMeteorShower;
 
   // Görsel test "full performans" godmode aksiyonları
   final VoidCallback onSeedShowcase;
@@ -64,6 +65,10 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onClearPolicies;
   final VoidCallback onMakeSage;
   final VoidCallback onSpawnMigrant;
+  final VoidCallback onForcePetition;
+  /// Seçilebilir dilekçeler: (id, '🎉 Başlık') — DevPanel her biri için buton.
+  final List<(String, String)> petitions;
+  final void Function(String id) onForcePetitionId;
   final bool perfMode;
   final VoidCallback onTogglePerf;
 
@@ -102,6 +107,7 @@ class DevPanel extends StatelessWidget {
     required this.onStartDance,
     required this.onStartChat,
     required this.onClearActivities,
+    required this.onMeteorShower,
     required this.onSeedShowcase,
     required this.onSetDawn,
     required this.onSetNoon,
@@ -112,6 +118,9 @@ class DevPanel extends StatelessWidget {
     required this.onClearPolicies,
     required this.onMakeSage,
     required this.onSpawnMigrant,
+    required this.onForcePetition,
+    required this.petitions,
+    required this.onForcePetitionId,
     required this.perfMode,
     required this.onTogglePerf,
   });
@@ -168,12 +177,19 @@ class DevPanel extends StatelessWidget {
                           _DevBtn('🗒 Yasaları Sıfırla', onClearPolicies),
                           _DevBtn('👵 Bilge Yap', onMakeSage),
                           _DevBtn('🚶 Göçmen Çağır', onSpawnMigrant),
+                          _DevBtn('📜 Dilekçe Getir', onForcePetition),
                           _DevBtn(
                               perfMode
                                   ? '🚀 Perf Modu AÇIK'
                                   : '🐢 Perf Modu',
                               onTogglePerf,
                               active: perfMode),
+                        ]),
+                        const SizedBox(height: 14),
+                        _section('Dilekçe Seç (anında getir)'),
+                        _wrapButtons([
+                          for (final p in petitions)
+                            _DevBtn(p.$2, () => onForcePetitionId(p.$1)),
                         ]),
                         const SizedBox(height: 14),
                         _section('Hızlı Kurulum'),
@@ -210,6 +226,7 @@ class DevPanel extends StatelessWidget {
                           _DevBtn('🎸 Müzik', onPlayMusic),
                           _DevBtn('💃 Dans', onStartDance),
                           _DevBtn('💬 Sohbet', onStartChat),
+                          _DevBtn('🌠 Göktaşı Yağmuru', onMeteorShower),
                           _DevBtn('🧹 Temizle', onClearActivities),
                         ]),
                         const SizedBox(height: 14),

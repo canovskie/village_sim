@@ -36,9 +36,11 @@ import 'entities/florist_entity.dart';
 import 'entities/shepherd_entity.dart';
 import 'world/animal_entity.dart';
 import 'world/bird_flock.dart';
+import 'world/bee_flock.dart';
 import 'rendering/tool_renderer.dart';
 import 'world/nature_entity.dart';
 import 'world/decor_entity.dart';
+import 'world/grave.dart';
 import 'rendering/nature_renderer.dart';
 import 'rendering/decor_renderer.dart';
 import 'rendering/animal_renderer.dart';
@@ -51,9 +53,11 @@ import 'ui/building_info_panel.dart';
 import 'ui/villager_info_panel.dart';
 import 'ui/event_banner.dart';
 import 'ui/event_choice_modal.dart';
+import 'ui/petition_modal.dart';
+import 'systems/petition_system.dart';
 import 'ui/dev_panel.dart';
 import 'ui/objective_panel.dart';
-import 'systems/objective_tracker.dart';
+import 'systems/quest_book.dart';
 import 'ui/sky_widgets.dart';
 import 'ui/loading_screen.dart';
 import 'ui/mode_button.dart';
@@ -79,6 +83,7 @@ import 'scene/scene_data.dart';
 // alan (yerleştirme, tick döngüsü, world helper'ları, UI, vs).
 part 'scene/scene_scenarios.dart';
 part 'scene/scene_npc_activity.dart';
+part 'scene/scene_npc_routine.dart';
 part 'scene/scene_events.dart';
 part 'scene/scene_placement.dart';
 part 'scene/scene_building_spawn.dart';
@@ -87,6 +92,10 @@ part 'scene/scene_tick.dart';
 part 'scene/scene_input.dart';
 part 'scene/scene_ui.dart';
 part 'scene/scene_firepit_gather.dart';
+part 'scene/scene_petitions.dart';
+part 'scene/scene_funeral.dart';
+part 'scene/scene_reactions.dart';
+part 'scene/scene_flow.dart';
 
 void main() => runApp(const VillageSimApp());
 
@@ -246,6 +255,9 @@ class _VillageSceneState extends State<VillageScene>
   // ── Ground decor (çiçek, mantar, çalı, kütük, taş) — pure visual ─────────
   final List<DecorEntity> _decor = [];
 
+  // ── Mezarlık — kilise yanında biriken mezarlar (cenaze sistemi) ──────────
+  final List<Grave> _graves = [];
+
   // ── Mining (maden kazma) ───────────────────────────────────────────────────
   final List<MineNode> _mineNodes = [];
   final List<MinerEntity> _miners = [];
@@ -263,6 +275,16 @@ class _VillageSceneState extends State<VillageScene>
   // Etkileşim yok, pure atmosphere. Gündüz periyodik spawn, off-grid temizle.
   final List<BirdFlock> _birdFlocks = [];
   double _birdFlockSpawnTimer = 20.0; // ilk sürü 20s sonra
+
+  // ── Ambient arı sürüleri — her arı kovanına bağlı, kovan etrafında orbit ──
+  // Topology değişince _rebuildBeeSwarms ile kovanlardan türetilir (mevcutlar
+  // pozisyona göre korunur). Pure atmosphere, gece fade.
+  final List<BeeSwarm> _beeSwarms = [];
+
+  // ── Ambient göktaşı yağmuru — seyrek, gece özel gök gösterisi (karar yok) ──
+  // Geri sayım gün-gece boyunca akar; sıfırlanınca gece tetiklenir, köylüler
+  // izler + moral artar. İlk gösteri ~ilk gecede.
+  double _meteorShowerTimer = 0.5 * kGameDaySeconds;
 
   // ── Belediye politikaları — oyuncunun nüfus üstündeki kararları ──────────
   // Default hepsi kapalı. BuildingInfoPanel toggle ile değiştirir.
@@ -315,6 +337,16 @@ class _VillageSceneState extends State<VillageScene>
       _coalInTransit = 0,
       _foodInTransit = 0;
 
+  // Köy morali — PASİF BİRİKİM GÖSTERGESİ. Ekonomiden türemez; olay/eylem/
+  // politika hedefe doğru iter, _morale yavaşça oraya süzülür ve tabana döner.
+  // Hiçbir oyun mantığı bunu okumaz — yalnızca HUD/panel gösterir (_stats.morale).
+  double _morale = 0.5;
+
+  // ── Reaktif ortam (sürekli canlılık) ─────────────────────────────────────
+  double _spontaneousTimer = 0; // ara sıra rastgele NPC'ye küçük gövde refleksi
+  bool   _lastRainy = false;    // yağmur geçiş tespiti (başla/dur reaksiyonu)
+  bool   _wasStarving = false;  // açlığa giriş tespiti (bir kerelik reaksiyon)
+
   // ── Rastgele olaylar ───────────────────────────────────────────────────────
   double _eventTimer = kEventFirstDelay; // bir sonraki olaya kalan süre
   double _eventMorale = 0.0; // aktif geçici moral etkisi (+/−)
@@ -328,13 +360,34 @@ class _VillageSceneState extends State<VillageScene>
   // simülasyon dt = 0 (oyun donar), oyuncu seçince serbest kalır.
   EventOutcome? _pendingChoice;
 
+  // ── Dilekçe / Meclis (scene_petitions) ─────────────────────────────────────
+  // Ambient yönetişim: köy periyodik dilekçe sunar, HUD'da mühür belirir.
+  // Modal açıkken oyun DURMAZ (ambient — _pendingChoice'tan farkı bu).
+  Petition? _pendingPetition;
+  bool _petitionModalOpen = false;
+  double _petitionTimer = 1.0 * kGameDaySeconds; // ilk dilekçe ~1 oyun günü sonra
+  double _petitionDeadline = 0;
+  // Zincir: tetiklenmiş takip dilekçeleri (id + ne zaman geleceği sim time).
+  final List<({String id, double fireAtSim})> _petitionFollowUps = [];
+  // Hafıza: çözülen dilekçe id → cooldown sim time (aynısı hemen random çıkmasın).
+  final Map<String, double> _petitionCooldowns = {};
+  // Köyün kalıcı hafızası: geçmiş kararların bıraktığı bayraklar (ör. 'cult.active').
+  // Dilekçeler bunu okuyup dallanır; köyün "öyküsü" burada birikir.
+  final Set<String> _villageMemory = {};
+
   // Geliştirici test paneli açık mı.
   bool _devPanelOpen = false;
 
-  // Hedef listesi paneli daraltılmış mı (oyuncu küçültebilir).
+  // Köy Defteri paneli daraltılmış mı (oyuncu küçültebilir).
   bool _objectivesCollapsed = false;
-  // Hangi hedefler önceden tamamlanmıştı — yeni tamamlanan için bildirim.
-  final Set<String> _completedObjectives = {};
+
+  // ── Köy Akışı (görev defteri + politika-odaklı Tüzük kademesi) ────────────
+  // Tamamlanmış görev id'leri (yeni tamamlanan → görsel ödül + bildirim).
+  final Set<String> _completedQuests = {};
+  // Köyün kimlik kademesi (charterTier) — politika+görevle ilerler, asla gerilemez.
+  int _charterTier = 0;
+  // _tickFlow throttle sayacı.
+  double _flowScan = 0;
 
   // Sosyal canlılık — bağlama duyarlı, dağıtık yoğunluk.
   // Her NPC kendi cooldown'unda bağımsız değerlendirilir; global cap yok.
@@ -342,6 +395,8 @@ class _VillageSceneState extends State<VillageScene>
   // ayarlar → nüfus arttıkça doğal olarak köy daha canlı olur, dağıtık
   // bölgeler sessiz kalır.
   double _socialScanTimer = 0;
+  /// NPC rutin (errand) tarama sayacı — scene_npc_routine.
+  double _routineScan = 0;
   static const double _kSocialScanInterval =
       3.0; // her NPC için 3 sn'de bir bak
 
@@ -349,18 +404,6 @@ class _VillageSceneState extends State<VillageScene>
   // Tick periyotları extension içinde sabit; field'lar burada tutulur.
   double _gatherScanTimer = 0;
   double _storyScanTimer = 0;
-  static const List<String> _kChatIcons = [
-    '💬',
-    '🍞',
-    '🌾',
-    '⚒',
-    '😊',
-    '❓',
-    '☀',
-    '✨',
-    '🪵',
-    '🪙',
-  ];
 
   // Dev: simülasyon hız boost'u. Normal _timeScale ile çarpılır. 1.0 = normal,
   // 30.0 = hızlı denge testi. DevPanel slider'ı set eder.
@@ -539,11 +582,17 @@ class _VillageSceneState extends State<VillageScene>
             Positioned.fill(child: buildGameCanvas()),
             Positioned.fill(child: buildHudLayer()),
             buildBottomToolbar(),
+            // Bekleyen dilekçe mührü — HUD üstünde, modal kapalıyken (ambient).
+            if (_pendingPetition != null && !_petitionModalOpen)
+              buildPetitionSeal(),
             if (_selectedBuilding != null) buildSelectedBuildingPanel(),
             if (_selectedVillager != null) buildSelectedVillagerPanel(),
             // Karar bekleyen olay — modal açıkken simülasyon dt = 0 (tick
             // yarıduraklatılır), oyuncu seçene kadar.
             if (_pendingChoice != null) buildEventChoiceModal(),
+            // Dilekçe modal'ı — oyunu DURDURMAZ (ambient yönetişim).
+            if (_petitionModalOpen && _pendingPetition != null)
+              buildPetitionModal(),
             if (_devPanelOpen) buildDevPanel(),
             buildEventBanner(),
             buildObjectivesPanel(),

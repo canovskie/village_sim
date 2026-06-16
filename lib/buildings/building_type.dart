@@ -83,6 +83,13 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.34, 0.55, LightKind.window),
     BuildingLight(0.53, 0.63, LightKind.lantern),
   ],
+  BuildingType.church: [
+    BuildingLight(0.52, 0.71, LightKind.window),
+    BuildingLight(0.60, 0.74, LightKind.window),
+    BuildingLight(0.67, 0.77, LightKind.window),
+    BuildingLight(0.36, 0.79, LightKind.lantern),
+    BuildingLight(0.13, 0.68, LightKind.lantern),
+  ],
 };
 
 // ─── Baca / duman noktaları ────────────────────────────────────────────────
@@ -144,6 +151,8 @@ enum BuildingType {
   lamppost,     // 1x1 — procedurel çizim (asset yok). Gece ışık kaynağı.
   floristCottage, // 2x2 — floristcottage.png. Çiçekçi kulübesi: çevreye çiçek spawn + Florist NPC sular.
   chickenCoop,    // 2x2 — chickencoop.png. Tavuk kümesi: 3-4 tavuk spawn + periyodik yumurta (food).
+  beehive,        // 1x1 — beehive.png. Arı kovanı: menzildeki çiçeğe göre bal üretir + ambient arılar.
+  church,         // 2x2 — church.png. Kilise: civic moral + cenaze töreni mekânı + yanına mezarlık.
 }
 
 class BuildingMeta {
@@ -255,6 +264,27 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     groundXCenter: 0.50,
     spriteScale: 1.0,
     effectRadius: 3.5, // tavukların dolaştığı menzil
+  ),
+  BuildingType.beehive: BuildingMeta(
+    cols: 1,
+    rows: 1,
+    label: 'Arı Kovanı',
+    cost: ResourceCost(wood: 8),
+    groundXCenter: 0.50,
+    spriteScale: 0.62, // küçük kovan — well/firepit ölçeğine yakın
+    walkable: true, // 1×1 dekor; etrafından geçilebilir
+    effectRadius: 3.5, // bu menzildeki çiçekler bal üretimini hızlandırır
+  ),
+  BuildingType.church: BuildingMeta(
+    cols: 2,
+    rows: 2,
+    label: 'Kilise',
+    cost: ResourceCost(wood: 30, stone: 24, iron: 3),
+    // church.png trimlenmiş (1083×1156) → taban alt kenarda, merkez ~0.50.
+    groundY: 1.0,
+    groundXCenter: 0.50,
+    spriteScale: 1.2, // görkemli landmark — footprint'in biraz dışına taşar
+    effectRadius: 5.5, // moral menzili + cenaze töreni/mezarlık alanı
   ),
   BuildingType.woodenHouse: BuildingMeta(
     cols: 2,

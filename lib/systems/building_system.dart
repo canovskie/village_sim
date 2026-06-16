@@ -11,10 +11,12 @@ class VillageStats {
   /// Her malzeme kaynağının üst sınırı (depo sayısına bağlı).
   final int stockCapacity;
 
-  /// Köy morali 0..1 (kuyu + taverna). 0.5 = nötr.
+  /// Köy morali 0..1 — PASİF GÖSTERGE. Artık binalardan/ekonomiden TÜREMEZ;
+  /// sahnedeki `_morale` birikim değeri buraya geçirilir (yalnızca display).
+  /// Hiçbir oyun mantığı bunu okumaz. 0.5 = nötr.
   final double morale;
 
-  /// Nüfus büyüme hız çarpanı (moralden türer, ≥1).
+  /// (Artık kullanılmıyor — geriye dönük uyumluluk için sabit 1.0.)
   final double growthMultiplier;
 
   /// Taşıyıcı NPC hız çarpanı (ahır sayısına bağlı, ≥1).
@@ -32,18 +34,14 @@ class VillageStats {
   });
 }
 
-/// Köy çapı değerlerini binalardan türetir. Yan etkisizdir; her tick ve
-/// panel açılışında güvenle çağrılabilir.
+/// Köy çapı değerlerini binalardan türetir (kapasite, taşıyıcı hızı, kuyu).
+/// Moral artık burada HESAPLANMAZ — sahneden gelen [morale] birikim değeri
+/// olduğu gibi taşınır (pasif gösterge). Yan etkisizdir.
 VillageStats computeVillageStats(List<BuildingEntity> buildings,
-    {double starvation = 0.0, double eventMorale = 0.0}) {
+    {double morale = 0.5}) {
   int capacity = kBaseStockCapacity;
-  double moraleBonus = 0.0;
   double carrierBonus = 0.0;
   int wellCount = 0;
-
-  // Susuz evler köyü mutsuz eder — dolu olan evlerin ortalama su seviyesi.
-  double waterSum = 0.0;
-  int occupiedHouses = 0;
 
   for (final b in buildings) {
     final f = b.fn;
@@ -52,17 +50,11 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
     switch (f.role) {
       case BuildingRole.storage:
         capacity += f.storageCapacity;
-      case BuildingRole.housing:
-        if (b.occupants > 0) {
-          waterSum += b.waterLevel;
-          occupiedHouses++;
-        }
       case BuildingRole.civic:
         switch (f.civicEffect) {
-          case CivicEffect.morale:
-            moraleBonus += f.civicValue;
           case CivicEffect.carrierSpeed:
             carrierBonus += f.civicValue;
+          case CivicEffect.morale:
           case CivicEffect.populationGrowth:
           case CivicEffect.none:
             break;
@@ -72,24 +64,12 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
     }
   }
 
-  moraleBonus = moraleBonus.clamp(0.0, 0.5);
   carrierBonus = carrierBonus.clamp(0.0, 0.8);
 
-  // Su açığı cezası: dolu evlerin ortalaması düşükse moral ve büyüme düşer.
-  final avgWater = occupiedHouses > 0 ? waterSum / occupiedHouses : 1.0;
-  final waterPenalty =
-      ((1.0 - avgWater) * kWaterMoralePenalty).clamp(0.0, kWaterMoralePenalty);
-
-  // Açlık cezası: yiyecek tükenince köy mutsuzlaşır (su cezasına paralel).
-  final starvePenalty =
-      (starvation.clamp(0.0, 1.0) * kStarvationMoralePenalty);
-
-  // Net etki: civic bonus − su/açlık cezası + olay etkisi (festival +/kuraklık −).
-  final net = moraleBonus - waterPenalty - starvePenalty + eventMorale;
   return VillageStats(
     stockCapacity: capacity,
-    morale: (0.5 + net).clamp(0.0, 1.0),
-    growthMultiplier: (1.0 + net).clamp(0.5, 2.0),
+    morale: morale.clamp(0.0, 1.0),
+    growthMultiplier: 1.0,
     carrierSpeedMultiplier: 1.0 + carrierBonus,
     wellCount: wellCount,
   );
@@ -112,11 +92,9 @@ VillageStats updateBuildings({
   required int freeHousingSlots,
   required void Function(BuildingEntity townhall) onSpawnVillager,
   bool enforceCapacity = true,
-  double starvation = 0.0,
-  double eventMorale = 0.0,
+  double morale = 0.5,
 }) {
-  final stats = computeVillageStats(buildings,
-      starvation: starvation, eventMorale: eventMorale);
+  final stats = computeVillageStats(buildings, morale: morale);
 
   for (final b in buildings) {
     final f = b.fn;

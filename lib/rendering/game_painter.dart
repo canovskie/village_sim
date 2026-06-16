@@ -22,8 +22,10 @@ import '../entities/miner_entity.dart';
 import 'water_renderer.dart';
 import '../world/nature_entity.dart';
 import '../world/decor_entity.dart';
+import '../world/grave.dart';
 import 'nature_renderer.dart';
 import 'decor_renderer.dart';
+import 'grave_renderer.dart';
 import 'animal_renderer.dart';
 import '../buildings/building_entity.dart';
 import '../buildings/building_renderer.dart';
@@ -41,6 +43,7 @@ import '../entities/florist_entity.dart';
 import '../entities/shepherd_entity.dart';
 import '../world/animal_entity.dart';
 import '../world/bird_flock.dart';
+import '../world/bee_flock.dart';
 import '../world/resource_box.dart';
 import '../world/hay_entity.dart';
 import '../world/resource_placement.dart';
@@ -264,6 +267,16 @@ final Path _scratchPath = Path();
 // Spread/sort her frame allocate yapmasın diye top-level static.
 final List<_Drawable> _sceneBuffer = [];
 
+// ─── Occlusion silhouette (C) parametreleri ─────────────────────────────────
+// Bina gövde yüksekliği tahmini = footprint ekran yüksekliği * scale + base (px).
+// Böylece kutunun üstü gerçek çatıya yakın olur (küçük/büyük binaya uyarlanır).
+const double kOccWallScale = 1.7;
+const double kOccWallBase  = 26;
+// Aktörün örtülme testinde kullanılan gövde nokta ofseti (ayaktan yukarı, px).
+const double kOccProbeY = 46;
+// Örtülen aktörün üstte yeniden çizildiği yarı saydam katman (~%40 opaklık).
+final Paint _occFadePaint = Paint()..color = const Color(0x66FFFFFF);
+
 // ── Ground Picture cache ─────────────────────────────────────────────────────
 // Çim+kum+border katmanı statik — her map için bir kez Picture'a kaydedilir,
 // frame'lerde drawPicture ile replay edilir. Camera-bağımsız (Offset.zero ile
@@ -326,6 +339,18 @@ double _sceneTime = 0;
 abstract class _Drawable {
   double get depth;
   void draw(Canvas canvas, Size size, Offset camera);
+
+  /// Stabil sort tie-break — buffer'daki ekleme sırası (her frame atanır).
+  /// Eşit depth'te bu deterministik sıra kullanılır → titreme/rastgele örtme yok.
+  int sortIndex = 0;
+
+  /// Bu drawable bir "aktör" (NPC/işçi) ise wrapped entity; değilse null.
+  /// Occlusion silhouette pass'i aktörleri buradan bulur. Bina içindeyken null.
+  WorkerEntity? get actor => null;
+
+  /// Bu drawable bir bina ise wrapped entity; değilse null. Occlusion testinde
+  /// "önde çizilen örten" listesi buradan kurulur.
+  BuildingEntity? get building => null;
 }
 
 class _VillagerDrawable extends _Drawable {
@@ -334,6 +359,7 @@ class _VillagerDrawable extends _Drawable {
   final double dayLight;
   _VillagerDrawable(this.e, this.time, this.dayLight);
   @override double get depth => e.depth;
+  @override WorkerEntity? get actor => e.isInsideBuilding ? null : e;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     if (e.isInsideBuilding) return;
@@ -341,8 +367,11 @@ class _VillagerDrawable extends _Drawable {
     final s = gridToScreen(e.renderX, e.renderY, size, camera);
 
     // Gölge — ayak altında, torch glow'un da altında.  Boyut karakter
-    // ölçeğiyle (yaşam-evresi dahil) orantılı.
-    _drawCharShadow(canvas, s.dx, s.dy, kCharScale * e.lifeStage.renderScale);
+    // ölçeğiyle (yaşam-evresi dahil) orantılı. (Ölüm dalı kendi solan gölgesini
+    // çizer → burada atla.)
+    if (!e.isDying) {
+      _drawCharShadow(canvas, s.dx, s.dy, kCharScale * e.lifeStage.renderScale);
+    }
 
     // Lokal meşale glow + alev — sprite'tan ÖNCE çizilir ki karakter üstüne
     // binsin. Entity.torchLevel tek karar noktası; 0..1 fade. Glow konumu
@@ -359,7 +388,7 @@ class _VillagerDrawable extends _Drawable {
           time, e.torchPhase, intensity: torchLv);
     }
 
-    if (e.isSleeping && !e.isInsideBuilding) {
+    if (e.isSleeping && !e.isInsideBuilding && !e.isDying) {
       // Yatay uyku pozu — yastık + battaniye + kapalı göz, hafif breath.
       final sleepScale = kCharScale * e.lifeStage.renderScale;
       canvas.save();
@@ -373,6 +402,39 @@ class _VillagerDrawable extends _Drawable {
       return;
     }
 
+    // Ölüm — collapse + fade. Anlık silinmek yerine ayakları kesilir gibi yana
+    // devrilip yere yığılır ve solar (ayak ucu pivot). Gölge de küçülüp söner.
+    if (e.isDying) {
+      final dp = e.dyingProgress;
+      final cs = kCharScale * e.lifeStage.renderScale;
+      final dir = e.effectiveFacingRight ? 1.0 : -1.0;
+      // İlk yarı: dizler çöker + yana devrilir. İkinci yarı: yerde solar.
+      final topple = dp * 1.4 * dir;      // ~80° yana yatış
+      final sink   = dp * 6.0 * cs;        // yere oturma
+      final squash = 1.0 - 0.18 * dp;      // dikeyde hafif ezilme
+      final alpha  = (dp < 0.5 ? 1.0 : 1.0 - (dp - 0.5) / 0.5).clamp(0.0, 1.0);
+      _drawCharShadow(canvas, s.dx, s.dy, cs * (1.0 - 0.45 * dp));
+      canvas.saveLayer(
+        Rect.fromCenter(center: s, width: 140 * cs, height: 180 * cs),
+        Paint()..color = Color.fromARGB((alpha * 255).round(), 255, 255, 255),
+      );
+      canvas.translate(s.dx, s.dy + sink);
+      canvas.rotate(topple);
+      canvas.scale(cs, cs * squash);
+      CharacterRenderer.draw(canvas, e.type,
+          flipX:         !e.effectiveFacingRight,
+          walkPhase:     e.walkPhase,
+          moveIntensity: 0,
+          carrying:      false,
+          torchLevel:    0,
+          torchPhase:    e.torchPhase,
+          visual:        e.visual,
+          time:          time,
+          stage:         e.lifeStage);
+      canvas.restore();
+      return;
+    }
+
     // Yaşam evresine göre boy ölçeği — çocuk küçük, yetişkin tam, yaşlı hafif.
     final charScale = kCharScale * e.lifeStage.renderScale;
     // Dans → gerçek zıplama. NPC her vuruşta yere iner çıkar.
@@ -383,39 +445,113 @@ class _VillagerDrawable extends _Drawable {
       danceBounce = sin(time * 6.0 + e.gridX * 1.1).abs() * 4.0;
       danceSway   = sin(time * 3.0 + e.gridX * 0.7) * 0.20;
     }
+    // Sohbet → konuşma jesti: konuşan sırasında belirgin baş-gövde "nod",
+    // dinlerken hafif. Karşılıklı sohbetin canlı görünmesini sağlar.
+    double talkBob  = 0;
+    double talkSway = 0;
+    if (e.activity == VillagerActivity.chat) {
+      final (speaking, _) = e.convoNow();
+      final amp = speaking ? 1.0 : 0.3;
+      talkBob  = sin(time * 9.0 + e.gridX * 1.3).abs() * 1.5 * amp;
+      talkSway = sin(time * 4.5 + e.gridX) * 0.05 * amp;
+    }
+    // Mood postürü — neşeli köylü dik + hafif yukarı, üzgün çökük + hafif aşağı.
+    // Tüm yürüyen/duran NPC'ye uygulanır (uyku erken return; etkilenmez).
+    double moodLift   = 0;
+    double moodScaleY = 1.0;
+    if (e.mood > 0.15) {
+      final m = e.mood.clamp(0.0, 1.0);
+      moodScaleY = 1.0 + 0.03 * m;
+      moodLift   = 0.9 * m;
+    } else if (e.mood < -0.15) {
+      final m = (-e.mood).clamp(0.0, 1.0);
+      moodScaleY = 1.0 - 0.06 * m;
+      moodLift   = -0.9 * m;
+    }
     // Ateş başı oturma — sprite'ı dikeyde sıkıştırıp aşağı kaydırarak
     // "çömelme" hissi. Anlatıcıda hafif öne-arka sallanma.
     double sitYOff   = 0;
     double sitYScale = 1.0;
     double sitSway   = 0;
+    CharPose charPose = CharPose.normal;
     final isSeated = e.isSeatedAtFire && (
         e.activity == VillagerActivity.warm ||
         e.activity == VillagerActivity.storytelling ||
         e.activity == VillagerActivity.listening);
     if (isSeated) {
-      sitYOff   = 4;
-      sitYScale = 0.78;
+      // Gerçek oturma duruşu — kaba squash değil. Duruşa göre yere oturt
+      // (sprite'ı aşağı kaydır), uzuv pozunu CharacterRenderer halleder.
+      switch (e.firePose) {
+        case FirePose.sit:
+          charPose = CharPose.sit;   sitYOff = 9;
+        case FirePose.kneel:
+          charPose = CharPose.kneel; sitYOff = 7;
+        case FirePose.mourn:
+          charPose = CharPose.mourn; sitYOff = 10;
+      }
       if (e.activity == VillagerActivity.storytelling) {
         sitSway = sin(time * 2.0 + e.gridX) * 0.06;
       }
     }
+    // Duygu gövde dili — emoji DEĞİL, POSTÜR: sevinç sıçrar, yas çöküp öne
+    // eğilir, korku titreyip kaçınır, hayranlık doğrulur, sevgi yumuşak salınır.
+    // emotionIntensity ile başta zirve sonra söner (refleks gibi).
+    // Oturanlarda duygu firePose ile anlatılır (ayin/yas/otur) → emotion pozu
+    // yalnız ayaktakilere uygulanır.
+    double emoBounce = 0, emoLift = 0, emoRot = 0, emoScaleY = 1.0;
+    if (e.emotionTime > 0 &&
+        e.emotion != NpcEmotion.none &&
+        e.activity != VillagerActivity.dance &&
+        !isSeated) {
+      final k = e.emotionIntensity;
+      final fdir = e.effectiveFacingRight ? 1.0 : -1.0;
+      switch (e.emotion) {
+        case NpcEmotion.joy:
+          emoBounce = sin(time * 7.0 + e.gridX).abs() * 2.6 * k; // sevinç sıçraması
+          emoLift = 0.6 * k;
+        case NpcEmotion.love:
+          emoRot = sin(time * 3.0 + e.gridX) * 0.07 * k; // yumuşak salınım
+        case NpcEmotion.wonder:
+          emoLift = 1.3 * k; // doğrulup yukarı bakış
+          emoScaleY = 1.0 + 0.03 * k;
+        case NpcEmotion.content:
+          emoRot = sin(time * 1.6 + e.gridX) * 0.03 * k; // huzurlu hafif sallanış
+        case NpcEmotion.grief:
+          emoScaleY = 1.0 - 0.11 * k; // çöküş
+          emoLift = -1.4 * k;         // başı/gövdeyi aşağı
+          emoRot = 0.06 * k * fdir;   // öne eğilme
+        case NpcEmotion.fear:
+          emoBounce = sin(time * 22.0 + e.gridX) * 0.9 * k; // titreme
+          emoRot = -0.10 * k * fdir;  // geriye kaçınma
+        case NpcEmotion.anger:
+          emoBounce = sin(time * 18.0 + e.gridX) * 0.7 * k; // gerginlik
+          emoRot = 0.05 * k * fdir;   // öne yüklenme
+        case NpcEmotion.none:
+          break;
+      }
+    }
     canvas.save();
-    canvas.translate(s.dx, s.dy - danceBounce + sitYOff);
+    canvas.translate(s.dx,
+        s.dy - danceBounce - talkBob - moodLift + sitYOff - emoBounce - emoLift);
     if (danceSway != 0) canvas.rotate(danceSway);
     if (sitSway != 0)   canvas.rotate(sitSway);
-    // Idle micro-anim — nefes + sway, yalnız dans/oturma yokken anlamlı (idle
-    // helper'ları walking/işteyken zaten 0/1 döner).
-    if (danceSway == 0 && sitSway == 0) {
+    if (talkSway != 0)  canvas.rotate(talkSway);
+    if (emoRot != 0)    canvas.rotate(emoRot);
+    // Idle micro-anim — nefes + sway, yalnız dans/oturma/sohbet yokken anlamlı
+    // (idle helper'ları walking/işteyken zaten 0/1 döner).
+    final calm = danceSway == 0 && sitSway == 0 && talkSway == 0;
+    if (calm) {
       final swayR = e.idleSwayRotation(time);
       if (swayR != 0) canvas.rotate(swayR);
     }
-    final breathY = (danceSway == 0 && sitSway == 0) ? e.idleBreathScale(time) : 1.0;
-    canvas.scale(charScale, charScale * sitYScale * breathY);
+    final breathY = calm ? e.idleBreathScale(time) : 1.0;
+    canvas.scale(charScale, charScale * sitYScale * breathY * moodScaleY * emoScaleY);
     CharacterRenderer.draw(canvas, e.type,
         flipX:         !e.effectiveFacingRight,
         walkPhase:     e.walkPhase,
         moveIntensity: e.moveIntensity,
         carrying:      e.isCarrying && e.carriedItem != null,
+        pose:          charPose,
         torchLevel:    torchLv,
         torchPhase:    e.torchPhase,
         visual:        e.visual,
@@ -444,18 +580,28 @@ class _VillagerDrawable extends _Drawable {
         ResourceRenderer.drawCarriedHay(canvas, item, s.dx, s.dy - danceBounce);
       }
     }
-    // Sohbet baloncuğu — chat ve storytelling. Müzik/dans görsel ipucuna sahip.
-    if ((e.activity == VillagerActivity.chat ||
-         e.activity == VillagerActivity.storytelling) &&
-        e.chatBubbleTime > 0 && e.chatBubbleIcon.isNotEmpty) {
-      _drawChatBubble(canvas, Offset(s.dx, s.dy - danceBounce + sitYOff),
-          e.chatBubbleIcon, e.chatBubbleTime);
+    // Sohbet baloncuğu.
+    final bubbleBase = Offset(s.dx, s.dy - danceBounce - talkBob - moodLift + sitYOff);
+    if (e.activity == VillagerActivity.chat) {
+      // Karşılıklı konuşma — yalnız sırası gelen konuşur (konuya bağlı replik).
+      final (speaking, cIcon) = e.convoNow();
+      if (speaking && cIcon.isNotEmpty) {
+        _drawChatBubble(canvas, bubbleBase, cIcon, e.chatBubbleTime);
+      }
+    } else if (e.chatBubbleTime > 0 &&
+        e.chatBubbleIcon.isNotEmpty &&
+        e.activity != VillagerActivity.music &&
+        e.activity != VillagerActivity.dance) {
+      // Statik baloncuk: hikaye 📖, selam 👋, göktaşı 🌠, oyuncu ❤️/👋.
+      _drawChatBubble(canvas, bubbleBase, e.chatBubbleIcon, e.chatBubbleTime);
     }
     // Müzik aktivitesinde sazın etrafında uçuşan notalar.
     if (e.activity == VillagerActivity.music && e.chatBubbleTime > 0) {
       _drawMusicNotes(canvas, Offset(s.dx, s.dy - danceBounce),
           e.gridX, e.gridY, e.chatBubbleTime);
     }
+    // (Baş üstü duygu emojisi KALDIRILDI — duygu artık yalnızca gövde diliyle
+    // anlatılır: yukarıdaki emoBounce/emoLift/emoRot/emoScaleY postürü.)
   }
 
   void _drawMusicNotes(Canvas canvas, Offset base, double gx, double gy,
@@ -566,6 +712,7 @@ class _BuilderDrawable extends _Drawable {
   final BuilderEntity b;
   _BuilderDrawable(this.b);
   @override double get depth => b.depth;
+  @override WorkerEntity? get actor => b;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(b.renderX, b.renderY, size, camera);
@@ -635,6 +782,7 @@ class _FarmerDrawable extends _Drawable {
   final FarmFarmer f;
   _FarmerDrawable(this.f);
   @override double get depth => f.depth;
+  @override WorkerEntity? get actor => f;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(f.renderX, f.renderY, size, camera);
@@ -675,6 +823,7 @@ class _MinerDrawable extends _Drawable {
   final MinerEntity m;
   _MinerDrawable(this.m);
   @override double get depth => m.depth;
+  @override WorkerEntity? get actor => m;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(m.renderX, m.renderY, size, camera);
@@ -782,6 +931,7 @@ class _WoodcutterDrawable extends _Drawable {
   final WoodcutterEntity w;
   _WoodcutterDrawable(this.w);
   @override double get depth => w.depth;
+  @override WorkerEntity? get actor => w;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(w.renderX, w.renderY, size, camera);
@@ -825,6 +975,7 @@ class _FisherDrawable extends _Drawable {
   final FisherEntity f;
   _FisherDrawable(this.f);
   @override double get depth => f.depth;
+  @override WorkerEntity? get actor => f;
   // Fisher splash wiring _FisherDrawable.draw içinde — fishPhase cycle başına
   // tek splash (kıyıya doğru biraz öne).
   void _maybeSplash(Canvas canvas, double sx, double sy) {
@@ -866,6 +1017,7 @@ class _FloristDrawable extends _Drawable {
   final FloristEntity fl;
   _FloristDrawable(this.fl);
   @override double get depth => fl.gridX + fl.gridY;
+  @override WorkerEntity? get actor => fl;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(fl.renderX, fl.renderY, size, camera);
@@ -897,6 +1049,7 @@ class _ShepherdDrawable extends _Drawable {
   final ShepherdEntity sh;
   _ShepherdDrawable(this.sh);
   @override double get depth => sh.depth;
+  @override WorkerEntity? get actor => sh;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(sh.renderX, sh.renderY, size, camera);
@@ -974,12 +1127,25 @@ class _ChickenDrawable extends _Drawable {
 
 class _DecorDrawable extends _Drawable {
   final DecorEntity d;
-  _DecorDrawable(this.d);
+  final double time;
+  _DecorDrawable(this.d, this.time);
   @override double get depth => d.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final center = gridToScreen(d.col + 0.5 + d.jitterX, d.row + 0.5 + d.jitterY, size, camera);
-    DecorRenderer.draw(canvas, center, d);
+    DecorRenderer.draw(canvas, center, d, time: time);
+  }
+}
+
+class _GraveDrawable extends _Drawable {
+  final Grave g;
+  _GraveDrawable(this.g);
+  @override double get depth => g.depth;
+  @override
+  void draw(Canvas canvas, Size size, Offset camera) {
+    final center = gridToScreen(
+        g.col + 0.5 + g.jitterX, g.row + 0.5 + g.jitterY, size, camera);
+    GraveRenderer.draw(canvas, center, g);
   }
 }
 
@@ -1048,6 +1214,7 @@ class _BuildingDrawable extends _Drawable {
   // görünebiliyordu. Ön-tile sort'u izometride doğru z-order verir.
   @override double get depth =>
       (b.col + b.cols - 1.0) + (b.row + b.rows - 1.0);
+  @override BuildingEntity? get building => b;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final corners = _corners(b.col, b.row, b.cols, b.rows, size, camera);
@@ -1299,6 +1466,7 @@ class VillageGamePainter extends CustomPainter {
   final List<LotusEntity> lotuses;
   final List<ReedClump>   reeds;
   final List<DecorEntity> decor;
+  final List<Grave>       graves;
   final List<FisherEntity> fishers;
   final List<FloristEntity> florists;
   final List<ShepherdEntity> shepherds;
@@ -1326,6 +1494,9 @@ class VillageGamePainter extends CustomPainter {
   final Set<BuildingEntity> burningBuildings;
   /// Ambient gökyüzü kuş sürüleri — sahnenin üstüne, son katman olarak çizilir.
   final List<BirdFlock> birdFlocks;
+  /// Ambient arı sürüleri — her arı kovanı etrafında orbit; kuşlarla aynı
+  /// ekran-uzayı pass'inde çizilir, gündüz görünür/gece fade.
+  final List<BeeSwarm> beeSwarms;
   /// Performans modu — true ise pahalı ambient/light effect pass'leri atlanır
   /// (fireflies, polen, kuş, bina shadow refinement, light pass detayı).
   final bool perfMode;
@@ -1363,6 +1534,7 @@ class VillageGamePainter extends CustomPainter {
     this.lotuses       = const [],
     this.reeds         = const [],
     this.decor         = const [],
+    this.graves        = const [],
     this.fishers       = const [],
     this.florists      = const [],
     this.shepherds     = const [],
@@ -1377,6 +1549,7 @@ class VillageGamePainter extends CustomPainter {
     this.activeFx      = const {},
     this.burningBuildings = const {},
     this.birdFlocks    = const [],
+    this.beeSwarms     = const [],
     this.perfMode      = false,
   });
 
@@ -1419,6 +1592,7 @@ class VillageGamePainter extends CustomPainter {
       _drawFireflies(canvas, size);
       _drawPollen(canvas, size);
       _drawBirdFlocks(canvas, size);
+      _drawBeeSwarms(canvas, size);
     }
     _drawRain(canvas, size);
     // Event overlay — aktif olayların ekran toneu + olaya özel partiküller.
@@ -1541,6 +1715,51 @@ class VillageGamePainter extends CustomPainter {
         canvas.drawLine(p, rightTip, wingPaint);
         bodyPaint.color = Color.fromARGB(fa, 0x22, 0x1E, 0x18);
         canvas.drawCircle(p, 1.4 * zoom, bodyPaint);
+      }
+    }
+  }
+
+  // ── Ambient arı sürüleri ────────────────────────────────────────────────────
+  // Her arı kovanı etrafında orbit eden küçük arılar. Hızlı kanat çırpışı
+  // (buzz) + amber gövde. Gündüz görünür, gece kovana çekilip fade olur.
+  void _drawBeeSwarms(Canvas canvas, Size size) {
+    if (beeSwarms.isEmpty) return;
+    // Gündüz görünür, alacakaranlıkta da hafif görünür kalsın (0.15'ten başlar).
+    final dayFade  = ((dayLight - 0.15) / 0.35).clamp(0.0, 1.0);
+    final rainFade = (1.0 - (rainIntensity / 0.5)).clamp(0.0, 1.0);
+    final visibility = dayFade * rainFade;
+    if (visibility < 0.05) return;
+
+    final bodyPaint = Paint();
+    final wingPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 1.3 * zoom;
+
+    for (final sw in beeSwarms) {
+      for (final bee in sw.bees) {
+        final (wx, wy) = sw.beeWorldPos(bee);
+        final ground = _worldToScreen(wx, wy, size);
+        final p = Offset(ground.dx, ground.dy + sw.beeBob(bee) * zoom);
+
+        if (p.dx < -20 || p.dx > size.width + 20 ||
+            p.dy < -20 || p.dy > size.height + 20) {
+          continue;
+        }
+
+        final fa = (visibility * 255).round().clamp(0, 255);
+        // Çok hızlı kanat çırpışı — ~5 Hz görsel buzz, her arı desync.
+        final wing = sin(time * 30.0 + bee.wingPhase);
+        final wlen = 2.8 * zoom;
+        final tipDy = wing * 1.1 * zoom;
+        wingPaint.color = Color.fromARGB((fa * 0.55).round(), 0xF0, 0xF0, 0xD0);
+        canvas.drawLine(Offset(p.dx - wlen, p.dy - tipDy), p, wingPaint);
+        canvas.drawLine(p, Offset(p.dx + wlen, p.dy - tipDy), wingPaint);
+        // Gövde: koyu çekirdek + parlak amber halka — net okunur nokta.
+        bodyPaint.color = Color.fromARGB(fa, 0x2A, 0x1C, 0x08);
+        canvas.drawCircle(p, 2.6 * zoom, bodyPaint);
+        bodyPaint.color = Color.fromARGB(fa, 0xFF, 0xC8, 0x48);
+        canvas.drawCircle(p, 1.7 * zoom, bodyPaint);
       }
     }
   }
@@ -1970,9 +2189,16 @@ class VillageGamePainter extends CustomPainter {
         if (list == null) continue;
         for (final d in list) {
           if (inView(d.col + 0.5, d.row + 0.5, upSmall, sideS)) {
-            _sceneBuffer.add(_DecorDrawable(d));
+            _sceneBuffer.add(_DecorDrawable(d, time));
           }
         }
+      }
+    }
+
+    // Mezarlar — sayı az (kilise yanında birikir); bucket'a gerek yok.
+    for (final g in graves) {
+      if (inView(g.col + 0.5, g.row + 0.5, upSmall, sideS)) {
+        _sceneBuffer.add(_GraveDrawable(g));
       }
     }
 
@@ -2180,9 +2406,69 @@ class VillageGamePainter extends CustomPainter {
       }
     }
 
-    _sceneBuffer.sort((a, b) => a.depth.compareTo(b.depth));
+    // (A) Stabil sıralama — depth eşitse ekleme sırası (deterministik) belirler.
+    // Dart List.sort stabil değil; bu yüzden order'ı elle veriyoruz → aynı
+    // diyagonaldeki objeler frame'den frame'e yer değiştirip titremez/örtmez.
+    for (int i = 0; i < _sceneBuffer.length; i++) {
+      _sceneBuffer[i].sortIndex = i;
+    }
+    _sceneBuffer.sort((a, b) {
+      final d = a.depth.compareTo(b.depth);
+      return d != 0 ? d : a.sortIndex.compareTo(b.sortIndex);
+    });
     for (final d in _sceneBuffer) {
       d.draw(canvas, size, camera);
+    }
+
+    // (C) Occlusion silhouette — önde çizilen bir bina bir aktörü (NPC/işçi)
+    // örtüyorsa, aktörü en üstte yarı saydam yeniden çiz → asla tamamen
+    // kaybolmaz (Sims/Tropico tarzı "duvarın ardından hayalet").
+    _drawOcclusionSilhouettes(canvas, size, camera);
+  }
+
+  /// Aktör, önünde çizilen bir binanın ekran gövdesi altında kalıyorsa üstüne
+  /// yarı saydam kopyasını çizer. Footprint AABB'si gövde yüksekliği kadar
+  /// yukarı uzatılır (duvar bölgesi). Aktör örtülmüyorsa hiç çizilmez (maliyetsiz).
+  void _drawOcclusionSilhouettes(Canvas canvas, Size size, Offset camera) {
+    // Önde çizilen binaların footprint + ekran AABB'si. Kutunun üstü, gerçek
+    // çatıya yaklaşsın diye binanın footprint ekran yüksekliğiyle ORANTILI tahmin
+    // edilir (kuyu kısa, kilise uzun) → ne gökyüzüne taşar ne örtmeyi kaçırır.
+    final occ = <(BuildingEntity, Rect)>[];
+    for (final d in _sceneBuffer) {
+      final b = d.building;
+      if (b == null) continue;
+      final (back, left, right, front) =
+          _corners(b.col, b.row, b.cols, b.rows, size, camera);
+      final minX = min(min(back.dx, left.dx), min(right.dx, front.dx));
+      final maxX = max(max(back.dx, left.dx), max(right.dx, front.dx));
+      final wallPx = (front.dy - back.dy) * kOccWallScale + kOccWallBase;
+      occ.add((b, Rect.fromLTRB(minX, back.dy - wallPx, maxX, front.dy)));
+    }
+    if (occ.isEmpty) return;
+
+    for (final d in _sceneBuffer) {
+      final a = d.actor;
+      if (a == null) continue;
+      final s = gridToScreen(a.renderX, a.renderY, size, camera);
+      final probe = Offset(s.dx, s.dy - kOccProbeY); // gövde/baş noktası
+      Rect? clip; // ghost'u SADECE örten bina bölgesine kıs → "duvar ardından"
+      for (final (b, box) in occ) {
+        // Aktör binanın ÖNÜNDE mi? (footprint'in güney VEYA doğusunda) → örtülemez.
+        // Tek-skaler depth off-axis'te yanılıyor; footprint kuralı doğru ön/arka verir.
+        if (a.renderX >= b.col + b.cols || a.renderY >= b.row + b.rows) continue;
+        if (box.contains(probe)) { clip = box; break; }
+      }
+      if (clip == null) continue;
+      // Yarı saydam aktörü EN ÜSTTE ama yalnız bina silüeti içinde çiz →
+      // çatının üstüne taşmaz, "üstüne çıkmış" gibi durmaz. Bina dışına
+      // (zaten görünen baş/omuz) hiç çizilmez → çift görüntü yok.
+      final box = Rect.fromLTRB(s.dx - 44, s.dy - 132, s.dx + 44, s.dy + 20);
+      canvas.save();
+      canvas.clipRect(clip);
+      canvas.saveLayer(box, _occFadePaint);
+      d.draw(canvas, size, camera);
+      canvas.restore();
+      canvas.restore();
     }
   }
 
@@ -2595,66 +2881,548 @@ class VillageGamePainter extends CustomPainter {
     }
     if (activeFx.isEmpty) return;
     // Sahnenin yapısına bağlı partikül pass'leri.
-    if (activeFx.contains(EventFx.celebration)) _fxCelebration(canvas, size);
-    if (activeFx.contains(EventFx.harvestSparkle)) _fxHarvestSparkle(canvas, size);
+    if (activeFx.contains(EventFx.festival)) _fxFestival(canvas, size);
+    if (activeFx.contains(EventFx.cropBlight)) _fxCropBlight(canvas, size);
+    if (activeFx.contains(EventFx.vigil)) _fxVigil(canvas, size);
+    if (activeFx.contains(EventFx.cultRite)) _fxCultRite(canvas, size);
+    if (activeFx.contains(EventFx.meteorShower)) _fxMeteorShower(canvas, size);
+    if (activeFx.contains(EventFx.wedding)) _fxWedding(canvas, size);
+    if (activeFx.contains(EventFx.harvestBounty)) _fxHarvestBounty(canvas, size);
     if (activeFx.contains(EventFx.plagueAura)) _fxPlagueAura(canvas, size);
     // fireOutbreak artık sahne overlay'inde değil — gerçek bina drawable'da
     // sprite üstüne alev + duman çiziyor (_BuildingDrawable._drawBurningOverlay).
-    if (activeFx.contains(EventFx.miracleLight)) _fxMiracleLight(canvas, size);
-    if (activeFx.contains(EventFx.treasureGlow)) _fxTreasureGlow(canvas, size);
     if (activeFx.contains(EventFx.beastEyes)) _fxBeastEyes(canvas, size);
     if (activeFx.contains(EventFx.thiefDash)) _fxThiefDash(canvas, size);
-    if (activeFx.contains(EventFx.visitorArrived)) _fxVisitorArrived(canvas, size);
   }
 
-  // Şenlik — ateş yerinin etrafında yükselen kalp/nota partikülleri.
-  void _fxCelebration(Canvas canvas, Size size) {
-    // Tüm firepit'ler etrafında.
+  // ── BESPOKE Şenlik ──────────────────────────────────────────────────────────
+  // Üç imza katman: (1) ateşten komşu binalara gerilen, sarkan + sallanan flama
+  // ipleri (üçgen bayraklar), (2) köy üstüne süzülen renkli konfeti, (3) ateşten
+  // yükselen sıcak fenerler. Dilekçeyle "Hasat Şenliği" onaylanınca tetiklenir;
+  // NPC'ler de ateşe toplanır + dans eder (sahne tarafı). Gerçek bir bayram.
+  void _fxFestival(Canvas canvas, Size size) {
+    const palette = [
+      Color(0xFFE8554E), // kırmızı
+      Color(0xFFF2A93B), // turuncu
+      Color(0xFFF4D03F), // sarı
+      Color(0xFF6FBE4A), // yeşil
+      Color(0xFF4FA8D8), // mavi
+      Color(0xFFB07BD0), // mor
+    ];
+
+    BuildingEntity? fire;
     for (final b in buildings) {
-      if (b.type != BuildingType.firepit) continue;
-      final base = _worldToScreen(b.col + 0.5, b.row + 0.5, size);
-      for (int i = 0; i < 8; i++) {
-        final phase = (time * 0.55 + i * 0.31 + b.col * 0.17) % 1.0;
-        final ang   = (i * 0.785) + phase * 0.6;
-        final dx    = sin(ang) * 26 * zoom;
-        final dy    = -phase * 60 * zoom - 4;
-        final pos   = base + Offset(dx, dy);
-        final a     = ((1 - phase) * 230).round().clamp(0, 230);
-        final symbolPick = (i + b.col + b.row) & 1;
-        // Kalp şekli yerine basit pixel rosette
-        _pFxParticle.color = symbolPick == 0
-            ? Color.fromARGB(a, 0xFF, 0x70, 0x90)   // pembe kalp
-            : Color.fromARGB(a, 0xFF, 0xE0, 0x60);  // sarı yıldız
-        canvas.drawCircle(pos, 2.5 * zoom, _pFxParticle);
-        _pFxParticle.color = Color.fromARGB((a * 0.5).round(), 0xFF, 0xFF, 0xFF);
-        canvas.drawCircle(pos, 1.2 * zoom, _pFxParticle);
+      if (b.type == BuildingType.firepit) {
+        fire = b;
+        break;
+      }
+    }
+
+    if (fire != null) {
+      final fireB = fire; // closure'larda non-null kullanım için
+      final fx0 = _worldToScreen(fireB.col + 0.5, fireB.row + 0.5, size);
+      final anchorTop = fx0 + Offset(0, -34 * zoom); // direk tepesi gibi yüksek nokta
+
+      // (1) FLAMA İPLERİ — ateşten en yakın ~5 binaya.
+      final others = buildings
+          .where((b) => !identical(b, fireB) && b.type != BuildingType.firepit)
+          .toList()
+        ..sort((a, b) {
+          int d2(BuildingEntity x) =>
+              (x.col - fireB.col) * (x.col - fireB.col) +
+              (x.row - fireB.row) * (x.row - fireB.row);
+          return d2(a).compareTo(d2(b));
+        });
+      final cordPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4 * zoom
+        ..isAntiAlias = true
+        ..color = const Color(0xCC4A3520);
+      final flagPaint = Paint()..isAntiAlias = true;
+      final n = others.length < 5 ? others.length : 5;
+      for (int k = 0; k < n; k++) {
+        final b = others[k];
+        final end = _worldToScreen(b.col + b.cols / 2.0, b.row + 0.1, size) +
+            Offset(0, -26 * zoom);
+        final mid =
+            Offset((anchorTop.dx + end.dx) / 2, (anchorTop.dy + end.dy) / 2);
+        final sag = (24 + sin(time * 1.3 + k) * 4) * zoom; // sallanan sarkma
+        final ctrl = Offset(mid.dx, mid.dy + sag);
+        canvas.drawPath(
+          Path()
+            ..moveTo(anchorTop.dx, anchorTop.dy)
+            ..quadraticBezierTo(ctrl.dx, ctrl.dy, end.dx, end.dy),
+          cordPaint,
+        );
+        // İp boyunca üçgen bayraklar.
+        const flags = 6;
+        for (int f = 1; f <= flags; f++) {
+          final t = f / (flags + 1);
+          final omt = 1 - t;
+          final px = omt * omt * anchorTop.dx +
+              2 * omt * t * ctrl.dx +
+              t * t * end.dx;
+          final py = omt * omt * anchorTop.dy +
+              2 * omt * t * ctrl.dy +
+              t * t * end.dy;
+          final sway = sin(time * 3.0 + f * 0.7 + k) * 1.6 * zoom;
+          final w = 3.6 * zoom, h = 7.0 * zoom;
+          flagPaint.color = palette[(f + k) % palette.length];
+          canvas.drawPath(
+            Path()
+              ..moveTo(px - w, py)
+              ..lineTo(px + w, py)
+              ..lineTo(px + sway, py + h)
+              ..close(),
+            flagPaint,
+          );
+        }
+      }
+
+      // (3) YÜKSELEN FENERLER — ateşten 4 sıcak küre, yavaş yükselir + flicker.
+      for (int i = 0; i < 4; i++) {
+        final phase = (time * 0.13 + i * 0.27) % 1.0;
+        final ly = fx0.dy - phase * 200 * zoom - 6 * zoom;
+        final lx = fx0.dx +
+            sin(time * 0.6 + i * 1.7) * 16 * zoom +
+            (i - 1.5) * 9 * zoom;
+        final flick = 0.8 + sin(time * 9 + i) * 0.2;
+        final a = ((1 - phase).clamp(0.0, 1.0) * flick * 220).round().clamp(0, 220);
+        canvas.drawCircle(
+            Offset(lx, ly),
+            7 * zoom,
+            Paint()
+              ..blendMode = BlendMode.plus
+              ..color = Color.fromARGB((a * 0.5).round(), 0xFF, 0x9E, 0x3C));
+        canvas.drawCircle(Offset(lx, ly), 3.3 * zoom,
+            Paint()..color = Color.fromARGB(a, 0xFF, 0xE4, 0x9E));
+      }
+    }
+
+    // (2) KONFETİ — köy üstüne süzülen renkli kağıtlar (ekran-uzayı, döner).
+    const confettiCount = 54;
+    final confPaint = Paint()..isAntiAlias = true;
+    for (int i = 0; i < confettiCount; i++) {
+      final seedX = ((i * 73) % 100) / 100.0;
+      final fall = (time * (0.10 + (i % 5) * 0.015) + i * 0.13) % 1.0;
+      final x = seedX * size.width + sin(time * 1.6 + i) * 12;
+      final y = fall * (size.height + 40) - 20;
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(time * 2.2 + i);
+      confPaint.color = palette[i % palette.length].withValues(alpha: 0.85);
+      canvas.drawRect(
+        Rect.fromCenter(
+            center: Offset.zero, width: 3.2 * zoom, height: 5.4 * zoom),
+        confPaint,
+      );
+      canvas.restore();
+    }
+  }
+
+  // ── BESPOKE Hasat Mantarı (blight) ──────────────────────────────────────────
+  // Tarlalara yayılan hastalık: sırayla enfekte olan tile'larda hastalıklı
+  // mor-gri leke + pörtleyip büyüyen mantar şapkaları + yukarı süzülen yeşil
+  // sporlar. Şenlikten tamamen farklı görünüm + farklı etki (ürün çürür).
+  void _fxCropBlight(Canvas canvas, Size size) {
+    if (farmTiles.isEmpty) return;
+    final p = Paint()..isAntiAlias = true;
+    for (int i = 0; i < farmTiles.length; i++) {
+      final t = farmTiles[i];
+      // Yayılma: tile'lar index sırasına göre kademeli enfekte olur.
+      final infect = ((time * 0.22) - i * 0.07).clamp(0.0, 1.0);
+      if (infect <= 0) continue;
+      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
+
+      // 1) Hastalıklı leke — tile üstünde mor-gri oval (büyüyerek koyulaşır).
+      final blotchA = (infect * 95).round().clamp(0, 95);
+      p.color = Color.fromARGB(blotchA, 0x5E, 0x42, 0x66);
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: base,
+            width: 26 * zoom * (0.5 + infect * 0.5),
+            height: 14 * zoom * (0.5 + infect * 0.5)),
+        p,
+      );
+
+      // 2) Mantar şapkaları — büyüdükçe daha çok kapak (max 4).
+      final caps = (infect * 4).round();
+      for (int c = 0; c < caps; c++) {
+        final ang = i * 1.3 + c * 1.7;
+        final grow = ((infect - c * 0.2).clamp(0.0, 1.0));
+        final mx = base.dx + cos(ang) * 8 * zoom;
+        final my = base.dy + sin(ang) * 4.5 * zoom;
+        // sap
+        p.color = const Color(0xFFCDBFA0);
+        canvas.drawRect(
+          Rect.fromCenter(
+              center: Offset(mx, my),
+              width: 1.5 * zoom,
+              height: 3.0 * zoom * grow),
+          p,
+        );
+        // şapka
+        p.color = const Color(0xFF7E5A3C);
+        canvas.drawCircle(
+            Offset(mx, my - 2.2 * zoom * grow), 2.6 * zoom * grow, p);
+        p.color = const Color(0xFF9A7350);
+        canvas.drawCircle(
+            Offset(mx - 0.6 * zoom, my - 2.6 * zoom * grow),
+            1.1 * zoom * grow, p);
+      }
+
+      // 3) Spor — yukarı süzülen yeşilimsi nokta (hastalık havada).
+      final sp = (time * 0.65 + i * 0.33) % 1.0;
+      final spA = ((1 - sp) * infect * 130).round().clamp(0, 130);
+      p.color = Color.fromARGB(spA, 0x9C, 0xBA, 0x58);
+      canvas.drawCircle(
+          Offset(base.dx + sin(time * 2 + i) * 5 * zoom, base.dy - sp * 22 * zoom),
+          1.5 * zoom, p);
+    }
+  }
+
+  // ── BESPOKE Bereketli Hasat (harvestBounty) ─────────────────────────────────
+  // Mantarın pozitif karşıtı: tarlalar kademeli olarak altın bir ışıltıyla
+  // olgunlaşır — sıcak hale + dalgalanan başak demetleri + yukarı süzülen
+  // bereket zerreleri (altın toz). Cömert, ferah, hasat sevinci.
+  void _fxHarvestBounty(Canvas canvas, Size size) {
+    if (farmTiles.isEmpty) return;
+    final p = Paint()..isAntiAlias = true;
+    for (int i = 0; i < farmTiles.length; i++) {
+      final t = farmTiles[i];
+      // Olgunlaşma dalgası — tile'lar sırayla "altına döner".
+      final ripe = ((time * 0.30) - i * 0.06).clamp(0.0, 1.0);
+      if (ripe <= 0) continue;
+      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
+
+      // 1) Sıcak altın hale — tile üstünde yumuşak nabız atan ışıltı (additive).
+      final pulse = 0.7 + sin(time * 2.2 + i * 0.5) * 0.3;
+      final haloA = (ripe * pulse * 70).round().clamp(0, 70);
+      p
+        ..blendMode = BlendMode.plus
+        ..color = Color.fromARGB(haloA, 0xF6, 0xC8, 0x4A);
+      canvas.drawOval(
+        Rect.fromCenter(
+            center: base,
+            width: 30 * zoom * (0.6 + ripe * 0.4),
+            height: 16 * zoom * (0.6 + ripe * 0.4)),
+        p,
+      );
+      p.blendMode = BlendMode.srcOver;
+
+      // 2) Olgun başak demetleri — büyüdükçe daha çok sap, hafifçe rüzgârda sallanır.
+      final stalks = (ripe * 4).round();
+      for (int s = 0; s < stalks; s++) {
+        final ang = i * 1.1 + s * 1.6;
+        final grow = ((ripe - s * 0.18).clamp(0.0, 1.0));
+        if (grow <= 0) continue;
+        final sway = sin(time * 1.8 + i + s) * 1.4 * zoom;
+        final sx = base.dx + cos(ang) * 8 * zoom;
+        final sy = base.dy + sin(ang) * 4.5 * zoom;
+        final topY = sy - 7.0 * zoom * grow;
+        // sap
+        p
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2 * zoom
+          ..color = const Color(0xFFB98C3A);
+        canvas.drawLine(
+            Offset(sx, sy), Offset(sx + sway, topY), p);
+        // başak başı — altın damla
+        p
+          ..style = PaintingStyle.fill
+          ..color = const Color(0xFFF2CE5C);
+        canvas.drawCircle(Offset(sx + sway, topY), 2.0 * zoom * grow, p);
+        p.color = const Color(0xFFFCEBA0);
+        canvas.drawCircle(
+            Offset(sx + sway - 0.5 * zoom, topY - 0.5 * zoom),
+            0.9 * zoom * grow, p);
+      }
+
+      // 3) Bereket zerresi — yukarı süzülen altın toz (havada ışıldayan bolluk).
+      final mt = (time * 0.5 + i * 0.4) % 1.0;
+      final mA = ((1 - mt) * ripe * 150).round().clamp(0, 150);
+      p
+        ..blendMode = BlendMode.plus
+        ..color = Color.fromARGB(mA, 0xFF, 0xE6, 0x9C);
+      canvas.drawCircle(
+          Offset(base.dx + sin(time * 1.6 + i) * 6 * zoom, base.dy - mt * 24 * zoom),
+          1.4 * zoom, p);
+      p.blendMode = BlendMode.srcOver;
+    }
+  }
+
+  // ── BESPOKE Matem (vigil) ───────────────────────────────────────────────────
+  // Ateş çevresinde yere dizilmiş, tek tek titreyen mum halkası + her mumdan
+  // yavaşça yükselen soluk "ruh" kıvılcımı. Dingin, hüzünlü — şenliğin tersi.
+  void _fxVigil(Canvas canvas, Size size) {
+    BuildingEntity? fire;
+    for (final b in buildings) {
+      if (b.type == BuildingType.firepit) {
+        fire = b;
+        break;
+      }
+    }
+    if (fire == null) return;
+    final c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
+    final glow = Paint()..blendMode = BlendMode.plus;
+    final core = Paint()..isAntiAlias = true;
+    const candles = 12;
+    for (int i = 0; i < candles; i++) {
+      final ang = i * (2 * pi / candles);
+      // İzometrik yassı halka (y ekseni 0.55).
+      final cx = c0.dx + cos(ang) * 40 * zoom;
+      final cy = c0.dy + sin(ang) * 22 * zoom;
+      final flick = 0.75 + sin(time * 7.0 + i * 1.7) * 0.25;
+      // Mum tabanı (küçük koyu çubuk)
+      core.color = const Color(0xFF2A2018);
+      canvas.drawRect(
+        Rect.fromCenter(
+            center: Offset(cx, cy), width: 1.6 * zoom, height: 3.2 * zoom),
+        core);
+      // Alev halesi + çekirdek
+      glow.color = Color.fromARGB((flick * 90).round(), 0xFF, 0x9A, 0x3A);
+      canvas.drawCircle(Offset(cx, cy - 3 * zoom), 5.5 * zoom * flick, glow);
+      core.color = Color.fromARGB((flick * 235).round(), 0xFF, 0xE6, 0xB0);
+      canvas.drawCircle(Offset(cx, cy - 3 * zoom), 1.5 * zoom, core);
+      // Yükselen soluk ruh kıvılcımı
+      final sp = (time * 0.4 + i * 0.5) % 1.0;
+      final a = ((1 - sp) * 90).round().clamp(0, 90);
+      core.color = Color.fromARGB(a, 0xCF, 0xD8, 0xE6);
+      canvas.drawCircle(
+          Offset(cx, cy - 4 * zoom - sp * 34 * zoom), 1.3 * zoom, core);
+    }
+  }
+
+  // ── BESPOKE Ayin / Din (cultRite) ───────────────────────────────────────────
+  // Ateş çevresinde yere çizilmiş, nabız atan parlak çember + üstünde dönen
+  // okült rünler (küçük geometrik glifler) + merkezde tuhaf mor-teal ışıltı.
+  void _fxCultRite(Canvas canvas, Size size) {
+    BuildingEntity? fire;
+    for (final b in buildings) {
+      if (b.type == BuildingType.firepit) {
+        fire = b;
+        break;
+      }
+    }
+    Offset c0 = Offset(size.width / 2, size.height / 2);
+    if (fire != null) c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
+
+    final pulse = sin(time * 1.6) * 0.5 + 0.5;
+    final ringR = 46 * zoom;
+
+    // Yere çizilmiş izometrik çember (nabız atan teal-mor).
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (1.4 + pulse * 1.2) * zoom
+      ..blendMode = BlendMode.plus
+      ..color = Color.fromARGB((70 + pulse * 90).round(), 0x9A, 0x6C, 0xE0);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: c0, width: ringR * 2, height: ringR * 1.1),
+        ring);
+    // İkinci iç çember (teal).
+    ring.color = Color.fromARGB((50 + pulse * 70).round(), 0x4C, 0xC8, 0xC0);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: c0, width: ringR * 1.3, height: ringR * 0.72),
+        ring);
+
+    // Merkez okült ışıltı.
+    canvas.drawCircle(c0, (10 + pulse * 8) * zoom,
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..color = Color.fromARGB((60 + pulse * 70).round(), 0x8A, 0x60, 0xD8));
+
+    // Dönen rünler — 6 küçük geometrik glif çember üstünde.
+    final rune = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3 * zoom
+      ..blendMode = BlendMode.plus
+      ..isAntiAlias = true;
+    const runes = 6;
+    for (int i = 0; i < runes; i++) {
+      final ang = time * 0.6 + i * (2 * pi / runes);
+      final rx = c0.dx + cos(ang) * ringR * 0.92;
+      final ry = c0.dy + sin(ang) * ringR * 0.5;
+      final bob = sin(time * 3 + i) * 2 * zoom;
+      final p = Offset(rx, ry + bob);
+      final a = (150 + sin(time * 4 + i) * 60).round().clamp(0, 230);
+      rune.color = Color.fromARGB(a, 0xC8, 0xB0, 0xF0);
+      final s = 3.2 * zoom;
+      // Glif türü i'ye göre: üçgen / artı / baklava.
+      switch (i % 3) {
+        case 0:
+          canvas.drawPath(
+            Path()
+              ..moveTo(p.dx, p.dy - s)
+              ..lineTo(p.dx + s, p.dy + s)
+              ..lineTo(p.dx - s, p.dy + s)
+              ..close(),
+            rune);
+        case 1:
+          canvas.drawLine(Offset(p.dx - s, p.dy), Offset(p.dx + s, p.dy), rune);
+          canvas.drawLine(Offset(p.dx, p.dy - s), Offset(p.dx, p.dy + s), rune);
+        default:
+          canvas.drawPath(
+            Path()
+              ..moveTo(p.dx, p.dy - s)
+              ..lineTo(p.dx + s, p.dy)
+              ..lineTo(p.dx, p.dy + s)
+              ..lineTo(p.dx - s, p.dy)
+              ..close(),
+            rune);
       }
     }
   }
 
-  // Hasat — tarlaların üstünde altın yıldız parıltıları.
-  void _fxHarvestSparkle(Canvas canvas, Size size) {
-    final n = (farmTiles.length).clamp(0, 32);
-    for (int i = 0; i < n; i++) {
-      final t = farmTiles[i];
-      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
-      final phase = (time * 1.3 + i * 0.41) % 1.0;
-      if (phase > 0.55) continue;
-      final a = ((1 - phase / 0.55) * 220).round().clamp(0, 220);
-      final r = 1.5 + (1 - phase / 0.55) * 1.8;
-      _pFxParticle.color = Color.fromARGB(a, 0xFF, 0xE8, 0x6A);
-      canvas.drawCircle(base + Offset(0, -2 * zoom), r * zoom, _pFxParticle);
+  // ── BESPOKE Göktaşı yağmuru (meteorShower) ──────────────────────────────────
+  // Ekran-uzayında gökyüzünü çaprazlama geçen küçük kayan yıldızlar (parlak baş
+  // + sönen kuyruk) + periyodik olarak kratere doğru süzülen büyük bir meteor ve
+  // ardından çarpma flaşı. Additive — gece göz alıcı, gündüz daha hafif.
+  void _fxMeteorShower(Canvas canvas, Size size) {
+    final glow = Paint()
+      ..isAntiAlias = true
+      ..blendMode = BlendMode.plus;
+    final night = (1 - dayLight).clamp(0.0, 1.0);
+    final vis = 0.45 + night * 0.55; // gece daha parlak
+
+    const dirx = 0.82, diry = 0.57; // çapraz yön (sağ-aşağı)
+
+    // Küçük kayan yıldızlar — üst gökyüzü bandında akar.
+    const stars = 16;
+    for (int i = 0; i < stars; i++) {
+      final speed = 0.5 + (i % 5) * 0.12;
+      final ph = (time * speed + i * 0.137) % 1.0;
+      final sx = ((i * 137.0) % size.width) - size.width * 0.15;
+      final sy = (i * 53.0) % (size.height * 0.55) - size.height * 0.1;
+      final travel = size.width * 0.5;
+      final hx = sx + dirx * travel * ph;
+      final hy = sy + diry * travel * ph;
+      final fade = sin(ph * pi).clamp(0.0, 1.0); // uçlarda doğal fade
+      final a = (fade * 200 * vis).round().clamp(0, 230);
+      if (a <= 0) continue;
+      final tailLen = 26.0 * zoom;
+      final tx = hx - dirx * tailLen, ty = hy - diry * tailLen;
+      canvas.drawLine(
+        Offset(tx, ty),
+        Offset(hx, hy),
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..strokeWidth = 1.6 * zoom
+          ..strokeCap = StrokeCap.round
+          ..shader = ui.Gradient.linear(
+            Offset(tx, ty), Offset(hx, hy),
+            [const Color(0x00FFFFFF), Color.fromARGB(a, 0xCF, 0xE4, 0xFF)],
+          ),
+      );
+      glow.color = Color.fromARGB(a, 0xFF, 0xFF, 0xF2);
+      canvas.drawCircle(Offset(hx, hy), 1.8 * zoom, glow);
     }
-    // Yedek: balıkçı kulübeleri varsa onların üstünde de
+
+    // Büyük bolid — ara sıra gökyüzünü baştan başa geçen parlak, yavaş meteor.
+    // Düşme/çarpma yok: sadece göz alıcı, uzun kuyruklu bir geçiş (cozy).
+    final bp = (time * 0.16) % 1.0;
+    if (bp < 0.6) {
+      final t = bp / 0.6;
+      final hx = -size.width * 0.1 + dirx * size.width * 1.2 * t;
+      final hy = size.height * 0.06 + diry * size.width * 1.2 * t;
+      final fade = sin(t * pi).clamp(0.0, 1.0);
+      final a = (fade * 235 * vis).round().clamp(0, 245);
+      const tailLen = 70.0;
+      final tx = hx - dirx * tailLen * zoom, ty = hy - diry * tailLen * zoom;
+      canvas.drawLine(
+        Offset(tx, ty),
+        Offset(hx, hy),
+        Paint()
+          ..blendMode = BlendMode.plus
+          ..strokeWidth = 2.8 * zoom
+          ..strokeCap = StrokeCap.round
+          ..shader = ui.Gradient.linear(
+            Offset(tx, ty), Offset(hx, hy),
+            [const Color(0x00FFD9A0), Color.fromARGB(a, 0xFF, 0xE0, 0xB0)],
+          ),
+      );
+      glow.color = Color.fromARGB(a, 0xFF, 0xF4, 0xDC);
+      canvas.drawCircle(Offset(hx, hy), 3.2 * zoom, glow);
+    }
+  }
+
+  // ── BESPOKE Düğün (wedding) ─────────────────────────────────────────────────
+  // Ateş başında yükselen kalpler + tepeden süzülen renkli yaprak/konfeti + sıcak
+  // bir taban parıltısı. Şenliğin küçük, sıcak kardeşi (çift dansı NPC tarafında).
+  void _fxWedding(Canvas canvas, Size size) {
+    BuildingEntity? fire;
     for (final b in buildings) {
-      if (b.type != BuildingType.fisherCabin) continue;
-      final p = _worldToScreen(b.col + 1, b.row + 1, size);
-      final phase = (time * 1.1 + b.col * 0.3) % 1.0;
-      if (phase > 0.5) continue;
-      final a = ((1 - phase / 0.5) * 200).round().clamp(0, 200);
-      _pFxParticle.color = Color.fromARGB(a, 0xFF, 0xE8, 0x6A);
-      canvas.drawCircle(p, 2.0 * zoom, _pFxParticle);
+      if (b.type == BuildingType.firepit) {
+        fire = b;
+        break;
+      }
     }
+    if (fire == null) return;
+    final c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
+    final fill = Paint()..isAntiAlias = true;
+
+    // 1) Sıcak taban parıltısı (nabız atan).
+    final pulse = 0.7 + sin(time * 2.2) * 0.3;
+    canvas.drawCircle(
+      Offset(c0.dx, c0.dy),
+      30 * zoom * pulse,
+      Paint()
+        ..blendMode = BlendMode.plus
+        ..color = Color.fromARGB((26 * pulse).round(), 0xFF, 0xC8, 0xD8),
+    );
+
+    // 2) Yükselen kalpler — ateş çevresinden çıkıp süzülerek yukarı kaybolur.
+    const hearts = 10;
+    for (int i = 0; i < hearts; i++) {
+      final sp = (time * 0.5 + i * 0.617) % 1.0;
+      final baseAng = i * (2 * pi / hearts);
+      final spreadX = cos(baseAng) * 30 * zoom;
+      final hx = c0.dx + spreadX + sin(time * 2 + i) * 5 * zoom;
+      final hy = c0.dy + 4 * zoom - sp * 60 * zoom;
+      final a = (sin(sp * pi) * 220).round().clamp(0, 220);
+      if (a <= 0) continue;
+      final s = (2.0 + (i % 3) * 0.7) * zoom * (0.7 + sp * 0.5);
+      fill.color = Color.fromARGB(a, 0xFF, 0x6E, 0x8C);
+      _drawHeart(canvas, Offset(hx, hy), s, fill);
+    }
+
+    // 3) Süzülen yaprak/konfeti — tepeden ateş çevresine yavaşça düşer.
+    const petals = 16;
+    const cols = [
+      Color(0xFFF6C5D8), Color(0xFFF7E59B), Color(0xFFBFE3C0),
+      Color(0xFFBFD4F2), Color(0xFFF2B6A0),
+    ];
+    for (int i = 0; i < petals; i++) {
+      final sp = (time * 0.35 + i * 0.41) % 1.0;
+      final px = c0.dx + cos(i * 1.7) * 46 * zoom + sin(time * 1.6 + i) * 9 * zoom;
+      final py = c0.dy - 46 * zoom + sp * 70 * zoom;
+      final a = (sin(sp * pi) * 200).round().clamp(0, 200);
+      if (a <= 0) continue;
+      fill.color = cols[i % cols.length].withValues(alpha: a / 255);
+      // ince eğik oval yaprak
+      canvas.save();
+      canvas.translate(px, py);
+      canvas.rotate(sin(time * 2 + i) * 0.9);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: 3.4 * zoom, height: 1.6 * zoom),
+        fill);
+      canvas.restore();
+    }
+  }
+
+  /// Küçük dolu kalp — [c] merkez, [s] yarı-genişlik. _fxWedding için.
+  void _drawHeart(Canvas canvas, Offset c, double s, Paint p) {
+    canvas.drawCircle(Offset(c.dx - s * 0.5, c.dy - s * 0.3), s * 0.55, p);
+    canvas.drawCircle(Offset(c.dx + s * 0.5, c.dy - s * 0.3), s * 0.55, p);
+    canvas.drawPath(
+      Path()
+        ..moveTo(c.dx - s, c.dy - s * 0.1)
+        ..lineTo(c.dx, c.dy + s)
+        ..lineTo(c.dx + s, c.dy - s * 0.1)
+        ..close(),
+      p,
+    );
   }
 
   // Salgın — NPC'lerin üstünde küçük yeşil bulut partikülü.
@@ -2667,61 +3435,6 @@ class VillageGamePainter extends CustomPainter {
       final a = ((1 - phase) * 180).round().clamp(0, 180);
       _pFxParticle.color = Color.fromARGB(a, 0x88, 0xC0, 0x60);
       canvas.drawCircle(p + Offset(0, yOff * zoom), 2.5 * zoom, _pFxParticle);
-    }
-  }
-
-  // Mucize — ekranın üstünden köy meydanına inen ışın hüzmesi.
-  void _fxMiracleLight(Canvas canvas, Size size) {
-    // Firepit varsa orada, yoksa ekran merkezi
-    Offset target = Offset(size.width / 2, size.height / 2);
-    for (final b in buildings) {
-      if (b.type == BuildingType.firepit) {
-        target = _worldToScreen(b.col + 0.5, b.row + 0.5, size);
-        break;
-      }
-    }
-    final pulse = (sin(time * 1.5) * 0.5 + 0.5);
-    final beamA = (60 + pulse * 50).round();
-    _pFxParticle.shader = ui.Gradient.linear(
-      Offset(target.dx, 0),
-      Offset(target.dx, target.dy),
-      [
-        Color.fromARGB(0, 0xFF, 0xF8, 0xC0),
-        Color.fromARGB(beamA, 0xFF, 0xF8, 0xC0),
-      ],
-    );
-    _pFxParticle.blendMode = BlendMode.plus;
-    canvas.drawRect(
-      Rect.fromLTWH(target.dx - 24, 0, 48, target.dy),
-      _pFxParticle,
-    );
-    _pFxParticle.shader = null;
-    _pFxParticle.blendMode = BlendMode.srcOver;
-  }
-
-  // Hazine — köy merkezinde altın parıltı çemberi.
-  void _fxTreasureGlow(Canvas canvas, Size size) {
-    Offset target = Offset(size.width / 2, size.height / 2);
-    for (final b in buildings) {
-      if (b.type == BuildingType.townhall || b.type == BuildingType.firepit) {
-        target = _worldToScreen(b.col + b.cols / 2.0, b.row + b.rows / 2.0, size);
-        if (b.type == BuildingType.townhall) break;
-      }
-    }
-    final pulse = (sin(time * 2.0) * 0.5 + 0.5);
-    final r = (40 + pulse * 14) * zoom;
-    final a = (60 + pulse * 80).round();
-    _pFxParticle.color = Color.fromARGB(a, 0xFF, 0xD8, 0x40);
-    _pFxParticle.blendMode = BlendMode.plus;
-    canvas.drawCircle(target, r, _pFxParticle);
-    _pFxParticle.blendMode = BlendMode.srcOver;
-    // Etrafa fırlayan parlak noktalar
-    for (int i = 0; i < 10; i++) {
-      final ang = (i * 0.628 + time * 0.5);
-      final d   = (8 + ((i + time * 2).floor() % 5) * 6.0) * zoom;
-      final pos = target + Offset(cos(ang) * d, sin(ang) * d * 0.5);
-      _pFxParticle.color = Color.fromARGB(200, 0xFF, 0xF0, 0x80);
-      canvas.drawCircle(pos, 1.6 * zoom, _pFxParticle);
     }
   }
 
@@ -2760,33 +3473,6 @@ class VillageGamePainter extends CustomPainter {
     _pFxParticle.color = const Color(0xCCC09020);
     canvas.drawRect(
         Rect.fromLTWH(x + 6 * zoom, y + 4 * zoom, 5 * zoom, 5 * zoom),
-        _pFxParticle);
-  }
-
-  // Ziyaretçi — köy meydanına doğru yürüyen küçük silüet (lobby).
-  void _fxVisitorArrived(Canvas canvas, Size size) {
-    // 3 saniye boyunca sahnede tek "yolda" silüet
-    final phase = (time % 20) / 20;
-    if (phase > 0.6) return;
-    // Pozisyon: ekranın solundan giriyor, meydana doğru
-    Offset target = Offset(size.width / 2, size.height / 2);
-    for (final b in buildings) {
-      if (b.type == BuildingType.market || b.type == BuildingType.firepit) {
-        target = _worldToScreen(b.col + b.cols / 2.0, b.row + b.rows / 2.0, size);
-        if (b.type == BuildingType.market) break;
-      }
-    }
-    final start = Offset(40, size.height * 0.45);
-    final t2 = (phase / 0.6).clamp(0.0, 1.0);
-    final pos = Offset.lerp(start, target, t2)!;
-    final bob = sin(time * 5) * 1.5;
-    _pFxParticle.color = const Color(0xDD3A2818);
-    canvas.drawRect(
-        Rect.fromLTWH(pos.dx, pos.dy + bob, 6 * zoom, 12 * zoom),
-        _pFxParticle);
-    _pFxParticle.color = const Color(0xFFD8A878);
-    canvas.drawRect(
-        Rect.fromLTWH(pos.dx, pos.dy - 5 * zoom + bob, 6 * zoom, 5 * zoom),
         _pFxParticle);
   }
 

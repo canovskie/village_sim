@@ -255,6 +255,22 @@ class VillagePolicies {
     this.cooldownUntilSim = 0,
   });
 
+  /// Yürürlükteki (aktif) berat/politika sayısı — köyün Tüzük ilerlemesi için.
+  /// family != open bir berat sayılır; açık her toggle bir berat. Pasif
+  /// gösterge değil — akış kademesi (charterTier) buna bakar.
+  int get enactedCount {
+    var n = family != FamilyPolicy.open ? 1 : 0;
+    for (final id in const [
+      'familyEncouragement', 'peacefulEnd', 'eldersExemptFromFood',
+      'hospitality', 'apprenticeship', 'slowMaturity', 'neighborliness',
+      'familyReunion', 'treePlanting', 'sharedHarvest', 'greenVillage',
+      'freeRange',
+    ]) {
+      if (isOn(id)) n++;
+    }
+    return n;
+  }
+
   /// Aile politikasının izin verdiği maksimum çocuk sayısı.
   int get maxChildren => switch (family) {
         FamilyPolicy.open => 1 << 30,

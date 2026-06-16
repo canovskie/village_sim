@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/resources.dart';
 import 'cozy_theme.dart';
+import 'ui_icon.dart';
 
 /// Diegetic "köy panosu" HUD'u — sol-üst ahşap kaynak panosu (çakılı çiviler,
 /// damarlı ahşap, oyma sayılar) + sağ-üst ahşap saat tabelası + altta deri
@@ -91,6 +92,15 @@ class GameHUD extends StatelessWidget {
     return '🌙';
   }
 
+  /// Hava ikonu dosya çekirdeği (UiIcon) — _weatherIcon ile aynı eşik mantığı.
+  String get _weatherAsset {
+    if (rainIntensity > 0.5) return 'storm';
+    if (rainIntensity > 0.0) return 'rain';
+    if (dayLight > 0.7) return 'sun';
+    if (dayLight > 0.3) return 'dawn';
+    return 'night';
+  }
+
   String get _weatherLabel {
     if (rainIntensity > 0.5) return 'sağanak';
     if (rainIntensity > 0.0) return 'yağmur';
@@ -167,21 +177,38 @@ class GameHUD extends StatelessWidget {
             // 2×3 oyma kaynak ızgarası
             Row(children: [
               Expanded(child: CarvedResource(icon: ResourceKind.wood.icon,
+                  asset: ResourceKind.wood.asset,
                   stored: stockpile.wood,  transit: woodInTransit)),
               Expanded(child: CarvedResource(icon: ResourceKind.stone.icon,
+                  asset: ResourceKind.stone.asset,
                   stored: stockpile.stone, transit: stoneInTransit)),
               Expanded(child: CarvedResource(icon: ResourceKind.iron.icon,
+                  asset: ResourceKind.iron.asset,
                   stored: stockpile.iron,  transit: ironInTransit)),
             ]),
             const SizedBox(height: 9),
             Row(children: [
               Expanded(child: CarvedResource(icon: ResourceKind.coal.icon,
+                  asset: ResourceKind.coal.asset,
                   stored: stockpile.coal,  transit: coalInTransit)),
               Expanded(child: CarvedResource(icon: ResourceKind.food.icon,
+                  asset: ResourceKind.food.asset,
                   stored: stockpile.food,  transit: foodInTransit)),
               Expanded(child: CarvedResource(icon: ResourceKind.gold.icon,
+                  asset: ResourceKind.gold.asset,
                   stored: stockpile.gold,  transit: 0, accent: true)),
             ]),
+            // Bal — lüks kaynak, yalnız arı kovanı varken (stok > 0) görünür.
+            if (stockpile.honey > 0) ...[
+              const SizedBox(height: 9),
+              Row(children: [
+                Expanded(child: CarvedResource(icon: ResourceKind.honey.icon,
+                    asset: ResourceKind.honey.asset,
+                    stored: stockpile.honey, transit: 0)),
+                const Expanded(child: SizedBox()),
+                const Expanded(child: SizedBox()),
+              ]),
+            ],
             const CozyDivider(),
             // Nüfus + işçiler + moral — sıkıştırılmış tek satır
             _populationRow(),
@@ -192,15 +219,15 @@ class GameHUD extends StatelessWidget {
       );
 
   Widget _populationRow() {
-    final workers = <(String, int, Color)>[
-      ('⚘', farmerCount, CozyUi.sage),
-      ('⚒', woodcutterCount, const Color(0xFFE7B374)),
-      ('⛏', minerCount, const Color(0xFFC5CDE9)),
-      ('⚓', fisherCount, const Color(0xFF89CFE6)),
-    ].where((s) => s.$2 > 0).toList();
+    final workers = <(String, String, int, Color)>[
+      ('farmer', '⚘', farmerCount, CozyUi.sage),
+      ('woodcutter', '⚒', woodcutterCount, const Color(0xFFE7B374)),
+      ('miner', '⛏', minerCount, const Color(0xFFC5CDE9)),
+      ('fisher', '⚓', fisherCount, const Color(0xFF89CFE6)),
+    ].where((s) => s.$3 > 0).toList();
 
     return Row(children: [
-      const Text('👥', style: TextStyle(fontSize: 14)),
+      const UiIcon('pop', fallback: '👥', size: 14),
       const SizedBox(width: 6),
       Text('$_totalPop',
           style: CozyUi.carvedNumber.copyWith(fontSize: 16)),
@@ -210,19 +237,29 @@ class GameHUD extends StatelessWidget {
         child: Text('köylü', style: CozyUi.carvedSmall.copyWith(fontSize: 10)),
       ),
       const Spacer(),
-      for (final (icon, n, col) in workers)
+      for (final (asset, emoji, n, col) in workers)
         Padding(
           padding: const EdgeInsets.only(left: 7),
-          child: Text('$icon$n',
-              style: TextStyle(
-                color: col,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                fontFamily: 'monospace',
-                shadows: const [
-                  Shadow(color: Color(0xDD1A0E04), blurRadius: 0, offset: Offset(0, 1)),
-                ],
-              )),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              UiIcon(asset, fallback: emoji, size: 12),
+              const SizedBox(width: 2),
+              Text('$n',
+                  style: TextStyle(
+                    color: col,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w900,
+                    fontFamily: 'monospace',
+                    shadows: const [
+                      Shadow(
+                          color: Color(0xDD1A0E04),
+                          blurRadius: 0,
+                          offset: Offset(0, 1)),
+                    ],
+                  )),
+            ],
+          ),
         ),
     ]);
   }
@@ -297,7 +334,7 @@ class GameHUD extends StatelessWidget {
                     fontSize: 28, fontWeight: FontWeight.w900, letterSpacing: 1.2)),
             const SizedBox(height: 4),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(_weatherIcon, style: const TextStyle(fontSize: 12)),
+              UiIcon(_weatherAsset, fallback: _weatherIcon, size: 13),
               const SizedBox(width: 5),
               Text(_weatherLabel,
                   style: CozyUi.carvedSmall.copyWith(fontSize: 10, letterSpacing: 0.8)),

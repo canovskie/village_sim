@@ -169,6 +169,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     father.birthCount++;
     _villagers.add(baby);
 
+    // Doğum sevinci — gövde dili: anne/baba kutlar, komşular dönüp bakar.
+    mother.feel(NpcEmotion.joy, 5, moodDelta: 0.15);
+    father.feel(NpcEmotion.love, 5, moodDelta: 0.12);
+    _reactNearby(sx, sy, 5.0, NpcEmotion.joy, 4.0, moodDelta: 0.05);
+    nudgeMorale(0.05); // görünür mutlu olay → moral göstergesini hafif iter
+
     _showNotification(
         '👶 ${mother.name} & ${father.name} ailesine ${baby.name} doğdu!');
   }
@@ -267,6 +273,11 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     );
     // _BuildingDrawable spawn-pop animasyonu (ilk ~0.6s scale + toz) için.
     building.spawnTime = _time;
+
+    // Yeni bina dikildi — civardaki köylüler hayranlıkla dönüp bakar (gövde
+    // dili; baş üstü emoji yok). Yerel canlılık dalgası.
+    _reactNearby(o.col + 1.0, o.row + 1.0, 6.0, NpcEmotion.wonder, 3.5,
+        moodDelta: 0.04);
 
     switch (o.type) {
       case BuildingType.firepit:
@@ -580,6 +591,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           BuildOrder(type: type, col: col, row: row)..completed = true,
         );
       }
+      // Direkt yerleştirmede topology hook tetiklenmez — anchor slot'ları
+      // (kuyu/ateş/bank) + arı sürülerini elle türet.
+      _anchorSystem.rebuild(_buildings);
+      _rebuildBeeSwarms();
 
       // Küçük tarla + çiftçi spawn — pazarın yanına (safe area kuzeyinde).
       const farmC1 = 14, farmR1 = 2, farmC2 = 18, farmR2 = 5;
@@ -653,6 +668,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         // Diğer
         (BuildingType.mill,            19, 8),
         (BuildingType.floristCottage,  19, 12),
+        // Arı kovanı çiçekçinin yanına — bal sinerjisi (etki alanı çiçekleri).
+        (BuildingType.beehive,         17, 13),
         // Ekstra fenerler
         (BuildingType.lamppost,         8, 8),
         (BuildingType.lamppost,        14, 8),
@@ -665,6 +682,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           BuildOrder(type: type, col: col, row: row)..completed = true,
         );
       }
+      // Direkt yerleştirmede topology hook tetiklenmez — anchor slot'ları
+      // (kuyu/ateş/bank) + arı sürülerini elle türet.
+      _anchorSystem.rebuild(_buildings);
+      _rebuildBeeSwarms();
 
       // Tarla + 2 çiftçi — pazarın üstü
       const farmC1 = 14, farmR1 = 1, farmC2 = 20, farmR2 = 3;

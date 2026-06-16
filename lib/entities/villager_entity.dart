@@ -27,6 +27,18 @@ enum WanderBehavior { patrol, ponder, stroll, homebody, waterside, playful }
 /// [listening] dinleyici — storyteller çevresinde oturan, kıpırdamayan NPC.
 enum VillagerActivity { none, chat, music, dance, warm, storytelling, listening }
 
+/// NPC'nin anlık duygusu — "canlılık" altyapısı. Geçici tepki olarak tetiklenir
+/// ([VillagerEntity.feel]); baş üstü ikon + görsel tepki (yürüyüş/irkilme) +
+/// kalıcı [VillagerEntity.mood] kaymasını sürer. [none] = nötr (ikon yok).
+///   joy=sevinç, content=huzur, grief=keder, fear=korku, wonder=hayret,
+///   anger=öfke, love=sevgi/aşk.
+enum NpcEmotion { none, joy, content, grief, fear, wonder, anger, love }
+
+/// Ateş başı oturma duruşu — olay reaksiyonu ([_gatherAtFire]) belirler,
+/// renderer CharPose'a çevirir. [sit] normal toplanma, [kneel] ayin/ibadet,
+/// [mourn] yas töreni. assignSit her oturmada [sit]'e sıfırlar.
+enum FirePose { sit, kneel, mourn }
+
 class VillagerEntity extends WorkerEntity {
   final VillagerType type;
 
@@ -56,6 +68,37 @@ class VillagerEntity extends WorkerEntity {
 
   VillagerState state = VillagerState.idle;
   double idleTimer = 0;
+
+  // ── Rutin / errand (amaçlı hedef akışı) ────────────────────────────────────
+  /// true → köylü boşta ve serbest; sahne rutin sistemi ona amaçlı bir hedef
+  /// (pazar/taverna/kuyu/ev...) atamalı. Atanınca [goTo] ile false olur.
+  bool needsErrand = false;
+  bool _onErrand = false;
+  double _errandDwell = 0;   // hedefe varınca kaç sn oyalanacak
+  double _errandWait = 0;    // atanmayı kaç sn bekledi (fallback için)
+
+  /// Çocuklar errand yürütmez (oyuncul dolaşır); yetişkin/genç/yaşlı yürütür.
+  bool get canRunErrands => lifeStage != LifeStage.child;
+
+  /// Sahne rutin sistemi çağırır: amaçlı bir hedefe yürü, varınca [dwell] sn
+  /// orada oyalan (bir şey yapıyormuş gibi). Amaçsız wander'ın yerini alır.
+  /// Bir noktaya dönüp bakar — gerçek gövde dili ("fark etti, baktı").
+  /// Yalnızca yönü çevirir (glance tetiklemez ki bakış o noktada sabit kalsın).
+  /// Reaksiyon dalgalarında ([_reactNearby]) çağrılır.
+  void lookToward(double x, double y) {
+    if ((x - gridX).abs() > 0.05) facingRight = x > gridX;
+  }
+
+  void goTo(double x, double y, double dwell) {
+    targetCol = x;
+    targetRow = y;
+    _errandDwell = dwell;
+    _onErrand = true;
+    needsErrand = false;
+    _errandWait = 0;
+    state = VillagerState.moving;
+    glanceAround(duration: 0.6);
+  }
 
   @override
   final double speed;
@@ -130,6 +173,132 @@ class VillagerEntity extends WorkerEntity {
   /// aktivite doğal artar. 60-180 sn.
   double socialCooldown = 0;
 
+  // ── Sohbet konuşması — karşılıklı + konuya bağlı baloncuk ───────────────────
+  /// Sohbette karşıdaki kişi (yüz dönme + sıra için). null = solo/yok.
+  VillagerEntity? convoPartner;
+  /// Konuşmanın replik ikonları — konuya göre seçilmiş sıralı emoji dizisi
+  /// (ör. çiftçi sohbeti 🌾💧☀️). Rastgele tek emoji yerine "konu".
+  List<String> convoIcons = const [];
+  /// Konuşmanın toplam süresi — sıra hesabı (elapsed = total - chatBubbleTime).
+  double convoTotal = 0;
+  /// Çiftte "başlatan" mı — replikleri sırayla bölüşmek için (0,2.. vs 1,3..).
+  bool convoStarter = false;
+
+  /// Şu an konuşuyor muyum + hangi replik ikonu. Sıra-temelli: ~1.4s'de bir
+  /// konuşan değişir → "A der, B yanıtlar" hissi. Konuşmuyorsam (false,'').
+  (bool, String) convoNow() {
+    if (convoIcons.isEmpty || convoTotal <= 0 || chatBubbleTime <= 0) {
+      return (false, '');
+    }
+    final elapsed = convoTotal - chatBubbleTime;
+    const lineLen = 1.4;
+    final line = (elapsed / lineLen).floor();
+    final iAmSpeaker = line.isEven == convoStarter;
+    if (!iAmSpeaker) return (false, '');
+    return (true, convoIcons[line % convoIcons.length]);
+  }
+
+  /// Sohbet bitince konuşma durumunu temizler.
+  void clearConvo() {
+    convoPartner = null;
+    convoIcons = const [];
+    convoTotal = 0;
+  }
+
+  // ── Duygu / iç dünya (canlılık altyapısı) ──────────────────────────────────
+  /// Kalıcı ruh hali: -1 (mutsuz) .. +1 (mutlu), 0 nötr. Olaylar ve etkileşimler
+  /// [feel] ile iter; [tickInnerLife] her tick yavaşça nötre çeker.
+  /// SADECE GÖRSEL: duruş/yüz ifadesini besler — davranışın NEDENİ değildir
+  /// (rutin/sosyal seçim artık mood'a bakmaz; sayı davranışı yönetmez).
+  double mood = 0.0;
+  /// Enerji 0..1 — gündüz/iş tüketir, uyku/ısınma doldurur.
+  /// SADECE GÖSTERİM (panelde bar) — hiçbir mantık bunu okumaz/gate'lemez.
+  double energy = 1.0;
+  /// Anlık duygu (geçici tepki). [emotionTime] > 0 iken aktif → renderer bunu
+  /// GÖVDE DİLİNE çevirir (emoji DEĞİL): yas çöküşü, sevinç zıplaması, korku
+  /// geri çekilmesi vb. Solunca [NpcEmotion.none]'a döner.
+  NpcEmotion emotion = NpcEmotion.none;
+  double emotionTime = 0.0;
+  double _emotionDur = 0.0;
+
+  /// Duygunun anlık şiddeti 0..1 — başta zirve, sonuna doğru söner. Renderer
+  /// gövde dili (eğilme/zıplama/titreme) genliğini buna göre ölçekler.
+  double get emotionIntensity {
+    if (emotionTime <= 0 || _emotionDur <= 0) return 0.0;
+    final t = (emotionTime / _emotionDur).clamp(0.0, 1.0);
+    // Hızlı yükseliş (ilk %20) + yumuşak iniş — refleks gibi.
+    return t > 0.8 ? (1.0 - t) / 0.2 : t / 0.8;
+  }
+
+  /// Anlık bir duygu tetikler: geçici görsel tepki ([dur] sn) + kalıcı mood
+  /// kayması ([moodDelta]). Daha güçlü duygu zayıfı ezmez — süre uzar.
+  void feel(NpcEmotion e, double dur, {double moodDelta = 0}) {
+    if (e != NpcEmotion.none && (emotion == NpcEmotion.none || dur >= emotionTime)) {
+      emotion = e;
+      emotionTime = dur;
+      _emotionDur = dur;
+    }
+    if (moodDelta != 0) mood = (mood + moodDelta).clamp(-1.0, 1.0);
+  }
+
+  // ── Ölüm animasyonu (collapse + fade) ──────────────────────────────────────
+  /// Köylü ölüyor mu — anlık silinmez; gözle görülür biçimde yere çöker, solar,
+  /// sonra sahneden kaldırılır. Hem doğal ölüm hem olay ölümleri buradan geçer.
+  bool isDying = false;
+  double _deathT = 0.0, _deathDur = 1.6;
+  /// Animasyon bitince doğal-ölüm cenazesi düzenlensin mi (olay ölümlerinde
+  /// kendi töreni var → false).
+  bool deathHoldsFuneral = false;
+
+  /// Ölüm animasyonu ilerlemesi 0..1 (renderer çöküş/solma için kullanır).
+  double get dyingProgress =>
+      _deathDur <= 0 ? 1.0 : (1.0 - _deathT / _deathDur).clamp(0.0, 1.0);
+  /// Animasyon tamamlandı → sahne bu köylüyü kaldırabilir.
+  bool get deathFinished => isDying && _deathT <= 0;
+
+  /// Ölümü başlat: hareketi/oturmayı durdur, geri sayımı kur. [funeral] doğal
+  /// ölümlerde true (sahne tören düzenler).
+  void startDying({double duration = 1.6, bool funeral = false}) {
+    if (isDying) return;
+    isDying = true;
+    _deathDur = duration;
+    _deathT = duration;
+    deathHoldsFuneral = funeral;
+    emotion = NpcEmotion.none;
+    emotionTime = 0;
+    if (sitClaimed) _cancelSit();
+  }
+
+  /// İç dünyayı her tick ilerletir: duygu zamanlayıcısı, mood'un nötre dönüşü,
+  /// enerji tüketimi/yenilenmesi. [dayLight] gündüz/gece, [resting] uyku/ısınma.
+  void tickInnerLife(double dt, double dayLight, bool resting) {
+    // Ölüm animasyonu sırasında iç dünya donar — sadece çöküş geri sayar.
+    if (isDying) {
+      _deathT -= dt;
+      return;
+    }
+    if (emotionTime > 0) {
+      emotionTime -= dt;
+      if (emotionTime <= 0) emotion = NpcEmotion.none;
+    }
+    // Mood yavaşça nötre döner (gün başına ~0.5 sönüm).
+    if (mood != 0) {
+      final decay = (dt / kGameDaySeconds) * 0.5;
+      if (mood > 0) {
+        mood = (mood - decay).clamp(0.0, 1.0);
+      } else {
+        mood = (mood + decay).clamp(-1.0, 0.0);
+      }
+    }
+    // Enerji: dinlenirken dolar, gündüz aktifken tükenir (gün döngüsüne göre).
+    final rate = dt / kGameDaySeconds;
+    if (resting) {
+      energy = (energy + rate * 1.6).clamp(0.0, 1.0);
+    } else if (dayLight > 0.3) {
+      energy = (energy - rate * 0.7).clamp(0.0, 1.0);
+    }
+  }
+
   // ── Ateş başı oturma sistemi ───────────────────────────────────────────────
   /// Ateş slotuna yöneliyor mu / oturmuş mu (ikisi de bu flag ile). false
   /// olunca normal idle/moving döngüsüne döner. [sitArriveX,Y]'ye varınca
@@ -143,6 +312,9 @@ class VillagerEntity extends WorkerEntity {
   double warmthTimer = 0;
   /// Slot'u serbest bırakan callback — scene_firepit_gather verir.
   void Function()? _releaseSit;
+
+  /// Oturma duruşu — varsayılan bağdaş; olay reaksiyonu ayin/yas'a çevirebilir.
+  FirePose firePose = FirePose.sit;
 
   /// Şu an gerçekten oturmuş, ısınıyor/dinliyor mu (slot pozisyonunda mı).
   bool get isSeatedAtFire {
@@ -164,6 +336,7 @@ class VillagerEntity extends WorkerEntity {
     _releaseSit = release;
     sitClaimed  = true;
     activity    = VillagerActivity.warm;
+    firePose    = FirePose.sit; // varsayılan; reaksiyon sonradan değiştirebilir
     chatBubbleIcon = '';
     chatBubbleTime = 0;
   }
@@ -332,6 +505,9 @@ class VillagerEntity extends WorkerEntity {
        double dayLight = 1.0,
        double rainIntensity = 0.0}) {
 
+    // Ölüyor — AI/hareket donar (renderer çöküşü çizer, scene timer'ı sayar).
+    if (isDying) return;
+
     // ── Yaşlanma — her durumda (uyku/taşıma dahil) ilerler ────────────────
     ageDays += dt / kGameDaySeconds;
 
@@ -477,8 +653,23 @@ class VillagerEntity extends WorkerEntity {
           }
           _lookTimer = 0.7 + rng.nextDouble() * 1.8;
         }
-        if (idleTimer <= 0) {
-          _pickNewTarget(gridCols, gridRows, rng, waterTiles, softObstacles);
+        // Bir sosyal aktivitedeyken (sohbet/müzik/dans) yerinde kal — hedef
+        // seçip konuşmanın ortasında kayıp gitme.
+        if (idleTimer <= 0 && activity == VillagerActivity.none) {
+          // Oyalanma bitti → amaçlı hedef akışı. Sahne rutin sistemi
+          // (needsErrand) zamana/ihtiyaca göre bir POI atar; o gelene kadar
+          // köylü "ne yapsam" diye kısa bekler. Atanamazsa (POI yok / çocuk)
+          // eski kişisel dolaşmaya düşer — donuk kalmaz.
+          if (canRunErrands) {
+            needsErrand = true;
+            _errandWait += dt;
+            if (_errandWait > 4.0) {
+              _pickNewTarget(gridCols, gridRows, rng, waterTiles, softObstacles);
+              _errandWait = 0;
+            }
+          } else {
+            _pickNewTarget(gridCols, gridRows, rng, waterTiles, softObstacles);
+          }
         }
 
       case VillagerState.moving:
@@ -490,8 +681,15 @@ class VillagerEntity extends WorkerEntity {
           // Devriyede vardığında sıradaki uca dön.
           if (_activeBehavior == WanderBehavior.patrol) _patToB = !_patToB;
           state = VillagerState.idle;
-          final (lo, hi) = _dwellRange;
-          idleTimer  = lo + rng.nextDouble() * (hi - lo);
+          if (_onErrand) {
+            // Amaçlı hedefe vardı → orada bir süre oyalan (iş/sohbet/dinlence
+            // hissi). Bitince needsErrand ile sahne yeni hedef atar.
+            idleTimer = _errandDwell;
+            _onErrand = false;
+          } else {
+            final (lo, hi) = _dwellRange;
+            idleTimer = lo + rng.nextDouble() * (hi - lo);
+          }
           _lookTimer = 0.4 + rng.nextDouble();
         } else if (waterTiles.contains((gridX.round(), gridY.round()))) {
           // Kısa hop (< 3 tile) için A* skip edilir; düz adım suya saplanırsa

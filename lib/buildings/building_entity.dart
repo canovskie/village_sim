@@ -41,6 +41,10 @@ class BuildingEntity {
   /// aşınca +1 food üretir, sıfırlanır. main.dart update loop yönetir.
   double eggTimer = 0.0;
 
+  /// Arı kovanı bal zamanlayıcısı (saniye). Her tick çiçek-sayısı çarpanıyla
+  /// artar; eşiği aşınca +1 bal üretir, sıfırlanır. scene_tick yönetir.
+  double honeyTimer = 0.0;
+
   BuildingEntity({required this.type, required this.col, required this.row});
 
   int get cols => kBuildingMeta[type]!.cols;

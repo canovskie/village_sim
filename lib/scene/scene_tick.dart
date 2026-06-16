@@ -32,11 +32,13 @@ extension _SceneTick on _VillageSceneState {
     _applyGodModeRefill();
     final starvation = _tickPopulationAndHunger(dt);
     _tickEventsAndFx(dt);
+    _tickWeatherReaction(dt);     // yağmur başla/dur → gövde dili + sığınağa koş
     _tickBuildingSystems(dt, starvation);
     _maybeRebuildSpatialCache(dt);
     _tickEntities(dt);
     _tickPostMotion(dt);
     _tickDerivedAndMeta(dt);
+    _spontaneousLife(dt);         // sürekli baseline canlılık (rastgele refleks)
     _frame.value = _frame.value + 1;
   }
 
@@ -145,7 +147,32 @@ extension _SceneTick on _VillageSceneState {
   // ── Bina sistemleri (üretim/ticaret/stat + aktiflik bayrakları) ───────────
 
   void _tickBuildingSystems(double dt, double starvation) {
-    // Üretim, ticaret, nüfus büyümesi, stok kapasitesi.
+    // ── Açlık → bir kerelik görünür reaksiyon (formül değil) ──────────────
+    // Açlığa girilince köy görünür tedirgin olur: gövde dili (keder) + ayrık
+    // moral nudge. Toparlanınca bayrak sıfırlanır (tekrar tetiklenebilir).
+    if (!_wasStarving && starvation > 0.5) {
+      _wasStarving = true;
+      _feelVillage(NpcEmotion.grief, 6, -0.05);
+      nudgeMorale(-0.10);
+    } else if (_wasStarving && starvation < 0.15) {
+      _wasStarving = false;
+    }
+
+    // ── Moral (pasif gösterge) ────────────────────────────────────────────
+    // Hedef yalnızca OLAY + POLİTİKA + bilge'den gelir — ekonomi (yemek/su/
+    // stok/bina) moral hesabına KATILMAZ. _morale hedefe yumuşakça süzülür;
+    // etki bitince taban 0.5'e geri döner. Ayrıca ayrık reaksiyonlar
+    // [nudgeMorale] ile anlık iter. Hiçbir mantık _morale'i okumaz.
+    final moraleTarget = (0.5 +
+            _eventMorale +
+            (_villagers.any((v) => v.isSage) ? 0.08 : 0.0) +
+            _policyMoralePermanent() +
+            _policyMoraleTemporary())
+        .clamp(0.0, 1.0);
+    _morale += (moraleTarget - _morale) * (dt * kMoraleEaseRate).clamp(0.0, 1.0);
+    _morale = _morale.clamp(0.0, 1.0);
+
+    // Üretim, ticaret, nüfus büyümesi, stok kapasitesi. Moral pasif geçer.
     _stats = updateBuildings(
       dt: dt,
       buildings: _buildings,
@@ -153,13 +180,7 @@ extension _SceneTick on _VillageSceneState {
       freeHousingSlots: _freeHousingSlots(),
       onSpawnVillager: _spawnGrownVillager,
       enforceCapacity: !_godMode,
-      starvation: starvation,
-      // Politika morali — kalıcı bedeller + bilge bonusu + geçici efektler
-      // (göçmen uyumu, aile birleşimi). Toplam eventMorale'ye katılır.
-      eventMorale: _eventMorale +
-          (_villagers.any((v) => v.isSage) ? 0.08 : 0.0) +
-          _policyMoralePermanent() +
-          _policyMoraleTemporary(),
+      morale: _morale,
     );
     // Ahır bonusunu taşıyıcılara uygula
     for (final v in _villagers) {
@@ -251,24 +272,35 @@ extension _SceneTick on _VillageSceneState {
       }
     }
 
+    // Doğal ölüm → ANLIK silme yok: köylü gözle görülür biçimde çöker + solar
+    // (collapse animasyonu), animasyon bitince listeden çıkar. Taşıma işi varsa
+    // önce bitirsin (yerde öksüz kutu/balya kalmasın). Aile bağı ölüm başlarken
+    // koparılır ki sim (doğurganlık/sosyal) onu artık saymasın.
+    for (final v in _villagers) {
+      if (v.isDying || v.isCarrying) continue;
+      if (v.ageDays >= v.lifespanDays) {
+        for (final p in v.parents) {
+          p.children.remove(v);
+        }
+        for (final c in v.children) {
+          c.parents.remove(v);
+        }
+        v.startDying(funeral: true);
+      }
+    }
+    // Çöküş animasyonu biten köylüleri kaldır + doğal ölümlerde cenaze düzenle.
+    // Tören _gatherAtFire ile _villagers'ı tarar → ölü listeden çıktıktan SONRA
+    // çalışmalı (cenaze sistemi scene_funeral'da).
+    final dead = <(VillagerEntity, int)>[];
     _villagers.removeWhere((v) {
-      if (v.ageDays < v.lifespanDays || v.isCarrying) return false;
-      for (final p in v.parents) {
-        p.children.remove(v);
-      }
-      for (final c in v.children) {
-        c.parents.remove(v);
-      }
+      if (!v.deathFinished) return false;
       final orphans = v.children.where((c) => c.parents.isEmpty).length;
-      // Yaşlıya huzur açıksa drama dilini yumuşat — yetim sayısı bildirilmez.
-      final msg = _policies.peacefulEnd
-          ? '🕯️ ${v.name} huzura kavuştu.'
-          : orphans > 0
-              ? '🕯️ ${v.name} hayata veda etti. $orphans çocuk yetim kaldı.'
-              : '🕯️ ${v.name} hayata veda etti.';
-      _showNotification(msg);
+      if (v.deathHoldsFuneral) dead.add((v, orphans));
       return true;
     });
+    for (final (v, orphans) in dead) {
+      _holdFuneral(v, orphans: orphans);
+    }
 
     // Doğal doğum — fertility timer'ı dolan kadınlar için partner + yatak
     // kontrolü, varsa bebek spawn. Maliyet yok (chill-gameplay).
@@ -312,6 +344,7 @@ extension _SceneTick on _VillageSceneState {
     if (topologyChanged) {
       _pathContext.bumpVersion();
       _anchorSystem.rebuild(_buildings);
+      _rebuildBeeSwarms();
     }
     for (final t in _farmTiles) {
       t.update(farmDt);
@@ -469,6 +502,30 @@ extension _SceneTick on _VillageSceneState {
         _stockpile.food += 1;
       }
     }
+    // Arı Kovanı: pasif bal üretimi, menzildeki çiçek sayısıyla hızlanır.
+    // Çiçeksiz kovan da yavaşça bal verir; florist'in yanına konulan kovan
+    // 2-3 kat hızlanır → "doğru yerleşim" ödüllendirilir. Bal lüks/moral.
+    for (final b in _buildings) {
+      if (b.type != BuildingType.beehive) continue;
+      final meta = kBuildingMeta[BuildingType.beehive]!;
+      final cx = b.col + meta.cols * 0.5;
+      final cy = b.row + meta.rows * 0.5;
+      final r2 = meta.effectRadius * meta.effectRadius;
+      int flowers = 0;
+      for (final d in _decor) {
+        if (!_isFlowerDecor(d.kind)) continue;
+        final dx = (d.col + 0.5) - cx;
+        final dy = (d.row + 0.5) - cy;
+        if (dx * dx + dy * dy <= r2) flowers++;
+      }
+      // Hız çarpanı: çiçeksiz 1.0, her çiçek +0.22, üst sınır 3.0x.
+      final speed = (1.0 + flowers * 0.22).clamp(1.0, 3.0);
+      b.honeyTimer += dt * speed;
+      if (b.honeyTimer >= kHoneyInterval) {
+        b.honeyTimer = 0.0;
+        _stockpile.honey += 1;
+      }
+    }
     for (final sh in _shepherds) {
       sh.update(
         npcDt,
@@ -570,6 +627,74 @@ extension _SceneTick on _VillageSceneState {
       f.update(dt);
     }
     _birdFlocks.removeWhere((f) => f.isDead);
+
+    // Ambient göktaşı yağmuru — geri sayım gün boyu akar; süresi dolduğunda
+    // yalnız gece (yıldızlar görünürken) tetiklenir. Karar yok: köylüler izler,
+    // moral artar. Seyrek, özel bir cozy ödül.
+    if (_hasFire) {
+      _meteorShowerTimer -= dt;
+      if (_meteorShowerTimer <= 0 && _cycle.dayLight < 0.28) {
+        _startMeteorShower();
+        _meteorShowerTimer = (1.5 + _rng.nextDouble() * 2.0) * kGameDaySeconds;
+      }
+    }
+
+    // Arı sürüleri — her kovana bağlı, kovan etrafında orbit. Kovan yaşadığı
+    // sürece yaşar (spawn/teardown completion hook + rebuild'de). Pure atmosfer.
+    for (final sw in _beeSwarms) {
+      sw.update(dt);
+    }
+  }
+
+  /// Ambient göktaşı yağmuru gösterisini başlatır — gökyüzü fx + uyumayan
+  /// köylüler başını kaldırıp izler (🌠 bubble) + birkaçı ateşe toplanır +
+  /// köy moralı artar. Karar/soru yok; saf bir cozy gece ödülü.
+  void _startMeteorShower() {
+    final dur = kGameDaySeconds * 0.35; // birkaç dakikalık gece gösterisi
+    final e = EventEffect(fx: EventFx.meteorShower, duration: dur);
+    _activeFx.add(ActiveFx(e, dur));
+    for (final v in _villagers) {
+      if (v.isSleeping || v.isInsideBuilding) continue;
+      v.chatBubbleIcon = '🌠';
+      v.chatBubbleTime = 6 + _rng.nextDouble() * 4;
+      v.feel(NpcEmotion.wonder, 8, moodDelta: 0.12);
+    }
+    _gatherAtFire(dur, max: 8);
+    pushPolicyMorale(0.06, 2.0);
+    _showNotification(
+        '🌠 Gökyüzü göktaşı yağmuruyla doldu — köy başını kaldırıp izledi.');
+  }
+
+  /// Decor türü bir çiçek mi — arı kovanı bal sinerjisi (menzildeki çiçek
+  /// sayısı üretimi hızlandırır). Mantar/çalı/kütük çiçek sayılmaz.
+  bool _isFlowerDecor(DecorKind k) =>
+      k == DecorKind.daisy ||
+      k == DecorKind.poppy ||
+      k == DecorKind.lavender ||
+      k == DecorKind.buttercup ||
+      k == DecorKind.clover;
+
+  /// Arı sürülerini mevcut kovanlardan türetir. Var olan sürüler pozisyona
+  /// göre korunur (orbit state sıfırlanmaz); kaldırılan kovanın sürüsü düşer,
+  /// yeni kovana taze sürü eklenir. Topology değişiminde çağrılır.
+  void _rebuildBeeSwarms() {
+    final kept = <BeeSwarm>[];
+    for (final b in _buildings) {
+      if (b.type != BuildingType.beehive) continue;
+      final hx = b.col + 0.5;
+      final hy = b.row + 0.5;
+      BeeSwarm? existing;
+      for (final s in _beeSwarms) {
+        if ((s.hiveX - hx).abs() < 0.01 && (s.hiveY - hy).abs() < 0.01) {
+          existing = s;
+          break;
+        }
+      }
+      kept.add(existing ?? BeeSwarm.spawn(hx, hy, _rng));
+    }
+    _beeSwarms
+      ..clear()
+      ..addAll(kept);
   }
 
   // ── Türetilmiş HUD sayımları + sosyal + objektif + snapshot ───────────────
@@ -610,13 +735,19 @@ extension _SceneTick on _VillageSceneState {
       time: _time,
     );
 
-    // ── Sohbet baloncukları — sosyal canlılık katmanı ───────────────────
-    // Aktif baloncukları decay et + zaman zaman yakın çift için yeni başlat.
+    // ── Sohbet baloncukları + iç dünya — sosyal/duygusal canlılık katmanı ──
+    // Aktif baloncukları decay et + her NPC'nin mood/energy/emotion'ını ilerlet.
+    final dl = _cycle.dayLight;
     for (final v in _villagers) {
+      final resting = v.isSleeping ||
+          v.activity == VillagerActivity.warm ||
+          v.activity == VillagerActivity.listening;
+      v.tickInnerLife(dt, dl, resting);
       if (v.chatBubbleTime > 0) {
         v.chatBubbleTime -= dt;
         if (v.chatBubbleTime <= 0) {
           v.chatBubbleIcon = '';
+          if (v.convoIcons.isNotEmpty) v.clearConvo();
           // Anlatıcı hala oturuyorsa warm'a düş (story bitti, ısınıyor).
           v.activity = v.sitClaimed
               ? VillagerActivity.warm
@@ -633,23 +764,14 @@ extension _SceneTick on _VillageSceneState {
       _socialScanTimer = 0;
       _tryStartChats();
     }
+    // Amaçlı hedef akışı — boşalan köylülere zamana/ihtiyaca göre POI ata.
+    _tickRoutine(dt);
     // Ateş başı toplanma + hikaye saati taramaları.
     _tickFirepitGather(dt);
+    _tickPetitions(dt);
 
-    // Yeni tamamlanan hedef için bildirim (sadece bir kez).
-    final objStates = ObjectiveTracker.evaluate(
-      ObjectiveContext(
-        buildings: _buildings,
-        farmTiles: _farmTiles,
-        population: _villagers.length,
-      ),
-    );
-    for (final s in objStates) {
-      if (s.completed && !_completedObjectives.contains(s.obj.id)) {
-        _completedObjectives.add(s.obj.id);
-        _showNotification('🎯 ${s.obj.label} — tamamlandı!');
-      }
-    }
+    // Köy Akışı — görev tamamlanması → görsel ödül + politika-odaklı kademe.
+    _tickFlow(dt);
 
     // Denge testi snapshot'u — 5 sn'de bir kaynak/nüfus kaydı.
     _simSnapshotTimer += dt;
@@ -822,7 +944,7 @@ extension _SceneTick on _VillageSceneState {
         v.greetCooldown -= 1.2;
         continue;
       }
-      if (_rng.nextDouble() > 0.25) continue;
+      if (_rng.nextDouble() > 0.40) continue; // canlılık: daha sık selam
 
       // En yakın uygun komşu — 1.6 tile içinde, 3×3 komşu bucket'tan ara.
       VillagerEntity? near;
@@ -859,6 +981,8 @@ extension _SceneTick on _VillageSceneState {
       near.greetCooldown = 8.0 + _rng.nextDouble() * 6.0;
       v.glanceAround(duration: 0.7);
       near.glanceAround(duration: 0.7);
+      v.feel(NpcEmotion.content, 1.6, moodDelta: 0.03);
+      near.feel(NpcEmotion.content, 1.6, moodDelta: 0.03);
     }
   }
 
@@ -1016,5 +1140,12 @@ extension _SceneTick on _VillageSceneState {
       untilSim: _time + durationDays * kGameDaySeconds,
       amount: amount,
     ));
+  }
+
+  /// Morale anlık ayrık iter (birikim göstergesi). Görünür bir eylem/olay olur
+  /// olmaz çağrılır (ör. açlığa girildi → -, doğum/şenlik → +). Sonra _morale
+  /// yine tabana süzülür. Pasif gösterge — hiçbir mantık okumaz.
+  void nudgeMorale(double delta) {
+    _morale = (_morale + delta).clamp(0.0, 1.0);
   }
 }

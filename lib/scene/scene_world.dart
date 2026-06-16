@@ -219,6 +219,15 @@ extension _SceneWorld on _VillageSceneState {
     _villagers.clear();
     _resourceBoxes.clear();
     _hayEntities.clear();
+    _birdFlocks.clear();
+    _beeSwarms.clear();
+    _pendingPetition = null;
+    _petitionModalOpen = false;
+    _petitionTimer = 1.0 * kGameDaySeconds;
+    _petitionDeadline = 0;
+    _petitionFollowUps.clear();
+    _petitionCooldowns.clear();
+    _villageMemory.clear();
 
     _stockpile.clear();
     // Başlangıç kaynak paketi — oyuncunun erken oyun sıkışmaması için.
@@ -241,7 +250,9 @@ extension _SceneWorld on _VillageSceneState {
     _activeEventLeft = 0.0;
     _pendingChoice = null;
     _activeFx.clear();
-    _completedObjectives.clear();
+    _completedQuests.clear();
+    _charterTier = 0;
+    _flowScan = 0;
     _foodHunger = 0.0;
     _dayCount = 1;
     _lastTimeOfDay = _cycle.timeOfDay;

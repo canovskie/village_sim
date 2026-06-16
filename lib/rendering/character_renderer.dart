@@ -92,6 +92,17 @@ class _Anim {
   }
 }
 
+// ─── POZ ──────────────────────────────────────────────────────────────────────
+/// Karakterin tüm gövde duruşunu değiştiren özel pozlar — ayakta/yürür dışı.
+/// Uzuvları (bacak/kol/lean) gerçekten yeniden konumlandırır; emoji/kestirme
+/// DEĞİL. Ateş başı oturma, ayin diz çökme, yas eğilmesi için.
+enum CharPose {
+  normal, // ayakta / yürür (varsayılan _Anim)
+  sit,    // bağdaş kurmuş — bacaklar öne katlı, eller kucakta, hafif öne
+  kneel,  // ayin: dizüstü, gövde dik, kollar yukarı yakarış
+  mourn,  // yas: çömelmiş, derin öne eğilme, kollar önde sarkık
+}
+
 // ─── RENDERER ─────────────────────────────────────────────────────────────────
 // Pixel-art tarzı karakterler: yalnızca dikdörtgenler, isAntiAlias=false.
 // Ayaklar canvas orijininde (y=0). Çağıran save/translate/scale/restore yapar.
@@ -102,6 +113,9 @@ class CharacterRenderer {
     double walkPhase = 0,
     double moveIntensity = 0.0,
     bool carrying = false,
+    /// Özel gövde duruşu — oturma/ayin/yas. normal dışı tüm uzuv açılarını
+    /// override eder (meşale kolu kilidi ve elde meşale devre dışı).
+    CharPose pose = CharPose.normal,
     /// 0..1 — Entity.torchLevel ile birebir. Sprite alpha ve hafif scale
     /// flicker bu değere bağlı; eski `bool torch` parametresinin yerine geçer.
     double torchLevel = 0.0,
@@ -114,8 +128,13 @@ class CharacterRenderer {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
     var anim = _Anim.compute(walkPhase, moveIntensity, carrying: carrying);
-    // Meşale taşıyorsa sol kol yukarı kilitlenir → el ve meşale tek birim.
-    if (torchLevel > 0.02) anim = anim.copyWith(armL: _kTorchArmAngle);
+    if (pose != CharPose.normal) {
+      // Poz tüm duruşu ele alır — yürüyüş/taşıma/meşale açıları geçersiz.
+      anim = _poseAnim(pose, time);
+    } else if (torchLevel > 0.02) {
+      // Meşale taşıyorsa sol kol yukarı kilitlenir → el ve meşale tek birim.
+      anim = anim.copyWith(armL: _kTorchArmAngle);
+    }
 
     // Çocuk/genç henüz meslek edinmemiş → standart köylü görünümü, tipten
     // bağımsız. Yetişkin/yaşlı meslek görünür; yaşlıda saç kıra döner.
@@ -152,9 +171,36 @@ class CharacterRenderer {
 
     // Gece dışarıda meşale — sol omuz (off-hand), tüm character render
     // yolları aynı helper'ı kullanır → civilian + worker pattern tutarlı.
-    _torchInLeftHand(canvas, torchLevel,
-        time: time, torchPhase: torchPhase);
+    // Oturma/ayin/yas pozunda eller serbest → meşale taşınmaz.
+    if (pose == CharPose.normal) {
+      _torchInLeftHand(canvas, torchLevel,
+          time: time, torchPhase: torchPhase);
+    }
     canvas.restore();
+  }
+
+  /// Poz → uzuv açıları. Bacakları katlar, kolları konumlar, gövdeyi eğip
+  /// indirir (bob). Gerçek duruş; squash/kestirme değil. Dikey yere oturtma
+  /// (sprite'ı aşağı kaydırma) çağıran tarafta (game_painter) yapılır.
+  static _Anim _poseAnim(CharPose pose, double time) {
+    switch (pose) {
+      case CharPose.sit:
+        // Bağdaş: iki bacak öne katlı (hafif asimetrik), gövde öne+aşağı,
+        // eller kucakta. Nefesle çok hafif salınım.
+        final breath = sin(time * 0.8) * 0.4;
+        return _Anim(1.32, 1.48, 0.62, -0.62, 15.0 + breath, lean: 0.12);
+      case CharPose.kneel:
+        // Ayin: dizler geri katlı (dizüstü), gövde dik, kollar yukarı yakarış
+        // — yavaş ritmik yükseliş (ibadet ritmi).
+        final lift = sin(time * 1.4) * 0.06;
+        return _Anim(-0.34, -0.34, -2.40 + lift, -2.40 - lift, 13.0);
+      case CharPose.mourn:
+        // Yas: çömelmiş + derin öne eğilme (baş öne düşer), kollar önde sarkık.
+        final sway = sin(time * 0.9) * 0.015;
+        return _Anim(1.18, 1.34, 0.34, -0.34, 16.0, lean: 0.36 + sway);
+      case CharPose.normal:
+        return _Anim.compute(time, 0);
+    }
   }
 
   /// Yatay yatmış uyku pozu — yastıkta kafa, vücut battaniyenin üstünde,
@@ -342,6 +388,15 @@ class CharacterRenderer {
              ..strokeJoin = StrokeJoin.miter..strokeCap = StrokeCap.square
              ..isAntiAlias = false;
 
+  // ── Yumuşak (anti-aliased) paint'ler — yalnızca yüz/ifade için ───────────
+  // Gövde pixel-art kalır (sert kenar); yüz tatlı/yuvarlak olsun diye AA.
+  static Paint _fa(Color c) =>
+      Paint()..color = c..style = PaintingStyle.fill..isAntiAlias = true;
+  static Paint _sa(Color c, [double w = 1.0]) =>
+      Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = w
+             ..strokeJoin = StrokeJoin.round..strokeCap = StrokeCap.round
+             ..isAntiAlias = true;
+
   // ─── ORTAK PARÇALAR ───────────────────────────────────────────────────────
 
   static void _shadow(Canvas c) {
@@ -369,15 +424,20 @@ class CharacterRenderer {
     if (anim.bob != 0) c.translate(0, anim.bob);
   }
 
-  /// Kare kafa, piksel göz ve ağız.
+  /// Yumuşak yuvarlak kafa, tatlı parlayan göz ve gülümseme (visual'sız fallback).
   static void _head(Canvas c, Color skin, {double y = -80}) {
-    c.drawRect(Rect.fromLTWH(-9, y - 10, 18, 20), _f(skin));
-    c.drawRect(Rect.fromLTWH(-9, y - 10, 18, 20), _s(_outline));
-    // Gözler
-    c.drawRect(Rect.fromLTWH(-6, y - 4,  3, 3), _f(_outline));
-    c.drawRect(Rect.fromLTWH( 3, y - 4,  3, 3), _f(_outline));
-    // Ağız
-    c.drawRect(Rect.fromLTWH(-4, y + 4,  8, 2), _f(_outline));
+    final faceR = RRect.fromRectAndCorners(
+      Rect.fromLTWH(-9, y - 10, 18, 20),
+      topLeft: const Radius.circular(3),
+      topRight: const Radius.circular(3),
+      bottomLeft: const Radius.circular(6),
+      bottomRight: const Radius.circular(6),
+    );
+    c.drawRRect(faceR, _fa(skin));
+    c.drawRRect(faceR, _sa(_outline));
+    _cuteEye(c, -6.4, y, const Color(0xFF6A4A30));
+    _cuteEye(c,  2.4, y, const Color(0xFF6A4A30));
+    _smile(c, y);
   }
 
   /// Animasyonlu bacak: hip pivot (hipX, −36).
@@ -1190,8 +1250,20 @@ class CharacterRenderer {
   /// [time] blink animasyonu için zaman parametresi.
   /// [y] kafanın merkez Y koordinatı (default -80).
   static void _shadedHead(Canvas c, NpcVisual v, double time, {double y = -80}) {
-    // ── Yüz / ten ─────────────────────────────────────────────────────────
-    _shadedRect(c, Rect.fromLTWH(-9, y - 10, 18, 20), v.skin);
+    // ── Yüz / ten — yuvarlatılmış çene (yumuşak, tatlı silüet) ─────────────
+    // Üst köşeler hafif, alt köşeler (çene) belirgin yuvarlak → bebeksi oran.
+    final faceR = RRect.fromRectAndCorners(
+      Rect.fromLTWH(-9, y - 10, 18, 20),
+      topLeft: const Radius.circular(3),
+      topRight: const Radius.circular(3),
+      bottomLeft: const Radius.circular(6),
+      bottomRight: const Radius.circular(6),
+    );
+    c.drawRRect(faceR, _fa(v.skin));
+    // Hacim: alın aydınlık, çene yumuşak gölge.
+    c.drawRect(Rect.fromLTWH(-7, y - 9, 14, 2), _fa(lighter(v.skin, 0.10)));
+    c.drawRect(Rect.fromLTWH(-6, y + 6, 12, 2), _fa(darker(v.skin, 0.10)));
+    c.drawRRect(faceR, _sa(_outline));
 
     // ── Saç (stile göre) ──────────────────────────────────────────────────
     _drawHair(c, v, y);
@@ -1199,32 +1271,63 @@ class CharacterRenderer {
     // ── Sakal (varsa, saçtan ÖNCE çiz ki üstte kalmasın) ──────────────────
     if (v.hasBeard) _drawBeard(c, v, y);
 
-    // ── Gözler (renkli + blink) ───────────────────────────────────────────
+    // ── Yanak allığı — tatlı pembe, yumuşak ───────────────────────────────
+    const blush = Color(0x3AE08484);
+    c.drawRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(-7.5, y + 1, 3.5, 2.4), const Radius.circular(1.2)), _fa(blush));
+    c.drawRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(4, y + 1, 3.5, 2.4), const Radius.circular(1.2)), _fa(blush));
+
+    // ── Gözler (büyük, parlak, glint'li) + blink ──────────────────────────
     // Blink: nadir, kısa.  sin > 0.96 → kapalı (≈0.6 sn / 8 sn döngü)
     final blinkRaw = sin(time * 0.78 + v.blinkPhase);
-    final closed   = blinkRaw > 0.96;
-    if (closed) {
-      // Kapalı göz — yatay çizgi
-      c.drawRect(Rect.fromLTWH(-6, y - 3, 3, 1), _f(_outline));
-      c.drawRect(Rect.fromLTWH( 3, y - 3, 3, 1), _f(_outline));
+    if (blinkRaw > 0.96) {
+      // Mutlu kapalı göz — yukarı kıvrık küçük yay ( ^ ^ )
+      _happyClosedEye(c, -6.4, y);
+      _happyClosedEye(c,  2.4, y);
     } else {
-      // Açık göz — küçük renk + outline
-      c.drawRect(Rect.fromLTWH(-6, y - 4, 3, 3), _f(_outline));
-      c.drawRect(Rect.fromLTWH( 3, y - 4, 3, 3), _f(_outline));
-      // İris renk - 2x2 iç kısım
-      c.drawRect(Rect.fromLTWH(-5, y - 3, 2, 2), _f(v.eyes));
-      c.drawRect(Rect.fromLTWH( 4, y - 3, 2, 2), _f(v.eyes));
+      _cuteEye(c, -6.4, y, v.eyes);
+      _cuteEye(c,  2.4, y, v.eyes);
     }
 
-    // ── Kaş (saç renginin koyu tonu) ──────────────────────────────────────
-    final brow = darker(v.hair, 0.10);
-    c.drawRect(Rect.fromLTWH(-7, y - 6, 4, 1), _f(brow));
-    c.drawRect(Rect.fromLTWH( 3, y - 6, 4, 1), _f(brow));
+    // ── Kaş — ince, hafif kalkık (masum/yumuşak ifade) ────────────────────
+    final brow = darker(v.hair, 0.05);
+    c.drawRect(Rect.fromLTWH(-6.4, y - 5, 3, 1), _fa(brow));
+    c.drawRect(Rect.fromLTWH( 3.4, y - 5, 3, 1), _fa(brow));
 
-    // ── Ağız (sakal yoksa görünür) ────────────────────────────────────────
+    // ── Ağız — küçük gülümseme (tam sakal yoksa görünür) ──────────────────
     if (v.beardStyle != BeardStyle.full) {
-      c.drawRect(Rect.fromLTWH(-3, y + 5, 6, 1), _f(_outline));
+      _smile(c, y);
     }
+  }
+
+  /// Tatlı göz: koyu yuvarlak çerçeve + renkli iris + beyaz glint (parlama).
+  /// Glint, "canlı/sevimli" hissinin ana sinyali.
+  static void _cuteEye(Canvas c, double ex, double y, Color iris) {
+    c.drawRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(ex, y - 3.5, 4, 5), const Radius.circular(1.8)), _fa(_outline));
+    c.drawRect(Rect.fromLTWH(ex + 0.8, y - 2.4, 2.4, 3), _fa(iris));
+    c.drawRect(Rect.fromLTWH(ex + 0.8, y - 2.8, 1.4, 1.4), _fa(const Color(0xFFFFFFFF)));
+  }
+
+  /// Mutlu kapalı göz — yukarı kıvrık küçük yay (blink anı).
+  static void _happyClosedEye(Canvas c, double ex, double y) {
+    c.drawPath(
+      Path()
+        ..moveTo(ex, y - 1)
+        ..quadraticBezierTo(ex + 2, y - 3.4, ex + 4, y - 1),
+      _sa(_outline, 1.2),
+    );
+  }
+
+  /// Küçük yukarı kıvrık gülümseme.
+  static void _smile(Canvas c, double y) {
+    c.drawPath(
+      Path()
+        ..moveTo(-3, y + 4.6)
+        ..quadraticBezierTo(0, y + 7, 3, y + 4.6),
+      _sa(_outline, 1.2),
+    );
   }
 
   /// Hair rendering — stile göre farklı şekil.

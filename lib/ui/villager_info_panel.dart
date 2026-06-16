@@ -112,6 +112,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                   const SizedBox(height: 10),
                   _ageBar(v, stage),
                   const SizedBox(height: 9),
+                  _moodRow(v),
+                  const SizedBox(height: 2),
                   _row('Ev', widget.homeLabel ?? 'Evsiz'),
                   if (v.greetCount > 0 || v.giftCount > 0) ...[
                     const SizedBox(height: 2),
@@ -505,6 +507,21 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   }
 
   // ─── Rows ───────────────────────────────────────────────────────────────────
+
+  /// Ruh hali + enerji satırı — NPC'nin iç dünyasını oyuncuya gösterir.
+  Widget _moodRow(VillagerEntity v) {
+    final (icon, label) = _moodLabel(v.mood);
+    final energyPct = (v.energy * 100).round();
+    return _row('Hâli', '$icon $label · ⚡$energyPct%');
+  }
+
+  (String, String) _moodLabel(double m) {
+    if (m > 0.45) return ('😄', 'Neşeli');
+    if (m > 0.12) return ('🙂', 'Keyifli');
+    if (m < -0.45) return ('😢', 'Çökmüş');
+    if (m < -0.12) return ('😕', 'Keyifsiz');
+    return ('😐', 'Sakin');
+  }
 
   Widget _row(String label, String value) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),

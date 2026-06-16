@@ -1,5 +1,17 @@
 part of '../main.dart';
 
+// ── Sohbet konuları — her konu sıralı bir replik ikonu dizisi. Karşılıklı
+// sohbette çift bu diziyi sırayla "söyler" → baloncuk anlamlı görünür
+// (rastgele tek emoji yerine konuşmanın konusu).
+const List<String> _kTopicGeneral = ['💬', '🙂', '❓', '😄'];
+const List<String> _kTopicFarm    = ['🌾', '💧', '☀', '🥕'];
+const List<String> _kTopicTrade   = ['🪙', '📦', '⚖', '🤝'];
+const List<String> _kTopicFood    = ['🍺', '🍞', '😋', '🍲'];
+const List<String> _kTopicFamily  = ['👶', '❤', '🏠', '😊'];
+const List<String> _kTopicWork    = ['⚒', '🪵', '🪨', '💪'];
+const List<String> _kTopicGossip  = ['🤫', '👀', '😮', '🙊'];
+const List<String> _kTopicWeather = ['☀', '🌧', '🌬', '🌈'];
+
 /// Sosyal canlılık: chat/music/dance — bağlama duyarlı, dağıtık per-NPC
 /// değerlendirme. Pazar/taverna/ateş/akşam/yağmur çarpanları kullanır.
 /// part of main.dart — State'in tüm private alanlarına erişim.
@@ -46,7 +58,7 @@ extension _SceneNpcActivity on _VillageSceneState {
         started = _tryStartChatFor(v);
       }
       if (started) {
-        v.socialCooldown = 60 + _rng.nextDouble() * 120;
+        v.socialCooldown = 40 + _rng.nextDouble() * 80;
       }
     }
   }
@@ -54,23 +66,73 @@ extension _SceneNpcActivity on _VillageSceneState {
   bool _tryStartChatFor(VillagerEntity v) {
     final partner = _findNearbyIdle(v);
     if (partner == null) return false;
-    final icon = _VillageSceneState._kChatIcons[
-        _rng.nextInt(_VillageSceneState._kChatIcons.length)];
-    final dur  = 3.5 + _rng.nextDouble() * 2.0;
-    v.activity = VillagerActivity.chat;
-    v.chatBubbleIcon = icon;
-    v.chatBubbleTime = dur;
-    partner.activity = VillagerActivity.chat;
-    partner.chatBubbleIcon = icon;
-    partner.chatBubbleTime = dur;
-    partner.socialCooldown = 60 + _rng.nextDouble() * 120;
+    // Konuya bağlı replik dizisi + karşılıklı sıra (turn-taking). Daha uzun
+    // süre → birkaç replik gidip gelir.
+    final icons = _convoTopic(v, partner);
+    final dur   = 6.0 + _rng.nextDouble() * 3.0;
+    _beginConvo(v, partner, icons, dur, starter: true);
+    _beginConvo(partner, v, icons, dur, starter: false);
+    partner.socialCooldown = 40 + _rng.nextDouble() * 80;
+    // Yüzünü karşısındakine dön — sohbet ediyormuş gibi.
+    v.facingRight       = partner.gridX >= v.gridX;
+    partner.facingRight = v.gridX >= partner.gridX;
+    v.feel(NpcEmotion.content, dur, moodDelta: 0.03);
+    partner.feel(NpcEmotion.content, dur, moodDelta: 0.03);
     return true;
+  }
+
+  /// Bir köylüyü sohbet durumuna sokar (karşılıklı konuşma state'i).
+  void _beginConvo(VillagerEntity v, VillagerEntity other, List<String> icons,
+      double dur, {required bool starter}) {
+    v.activity     = VillagerActivity.chat;
+    v.chatBubbleTime = dur;
+    v.chatBubbleIcon = ''; // baloncuk artık convoNow()'dan gelir
+    v.convoPartner   = other;
+    v.convoIcons     = icons;
+    v.convoTotal     = dur;
+    v.convoStarter   = starter;
+  }
+
+  /// Konuşan iki köylüye bağlama göre bir konu (replik ikonu dizisi) seçer:
+  /// meslek, yakın bina (pazar/taverna), aile, mood. Ağırlıklı rastgele.
+  List<String> _convoTopic(VillagerEntity a, VillagerEntity b) {
+    bool isType(VillagerType t) => a.type == t || b.type == t;
+    final mx = (a.gridX + b.gridX) / 2, my = (a.gridY + b.gridY) / 2;
+    bool near(BuildingType bt, double r) => _nearAny(mx, my, _spotsOf(bt), r);
+
+    final cands = <(List<String>, double)>[];
+    void add(List<String> topic, double w) {
+      if (w > 0) cands.add((topic, w));
+    }
+
+    add(_kTopicFarm, isType(VillagerType.farmer) ? 2.5 : 0);
+    add(_kTopicWork,
+        (isType(VillagerType.blacksmith) || isType(VillagerType.miner)) ? 2.2 : 0);
+    add(_kTopicTrade,
+        near(BuildingType.market, 4) ? 2.5 : (isType(VillagerType.merchant) ? 1.5 : 0));
+    add(_kTopicFood, near(BuildingType.tavern, 4) ? 2.6 : 0);
+    add(_kTopicFamily, (a.children.isNotEmpty || b.children.isNotEmpty) ? 1.8 : 0);
+    add(_kTopicGossip, 1.0);
+    add(_kTopicWeather, 0.8);
+    add(_kTopicGeneral, 1.6);
+
+    double total = 0;
+    for (final c in cands) {
+      total += c.$2;
+    }
+    var pick = _rng.nextDouble() * total;
+    for (final c in cands) {
+      pick -= c.$2;
+      if (pick <= 0) return c.$1;
+    }
+    return _kTopicGeneral;
   }
 
   bool _tryStartMusicFor(VillagerEntity v) {
     v.activity = VillagerActivity.music;
     v.chatBubbleIcon = '🎸';
     v.chatBubbleTime = 9 + _rng.nextDouble() * 5;
+    v.feel(NpcEmotion.content, 9, moodDelta: 0.04);
     return true;
   }
 
@@ -84,7 +146,9 @@ extension _SceneNpcActivity on _VillageSceneState {
     partner.activity = VillagerActivity.dance;
     partner.chatBubbleIcon = '💃';
     partner.chatBubbleTime = dur;
-    partner.socialCooldown = 60 + _rng.nextDouble() * 120;
+    partner.socialCooldown = 40 + _rng.nextDouble() * 80;
+    v.feel(NpcEmotion.joy, dur, moodDelta: 0.06);
+    partner.feel(NpcEmotion.joy, dur, moodDelta: 0.06);
     return true;
   }
 
@@ -96,7 +160,7 @@ extension _SceneNpcActivity on _VillageSceneState {
       ..shuffle(_rng);
     if (adults.isEmpty) return false;
     _tryStartMusicFor(adults.first);
-    adults.first.socialCooldown = 60 + _rng.nextDouble() * 60;
+    adults.first.socialCooldown = 40 + _rng.nextDouble() * 50;
     return true;
   }
 
@@ -108,7 +172,7 @@ extension _SceneNpcActivity on _VillageSceneState {
       ..shuffle(_rng);
     for (final v in adults) {
       if (_tryStartDanceFor(v)) {
-        v.socialCooldown = 60 + _rng.nextDouble() * 60;
+        v.socialCooldown = 40 + _rng.nextDouble() * 50;
         return true;
       }
     }
@@ -123,7 +187,7 @@ extension _SceneNpcActivity on _VillageSceneState {
       ..shuffle(_rng);
     for (final v in adults) {
       if (_tryStartChatFor(v)) {
-        v.socialCooldown = 60 + _rng.nextDouble() * 60;
+        v.socialCooldown = 40 + _rng.nextDouble() * 50;
         return true;
       }
     }

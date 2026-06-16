@@ -184,4 +184,20 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     summary: '3-4 tavuk barındırır. Tavuklar dolaşır ve periyodik olarak '
         'yumurta yumurtlar — kümes düzenli olarak yiyecek üretir.',
   ),
+
+  BuildingType.beehive: BuildingFunction(
+    role: BuildingRole.gathering,
+    summary: 'Arılar etraftaki çiçeklerden bal taşır. Menzilinde ne kadar çok '
+        'çiçek varsa o kadar hızlı bal üretir — çiçekçinin yanına yakışır. '
+        'Biriken bal köyü mutlu eder (lüks).',
+  ),
+
+  BuildingType.church: BuildingFunction(
+    role: BuildingRole.civic,
+    summary: 'Köyün ruh evi. Köylüler huzur ve birlik bulur, moral yükselir. '
+        'Biri hayata veda ettiğinde köy onu burada uğurlar; yanında usulca '
+        'bir mezarlık büyür.',
+    civicEffect: CivicEffect.morale,
+    civicValue: 0.12,
+  ),
 };

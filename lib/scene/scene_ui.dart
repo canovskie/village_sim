@@ -201,6 +201,7 @@ extension _SceneUi on _VillageSceneState {
                       lotuses: _lotuses,
                       reeds: _reeds,
                       decor: _decor,
+                      graves: _graves,
                       fishers: _fishers,
                       florists: _florists,
                       shepherds: _shepherds,
@@ -217,6 +218,7 @@ extension _SceneUi on _VillageSceneState {
                       activeFx: _fxActiveIds,
                       burningBuildings: _burningBuildings,
                       birdFlocks: _birdFlocks,
+                      beeSwarms: _beeSwarms,
                       perfMode: _perfMode,
                       lumberCamps: _lumberCamps,
                     ),
@@ -726,12 +728,13 @@ extension _SceneUi on _VillageSceneState {
       v.chatBubbleIcon = '👋';
       v.chatBubbleTime = 4.5;
       v.greetCount++;
-      // Selam alan NPC anlık olarak oyuncu yönüne bakar (yön bilinmediği için
-      // sadece bakışı çevir — küçük "fark etti" hissi).
-      v.facingRight = !v.facingRight;
+      // Selam alan NPC mutlu olur (gövde dili — huzurlu salınış).
+      v.feel(NpcEmotion.content, 3.0, moodDelta: 0.05);
       // Boş ise küçük "selam aldım" iç sosyal cooldown azalt → kısa süre içinde
       // başka selamlaşma/chat'e geç olasılığı düşmesin.
       if (v.socialCooldown > 6) v.socialCooldown = 6;
+      // Komşular dönüp bakar (yerel canlılık dalgası).
+      _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.wonder, 2.0);
     });
   }
 
@@ -745,9 +748,13 @@ extension _SceneUi on _VillageSceneState {
       v.chatBubbleIcon = '❤️';
       v.chatBubbleTime = 5.5;
       v.giftCount++;
+      // Hediye alan NPC sevinçle karşılık verir (gövde dili — sıçrama).
+      v.feel(NpcEmotion.joy, 3.5, moodDelta: 0.10);
       // Köy çapında küçük, 1 oyun günü süren moral bonusu — chill ölçekte.
       _policyMoraleEffects
           .add((untilSim: _time + kGameDaySeconds, amount: 0.02));
+      // Komşular sevinen köylüye dönüp bakar.
+      _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.2);
     });
   }
 
@@ -910,6 +917,11 @@ extension _SceneUi on _VillageSceneState {
             }
           }),
           onSpawnMigrant: () => setStateHere(_spawnMigrant),
+          onForcePetition: _forcePetition,
+          petitions: [
+            for (final p in PetitionSystem.all) (p.id, '${p.icon} ${p.title}'),
+          ],
+          onForcePetitionId: _forcePetitionById,
           perfMode: _perfMode,
           onTogglePerf: () => setStateHere(() => _perfMode = !_perfMode),
           simSpeedBoost: _devSpeedBoost,
@@ -963,6 +975,7 @@ extension _SceneUi on _VillageSceneState {
             }
           },
           onClearActivities: () => setStateHere(_devClearActivities),
+          onMeteorShower: () => setStateHere(_startMeteorShower),
         ),
       ),
     );
@@ -1008,15 +1021,17 @@ extension _SceneUi on _VillageSceneState {
         child: ListenableBuilder(
           listenable: _frame,
           builder: (_, _) {
-            final states = ObjectiveTracker.evaluate(
-              ObjectiveContext(
-                buildings: _buildings,
-                farmTiles: _farmTiles,
-                population: _villagers.length,
-              ),
-            );
+            final ctx = _questContext();
+            final quests = QuestBook.activeQuests(ctx, _completedQuests);
+            final tier = QuestBook.tierOf(_charterTier);
             return ObjectivePanel(
-              objectives: states,
+              quests: quests,
+              tierIndex: _charterTier,
+              tierName: tier.name,
+              tierIcon: tier.icon,
+              completedCount: _completedQuests.length,
+              totalCount: QuestBook.all.length,
+              next: QuestBook.nextTier(_charterTier),
               collapsed: _objectivesCollapsed,
               onToggleCollapse: () => setStateHere(
                 () => _objectivesCollapsed = !_objectivesCollapsed,

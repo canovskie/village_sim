@@ -2,16 +2,19 @@
 /// İşçi NPC'leri ham kaynak üretir, taşıyıcılar depoya/ateşe getirir,
 /// inşaat orderları stockpile'dan tüketir.
 enum ResourceKind {
-  wood('🪵', 'Odun'),
-  stone('🪨', 'Taş'),
-  iron('⚙', 'Demir'),
-  coal('♦', 'Kömür'),
-  food('🌾', 'Yiyecek'),
-  gold('★', 'Altın');
+  wood('🪵', 'Odun', 'wood'),
+  stone('🪨', 'Taş', 'stone'),
+  iron('⚙', 'Demir', 'iron'),
+  coal('♦', 'Kömür', 'coal'),
+  food('🌾', 'Yiyecek', 'food'),
+  honey('🍯', 'Bal', 'honey'),
+  gold('★', 'Altın', 'gold');
 
   final String icon;
   final String label;
-  const ResourceKind(this.icon, this.label);
+  /// Pixel-art ikon dosya çekirdeği — `assets/ui/icon_$asset.png` (UiIcon).
+  final String asset;
+  const ResourceKind(this.icon, this.label, this.asset);
 }
 
 /// Köy stoğu — değişebilir miktar takipçisi.
@@ -21,6 +24,7 @@ class ResourceBundle {
   int iron;
   int coal;
   int food;
+  int honey;
   int gold;
 
   ResourceBundle({
@@ -29,6 +33,7 @@ class ResourceBundle {
     this.iron  = 0,
     this.coal  = 0,
     this.food  = 0,
+    this.honey = 0,
     this.gold  = 0,
   });
 
@@ -38,6 +43,7 @@ class ResourceBundle {
         ResourceKind.iron  => iron,
         ResourceKind.coal  => coal,
         ResourceKind.food  => food,
+        ResourceKind.honey => honey,
         ResourceKind.gold  => gold,
       };
 
@@ -48,6 +54,7 @@ class ResourceBundle {
       case ResourceKind.iron:  iron  += amount;
       case ResourceKind.coal:  coal  += amount;
       case ResourceKind.food:  food  += amount;
+      case ResourceKind.honey: honey += amount;
       case ResourceKind.gold:  gold  += amount;
     }
   }
@@ -58,6 +65,7 @@ class ResourceBundle {
       iron  >= c.iron  &&
       coal  >= c.coal  &&
       food  >= c.food  &&
+      honey >= c.honey &&
       gold  >= c.gold;
 
   void spend(ResourceCost c) {
@@ -66,11 +74,12 @@ class ResourceBundle {
     iron  -= c.iron;
     coal  -= c.coal;
     food  -= c.food;
+    honey -= c.honey;
     gold  -= c.gold;
   }
 
   void clear() {
-    wood = stone = iron = coal = food = gold = 0;
+    wood = stone = iron = coal = food = honey = gold = 0;
   }
 
   /// Eksik kaynakları "12 🪵 + 3 🪨" gibi gösterilebilir biçimde döner.
@@ -84,6 +93,7 @@ class ResourceBundle {
     check(ResourceKind.iron,  iron,  c.iron);
     check(ResourceKind.coal,  coal,  c.coal);
     check(ResourceKind.food,  food,  c.food);
+    check(ResourceKind.honey, honey, c.honey);
     check(ResourceKind.gold,  gold,  c.gold);
     return parts.join(' ');
   }
@@ -96,6 +106,7 @@ class ResourceCost {
   final int iron;
   final int coal;
   final int food;
+  final int honey;
   final int gold;
 
   const ResourceCost({
@@ -104,6 +115,7 @@ class ResourceCost {
     this.iron  = 0,
     this.coal  = 0,
     this.food  = 0,
+    this.honey = 0,
     this.gold  = 0,
   });
 
@@ -111,7 +123,7 @@ class ResourceCost {
 
   bool get isFree =>
       wood == 0 && stone == 0 && iron == 0 &&
-      coal == 0 && food == 0 && gold == 0;
+      coal == 0 && food == 0 && honey == 0 && gold == 0;
 
   /// Sıfır olmayan kaynakları (kind, amount) listesi olarak döner.
   List<(ResourceKind, int)> get entries => [
@@ -120,6 +132,7 @@ class ResourceCost {
         if (iron  > 0) (ResourceKind.iron,  iron),
         if (coal  > 0) (ResourceKind.coal,  coal),
         if (food  > 0) (ResourceKind.food,  food),
+        if (honey > 0) (ResourceKind.honey, honey),
         if (gold  > 0) (ResourceKind.gold,  gold),
       ];
 }
