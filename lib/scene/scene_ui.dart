@@ -252,6 +252,9 @@ extension _SceneUi on _VillageSceneState {
           minerCount: _miners.length,
           fisherCount: _fishers.length,
           builderCount: _builders.length,
+          shepherdCount: _shepherds.length,
+          floristCount: _florists.length,
+          homelessCount: _villagers.where((v) => v.homeBuilding == null).length,
           busyBuilders:
               _builders.where((b) => b.state != BuilderState.idle).length,
           timeOfDay: _cycle.timeOfDay,
@@ -1086,9 +1089,12 @@ extension _SceneUi on _VillageSceneState {
       left: 0,
       right: 0,
       child: Center(
-        child: WaxBadge(
-          label: _notification!,
-          color: CozyUi.ember,
+        child: AppReveal(
+          child: AppChip(
+            label: _notification!,
+            color: AppUi.accent,
+            solid: true,
+          ),
         ),
       ),
     );

@@ -114,9 +114,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         children: [
                           Expanded(
                             child: AppButton(
-                              label: 'VARSAYILAN',
+                              label: 'SIFIRLA',
                               kind: AppButtonKind.ghost,
-                              icon: GameIconData.dice,
                               expand: true,
                               onTap: _model.resetToDefaults,
                             ),

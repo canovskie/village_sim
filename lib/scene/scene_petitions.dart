@@ -153,6 +153,7 @@ extension _ScenePetitions on _VillageSceneState {
       }
 
       _pendingPetition   = null;
+      _petitionAuthor    = null;
       _petitionModalOpen = false;
       _petitionTimer     = _kPetitionInterval;
     });

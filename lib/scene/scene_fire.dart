@@ -16,6 +16,12 @@ extension _SceneFire on _VillageSceneState {
   static const double _kFuelPerLog = 0.35;
   /// Ateşçi atama taraması (sn).
   static const double _kFirekeeperScanSec = 1.5;
+  /// Odun stoğu bu seviyenin ALTINA inince "odun azalıyor" dilekçesi (erken
+  /// uyarı — ateş sönmeden önce oyuncu önlem alabilsin).
+  static const int _kWoodLowWarn = 5;
+  /// Uyarı histerezi: stok bu seviyeye çıkınca yeniden "sağlıklı" sayılır
+  /// (bir sonraki düşüşte yine uyarı çıkabilir).
+  static const int _kWoodHealthy = 12;
 
   /// Ateş şu an yanıyor mu — kurulmuş + yakıtı var.
   bool get _fireBurning =>
@@ -48,6 +54,28 @@ extension _SceneFire on _VillageSceneState {
       _maybeDispatchFirekeeper(fire);
     }
     _advanceFirekeeper(fire);
+
+    // 4) Odun azalma erken uyarısı — ateş sönmeden önce dilekçe.
+    _tickWoodWarning();
+  }
+
+  /// Odun stoğu kritiğe inince (ama henüz bitmeden) oduncuların sesiyle bir
+  /// uyarı dilekçesi sunar. Histerez: stok önce sağlıklı seviyeye çıkmalı,
+  /// sonra düşüşte tek sefer tetiklenir (spam yok). Oyun başında stok zaten
+  /// düşükken yanlış uyarı çıkmaz (önce dolması beklenir).
+  void _tickWoodWarning() {
+    final wood = _stockpile.wood;
+    if (wood >= _kWoodHealthy) {
+      _woodHealthy = true;
+      return;
+    }
+    if (_woodHealthy && wood < _kWoodLowWarn) {
+      _woodHealthy = false;
+      if (_pendingPetition == null) {
+        final p = PetitionSystem.byId('woodLow');
+        if (p != null) _presentPetition(p);
+      }
+    }
   }
 
   /// Yakıt eşiğin altında, stokta odun var ve atanmış ateşçi yoksa — en yakın

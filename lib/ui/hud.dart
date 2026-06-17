@@ -9,6 +9,7 @@ class GameHUD extends StatelessWidget {
   final int woodInTransit, stoneInTransit, ironInTransit, coalInTransit, foodInTransit;
 
   final int villagerCount, farmerCount, woodcutterCount, minerCount, fisherCount, builderCount, busyBuilders;
+  final int shepherdCount, floristCount, homelessCount;
 
   final double timeOfDay, rainIntensity, dayLight;
   final int dayCount;
@@ -46,6 +47,9 @@ class GameHUD extends StatelessWidget {
     required this.fisherCount,
     required this.builderCount,
     required this.busyBuilders,
+    this.shepherdCount = 0,
+    this.floristCount = 0,
+    this.homelessCount = 0,
     required this.timeOfDay,
     required this.rainIntensity,
     required this.dayLight,
@@ -99,7 +103,8 @@ class GameHUD extends StatelessWidget {
           : AppUi.rust;
 
   int get _totalPop =>
-      villagerCount + farmerCount + woodcutterCount + minerCount + fisherCount + builderCount;
+      villagerCount + farmerCount + woodcutterCount + minerCount +
+      fisherCount + builderCount + shepherdCount + floristCount;
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
@@ -189,37 +194,106 @@ class GameHUD extends StatelessWidget {
         ),
       );
 
-  Widget _populationRow() {
-    final workers = <(GameIconData, int, Color)>[
-      (GameIconData.wheat, farmerCount, AppUi.sage),
-      (GameIconData.axe, woodcutterCount, const Color(0xFFE7B374)),
-      (GameIconData.pickaxe, minerCount, const Color(0xFFC5CDE9)),
-      (GameIconData.fish, fisherCount, AppUi.info),
-    ].where((s) => s.$2 > 0).toList();
+  // Profession palette — tooltip + olası inline kullanım.
+  static const _farmerC = AppUi.sage;
+  static const _woodC   = Color(0xFFE7B374);
+  static const _minerC  = Color(0xFFC5CDE9);
+  static const _fisherC = AppUi.info;
+  static const _shepC   = Color(0xFFCDB79A);
+  static const _floriC  = Color(0xFFE08AB0);
+  static const _buildC  = Color(0xFFD8C088);
 
-    return Row(children: [
-      GameIcon(GameIconData.people, size: 15, color: AppUi.textMid),
-      const SizedBox(width: 7),
-      Text('$_totalPop', style: AppUi.number.copyWith(fontSize: 16)),
-      const SizedBox(width: 5),
-      Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text('köylü', style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
+  Widget _populationRow() {
+    return Tooltip(
+      richMessage: _professionBreakdown(),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      margin: const EdgeInsets.only(left: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xF21A1B22),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x33FFFFFF)),
       ),
-      const Spacer(),
-      for (final (icon, n, col) in workers)
+      child: Row(children: [
+        // Köylü — toplam nüfus.
+        GameIcon(GameIconData.people, size: 15, color: AppUi.textMid),
+        const SizedBox(width: 7),
+        Text('$_totalPop', style: AppUi.number.copyWith(fontSize: 16)),
+        const SizedBox(width: 5),
         Padding(
-          padding: const EdgeInsets.only(left: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GameIcon(icon, size: 12, color: col),
-              const SizedBox(width: 3),
-              Text('$n', style: AppUi.number.copyWith(fontSize: 12, color: col)),
-            ],
-          ),
+          padding: const EdgeInsets.only(top: 2),
+          child: Text('köylü',
+              style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
         ),
-    ]);
+        const SizedBox(width: 16),
+        // Evsiz — yan yana; >0 ise vurgulu (rust).
+        GameIcon(GameIconData.home, size: 14,
+            color: homelessCount > 0 ? AppUi.rust : AppUi.textMid),
+        const SizedBox(width: 7),
+        Text('$homelessCount',
+            style: AppUi.number.copyWith(
+                fontSize: 16,
+                color: homelessCount > 0 ? AppUi.rust : AppUi.textMid)),
+        const SizedBox(width: 5),
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text('evsiz',
+              style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
+        ),
+        const Spacer(),
+        // İmleç ipucu — üstüne gelince meslek dağılımı.
+        GameIcon(GameIconData.chevron, size: 11, color: AppUi.textMid),
+      ]),
+    );
+  }
+
+  // Hover tooltip — hangi mesleğe kaç köylü dağıtılmış (+ serbest + evsiz).
+  InlineSpan _professionBreakdown() {
+    final rows = <(String, int, Color)>[
+      ('Çiftçi',   farmerCount,     _farmerC),
+      ('Oduncu',   woodcutterCount, _woodC),
+      ('Madenci',  minerCount,      _minerC),
+      ('Balıkçı',  fisherCount,     _fisherC),
+      ('Çoban',    shepherdCount,   _shepC),
+      ('Çiçekçi',  floristCount,    _floriC),
+      ('İnşaatçı', builderCount,    _buildC),
+    ].where((r) => r.$2 > 0).toList();
+
+    final base = AppUi.body.copyWith(fontSize: 12, height: 1.45);
+    final children = <InlineSpan>[
+      TextSpan(
+        text: 'Meslek dağılımı\n',
+        style: AppUi.label.copyWith(
+            fontSize: 10, letterSpacing: 1.4, color: AppUi.accentSoft),
+      ),
+    ];
+    if (rows.isEmpty) {
+      children.add(TextSpan(
+          text: 'Henüz meslek yok\n',
+          style: base.copyWith(color: AppUi.textMid)));
+    }
+    for (final (name, n, col) in rows) {
+      children.add(TextSpan(
+          text: '$name  ', style: base.copyWith(color: AppUi.textMid)));
+      children.add(TextSpan(
+          text: '$n\n',
+          style: base.copyWith(color: col, fontWeight: FontWeight.w700)));
+    }
+    // Serbest (mesleği olmayan köylü) + evsiz alt çizgi.
+    children.add(TextSpan(
+        text: '─────\n', style: base.copyWith(color: const Color(0x33FFFFFF))));
+    children.add(TextSpan(
+        text: 'Serbest  ', style: base.copyWith(color: AppUi.textMid)));
+    children.add(TextSpan(
+        text: '$villagerCount\n',
+        style: base.copyWith(color: AppUi.textHi, fontWeight: FontWeight.w700)));
+    children.add(TextSpan(
+        text: 'Evsiz  ', style: base.copyWith(color: AppUi.textMid)));
+    children.add(TextSpan(
+        text: '$homelessCount',
+        style: base.copyWith(
+            color: homelessCount > 0 ? AppUi.rust : AppUi.textHi,
+            fontWeight: FontWeight.w700)));
+    return TextSpan(children: children);
   }
 
   Widget _moraleMeter() {

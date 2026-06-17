@@ -95,23 +95,32 @@ extension _SceneEstates on _VillageSceneState {
     if (pe != null) _estates.nudge(pe, swayGain: 0.05);
   }
 
-  /// Dilekçeyi getiren zümreden bir SÖZCÜ sahneye çıkarır (diegetik): uygun bir
-  /// köylü işini bırakıp köy merkezine döner ve dilekçeyi sunan duyguyu yaşar.
-  /// `_presentPetition` çağırır. Sözcü bulunamazsa sessizce geçilir.
-  void _summonSpokesperson(Petition p) {
-    final e = p.estate;
-    if (e == null) return;
-    final cands = _villagers
-        .where((v) =>
-            !v.isSleeping &&
-            !v.isInsideBuilding &&
-            !v.isDying &&
-            !v.isCarrying &&
-            v.hasProfession &&
-            estateOfVillager(v.type, v.lifeStage) == e)
+  /// Dilekçeyi GETİRECEK gerçek köylüyü seçer (rastgele "Çiftçiler" değil —
+  /// somut biri). Önce dilekçenin zümresinden uygun bir yetişkin; yoksa
+  /// herhangi bir yetişkin (yazar asla boş kalmasın). Uyuyan/içerideki bile
+  /// olabilir — portre + bilgi için kimliği yeterli.
+  VillagerEntity? _pickPetitionAuthor(Petition p) {
+    final adults = _villagers
+        .where((v) => v.hasProfession && !v.isDying)
         .toList();
-    if (cands.isEmpty) return;
-    final v = cands[_rng.nextInt(cands.length)];
+    if (adults.isEmpty) return null;
+    final e = p.estate;
+    if (e != null) {
+      final est = adults
+          .where((v) => estateOfVillager(v.type, v.lifeStage) == e)
+          .toList();
+      if (est.isNotEmpty) return est[_rng.nextInt(est.length)];
+    }
+    return adults[_rng.nextInt(adults.length)];
+  }
+
+  /// Dilekçeyi getiren köylüyü seçip saklar (`_petitionAuthor`) ve sahneye
+  /// diegetik olarak çıkarır: dışarıda/uyanıksa köy merkezine dönüp talebi
+  /// dile getiren gövde refleksini yaşar. `_presentPetition` çağırır.
+  void _summonSpokesperson(Petition p) {
+    final v = _pickPetitionAuthor(p);
+    _petitionAuthor = v;
+    if (v == null || v.isSleeping || v.isInsideBuilding) return;
     final (cc, cr) = _villageCenter();
     v.lookToward(cc.toDouble(), cr.toDouble());
     // Talebi dile getirmek — tonuna göre kaygı/umut gövde refleksi.

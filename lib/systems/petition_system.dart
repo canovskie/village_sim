@@ -851,6 +851,41 @@ abstract final class PetitionSystem {
       ),
     ),
 
+    // 🪵 Odun azalıyor (scene_fire erken uyarı — random çıkmaz). Ateş sönmeden
+    // önce oduncular durumu bildirir; oyuncu önlem alsın ya da güvensin.
+    _PetitionDef(
+      (_) => false,
+      0,
+      const Petition(
+        id: 'woodLow',
+        petitioner: 'Oduncular',
+        icon: '🪵',
+        title: 'Odun Azalıyor',
+        tone: PetitionTone.ominous,
+        estate: Estate.laborers,
+        stakes: 'Önlem al → tampon odun; güven → bedava ama ateş riske girer.',
+        body: 'Oduncular haber saldı: odun stoğu tükenmek üzere. Ateş sönmeden '
+            'bir şeyler yapmazsak köy karanlıkta kalabilir. Komşudan acil odun '
+            'mı getirtelim, yoksa oduncuların yetiştireceğine mi güvenelim?',
+        options: [
+          PetitionOption(
+            label: 'Komşudan odun getirt',
+            detail: 'Altın harca; stok hemen güvenli seviyeye çıkar.',
+            resolution: '🪵 Komşudan odun geldi — stok rahatladı, ateş güvende.',
+            goldDelta: -6,
+            woodDelta: 8,
+            estateMood: [(Estate.laborers, 0.05)],
+          ),
+          PetitionOption(
+            label: 'Oduncular yetiştirir',
+            detail: 'Masraf yok; oduncuların emeğine güvenirsin (ateş riskte).',
+            resolution: '🪓 Oduncular işe koyuldu — köy onlara güveniyor.',
+            estateMood: [(Estate.laborers, 0.06)],
+          ),
+        ],
+      ),
+    ),
+
     // 🔥 Ateş söndü (scene_fire programatik tetikler — random çıkmaz). Köy odun
     // bekliyor: acil seferberlik (altın→odun) ya da oduncuları bekle.
     _PetitionDef(

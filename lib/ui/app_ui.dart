@@ -267,19 +267,29 @@ class _AppButtonState extends State<AppButton> {
                 size: 15, color: filled ? fg : tint),
             const SizedBox(width: 8),
           ],
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(widget.label, style: AppUi.button.copyWith(color: fg)),
-              if (widget.sub != null)
-                Text(widget.sub!,
-                    style: AppUi.body.copyWith(
-                        fontSize: 9.5,
-                        color: filled
-                            ? fg.withValues(alpha: 0.75)
-                            : tint.withValues(alpha: 0.95))),
-            ],
+          // Flexible + ellipsis: dar slotta taşıp overflow şeridi çizmesin.
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: AppUi.button.copyWith(color: fg)),
+                if (widget.sub != null)
+                  Text(widget.sub!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      style: AppUi.body.copyWith(
+                          fontSize: 9.5,
+                          color: filled
+                              ? fg.withValues(alpha: 0.75)
+                              : tint.withValues(alpha: 0.95))),
+              ],
+            ),
           ),
         ],
       ),

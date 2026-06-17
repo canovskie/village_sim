@@ -47,6 +47,7 @@ import 'rendering/decor_renderer.dart';
 import 'rendering/animal_renderer.dart';
 import 'world/world_generator.dart';
 import 'buildings/building_type.dart';
+import 'ui/app_ui.dart';
 import 'ui/hud.dart';
 import 'ui/building_panel.dart';
 import 'ui/road_panel.dart';
@@ -223,6 +224,9 @@ class _VillageSceneState extends State<VillageScene>
   VillagerEntity? _firekeeper;            // o an ateşe odun taşıyan köylü
   bool _firekeeperLoaded = false;         // ateşçi odunu aldı mı (görsel + teslim)
   double _firekeeperGiveUp = 0;           // ulaşamazsa görevi bırakma sim zamanı
+  // Odun azalma uyarısı için histerez: stok sağlıklı seviyeye çıkmadan uyarı
+  // çıkmaz; bir kez çıkınca tekrar sağlığa dönene dek susar (spam önler).
+  bool _woodHealthy = false;
   BuildingEntity? _selectedBuilding;
   VillagerEntity? _selectedVillager;
   /// Oyuncu "Takip et" eylemini kullanırsa kamera bu NPC'ye demirlenir;
@@ -390,6 +394,9 @@ class _VillageSceneState extends State<VillageScene>
   // Köyün kalıcı hafızası: geçmiş kararların bıraktığı bayraklar (ör. 'cult.active').
   // Dilekçeler bunu okuyup dallanır; köyün "öyküsü" burada birikir.
   final Set<String> _villageMemory = {};
+  // Bekleyen dilekçeyi GETİREN gerçek köylü (rastgele değil — kim olduğu bilinir).
+  // Modal portresinde gösterilir; tıklanınca bilgi/aile paneli açılır.
+  VillagerEntity? _petitionAuthor;
 
   // ── Zümreler / Hizipler (scene_estates) ────────────────────────────────────
   // Yönetişimin kalbi: 4 zümrenin morali + nüfuzu. Dilekçe/ferman kararları

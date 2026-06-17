@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../systems/estate_system.dart';
-import 'cozy_theme.dart';
+import 'app_ui.dart';
 
 /// Ekranın kenarında sabit duran, canlı bir "zümre nabzı" tabelası.
 ///
@@ -48,8 +48,9 @@ class _EstateBannerState extends State<EstateBanner>
     return AnimatedBuilder(
       animation: _breath,
       builder: (context, _) {
-        return WoodPlankPanel(
+        return AppPanel(
           width: 78,
+          accent: AppUi.accent,
           padding: const EdgeInsets.fromLTRB(8, 8, 8, 9),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -63,7 +64,7 @@ class _EstateBannerState extends State<EstateBanner>
                   fontSize: 9,
                   letterSpacing: 0.6,
                   fontWeight: FontWeight.w700,
-                  fontFamily: CozyUi.fontDisplay,
+                  fontFamily: AppUi.fontDisplay,
                   shadows: [
                     Shadow(
                         color: Color(0xDD1A0E04),
@@ -104,7 +105,7 @@ class _EstateBannerState extends State<EstateBanner>
                   height: 1.15,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
-                  fontFamily: CozyUi.fontDisplay,
+                  fontFamily: AppUi.fontDisplay,
                   shadows: [
                     Shadow(
                         color: Color(0xDD1A0E04),
@@ -132,10 +133,10 @@ class _EstateMedallion extends StatelessWidget {
   /// Moralin sürekli (eşiksiz) renge çevrimi — kızgın(kırmızı)→tedirgin(kor)→
   /// kayıtsız(altın)→memnun(adaçayı). Tier'in keskin sıçraması yerine yumuşak.
   static Color moodTone(double m) {
-    const red = CozyUi.rust;
-    const ember = CozyUi.ember;
+    const red = AppUi.rust;
+    const ember = AppUi.accent;
     const gold = Color(0xFFD9C088);
-    const sage = CozyUi.sage;
+    const sage = AppUi.sage;
     if (m < 0.32) return Color.lerp(red, ember, (m / 0.32).clamp(0.0, 1.0))!;
     if (m < 0.50) {
       return Color.lerp(ember, gold, ((m - 0.32) / 0.18).clamp(0.0, 1.0))!;
@@ -234,7 +235,7 @@ class _EstateMedallion extends StatelessWidget {
             fontSize: 7.6,
             letterSpacing: 0.2,
             fontWeight: snap.ascendant ? FontWeight.w800 : FontWeight.w600,
-            fontFamily: CozyUi.fontText,
+            fontFamily: AppUi.fontText,
             shadows: const [
               Shadow(color: Color(0xCC1A0E04), blurRadius: 0, offset: Offset(0, 1)),
             ],

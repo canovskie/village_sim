@@ -108,7 +108,8 @@
       "Bash(rm -f Cinzel-Bold.ttf Cinzel-Regular.ttf)",
       "Bash(curl -sSL -o \"Cinzel-VF.ttf\" \"https://github.com/google/fonts/raw/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf\" -w \"VF -> %{http_code} %{size_download}b\\\\n\")",
       "Bash(sed -n '118,145p' lib/buildings/building_renderer.dart)",
-      "Bash(sed -n '55,95p' lib/systems/lighting_system.dart)"
+      "Bash(sed -n '55,95p' lib/systems/lighting_system.dart)",
+      "Bash(awk '/Widget _familyChip/,/^  Widget [a-zA-Z]+\\\\\\(/' lib/ui/villager_info_panel.dart)"
     ]
   }
 }
