@@ -14,6 +14,7 @@ import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
+import '../systems/estate_system.dart';
 import 'cozy_theme.dart';
 
 /// Bir binaya tıklanınca açılan diegetic "köy defteri" sayfası.
@@ -58,6 +59,11 @@ class BuildingInfoPanel extends StatelessWidget {
   /// Karar değişikliği cooldown'unda kalan saniye (0 = serbest).
   final double policyCooldownSec;
 
+  /// Zümre nabzı — yalnız townhall'da dolu. Her zümrenin morali + nüfuz payı.
+  final List<EstateSnapshot>? estates;
+  /// Köyün şu anki kimlik adı (baskın zümreden) — "Dengeli Köy" vb.
+  final String? villageIdentity;
+
   const BuildingInfoPanel({
     super.key,
     required this.building,
@@ -83,6 +89,8 @@ class BuildingInfoPanel extends StatelessWidget {
     this.onTogglePolicy,
     this.onSetFamilyPolicy,
     this.policyCooldownSec = 0,
+    this.estates,
+    this.villageIdentity,
   });
 
   BuildingFunction? get _fn => building.fn;
@@ -378,6 +386,10 @@ class BuildingInfoPanel extends StatelessWidget {
           _vitalBar('Moral', stats.morale,
               '${(stats.morale * 100).round()}%',
               color: stats.morale > 0.6 ? CozyUi.sage : foodColor),
+          if (estates != null && estates!.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _estatePulse(estates!, villageIdentity),
+          ],
           if (policies != null && onTogglePolicy != null) ...[
             const SizedBox(height: 14),
             _PolicyEditor(
@@ -404,6 +416,92 @@ class BuildingInfoPanel extends StatelessWidget {
       case CivicEffect.none:
         return [_inkRow('Boyut', '${building.cols}×${building.rows}')];
     }
+  }
+
+  /// Zümre Nabzı — hibrit görünürlük: 4 zümrenin morali (yüz) + nüfuz payı
+  /// (çizgi) + köyün kayan kimliği. Rakam yığını değil, tek bakışta his.
+  Widget _estatePulse(List<EstateSnapshot> snap, String? identity) {
+    Color moodColor(EstateMoodTier t) => switch (t) {
+          EstateMoodTier.content => CozyUi.sage,
+          EstateMoodTier.neutral => CozyUi.parchmentInk.withValues(alpha: 0.55),
+          EstateMoodTier.uneasy => CozyUi.ember,
+          EstateMoodTier.sullen => CozyUi.rust,
+        };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('ZÜMRELER',
+            style: TextStyle(
+                color: CozyUi.inkLabel.color,
+                fontSize: 8.5,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2)),
+        const SizedBox(height: 4),
+        Container(height: 0.6, color: CozyUi.parchmentEdge),
+        const SizedBox(height: 5),
+        if (identity != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text('Köy bir yöne kayıyor:  $identity',
+                style: TextStyle(
+                    color: CozyUi.parchmentInk.withValues(alpha: 0.78),
+                    fontSize: 10.5,
+                    fontStyle: FontStyle.italic,
+                    fontWeight: FontWeight.w600)),
+          ),
+        for (final s in snap)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2.5),
+            child: Row(
+              children: [
+                Text(s.estate.icon, style: const TextStyle(fontSize: 13)),
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 84,
+                  child: Text(s.estate.label,
+                      style: TextStyle(
+                          color: CozyUi.parchmentInk.withValues(
+                              alpha: s.ascendant ? 0.95 : 0.72),
+                          fontSize: 11,
+                          fontWeight:
+                              s.ascendant ? FontWeight.w800 : FontWeight.w500)),
+                ),
+                if (s.ascendant)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 3),
+                    child: Text('★',
+                        style: TextStyle(color: Color(0xFFE0C040), fontSize: 10)),
+                  ),
+                // Nüfuz payı çizgisi — köyün o zümreye ne kadar kaydığı.
+                Expanded(
+                  child: Container(
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: const Color(0x33000000),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(2),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FractionallySizedBox(
+                          widthFactor: s.swayShare.clamp(0.0, 1.0),
+                          child: Container(
+                            color: moodColor(s.tier).withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Text(s.tier.face, style: const TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 
   // ─── Aksiyon kuşağı ──────────────────────────────────────────────────────
@@ -1193,6 +1291,8 @@ class _PolicyEditorState extends State<_PolicyEditor> {
                       _consequenceLine('↑', d.benefit, CozyUi.sage),
                       if (d.cost != null)
                         _consequenceLine('↓', d.cost!, CozyUi.rust),
+                      if (d.estateMood.isNotEmpty)
+                        _estateEffectRow(d.estateMood),
                     ],
                   ),
                 ),
@@ -1285,6 +1385,8 @@ class _PolicyEditorState extends State<_PolicyEditor> {
                     _consequenceLine('↑', fp.benefit, CozyUi.sage),
                     if (fp.cost != null)
                       _consequenceLine('↓', fp.cost!, CozyUi.rust),
+                    if (familyPolicyEstateMood(fp).isNotEmpty)
+                      _estateEffectRow(familyPolicyEstateMood(fp)),
                   ],
                 ),
               ),
@@ -1328,6 +1430,31 @@ class _PolicyEditorState extends State<_PolicyEditor> {
         FamilyPolicy.oneChild => '1️⃣',
         FamilyPolicy.twoChild => '2️⃣',
       };
+
+  /// Fermanın zümre etkisi — kimi sevindirir (▲ sage) / kimi küstürür (▼ rust).
+  /// Politik dengeci için: bedelsiz ferman bile bir zümreyi diğerine yeğler.
+  Widget _estateEffectRow(List<(Estate, double)> effects) => Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Wrap(
+          spacing: 7,
+          runSpacing: 2,
+          children: [
+            for (final (e, d) in effects)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(e.icon, style: const TextStyle(fontSize: 9.5)),
+                  const SizedBox(width: 1),
+                  Text(d > 0 ? '▲' : '▼',
+                      style: TextStyle(
+                          color: d > 0 ? CozyUi.sage : CozyUi.rust,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w900)),
+                ],
+              ),
+          ],
+        ),
+      );
 
   /// Fayda/bedel satırı — sol oka göre yeşil (↑ fayda) ya da rust (↓ bedel).
   /// Her politika bir bütün: ne kazanırsın + neyi feda edersin görünür.

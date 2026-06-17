@@ -64,9 +64,11 @@ const double kFoodPerVillagerPerDay = 8.0;  // köylü başına günlük tüketi
 const int    kStarveRampFood        = 10;   // bu eşiğin altında açlık reaksiyonu
 
 // ─── Rastgele olaylar ─────────────────────────────────────────────────────────
-const double kEventFirstDelay  = 75.0;  // kuruluştan ilk olaya kadar (sn)
-const double kEventMinInterval = 90.0;  // olaylar arası en kısa süre (sn)
-const double kEventMaxInterval = 180.0; // olaylar arası en uzun süre (sn)
+// Bir oyun günü = 240 sn. Olaylar NADİR ve özel olmalı — sürekli bombardıman
+// değil. ~1.5 günde ilk olay, sonra her 3-6 günde bir (ort. ~4.5 gün).
+const double kEventFirstDelay  = 360.0;  // kuruluştan ilk olaya kadar (~1.5 gün)
+const double kEventMinInterval = 720.0;  // olaylar arası en kısa süre (3 gün)
+const double kEventMaxInterval = 1440.0; // olaylar arası en uzun süre (6 gün)
 const double kEventBannerDuration = 6.0; // banner kart ekranda kalma süresi
 
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────

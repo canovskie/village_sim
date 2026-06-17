@@ -1,4 +1,5 @@
 import '../systems/event_system.dart';
+import '../systems/estate_system.dart';
 
 /// Sahnede aktif olan bir EventEffect örneği — banner kapansa da efekt
 /// kendi süresince yaşar (animasyon süresi != moral süresi olabilir).
@@ -72,6 +73,11 @@ class PolicyDef {
   /// Bedeli — açıkça oyuncu aleyhine sonuç ("↓" prefix). null = bedelsiz.
   final String? cost;
   final PolicyCategory category;
+  /// Bu fermanın ZÜMRELER üstündeki etkisi — (zümre, ±delta). Ferman proaktif
+  /// kaldıraçtır: yürürlüğe sokmak sevindirdiği zümreyi memnun eder + köyü o
+  /// yöne kaydırır (nüfuz); kaldırmak sevenleri küstürür. Politik denge burada
+  /// da işler — bedelsiz ferman bile bir zümrenin gönlünü diğerine tercih eder.
+  final List<(Estate, double)> estateMood;
   const PolicyDef({
     required this.id,
     required this.icon,
@@ -80,8 +86,20 @@ class PolicyDef {
     required this.benefit,
     required this.category,
     this.cost,
+    this.estateMood = const [],
   });
 }
+
+/// Aile planlaması (mutex) fermanının zümre etkisi — enum'a gömmek yerine
+/// burada (Estate import'u enum tarafına sızmasın). [_setFamilyPolicy] uygular.
+List<(Estate, double)> familyPolicyEstateMood(FamilyPolicy fp) => switch (fp) {
+      FamilyPolicy.open => const [(Estate.hearth, 0.05)],
+      FamilyPolicy.oneChild => const [
+          (Estate.hearth, -0.10),
+          (Estate.artisans, 0.05),
+        ],
+      FamilyPolicy.twoChild => const [(Estate.hearth, -0.03)],
+    };
 
 enum PolicyCategory {
   family('AİLE', '👨‍👩‍👧'),
@@ -106,7 +124,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Aileler daha sık çocuk dünyaya getirir.',
       benefit: 'Beşikler sık sallanır',
       cost: 'Anne-baba yorgunluğu evlere sızar',
-      category: PolicyCategory.family),
+      category: PolicyCategory.family,
+      estateMood: [(Estate.hearth, 0.10), (Estate.laborers, 0.04), (Estate.artisans, -0.04)]),
   PolicyDef(
       id: 'slowMaturity',
       icon: '🐢',
@@ -114,7 +133,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Yaşam evreleri yavaş ilerler.',
       benefit: 'Çocukluk uzun ve dolu olur',
       cost: 'Eller işe geç uzanır',
-      category: PolicyCategory.family),
+      category: PolicyCategory.family,
+      estateMood: [(Estate.hearth, 0.06), (Estate.laborers, -0.05)]),
   // Yaşlı
   PolicyDef(
       id: 'peacefulEnd',
@@ -123,7 +143,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Ömür sonu sakin geçer.',
       benefit: 'Köyde dingin bir hava hâkim olur',
       cost: 'Yaşlılık kısalır, bilgelik nadir olgunlaşır',
-      category: PolicyCategory.elder),
+      category: PolicyCategory.elder,
+      estateMood: [(Estate.hearth, 0.10), (Estate.faithful, 0.05)]),
   PolicyDef(
       id: 'eldersExemptFromFood',
       icon: '🍞',
@@ -131,7 +152,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Yaşlılar ortak sofradan ayrı tutulur.',
       benefit: 'Sofra rahat, kile dolu kalır',
       cost: 'Kuşaklar arası bir sessizlik düşer',
-      category: PolicyCategory.elder),
+      category: PolicyCategory.elder,
+      estateMood: [(Estate.hearth, 0.08), (Estate.laborers, -0.04)]),
   // Topluluk
   PolicyDef(
       id: 'hospitality',
@@ -140,7 +162,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Köy kapısı gezginlere açıktır.',
       benefit: 'Yabancı yüzler köyde ekmek bulur',
       cost: 'Köy ona alışana dek hafif gerilim olur',
-      category: PolicyCategory.community),
+      category: PolicyCategory.community,
+      estateMood: [(Estate.artisans, 0.08), (Estate.hearth, -0.06)]),
   PolicyDef(
       id: 'apprenticeship',
       icon: '🔨',
@@ -148,21 +171,24 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Çocuklar genelde anne-babasının zanaatını öğrenir.',
       benefit: 'Soydan soya zanaat geçer',
       cost: 'Yeni eller eski izden zor çıkar',
-      category: PolicyCategory.community),
+      category: PolicyCategory.community,
+      estateMood: [(Estate.artisans, 0.10), (Estate.laborers, 0.04), (Estate.faithful, -0.03)]),
   PolicyDef(
       id: 'neighborliness',
       icon: '👋',
       label: 'Komşuluk',
       desc: 'Yakın geçen köylüler birbirini selamlar.',
       benefit: 'Selamlaşma köyü canlandırır',
-      category: PolicyCategory.community),
+      category: PolicyCategory.community,
+      estateMood: [(Estate.hearth, 0.06), (Estate.laborers, 0.03)]),
   PolicyDef(
       id: 'familyReunion',
       icon: '💞',
       label: 'Aile birleşimi',
       desc: 'Bekar yetişkinler bir araya gelir.',
       benefit: 'Birleşimler köye sıcaklık katar',
-      category: PolicyCategory.community),
+      category: PolicyCategory.community,
+      estateMood: [(Estate.hearth, 0.10)]),
   // Ekonomi
   PolicyDef(
       id: 'treePlanting',
@@ -171,7 +197,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Oduncu kestiği ağacın yanına fidan diker.',
       benefit: 'Orman kendini yeniler',
       cost: 'Balta daha yavaş sallanır',
-      category: PolicyCategory.economy),
+      category: PolicyCategory.economy,
+      estateMood: [(Estate.faithful, 0.06), (Estate.laborers, -0.06)]),
   PolicyDef(
       id: 'sharedHarvest',
       icon: '🌾',
@@ -179,7 +206,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Tarlalar birlikte olgunlaşır.',
       benefit: 'Hiçbir tarla geride kalmaz',
       cost: 'Hiçbir tarla da öne geçemez',
-      category: PolicyCategory.economy),
+      category: PolicyCategory.economy,
+      estateMood: [(Estate.laborers, 0.08), (Estate.artisans, -0.04)]),
   // Çevre
   PolicyDef(
       id: 'greenVillage',
@@ -187,7 +215,8 @@ const List<PolicyDef> kPolicyDefs = [
       label: 'Yeşil köy',
       desc: 'Yeni evlerin çevresine çiçek serpilir.',
       benefit: 'Köy çiçek açar',
-      category: PolicyCategory.environment),
+      category: PolicyCategory.environment,
+      estateMood: [(Estate.faithful, 0.05), (Estate.hearth, 0.04)]),
   PolicyDef(
       id: 'freeRange',
       icon: '🐑',
@@ -195,7 +224,8 @@ const List<PolicyDef> kPolicyDefs = [
       desc: 'Hayvanlar geniş alanda dolaşır.',
       benefit: 'Sürü kendi yolunu bulur',
       cost: 'Çoban onları aramak için daha çok yürür',
-      category: PolicyCategory.environment),
+      category: PolicyCategory.environment,
+      estateMood: [(Estate.laborers, 0.06), (Estate.hearth, -0.03)]),
 ];
 
 /// Belediye politikaları — köy yönetiminin nüfus üstündeki kararları.

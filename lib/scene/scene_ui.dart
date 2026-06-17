@@ -469,6 +469,11 @@ extension _SceneUi on _VillageSceneState {
         policyCooldownSec: selected.type == BuildingType.townhall
             ? _policyCooldownRemaining()
             : 0,
+        estates: selected.type == BuildingType.townhall
+            ? _estateSnapshot()
+            : null,
+        villageIdentity:
+            selected.type == BuildingType.townhall ? _estates.identityName : null,
             ),
           ),
         ],
@@ -552,6 +557,8 @@ extension _SceneUi on _VillageSceneState {
               ? '📜 Otlama serbest — hayvanlar geniş dolaşır.'
               : '📜 Otlama serbest kaldırıldı.';
       }
+      // Ferman zümre dengesini oynatır — yürürlüğe sokmak/kaldırmak farklı.
+      _applyEstateDecree(_policyEstateMood(key), enacting: _policies.isOn(key));
       _policies.cooldownUntilSim = _time + _kPolicyCooldownSec;
       _applyPolicySideChannels();
     });
@@ -570,8 +577,12 @@ extension _SceneUi on _VillageSceneState {
   void _setFamilyPolicy(FamilyPolicy fp) {
     if (_policyCooldownRemaining() > 0) return;
     if (_policies.family == fp) return;
+    final old = _policies.family;
     setStateHere(() {
       _policies.family = fp;
+      // Eski aile fermanını geri al, yenisini yürürlüğe sok (zümre salınımı).
+      _applyEstateDecree(familyPolicyEstateMood(old), enacting: false);
+      _applyEstateDecree(familyPolicyEstateMood(fp), enacting: true);
       _policies.cooldownUntilSim = _time + _kPolicyCooldownSec;
       _applyPolicySideChannels();
     });

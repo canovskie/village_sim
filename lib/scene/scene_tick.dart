@@ -635,7 +635,7 @@ extension _SceneTick on _VillageSceneState {
       _meteorShowerTimer -= dt;
       if (_meteorShowerTimer <= 0 && _cycle.dayLight < 0.28) {
         _startMeteorShower();
-        _meteorShowerTimer = (1.5 + _rng.nextDouble() * 2.0) * kGameDaySeconds;
+        _meteorShowerTimer = (5.0 + _rng.nextDouble() * 4.0) * kGameDaySeconds;
       }
     }
 
@@ -769,6 +769,8 @@ extension _SceneTick on _VillageSceneState {
     // Ateş başı toplanma + hikaye saati taramaları.
     _tickFirepitGather(dt);
     _tickPetitions(dt);
+    // Zümre dengesi — moral tabana süzülür + küskün zümre diegetik somurtma.
+    _tickEstates(dt);
 
     // Köy Akışı — görev tamamlanması → görsel ödül + politika-odaklı kademe.
     _tickFlow(dt);

@@ -98,6 +98,9 @@ final _pWarmHalo   = Paint()..blendMode = BlendMode.lighten..isAntiAlias = true;
 // içinde bulunduğu ışık tonu" (mehtap mavi, altın saat amber, ...). Strength=0
 // için identity beyaza lerp edilir → öğle neredeyse dokunulmaz.
 final _pAmbientGrade = Paint()..blendMode = BlendMode.modulate..isAntiAlias = false;
+// Gündüz atmosfer pass'i — fullscreen blend katmanları (güneş formu / hava
+// perspektifi / bloom / sıcak vignette). Blend modu her katmanda set edilir.
+final _pDayGrade = Paint()..isAntiAlias = false;
 // Per-light warm wash — sprite'ı ışık alanında ısıtır. BlendMode.plus
 // radial gradient, dış halo'dan dar ve daha düşük alfa: hedef sprite hue
 // değişimi, parlama patlaması değil. (Layer paint inline yapılıyor —
@@ -1564,6 +1567,19 @@ class VillageGamePainter extends CustomPainter {
     canvas.scale(zoom, zoom);
     canvas.translate(-cx, -cy);
 
+    // Gündüz renk gradingi — sahne sprite/zemin katmanı bir saveLayer içinde
+    // ColorFilter.matrix (kontrast + doygunluk) ile işlenir. SADECE gündüz
+    // platosunda (dayLight yüksek) devreye girer → gece/şafak/altın saat
+    // tamamen dokunulmadan kalır (mevcut ambient grade + ışık katmanları o
+    // saatleri zaten taşıyor). "Pastel" düz his değer kontrastı + doygunluk
+    // eksikliğinden; bu pass onu gerçek bir grade ile çözer (alpha tweak değil).
+    final dayGrade = ((dayLight - 0.55) / 0.45).clamp(0.0, 1.0);
+    final useGrade = !perfMode && dayGrade > 0.01;
+    if (useGrade) {
+      canvas.saveLayer(
+        null, Paint()..colorFilter = ColorFilter.matrix(_dayGradeMatrix(dayGrade)));
+    }
+
     _drawGround(canvas, size);
     _drawFarmTiles(canvas, size);
     _drawWaterFoam(canvas, size);
@@ -1582,6 +1598,7 @@ class VillageGamePainter extends CustomPainter {
       _drawGhost(canvas, size);
     }
 
+    if (useGrade) canvas.restore();
     canvas.restore();
 
     // ── Ekran uzayı efektleri (zoom'dan etkilenmez) ──────────────────────────
@@ -2547,9 +2564,10 @@ class VillageGamePainter extends CustomPainter {
     // Modulate olduğu için strength=0'da beyaza lerp ederiz → identity.
     _drawAmbientGrade(canvas, size);
 
-    // Gündüz fast path — overlay bantları şeffaf, sadece kompozisyon vignette.
+    // Gündüz fast path — overlay bantları şeffaf, tam aydınlık. Gündüz
+    // atmosfer pass'i (güneş formu + hava perspektifi + bloom + sıcak vignette).
     if (overlayTop.a == 0 && overlayBottom.a == 0 && darkness < 0.05) {
-      _drawDayVignette(canvas, size);
+      _drawDayAtmosphere(canvas, size);
       return;
     }
 
@@ -2835,16 +2853,89 @@ class VillageGamePainter extends CustomPainter {
         _pAmbientGrade);
   }
 
-  // Gündüz hafif vignette — kompozisyon kontrastı.
-  void _drawDayVignette(Canvas canvas, Size size) {
+  // Gündüz renk grade matrisi — kontrast (mid-gray pivot) + luminance-koruyan
+  // doygunluk. t = dayGrade (0..1, öğlede 1). ColorFilter.matrix 0..255 ölçekte
+  // çalışır; offset sütunu (5.) 0..255. A satırı identity (alfa korunur).
+  List<double> _dayGradeMatrix(double t) {
+    final s = 1.0 + 0.24 * t; // doygunluk: pastel → canlı
+    final k = 1.0 + 0.13 * t; // kontrast: değer ayrımı (form okunur)
+    const lr = 0.2126, lg = 0.7152, lb = 0.0722;
+    final a = 1.0 - s;
+    // Saturation matrisi satırları
+    final rr = lr * a + s, rg = lg * a,     rb = lb * a;
+    final gr = lr * a,     gg = lg * a + s, gb = lb * a;
+    final br = lr * a,     bg = lg * a,     bb = lb * a + s;
+    final off = 128.0 * (1.0 - k); // kontrast pivot offseti
+    return <double>[
+      k * rr, k * rg, k * rb, 0, off,
+      k * gr, k * gg, k * gb, 0, off,
+      k * br, k * bg, k * bb, 0, off,
+      0,      0,      0,      1, 0,
+    ];
+  }
+
+  // Gündüz atmosfer pass'i — gündüz fast-path'inde çağrılır (overlay şeffaf,
+  // tam aydınlık). Gece ışık katmanlarının gündüzdeki karşılığı: düz "boyama"
+  // hissini güneş formu + hava perspektifi + bloom + sıcak vignette ile kırar.
+  // Hepsi fullscreen blend (saveLayer yok) → ucuz. dayGrade ile ölçeklenir.
+  void _drawDayAtmosphere(Canvas canvas, Size size) {
+    final t = ((dayLight - 0.55) / 0.45).clamp(0.0, 1.0);
+    if (t <= 0.01) return;
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    _pLighting.shader = ui.Gradient.radial(
-      Offset(size.width / 2, size.height / 2),
-      max(size.width, size.height) * 0.78,
-      [const Color(0x00000000), const Color(0x18050810)],
+    final maxR = max(size.width, size.height);
+    int a(int base) => (base * t).round().clamp(0, 255);
+
+    // (a) Güneş yönü formu — sol-üst sıcak / sağ-alt nötr, BlendMode.overlay.
+    // Overlay: >mid-gray açar+ısıtır, <mid-gray koyar → sahneye hacim+kontrast.
+    _pDayGrade.blendMode = BlendMode.overlay;
+    _pDayGrade.shader = ui.Gradient.linear(
+      Offset(size.width * 0.28, 0),
+      Offset(size.width * 0.78, size.height),
+      [
+        Color.fromARGB(a(255), 0x9C, 0x90, 0x74), // güneş tarafı — ılık açma
+        Color.fromARGB(a(255), 0x6E, 0x6B, 0x68), // gölge tarafı — hafif koyu
+      ],
     );
-    canvas.drawRect(rect, _pLighting);
-    _pLighting.shader = null;
+    canvas.drawRect(rect, _pDayGrade);
+
+    // (b) Hava perspektifi — üst (izometrikte uzak) hafif serin pus, screen.
+    _pDayGrade.blendMode = BlendMode.screen;
+    _pDayGrade.shader = ui.Gradient.linear(
+      const Offset(0, 0),
+      Offset(0, size.height * 0.55),
+      [
+        Color.fromARGB(a(0x22), 0xB4, 0xC8, 0xDC),
+        Color.fromARGB(0, 0xB4, 0xC8, 0xDC),
+      ],
+    );
+    canvas.drawRect(rect, _pDayGrade);
+
+    // (c) Güneş bloom — üst-orta yumuşak altın saçılma, plus düşük alfa.
+    _pDayGrade.blendMode = BlendMode.plus;
+    _pDayGrade.shader = ui.Gradient.radial(
+      Offset(size.width * 0.5, size.height * 0.10),
+      maxR * 0.62,
+      [
+        Color.fromARGB(a(0x16), 0xFF, 0xE8, 0xAC),
+        Color.fromARGB(0, 0xFF, 0xE8, 0xAC),
+      ],
+    );
+    canvas.drawRect(rect, _pDayGrade);
+
+    // (d) Sıcak vignette — kenarları YUMUŞAK sıcak-koyu (gece soğuğu DEĞİL).
+    // multiply: merkez nötr (beyaz), kenar hafif sıcak-bej → güneşli his.
+    _pDayGrade.blendMode = BlendMode.multiply;
+    final edge = Color.lerp(
+        const Color(0xFFFFFFFF), const Color(0xFFE6D7BC), t)!;
+    _pDayGrade.shader = ui.Gradient.radial(
+      Offset(size.width * 0.5, size.height * 0.46),
+      maxR * 0.74,
+      [const Color(0xFFFFFFFF), edge],
+    );
+    canvas.drawRect(rect, _pDayGrade);
+
+    _pDayGrade.shader = null;
+    _pDayGrade.blendMode = BlendMode.srcOver;
   }
 
   // LightingSystem (world-space) listesi → screen-space _LightInfo buffer.

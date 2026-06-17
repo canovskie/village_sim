@@ -41,25 +41,41 @@ abstract final class CozyUi {
   static const rust        = Color(0xFFC04428); // tehlike
 
   // ── Tipografi ──────────────────────────────────────────────────────────────
-  /// Tahtaya kazınmış başlık — ahşap üstü açık serif.
+  // İki aile (OFL): Cinzel = oyma taş/ahşap kapital → başlık & etiket;
+  // Spectral = sıcak kitap serif → gövde, menü, sayı. Eski 'monospace'
+  // kaldırıldı; tüm UI bu iki aileye oturur.
+  static const fontDisplay = 'Cinzel';   // büyük başlık / oyma caps
+  static const fontText    = 'Spectral'; // gövde / sayı / menü
+
+  /// Devasa açılış / ekran başlığı — taşa oyulmuş kapital.
+  static const displayTitle = TextStyle(
+    color: Color(0xFFFFE9B8),
+    fontSize: 46,
+    height: 1.0,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 4.0,
+    fontFamily: CozyUi.fontDisplay,
+  );
+
+  /// Tahtaya kazınmış başlık — ahşap üstü oyma kapital.
   static const carvedTitle = TextStyle(
     color: Color(0xFFFFE9B8),
     fontSize: 12,
-    fontWeight: FontWeight.w900,
+    fontWeight: FontWeight.w700,
     letterSpacing: 2.4,
-    fontFamily: 'monospace',
+    fontFamily: CozyUi.fontDisplay,
     shadows: [
       Shadow(color: Color(0xDD1A0E04), blurRadius: 0, offset: Offset(0, 1)),
       Shadow(color: Color(0x66000000), blurRadius: 3, offset: Offset(0, 2)),
     ],
   );
 
-  /// Tahtaya kazınmış sayı.
+  /// Tahtaya kazınmış sayı — kitap serif, tabular hizalı.
   static const carvedNumber = TextStyle(
     color: Color(0xFFFFEAB6),
     fontSize: 14,
-    fontWeight: FontWeight.w900,
-    fontFamily: 'monospace',
+    fontWeight: FontWeight.w700,
+    fontFamily: CozyUi.fontText,
     fontFeatures: [FontFeature.tabularFigures()],
     shadows: [
       Shadow(color: Color(0xDD1A0E04), blurRadius: 0, offset: Offset(0, 1)),
@@ -70,43 +86,44 @@ abstract final class CozyUi {
   static const carvedSmall = TextStyle(
     color: Color(0xFFE0BE7A),
     fontSize: 9.5,
-    fontWeight: FontWeight.w800,
+    fontWeight: FontWeight.w700,
     letterSpacing: 1.2,
-    fontFamily: 'monospace',
+    fontFamily: CozyUi.fontDisplay,
     shadows: [
       Shadow(color: Color(0xDD1A0E04), blurRadius: 0, offset: Offset(0, 1)),
     ],
   );
 
-  /// Parşömen üstü el yazısı feel — koyu mürekkep.
+  /// Parşömen üstü kitap serif — koyu mürekkep başlık.
   static const inkTitle = TextStyle(
     color: parchmentInk,
-    fontSize: 13,
-    fontWeight: FontWeight.w800,
-    letterSpacing: 1.6,
-    fontFamily: 'monospace',
+    fontSize: 14,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.8,
+    fontFamily: CozyUi.fontText,
   );
 
   static const inkBody = TextStyle(
     color: parchmentInk,
-    fontSize: 10.5,
-    fontWeight: FontWeight.w600,
-    fontFamily: 'monospace',
+    fontSize: 12,
+    height: 1.35,
+    fontWeight: FontWeight.w500,
+    fontFamily: CozyUi.fontText,
   );
 
   static const inkMuted = TextStyle(
     color: parchmentInk2,
-    fontSize: 9.5,
+    fontSize: 11,
     fontStyle: FontStyle.italic,
-    fontFamily: 'monospace',
+    fontFamily: CozyUi.fontText,
   );
 
   static const inkLabel = TextStyle(
     color: parchmentInk2,
-    fontSize: 8.5,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 1.4,
-    fontFamily: 'monospace',
+    fontSize: 9,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.6,
+    fontFamily: CozyUi.fontDisplay,
   );
 }
 
@@ -486,9 +503,9 @@ class LeatherButton extends StatelessWidget {
                       ? const Color(0xFFFFF1D5)
                       : const Color(0xFFFCEDC4),
                   fontSize: fontSize,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.6,
-                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  fontFamily: CozyUi.fontText,
                   shadows: const [
                     Shadow(color: Color(0xCC1A0E04), blurRadius: 0, offset: Offset(0, 1)),
                     Shadow(color: Color(0x55000000), blurRadius: 2, offset: Offset(0, 1)),
@@ -541,9 +558,9 @@ class WaxBadge extends StatelessWidget {
         style: const TextStyle(
           color: Color(0xFFF8E2B6),
           fontSize: 9.5,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
-          fontFamily: 'monospace',
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+          fontFamily: CozyUi.fontDisplay,
           shadows: [
             Shadow(color: Color(0xAA000000), blurRadius: 0, offset: Offset(0, 1)),
           ],
@@ -603,8 +620,9 @@ class CarvedResource extends StatelessWidget {
               style: const TextStyle(
                 color: Color(0xFFE0B978),
                 fontSize: 9,
-                fontWeight: FontWeight.w800,
-                fontFamily: 'monospace',
+                fontWeight: FontWeight.w700,
+                fontFamily: CozyUi.fontText,
+                fontFeatures: [FontFeature.tabularFigures()],
                 shadows: [
                   Shadow(color: Color(0xDD1A0E04), blurRadius: 0, offset: Offset(0, 1)),
                 ],

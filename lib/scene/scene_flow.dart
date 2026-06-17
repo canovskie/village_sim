@@ -83,8 +83,9 @@ extension _SceneFlow on _VillageSceneState {
 
   /// Merkez çevresine kalıcı çiçek/çalı serpme — su/bina/ağaç/dekor çakışmasız
   /// (`_sprinkleGreenAround` deseni).
-  void _scatterRewardDecor(int cc, int cr, int radius, int count) {
-    const kinds = [
+  void _scatterRewardDecor(int cc, int cr, int radius, int count,
+      {List<DecorKind>? kinds}) {
+    kinds ??= const [
       DecorKind.daisy, DecorKind.poppy, DecorKind.lavender,
       DecorKind.buttercup, DecorKind.clover, DecorKind.bushSmall,
     ];

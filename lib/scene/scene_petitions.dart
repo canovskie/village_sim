@@ -59,6 +59,7 @@ extension _ScenePetitions on _VillageSceneState {
   void _presentPetition(Petition p) {
     _pendingPetition  = p;
     _petitionDeadline = _kPetitionDeadline;
+    _summonSpokesperson(p); // diegetik: zümre sözcüsü merkeze döner
     _showNotification('📜 ${p.petitioner} bir dilekçe sundu');
   }
 
@@ -134,6 +135,8 @@ extension _ScenePetitions on _VillageSceneState {
         pushPolicyMorale(o.moraleAmount, o.moraleDays);
       }
       _applyPetitionFx(o.fx);
+      // Zümre dengesi: kararın morali oynatması + nüfuz kayması (köy kimliği).
+      _applyEstatePetition(p, o);
 
       // Köy hafızası: kararın bıraktığı kalıcı bayraklar (zincir/dallanma okur).
       _villageMemory.addAll(o.setsFlags);

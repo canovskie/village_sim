@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'estate_system.dart';
 
 /// Dilekçeye bağlı görsel/anlık tepki — sahne bunu somut animasyona çevirir
 /// (sadece istatistik değil: köy gözle görülür biçimde tepki verir).
@@ -61,6 +62,12 @@ class PetitionOption {
   /// Köy hafızasından silinecek bayraklar (ör. bir yolu kapatınca).
   final List<String> clearsFlags;
 
+  /// Bu kararın ZÜMRELER üstündeki morali etkisi — (zümre, ±delta) çiftleri.
+  /// Pozitif = sevindirir (+ köyü o zümreye doğru kaydırır, nüfuz kazanır),
+  /// negatif = gücendirir. Politik dengenin omurgası: çoğu seçenek birini
+  /// sevindirip diğerini küstürür.
+  final List<(Estate, double)> estateMood;
+
   const PetitionOption({
     required this.label,
     required this.detail,
@@ -77,6 +84,7 @@ class PetitionOption {
     this.followUpDelayDays = 1.5,
     this.setsFlags = const [],
     this.clearsFlags = const [],
+    this.estateMood = const [],
   });
 
   /// UI etki chip'leri — (ikon, etiket) çiftleri.
@@ -93,6 +101,11 @@ class PetitionOption {
     if (moraleAmount != 0) {
       final pct = (moraleAmount * 100).round();
       out.add(('😊', '${pct > 0 ? '+' : ''}$pct%'));
+    }
+    // Zümre etkisi — kim sevinir/küser (politik dengeyi göster).
+    for (final (e, d) in estateMood) {
+      if (d == 0) continue;
+      out.add((e.icon, d > 0 ? '▲' : '▼'));
     }
     return out;
   }
@@ -115,6 +128,9 @@ class Petition {
   final String? stakes;
   /// Duygu tonu — modal/mühür vurgu rengi + havası.
   final PetitionTone tone;
+  /// Bu dilekçeyi getiren ZÜMRE — sözcü o zümreden seçilir, sahneye o köylü
+  /// yürür (diegetik). null = belirli bir zümre adına değil (genel köy).
+  final Estate? estate;
   final List<PetitionOption> options;
 
   const Petition({
@@ -127,6 +143,7 @@ class Petition {
     this.note,
     this.stakes,
     this.tone = PetitionTone.neutral,
+    this.estate,
   });
 }
 
@@ -216,6 +233,7 @@ abstract final class PetitionSystem {
         icon: '🎉',
         title: 'Hasat Şenliği',
         tone: PetitionTone.warm,
+        estate: Estate.laborers,
         stakes: 'Biraz altın → günlerce sürecek coşku.',
         body: 'Ambar dolu, yüzler gülüyor. Çiftçiler bir hasat şenliği '
             'düzenlemek istiyor — ateş, müzik, dans. Biraz altın harcanır '
@@ -231,6 +249,7 @@ abstract final class PetitionSystem {
             fx: PetitionFx.festival,
             followUpId: 'festivalAnnual',
             followUpDelayDays: 2.0,
+            estateMood: [(Estate.laborers, 0.12), (Estate.hearth, 0.06)],
           ),
           PetitionOption(
             label: 'Belki sonra',
@@ -238,6 +257,7 @@ abstract final class PetitionSystem {
             resolution: '🎉 Şenlik ertelendi.',
             moraleAmount: -0.02,
             moraleDays: 1,
+            estateMood: [(Estate.laborers, -0.07)],
           ),
         ],
       ),
@@ -254,6 +274,7 @@ abstract final class PetitionSystem {
         icon: '🍄',
         title: 'Hasada Mantar Bulaştı',
         tone: PetitionTone.ominous,
+        estate: Estate.laborers,
         stakes: 'Müdahale et → kurtar; bırak → hasadın çoğu çürür.',
         body: 'Çiftçiler soluk soluğa geldi: tarlalara bir mantar musallat '
             'olmuş, başaklar çürümeye başlamış. Hızlı davranmazsak hasadın '
@@ -271,6 +292,7 @@ abstract final class PetitionSystem {
             setsFlags: ['fields.tended'],
             followUpId: 'bountifulHarvest',
             followUpDelayDays: 3.0,
+            estateMood: [(Estate.laborers, 0.12), (Estate.artisans, -0.05)],
           ),
           PetitionOption(
             label: 'Bırak, doğa halletsin',
@@ -281,6 +303,7 @@ abstract final class PetitionSystem {
             moraleDays: 3,
             fx: PetitionFx.cropBlight,
             setsFlags: ['fields.neglected'],
+            estateMood: [(Estate.laborers, -0.16)],
           ),
         ],
       ),
@@ -297,6 +320,7 @@ abstract final class PetitionSystem {
         icon: '🕯️',
         title: 'Köy Yasta',
         tone: PetitionTone.solemn,
+        estate: Estate.hearth,
         stakes: 'Köylü her hâlükârda gider — yas nasıl tutulacak?',
         body: 'Bu sabah köy ağır bir haberle uyandı: içlerinden biri umudunu '
             'yitirmiş, kendini bırakmış. Geride sessiz bir boşluk kaldı. Köy '
@@ -307,12 +331,14 @@ abstract final class PetitionSystem {
             detail: 'Köy ateş başında toplanır, mumlar yakılır — acı paylaşılır.',
             resolution: '', // dinamik mesaj reaksiyondan gelir (isimle)
             fx: PetitionFx.vigil,
+            estateMood: [(Estate.hearth, 0.08), (Estate.faithful, 0.06)],
           ),
           PetitionOption(
             label: 'Sessizce uğurla',
             detail: 'Tören yok; herkes kendi köşesinde yas tutar — acı daha derin.',
             resolution: '',
             fx: PetitionFx.mourn,
+            estateMood: [(Estate.hearth, -0.08), (Estate.faithful, -0.05)],
           ),
         ],
       ),
@@ -332,6 +358,7 @@ abstract final class PetitionSystem {
         icon: '⛪',
         title: 'Yeni Bir İnanç',
         tone: PetitionTone.ominous,
+        estate: Estate.faithful,
         stakes: 'İzin ver → inanç kök salıp büyür; engelle → dağılır.',
         body: 'Köyde birkaç kişi geceleri ateş başında toplanıp kendi '
             'uydurdukları bir inancın ayinlerini yapmaya başlamış — tuhaf '
@@ -345,6 +372,7 @@ abstract final class PetitionSystem {
             setsFlags: ['cult.active'],
             followUpId: 'cultGrows',
             followUpDelayDays: 3.0,
+            estateMood: [(Estate.faithful, 0.14), (Estate.hearth, -0.08)],
           ),
           PetitionOption(
             label: 'Vazgeçir onları',
@@ -353,6 +381,7 @@ abstract final class PetitionSystem {
             moraleAmount: -0.03,
             moraleDays: 2,
             setsFlags: ['cult.suppressed'],
+            estateMood: [(Estate.faithful, -0.14), (Estate.hearth, 0.06)],
           ),
         ],
       ),
@@ -369,6 +398,7 @@ abstract final class PetitionSystem {
         icon: '⛪',
         title: 'Anma Günü',
         tone: PetitionTone.solemn,
+        estate: Estate.faithful,
         body: 'Cemaat kilisede toplanıp göçüp gidenleri anmak istiyor — '
             'mumlar yakılacak, isimler okunacak, köy bir araya gelecek. '
             'Hüzünlü ama gönülleri iyileştiren bir gün.',
@@ -380,6 +410,7 @@ abstract final class PetitionSystem {
             moraleAmount: 0.06,
             moraleDays: 4,
             fx: PetitionFx.remembrance,
+            estateMood: [(Estate.faithful, 0.10), (Estate.hearth, 0.05)],
           ),
           PetitionOption(
             label: 'Bugün değil',
@@ -387,6 +418,7 @@ abstract final class PetitionSystem {
             resolution: '⛪ Anma günü ertelendi.',
             moraleAmount: -0.02,
             moraleDays: 2,
+            estateMood: [(Estate.faithful, -0.08)],
           ),
         ],
       ),
@@ -403,6 +435,7 @@ abstract final class PetitionSystem {
         icon: '💍',
         title: 'Bir Düğün Var',
         tone: PetitionTone.warm,
+        estate: Estate.hearth,
         body: 'Köyden iki genç birbirine gönül vermiş, yuva kurmak istiyorlar. '
             'Köy bir düğün için sabırsız — ateş yakılsın, halay çekilsin mi, '
             'yoksa sade mi tutalım?',
@@ -415,6 +448,7 @@ abstract final class PetitionSystem {
             moraleAmount: 0.10,
             moraleDays: 4,
             fx: PetitionFx.wedding,
+            estateMood: [(Estate.hearth, 0.10), (Estate.laborers, 0.04), (Estate.artisans, -0.04)],
           ),
           PetitionOption(
             label: 'Sade bir tören yeter',
@@ -423,6 +457,222 @@ abstract final class PetitionSystem {
             moraleAmount: 0.05,
             moraleDays: 3,
             fx: PetitionFx.wedding,
+            estateMood: [(Estate.hearth, 0.06)],
+          ),
+        ],
+      ),
+    ),
+
+    // ─── Hizip dilekçeleri — bir zümrenin kazancı, diğerinin kaybı ──────────
+    // Politik dengenin özü: net "doğru" yok, kimi sevindirirsen kimi küser.
+
+    // 💰 Pazar vergisi — Emekçiler tüccarlardan vergi ister (ambar fonu).
+    _PetitionDef(
+      (c) => c.adults >= 5,
+      0.7,
+      const Petition(
+        id: 'marketTax',
+        petitioner: 'Çiftçi sözcüsü',
+        icon: '💰',
+        title: 'Pazar Vergisi',
+        tone: PetitionTone.neutral,
+        estate: Estate.laborers,
+        stakes: 'Vergi koy → ambar dolar, tüccar küser; serbest bırak → tersi.',
+        body: 'Emekçiler homurdanıyor: "Pazar şişiyor, kese tüccarda kalıyor. '
+            'Küçük bir pazar vergisiyle ortak ambarı doldurup zor günlere '
+            'hazırlanalım." Zanaatkârlar bundan hoşlanmayacak.',
+        options: [
+          PetitionOption(
+            label: 'Vergiyi koy',
+            detail: 'Tüccardan küçük bir pay alınır, ortak kese dolar.',
+            resolution: '💰 Pazar vergisi kondu — ambar doldu, tüccarlar somurttu.',
+            goldDelta: 6,
+            estateMood: [(Estate.laborers, 0.12), (Estate.hearth, 0.05), (Estate.artisans, -0.15)],
+          ),
+          PetitionOption(
+            label: 'Pazarı serbest bırak',
+            detail: 'Vergi yok; zanaat akar ama emekçiler küser.',
+            resolution: '💰 Pazar serbest kaldı — tüccarlar sevindi, emekçiler buruk.',
+            estateMood: [(Estate.artisans, 0.12), (Estate.laborers, -0.09)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🌙 Kutsal gün — İnananlar dinlenme/ibadet günü ister; iş durur.
+    _PetitionDef(
+      (c) => c.population >= 6 &&
+          (c.hasChurch || c.remembers('cult.active')),
+      0.6,
+      const Petition(
+        id: 'holyDay',
+        petitioner: 'İnananların sözcüsü',
+        icon: '🌙',
+        title: 'Kutsal Gün',
+        tone: PetitionTone.solemn,
+        estate: Estate.faithful,
+        stakes: 'İlan et → huzur ama bir iş günü gider; reddet → tersi.',
+        body: 'İnananlar haftada bir "kutsal gün" istiyor — herkesin işi bırakıp '
+            'dinlendiği, ibadet ettiği bir gün. Ruhları dinginleştirir ama '
+            'tarlada ve atölyede bir gün kaybedilir.',
+        options: [
+          PetitionOption(
+            label: 'Kutsal günü ilan et',
+            detail: 'Köy haftada bir durur — huzur artar, üretim azalır.',
+            resolution: '🌙 Kutsal gün ilan edildi — köye dingin bir nefes indi.',
+            moraleAmount: 0.05,
+            moraleDays: 6,
+            setsFlags: ['holyDay.active'],
+            estateMood: [(Estate.faithful, 0.14), (Estate.hearth, 0.05), (Estate.laborers, -0.08), (Estate.artisans, -0.08)],
+          ),
+          PetitionOption(
+            label: 'İş başına',
+            detail: 'Gün kaybı olmaz; emekçi ve zanaatkâr memnun, inanan küs.',
+            resolution: '🌙 Kutsal gün reddedildi — çarklar dönmeye devam ediyor.',
+            estateMood: [(Estate.faithful, -0.12), (Estate.laborers, 0.06), (Estate.artisans, 0.06)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🧓 Yaşlılar meclisi mi, gençlerin sesi mi — Ocak vs genç emek/zanaat.
+    _PetitionDef(
+      (c) => c.population >= 6 && c.adults >= 4,
+      0.6,
+      const Petition(
+        id: 'eldersCouncil',
+        petitioner: 'Köyün ihtiyarları',
+        icon: '🧓',
+        title: 'Kimin Sözü Geçer?',
+        tone: PetitionTone.neutral,
+        estate: Estate.hearth,
+        stakes: 'Yaşlılara kulak ver → gelenek; gençlere → atılganlık.',
+        body: 'Köyde bir tartışma var: kararlarda kimin sözü ağır basmalı? '
+            'İhtiyarlar bir "yaşlılar meclisi" kurulsun, tecrübe konuşsun '
+            'istiyor. Genç emekçiler ve zanaatkârlar ise kendi seslerinin '
+            'duyulmasını bekliyor.',
+        options: [
+          PetitionOption(
+            label: 'Yaşlılar meclisi kurulsun',
+            detail: 'Tecrübe öne geçer; gençler biraz geri planda kalır.',
+            resolution: '🧓 Yaşlılar meclisi kuruldu — gelenek köyün pusulası oldu.',
+            setsFlags: ['council.elders'],
+            estateMood: [(Estate.hearth, 0.14), (Estate.faithful, 0.04), (Estate.laborers, -0.06), (Estate.artisans, -0.06)],
+          ),
+          PetitionOption(
+            label: 'Gençlerin sesi duyulsun',
+            detail: 'Atılgan genç eller söz sahibi olur; ihtiyarlar küser.',
+            resolution: '🧒 Gençlere kulak verildi — köyde taze bir rüzgâr esti.',
+            setsFlags: ['council.youth'],
+            estateMood: [(Estate.laborers, 0.08), (Estate.artisans, 0.08), (Estate.hearth, -0.12)],
+          ),
+        ],
+      ),
+    ),
+
+    // ─── Dış krizler — dışarıdan gelen baskı, zümreleri karşı karşıya getirir ─
+    // Cozy: kaybetmek yok ama karar zümre dengesini sarsar.
+
+    // 🌵 Kuraklık — su kıt; tarla mı, hane mi öncelikli?
+    _PetitionDef(
+      (c) => c.population >= 6 && c.food >= 10,
+      0.5,
+      const Petition(
+        id: 'drought',
+        petitioner: 'Kuyubaşı telaşı',
+        icon: '🌵',
+        title: 'Kuraklık',
+        tone: PetitionTone.ominous,
+        estate: Estate.laborers,
+        stakes: 'Suyu tarlaya ver → hasat kurtulur, haneler susar; tersi olur.',
+        body: 'Haftalardır yağmur yok, kuyu çekiliyor. Kalan suyu tarlalara mı '
+            'verelim, yoksa hanelere eşit mi paylaştıralım? Her iki seçenek de '
+            'birini susuz bırakacak.',
+        options: [
+          PetitionOption(
+            label: 'Tarlalara öncelik',
+            detail: 'Hasat kurtulur; haneler kısıtlanır, Ocak küser.',
+            resolution: '🌾 Su tarlalara verildi — hasat kurtuldu, haneler kıstı.',
+            foodDelta: 4,
+            estateMood: [(Estate.laborers, 0.10), (Estate.hearth, -0.07)],
+          ),
+          PetitionOption(
+            label: 'Hanelere eşit pay',
+            detail: 'Evler rahatlar; tarlalar kavrulur, ürün kaybı olur.',
+            resolution: '🏡 Su hanelere paylaştırıldı — tarlalar kavruldu.',
+            foodDelta: -6,
+            moraleAmount: -0.02,
+            moraleDays: 2,
+            fx: PetitionFx.cropBlight,
+            estateMood: [(Estate.hearth, 0.08), (Estate.laborers, -0.09)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🧳 Göçmen kafilesi — yorgun yabancılar kapıda; kabul mü, geçiş mi?
+    _PetitionDef(
+      (c) => c.population >= 6,
+      0.5,
+      const Petition(
+        id: 'migrantCaravan',
+        petitioner: 'Yorgun gezginler',
+        icon: '🧳',
+        title: 'Kapıda Bir Kafile',
+        tone: PetitionTone.neutral,
+        estate: Estate.artisans,
+        stakes: 'Kabul et → eller+pazar canlanır, Ocak tedirgin; geçir → tersi.',
+        body: 'Uzak diyardan yorgun bir kafile köyün kapısına dayandı; sığınak '
+            've ekmek istiyorlar. Zanaatkârlar yeni eller ve yeni pazar görüyor; '
+            'Ocak ise yabancılardan tedirgin.',
+        options: [
+          PetitionOption(
+            label: 'Kapıyı aç, kabul et',
+            detail: 'Yeni yüzler köye katılır; biraz yiyecek gider, Ocak küser.',
+            resolution: '🧳 Kafile köye buyur edildi — pazar canlandı, yeni yüzler geldi.',
+            foodDelta: -4,
+            setsFlags: ['migrants.welcomed'],
+            estateMood: [(Estate.artisans, 0.12), (Estate.hearth, -0.10)],
+          ),
+          PetitionOption(
+            label: 'Geçip gitsinler',
+            detail: 'Köy kendi içine kapanır; Ocak rahatlar, zanaat küser.',
+            resolution: '🚪 Kafile yoluna devam etti — köy kendi düzenini korudu.',
+            estateMood: [(Estate.hearth, 0.08), (Estate.artisans, -0.08)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🏴 Komşu köy elçisi — ticaret anlaşması mı, kendi yolumuz mu?
+    _PetitionDef(
+      (c) => c.population >= 8 && c.gold >= 4,
+      0.45,
+      const Petition(
+        id: 'neighborEnvoy',
+        petitioner: 'Komşu köyün elçisi',
+        icon: '🏴',
+        title: 'Komşudan Elçi',
+        tone: PetitionTone.neutral,
+        estate: Estate.artisans,
+        stakes: 'Anlaşma → kese dolar, İnananlar küser; reddet → tersi.',
+        body: 'Komşu köyden bir elçi geldi: karşılıklı ticaret ve dostluk '
+            'anlaşması öneriyor. Zanaatkârlar kese için heyecanlı; İnananlar ise '
+            '"yabancı âdetler köyün ruhunu bozar" diye tedirgin.',
+        options: [
+          PetitionOption(
+            label: 'Anlaşmayı yap',
+            detail: 'Ticaret açılır, kese dolar; İnananlar yabancılaşmadan korkar.',
+            resolution: '🏴 Komşuyla ticaret anlaşması imzalandı — kese doldu.',
+            goldDelta: 8,
+            setsFlags: ['pact.neighbor'],
+            estateMood: [(Estate.artisans, 0.12), (Estate.faithful, -0.06)],
+          ),
+          PetitionOption(
+            label: 'Kendi yolumuz',
+            detail: 'Elçi geri çevrilir; köy ruhunu korur, zanaat fırsat kaçırır.',
+            resolution: '🕯️ Elçi geri çevrildi — köy kendi yolunda kaldı.',
+            estateMood: [(Estate.faithful, 0.08), (Estate.hearth, 0.05), (Estate.artisans, -0.10)],
           ),
         ],
       ),
@@ -441,6 +691,7 @@ abstract final class PetitionSystem {
         icon: '🎊',
         title: 'Gelenek Olsun mu?',
         tone: PetitionTone.warm,
+        estate: Estate.laborers,
         note: '↩ Şenlik günlerce konuşuldu',
         body: 'Geçen şenlik köyde derin bir iz bıraktı. Çiftçiler bunu her '
             'hasatta tekrarlanan bir gelenek yapmak istiyor — köyün kendi '
@@ -454,6 +705,7 @@ abstract final class PetitionSystem {
             moraleDays: 10,
             fx: PetitionFx.festival,
             setsFlags: ['festival.tradition'],
+            estateMood: [(Estate.laborers, 0.12), (Estate.hearth, 0.06)],
           ),
           PetitionOption(
             label: 'Gerek yok',
@@ -461,6 +713,7 @@ abstract final class PetitionSystem {
             resolution: '🎊 Gelenek fikri şimdilik rafa kalktı.',
             moraleAmount: -0.02,
             moraleDays: 1,
+            estateMood: [(Estate.laborers, -0.06)],
           ),
         ],
       ),
@@ -478,6 +731,7 @@ abstract final class PetitionSystem {
         icon: '🔮',
         title: 'İnanç Yayılıyor',
         tone: PetitionTone.ominous,
+        estate: Estate.faithful,
         note: '↩ Ayinlere göz yummuştun',
         stakes: 'Tapınak ver → güçlenir; sınırla → söner.',
         body: 'Göz yumduğun inanç hızla yayıldı — artık köyün yarısı geceleri '
@@ -496,6 +750,7 @@ abstract final class PetitionSystem {
             setsFlags: ['cult.temple'],
             followUpId: 'cultSchism',
             followUpDelayDays: 4.0,
+            estateMood: [(Estate.faithful, 0.14), (Estate.hearth, -0.10), (Estate.artisans, -0.05)],
           ),
           PetitionOption(
             label: 'Yeter, sınırla',
@@ -505,6 +760,7 @@ abstract final class PetitionSystem {
             moraleDays: 4,
             clearsFlags: ['cult.active'],
             setsFlags: ['cult.suppressed'],
+            estateMood: [(Estate.faithful, -0.16), (Estate.hearth, 0.08)],
           ),
         ],
       ),
@@ -521,6 +777,7 @@ abstract final class PetitionSystem {
         icon: '⚡',
         title: 'İnançta Bölünme',
         tone: PetitionTone.ominous,
+        estate: Estate.faithful,
         note: '↩ Tapınağı sen vermiştin',
         stakes: 'Saf tut → biri göçer; uzlaştır → altınla birliği koru.',
         body: 'Tapınaktaki inananlar ikiye bölündü: kimi eski öğretiye sadık, '
@@ -534,6 +791,7 @@ abstract final class PetitionSystem {
             moraleAmount: -0.04,
             moraleDays: 4,
             fx: PetitionFx.vigil, // ayrılış — mum töreni havası
+            estateMood: [(Estate.faithful, -0.06)],
           ),
           PetitionOption(
             label: 'İki tarafı uzlaştır',
@@ -544,6 +802,7 @@ abstract final class PetitionSystem {
             moraleDays: 6,
             fx: PetitionFx.cult,
             setsFlags: ['cult.united'],
+            estateMood: [(Estate.faithful, 0.10), (Estate.artisans, -0.05)],
           ),
         ],
       ),
@@ -560,6 +819,7 @@ abstract final class PetitionSystem {
         icon: '🌾',
         title: 'Toprak Cömert',
         tone: PetitionTone.warm,
+        estate: Estate.laborers,
         note: '↩ Tarlalara iyi bakmıştın',
         stakes: 'İyi bakımın karşılığı — bol yiyecek + coşku.',
         body: 'Mantarı vaktinde temizlediğin tarlalar bu mevsim altın gibi '
@@ -574,6 +834,7 @@ abstract final class PetitionSystem {
             moraleAmount: 0.08,
             moraleDays: 5,
             fx: PetitionFx.harvestBounty,
+            estateMood: [(Estate.laborers, 0.12), (Estate.hearth, 0.05)],
           ),
           PetitionOption(
             label: 'Fazlayı sat',
@@ -584,6 +845,7 @@ abstract final class PetitionSystem {
             moraleAmount: 0.03,
             moraleDays: 3,
             fx: PetitionFx.harvestBounty,
+            estateMood: [(Estate.artisans, 0.12), (Estate.laborers, 0.03)],
           ),
         ],
       ),

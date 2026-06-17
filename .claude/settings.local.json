@@ -97,7 +97,16 @@
       "Bash(git branch *)",
       "Bash(git tag *)",
       "Bash(sed -n '14,32p' lib/scene/scene_tick.dart)",
-      "Bash(sed -n '62,95p' lib/scene/scene_events.dart)"
+      "Bash(sed -n '62,95p' lib/scene/scene_events.dart)",
+      "Bash(tee /tmp/vsim_run.log)",
+      "Bash(tee /tmp/vsim_run2.log)",
+      "Bash(mkdir -p assets/fonts)",
+      "Bash(curl -sSL -o Cinzel-Bold.ttf \"https://github.com/google/fonts/raw/main/ofl/cinzel/static/Cinzel-Bold.ttf\" -w \"Cinzel-Bold: %{http_code} %{size_download}b\\\\n\")",
+      "Bash(curl -sSL -o Cinzel-Regular.ttf \"https://github.com/google/fonts/raw/main/ofl/cinzel/static/Cinzel-Regular.ttf\" -w \"Cinzel-Reg: %{http_code} %{size_download}b\\\\n\")",
+      "Bash(curl -sSL -o Spectral-Regular.ttf \"https://github.com/google/fonts/raw/main/ofl/spectral/Spectral-Regular.ttf\" -w \"Spectral-Reg: %{http_code} %{size_download}b\\\\n\")",
+      "Bash(curl -sSL -o Spectral-Medium.ttf \"https://github.com/google/fonts/raw/main/ofl/spectral/Spectral-Medium.ttf\" -w \"Spectral-Med: %{http_code} %{size_download}b\\\\n\")",
+      "Bash(rm -f Cinzel-Bold.ttf Cinzel-Regular.ttf)",
+      "Bash(curl -sSL -o \"Cinzel-VF.ttf\" \"https://github.com/google/fonts/raw/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf\" -w \"VF -> %{http_code} %{size_download}b\\\\n\")"
     ]
   }
 }

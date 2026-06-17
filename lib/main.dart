@@ -55,6 +55,7 @@ import 'ui/event_banner.dart';
 import 'ui/event_choice_modal.dart';
 import 'ui/petition_modal.dart';
 import 'systems/petition_system.dart';
+import 'systems/estate_system.dart';
 import 'ui/dev_panel.dart';
 import 'ui/objective_panel.dart';
 import 'systems/quest_book.dart';
@@ -93,6 +94,7 @@ part 'scene/scene_input.dart';
 part 'scene/scene_ui.dart';
 part 'scene/scene_firepit_gather.dart';
 part 'scene/scene_petitions.dart';
+part 'scene/scene_estates.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_reactions.dart';
 part 'scene/scene_flow.dart';
@@ -283,8 +285,8 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Ambient göktaşı yağmuru — seyrek, gece özel gök gösterisi (karar yok) ──
   // Geri sayım gün-gece boyunca akar; sıfırlanınca gece tetiklenir, köylüler
-  // izler + moral artar. İlk gösteri ~ilk gecede.
-  double _meteorShowerTimer = 0.5 * kGameDaySeconds;
+  // izler + moral artar. Nadir/özel — ilk gösteri ~4. gün, sonra her 5-9 günde.
+  double _meteorShowerTimer = 4.0 * kGameDaySeconds;
 
   // ── Belediye politikaları — oyuncunun nüfus üstündeki kararları ──────────
   // Default hepsi kapalı. BuildingInfoPanel toggle ile değiştirir.
@@ -374,6 +376,16 @@ class _VillageSceneState extends State<VillageScene>
   // Köyün kalıcı hafızası: geçmiş kararların bıraktığı bayraklar (ör. 'cult.active').
   // Dilekçeler bunu okuyup dallanır; köyün "öyküsü" burada birikir.
   final Set<String> _villageMemory = {};
+
+  // ── Zümreler / Hizipler (scene_estates) ────────────────────────────────────
+  // Yönetişimin kalbi: 4 zümrenin morali + nüfuzu. Dilekçe/ferman kararları
+  // oynatır; köy yavaşça bir kimliğe kayar. Küskün zümre köyde GÖRÜNÜR olur.
+  final EstateSystem _estates = EstateSystem();
+  /// Küskün zümre postürü poll sayacı — ~5s aralıkla diegetik somurtma.
+  double _estateMoodScan = 0;
+  /// Köyün en son DUYURULAN kimliği (baskın zümre). null = henüz dengeli.
+  /// Değiştiğinde köy görünür biçimde dönüşür (_transformVillageIdentity).
+  Estate? _identityEstate;
 
   // Geliştirici test paneli açık mı.
   bool _devPanelOpen = false;
