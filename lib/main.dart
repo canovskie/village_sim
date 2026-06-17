@@ -69,7 +69,6 @@ import 'world/resource_placement.dart';
 import 'world/hay_entity.dart';
 import 'rendering/resource_renderer.dart';
 import 'core/resources.dart';
-import 'ui/cozy_theme.dart';
 import 'ui/main_menu_screen.dart';
 import 'systems/separation_system.dart';
 import 'systems/anchor_system.dart';
