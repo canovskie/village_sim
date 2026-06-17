@@ -23,6 +23,8 @@ import 'water_renderer.dart';
 import '../world/nature_entity.dart';
 import '../world/decor_entity.dart';
 import '../world/grave.dart';
+import '../world/reed_bed.dart';
+import 'reed_bed_renderer.dart';
 import 'nature_renderer.dart';
 import 'decor_renderer.dart';
 import 'grave_renderer.dart';
@@ -1152,6 +1154,18 @@ class _GraveDrawable extends _Drawable {
   }
 }
 
+class _ReedBedDrawable extends _Drawable {
+  final ReedBed b;
+  _ReedBedDrawable(this.b);
+  @override double get depth => b.depth;
+  @override
+  void draw(Canvas canvas, Size size, Offset camera) {
+    final center = gridToScreen(b.gridX, b.gridY, size, camera);
+    ReedBedRenderer.draw(canvas, center,
+        seed: (b.gridX * 13 + b.gridY * 7).round());
+  }
+}
+
 class _LotusDrawable extends _Drawable {
   final LotusEntity l;
   final double time;
@@ -1179,7 +1193,8 @@ class _ReedDrawable extends _Drawable {
     final cy = (s1.dy + s2.dy) / 2 + kTileH / 2; // tile orta yüksekliğine in
     NatureRenderer.drawReeds(canvas, cx, cy,
         time: time, seed: r.col * 19 + r.row * 41,
-        col: r.col.toDouble(), row: r.row.toDouble());
+        col: r.col.toDouble(), row: r.row.toDouble(),
+        growth: r.growth);
   }
 }
 
@@ -1242,13 +1257,13 @@ class _BuildingDrawable extends _Drawable {
       BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
           time: time, seed: b.col * 17 + b.row * 31,
           dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive, perfMode: perfMode);
+          isActive: b.isActive, perfMode: perfMode, fireFuel: b.fireFuel);
       canvas.restore();
     } else {
       BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
           time: time, seed: b.col * 17 + b.row * 31,
           dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive, perfMode: perfMode);
+          isActive: b.isActive, perfMode: perfMode, fireFuel: b.fireFuel);
     }
 
     // Toz bulutu — ilk 0.4 sn footprint kenarlarında 3 partikül. Açık bej ton.
@@ -1470,6 +1485,7 @@ class VillageGamePainter extends CustomPainter {
   final List<ReedClump>   reeds;
   final List<DecorEntity> decor;
   final List<Grave>       graves;
+  final List<ReedBed>     reedBeds;
   final List<FisherEntity> fishers;
   final List<FloristEntity> florists;
   final List<ShepherdEntity> shepherds;
@@ -1538,6 +1554,7 @@ class VillageGamePainter extends CustomPainter {
     this.reeds         = const [],
     this.decor         = const [],
     this.graves        = const [],
+    this.reedBeds      = const [],
     this.fishers       = const [],
     this.florists      = const [],
     this.shepherds     = const [],
@@ -2216,6 +2233,13 @@ class VillageGamePainter extends CustomPainter {
     for (final g in graves) {
       if (inView(g.col + 0.5, g.row + 0.5, upSmall, sideS)) {
         _sceneBuffer.add(_GraveDrawable(g));
+      }
+    }
+
+    // Saz yatakları — sayı az (ateş etrafı); bucket'a gerek yok.
+    for (final b in reedBeds) {
+      if (inView(b.gridX, b.gridY, upSmall, sideS)) {
+        _sceneBuffer.add(_ReedBedDrawable(b));
       }
     }
 

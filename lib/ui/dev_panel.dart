@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import '../core/resources.dart';
 import '../scene/scene_data.dart';
 import '../systems/event_system.dart';
-import 'game_theme.dart';
+import 'app_ui.dart';
 
 // ScenarioReport + SimSnapshot data classes lib/scene/scene_data.dart'tan
 // gelir — tek kaynaktan (main.dart hem buradan hem oradan import ediyordu).
 
 /// Geliştirici test paneli — sağdan slide-in, kategorilere ayrılmış butonlar.
-/// Production'da kaldırılmadan önce her sistemi tek tıkla test için.
+/// Modern koyu app_ui dilinde. Production'da kaldırılmadan önce her sistemi
+/// tek tıkla test için.
 class DevPanel extends StatelessWidget {
   // ── Durum okumaları ─────────────────────────────────────────────────────
   final bool   godMode;
@@ -125,7 +126,7 @@ class DevPanel extends StatelessWidget {
     required this.onTogglePerf,
   });
 
-  static const _accent = Color(0xFFE9A23B);
+  static const _accent = AppUi.accent;
 
   @override
   Widget build(BuildContext context) {
@@ -136,10 +137,17 @@ class DevPanel extends StatelessWidget {
         child: Container(
           width: 320,
           decoration: const BoxDecoration(
-            color: Color(0xF21A140C),
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [AppUi.surface2, AppUi.surface1],
+            ),
             border: Border(
               left: BorderSide(color: _accent, width: 2),
             ),
+            boxShadow: [
+              BoxShadow(color: Color(0x88000000), blurRadius: 24, offset: Offset(-6, 0)),
+            ],
           ),
           child: SafeArea(
             child: Column(
@@ -148,105 +156,190 @@ class DevPanel extends StatelessWidget {
                 _statusBar(),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 16),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 18),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _section('Görsel Test (Full Godmode)'),
+                        const AppSectionLabel('GÖRSEL TEST (FULL GODMODE)'),
                         _bigPrimaryBtn(
-                          '🎭  Showcase Köyü',
+                          'Showcase Köyü',
                           'GodMode + tüm bina tipleri + tarla + ahır + 12 NPC + yaşlılar',
+                          GameIconData.festival,
                           onSeedShowcase,
                         ),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 7),
                         _wrapButtons([
-                          _DevBtn(godMode ? '⚡ GodMode AÇIK' : '⚡ GodMode',
-                              onToggleGod, active: godMode),
-                          _DevBtn('🌅 Şafak', onSetDawn),
-                          _DevBtn('☀ Öğle', onSetNoon),
-                          _DevBtn('🌆 Akşam', onSetDusk),
-                          _DevBtn('🌙 Gece', onSetNight),
-                          _DevBtn(rainIntensity > 0.05
-                              ? '☂ Yağmur KAPAT'
-                              : '🌧 Yağmur AÇ', onToggleRain,
-                              active: rainIntensity > 0.05),
+                          AppButton(
+                              label: godMode ? 'GodMode AÇIK' : 'GodMode',
+                              icon: GameIconData.bolt,
+                              kind: godMode
+                                  ? AppButtonKind.filled
+                                  : AppButtonKind.tonal,
+                              onTap: onToggleGod),
+                          AppButton(
+                              label: 'Şafak',
+                              icon: GameIconData.dawn,
+                              onTap: onSetDawn),
+                          AppButton(
+                              label: 'Öğle',
+                              icon: GameIconData.sun,
+                              onTap: onSetNoon),
+                          AppButton(
+                              label: 'Akşam',
+                              icon: GameIconData.dawn,
+                              onTap: onSetDusk),
+                          AppButton(
+                              label: 'Gece',
+                              icon: GameIconData.moon,
+                              onTap: onSetNight),
+                          AppButton(
+                              label: rainIntensity > 0.05
+                                  ? 'Yağmur KAPAT'
+                                  : 'Yağmur AÇ',
+                              icon: GameIconData.rain,
+                              kind: rainIntensity > 0.05
+                                  ? AppButtonKind.filled
+                                  : AppButtonKind.tonal,
+                              tint: AppUi.info,
+                              onTap: onToggleRain),
                         ]),
-                        const SizedBox(height: 5),
+                        const SizedBox(height: 7),
                         _wrapButtons([
-                          _DevBtn('📜 Tüm Yasaları Aç', onAllPolicies),
-                          _DevBtn('🗒 Yasaları Sıfırla', onClearPolicies),
-                          _DevBtn('👵 Bilge Yap', onMakeSage),
-                          _DevBtn('🚶 Göçmen Çağır', onSpawnMigrant),
-                          _DevBtn('📜 Dilekçe Getir', onForcePetition),
-                          _DevBtn(
-                              perfMode
-                                  ? '🚀 Perf Modu AÇIK'
-                                  : '🐢 Perf Modu',
-                              onTogglePerf,
-                              active: perfMode),
+                          AppButton(
+                              label: 'Tüm Yasaları Aç',
+                              icon: GameIconData.scroll,
+                              onTap: onAllPolicies),
+                          AppButton(
+                              label: 'Yasaları Sıfırla',
+                              icon: GameIconData.scroll,
+                              onTap: onClearPolicies),
+                          AppButton(
+                              label: 'Bilge Yap',
+                              icon: GameIconData.star,
+                              onTap: onMakeSage),
+                          AppButton(
+                              label: 'Göçmen Çağır',
+                              icon: GameIconData.people,
+                              onTap: onSpawnMigrant),
+                          AppButton(
+                              label: 'Dilekçe Getir',
+                              icon: GameIconData.scroll,
+                              onTap: onForcePetition),
+                          AppButton(
+                              label: perfMode
+                                  ? 'Perf Modu AÇIK'
+                                  : 'Perf Modu',
+                              icon: GameIconData.speed,
+                              kind: perfMode
+                                  ? AppButtonKind.filled
+                                  : AppButtonKind.tonal,
+                              tint: AppUi.sage,
+                              onTap: onTogglePerf),
                         ]),
-                        const SizedBox(height: 14),
-                        _section('Dilekçe Seç (anında getir)'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('DİLEKÇE SEÇ (ANINDA GETİR)'),
                         _wrapButtons([
                           for (final p in petitions)
-                            _DevBtn(p.$2, () => onForcePetitionId(p.$1)),
+                            AppButton(
+                                label: p.$2,
+                                kind: AppButtonKind.ghost,
+                                onTap: () => onForcePetitionId(p.$1)),
                         ]),
-                        const SizedBox(height: 14),
-                        _section('Hızlı Kurulum'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('HIZLI KURULUM'),
                         _bigPrimaryBtn(
-                          '🏡  Yaşayan Köy Kur',
+                          'Yaşayan Köy Kur',
                           'Yeni harita + binalar + tarla + 5 köylü + bol kaynak',
+                          GameIconData.home,
                           onSeedLivingVillage,
                         ),
-                        const SizedBox(height: 14),
-                        _section('Olaylar'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('OLAYLAR'),
                         _eventsGrid(),
-                        const SizedBox(height: 14),
-                        _section('Kaynaklar'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('KAYNAKLAR'),
                         _resourcesGrid(),
-                        const SizedBox(height: 14),
-                        _section('Zaman & Hava'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('ZAMAN & HAVA'),
                         _slider('Saat',
                             '${(timeOfDay * 24).toStringAsFixed(1)} / 24',
                             timeOfDay, onSetTimeOfDay),
                         _slider('Yağmur',
                             '${(rainIntensity * 100).round()}%',
                             rainIntensity, onSetRain),
-                        const SizedBox(height: 14),
-                        _section('Köy'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('KÖY'),
                         _wrapButtons([
-                          _DevBtn('👶 +Köylü', onSpawnVillager),
-                          _DevBtn('🕯 Rastgele Öldür', onKillRandomVillager),
-                          _DevBtn('💤 Herkesi Uyandır', onWakeAll),
-                          _DevBtn('🗺 Yeni Harita', onNewMap),
+                          AppButton(
+                              label: '+Köylü',
+                              icon: GameIconData.people,
+                              onTap: onSpawnVillager),
+                          AppButton(
+                              label: 'Rastgele Öldür',
+                              icon: GameIconData.flame,
+                              kind: AppButtonKind.danger,
+                              onTap: onKillRandomVillager),
+                          AppButton(
+                              label: 'Herkesi Uyandır',
+                              icon: GameIconData.sun,
+                              onTap: onWakeAll),
+                          AppButton(
+                              label: 'Yeni Harita',
+                              icon: GameIconData.map,
+                              onTap: onNewMap),
                         ]),
-                        const SizedBox(height: 14),
-                        _section('Sosyal Aktiviteler'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('SOSYAL AKTİVİTELER'),
                         _wrapButtons([
-                          _DevBtn('🎸 Müzik', onPlayMusic),
-                          _DevBtn('💃 Dans', onStartDance),
-                          _DevBtn('💬 Sohbet', onStartChat),
-                          _DevBtn('🌠 Göktaşı Yağmuru', onMeteorShower),
-                          _DevBtn('🧹 Temizle', onClearActivities),
+                          AppButton(
+                              label: 'Müzik',
+                              icon: GameIconData.festival,
+                              onTap: onPlayMusic),
+                          AppButton(
+                              label: 'Dans',
+                              icon: GameIconData.festival,
+                              onTap: onStartDance),
+                          AppButton(
+                              label: 'Sohbet',
+                              icon: GameIconData.people,
+                              onTap: onStartChat),
+                          AppButton(
+                              label: 'Göktaşı Yağmuru',
+                              icon: GameIconData.star,
+                              tint: AppUi.info,
+                              onTap: onMeteorShower),
+                          AppButton(
+                              label: 'Temizle',
+                              icon: GameIconData.demolish,
+                              kind: AppButtonKind.ghost,
+                              onTap: onClearActivities),
                         ]),
-                        const SizedBox(height: 14),
-                        _section('Otomatik Senaryolar'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('OTOMATİK SENARYOLAR'),
                         _scenarioControls(),
                         if (lastReport != null) ...[
-                          const SizedBox(height: 7),
+                          const SizedBox(height: 9),
                           _reportCard(lastReport!),
                         ],
-                        const SizedBox(height: 14),
-                        _section('Denge Testi (Simülasyon)'),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('DENGE TESTİ (SİMÜLASYON)'),
                         _simSpeedSlider(),
-                        const SizedBox(height: 7),
+                        const SizedBox(height: 9),
                         _simHistoryChart(),
-                        const SizedBox(height: 5),
-                        _DevBtn('🗑 Geçmişi Temizle', onClearSimHistory),
-                        const SizedBox(height: 14),
-                        _section('Diğer'),
+                        const SizedBox(height: 7),
+                        AppButton(
+                            label: 'Geçmişi Temizle',
+                            icon: GameIconData.demolish,
+                            kind: AppButtonKind.ghost,
+                            onTap: onClearSimHistory),
+                        const SizedBox(height: 16),
+                        const AppSectionLabel('DİĞER'),
                         _wrapButtons([
-                          _DevBtn('🧹 Efektleri Temizle', onClearEffects),
+                          AppButton(
+                              label: 'Efektleri Temizle',
+                              icon: GameIconData.demolish,
+                              kind: AppButtonKind.ghost,
+                              onTap: onClearEffects),
                         ]),
                       ],
                     ),
@@ -266,33 +359,21 @@ class DevPanel extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
       decoration: const BoxDecoration(
         border: Border(
-          bottom: BorderSide(color: Color(0x33FFFFFF), width: 1),
+          bottom: BorderSide(color: AppUi.line, width: 1),
         ),
       ),
       child: Row(
         children: [
-          const Text('🐞', style: TextStyle(fontSize: 20)),
-          const SizedBox(width: 10),
-          const Expanded(
+          const GameIcon(GameIconData.bug, size: 20, color: _accent),
+          const SizedBox(width: 11),
+          Expanded(
             child: Text('Geliştirici Paneli',
-                style: TextStyle(
-                  color: _accent,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                  letterSpacing: 1.2,
-                )),
+                style: AppUi.title.copyWith(fontSize: 14, color: _accent)),
           ),
-          GestureDetector(
+          AppIconButton(
+            icon: GameIconData.close,
+            size: 26,
             onTap: onClose,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: MedievalTheme.chipDecoration(),
-              child: const Text('✕',
-                  style: TextStyle(
-                      color: MedievalTheme.textSecondary,
-                      fontSize: 11, fontWeight: FontWeight.bold)),
-            ),
           ),
         ],
       ),
@@ -301,15 +382,15 @@ class DevPanel extends StatelessWidget {
 
   Widget _statusBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      color: const Color(0x22000000),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      color: AppUi.surface0.withValues(alpha: 0.5),
       child: Row(
         children: [
           _stat('NPC', '$villagerCount'),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           _stat('Bina', '$buildingCount'),
           if (fps > 0) ...[
-            const SizedBox(width: 14),
+            const SizedBox(width: 16),
             _stat('FPS', '$fps'),
           ],
         ],
@@ -320,46 +401,24 @@ class DevPanel extends StatelessWidget {
   Widget _stat(String label, String value) => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label ',
-              style: const TextStyle(
-                color: MedievalTheme.textSecondary,
-                fontSize: 9.5,
-                fontFamily: 'monospace',
-              )),
-          Text(value,
-              style: const TextStyle(
-                color: MedievalTheme.textAccent,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-              )),
+          Text('${label.toUpperCase()} ', style: AppUi.label),
+          Text(value, style: AppUi.number.copyWith(fontSize: 12)),
         ],
-      );
-
-  Widget _section(String title) => Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 7),
-        child: Text(title.toUpperCase(),
-            style: const TextStyle(
-              color: _accent,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.8,
-              fontFamily: 'monospace',
-            )),
       );
 
   // ── Olay grid'i ─────────────────────────────────────────────────────────
   Widget _eventsGrid() {
     return Wrap(
-      spacing: 5, runSpacing: 5,
+      spacing: 6, runSpacing: 6,
       children: [
         for (final e in EventSystem.events)
-          _ChoiceTinyBtn(
+          AppButton(
             label: '${e.icon} ${e.title}',
-            color: switch (e.category) {
-              EventCategory.positive => const Color(0xFF6FBE4A),
-              EventCategory.negative => const Color(0xFFD45A45),
-              EventCategory.neutral  => const Color(0xFFE9A23B),
+            kind: AppButtonKind.tonal,
+            tint: switch (e.category) {
+              EventCategory.positive => AppUi.sage,
+              EventCategory.negative => AppUi.rust,
+              EventCategory.neutral  => AppUi.accent,
             },
             onTap: () => onTriggerEvent(e),
           ),
@@ -379,23 +438,31 @@ class DevPanel extends StatelessWidget {
 
   Widget _resourceRow(ResourceKind k) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           SizedBox(
-            width: 92,
+            width: 96,
             child: Text('${k.icon} ${k.label}',
-                style: const TextStyle(
-                  color: MedievalTheme.textPrimary,
-                  fontSize: 10.5,
-                  fontFamily: 'monospace',
-                )),
+                style: AppUi.body.copyWith(fontSize: 11.5)),
           ),
-          _DevBtn('+50', () => onAddResource(k, 50)),
-          const SizedBox(width: 4),
-          _DevBtn('+999', () => onAddResource(k, 999)),
-          const SizedBox(width: 4),
-          _DevBtn('−50', () => onAddResource(k, -50)),
+          AppButton(
+              label: '+50',
+              height: 28,
+              kind: AppButtonKind.tonal,
+              onTap: () => onAddResource(k, 50)),
+          const SizedBox(width: 5),
+          AppButton(
+              label: '+999',
+              height: 28,
+              kind: AppButtonKind.tonal,
+              onTap: () => onAddResource(k, 999)),
+          const SizedBox(width: 5),
+          AppButton(
+              label: '−50',
+              height: 28,
+              kind: AppButtonKind.ghost,
+              onTap: () => onAddResource(k, -50)),
         ],
       ),
     );
@@ -412,28 +479,18 @@ class DevPanel extends StatelessWidget {
           Row(
             children: [
               SizedBox(
-                width: 60,
-                child: Text(label,
-                    style: const TextStyle(
-                      color: MedievalTheme.textSecondary,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                    )),
+                width: 64,
+                child: Text(label.toUpperCase(), style: AppUi.label),
               ),
-              Text(valueText,
-                  style: const TextStyle(
-                    color: MedievalTheme.textAccent,
-                    fontSize: 10,
-                    fontFamily: 'monospace',
-                  )),
+              Text(valueText, style: AppUi.number.copyWith(fontSize: 11)),
             ],
           ),
           SizedBox(
-            height: 24,
+            height: 26,
             child: Slider(
               value: v.clamp(0.0, 1.0),
               activeColor: _accent,
-              inactiveColor: const Color(0x44FFFFFF),
+              inactiveColor: AppUi.line,
               thumbColor: _accent,
               onChanged: onChanged,
             ),
@@ -444,16 +501,17 @@ class DevPanel extends StatelessWidget {
   }
 
   Widget _wrapButtons(List<Widget> children) =>
-      Wrap(spacing: 5, runSpacing: 5, children: children);
+      Wrap(spacing: 6, runSpacing: 6, children: children);
 
   // ── Otomatik senaryo kontrolleri ───────────────────────────────────────
   Widget _scenarioControls() {
     if (activeScenario != null) {
       // Çalışıyorken progress bar
       return Container(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
         decoration: BoxDecoration(
-          color: const Color(0xFF1B130A),
+          color: AppUi.surface0,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
           border: Border.all(color: _accent.withValues(alpha: 0.6), width: 1.5),
         ),
         child: Column(
@@ -461,33 +519,30 @@ class DevPanel extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Text('▶', style: TextStyle(color: _accent, fontSize: 13)),
-                const SizedBox(width: 6),
+                const GameIcon(GameIconData.play, size: 13, color: _accent),
+                const SizedBox(width: 7),
                 Expanded(
                   child: Text(activeScenario!,
-                      style: const TextStyle(
-                        color: MedievalTheme.textAccent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                      )),
+                      style: AppUi.bodyHi.copyWith(fontSize: 12)),
                 ),
                 Text('${(scenarioProgress * 100).round()}%',
-                    style: const TextStyle(
-                      color: MedievalTheme.textSecondary,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                    )),
+                    style: AppUi.number.copyWith(fontSize: 11)),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 7),
             Container(
-              height: 3,
-              color: const Color(0x33000000),
-              child: FractionallySizedBox(
-                alignment: Alignment.centerLeft,
-                widthFactor: scenarioProgress,
-                child: Container(color: _accent),
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppUi.surface1,
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: FractionallySizedBox(
+                  alignment: Alignment.centerLeft,
+                  widthFactor: scenarioProgress,
+                  child: Container(color: _accent),
+                ),
               ),
             ),
           ],
@@ -495,12 +550,27 @@ class DevPanel extends StatelessWidget {
       );
     }
     return Wrap(
-      spacing: 5, runSpacing: 5,
+      spacing: 6, runSpacing: 6,
       children: [
-        _DevBtn('🏘 Baz Köy (10dk)', onScenarioBaseline),
-        _DevBtn('🤒 Salgın (8dk)', onScenarioPlague),
-        _DevBtn('☀ Kuraklık (8dk)', onScenarioDrought),
-        _DevBtn('🔥 Yangın (5dk)', onScenarioFire),
+        AppButton(
+            label: 'Baz Köy (10dk)',
+            icon: GameIconData.home,
+            onTap: onScenarioBaseline),
+        AppButton(
+            label: 'Salgın (8dk)',
+            icon: GameIconData.bug,
+            tint: AppUi.rust,
+            onTap: onScenarioPlague),
+        AppButton(
+            label: 'Kuraklık (8dk)',
+            icon: GameIconData.sun,
+            tint: AppUi.gold,
+            onTap: onScenarioDrought),
+        AppButton(
+            label: 'Yangın (5dk)',
+            icon: GameIconData.flame,
+            tint: AppUi.rust,
+            onTap: onScenarioFire),
       ],
     );
   }
@@ -508,14 +578,13 @@ class DevPanel extends StatelessWidget {
   // ── Senaryo sonuç raporu ───────────────────────────────────────────────
   Widget _reportCard(ScenarioReport r) {
     final verdictColor = r.warnings.isEmpty
-        ? const Color(0xFF6FC07A)
-        : (r.warnings.length > 1
-            ? const Color(0xFFE07868)
-            : _accent);
+        ? AppUi.sage
+        : (r.warnings.length > 1 ? AppUi.rust : _accent);
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
       decoration: BoxDecoration(
-        color: const Color(0xFF120E08),
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
         border: Border.all(color: verdictColor.withValues(alpha: 0.6), width: 1.5),
       ),
       child: Column(
@@ -523,76 +592,59 @@ class DevPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('📊 ${r.name}',
-                  style: TextStyle(
-                    color: verdictColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                  )),
-              const Spacer(),
+              Expanded(
+                child: Text(r.name,
+                    style: AppUi.bodyHi.copyWith(
+                        fontSize: 12, color: verdictColor)),
+              ),
               Text('${(r.durationSec / 60).toStringAsFixed(1)}dk',
-                  style: const TextStyle(
-                    color: MedievalTheme.textSecondary,
-                    fontSize: 9,
-                    fontFamily: 'monospace',
-                  )),
+                  style: AppUi.body.copyWith(
+                      fontSize: 10, color: AppUi.textLo)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 7),
           Text(r.verdict,
-              style: TextStyle(
-                color: verdictColor,
-                fontSize: 10,
-                fontFamily: 'monospace',
-                fontStyle: FontStyle.italic,
-              )),
-          const SizedBox(height: 6),
+              style: AppUi.body.copyWith(
+                  fontSize: 11,
+                  color: verdictColor,
+                  fontStyle: FontStyle.italic)),
+          const SizedBox(height: 7),
           // Kaynak deltaları
           Wrap(
-            spacing: 6, runSpacing: 4,
+            spacing: 8, runSpacing: 5,
             children: r.resources.entries.map((e) {
               final (start, end) = e.value;
               final delta = end - start;
               final c = delta > 0
-                  ? const Color(0xFF6FC07A)
-                  : (delta < 0 ? const Color(0xFFE07868)
-                              : MedievalTheme.textSecondary);
+                  ? AppUi.sage
+                  : (delta < 0 ? AppUi.rust : AppUi.textLo);
               return Text(
                 '${e.key}: $start→$end (${delta >= 0 ? "+" : ""}$delta)',
-                style: TextStyle(
-                  color: c, fontSize: 9, fontFamily: 'monospace',
-                ),
+                style: AppUi.body.copyWith(fontSize: 9.5, color: c),
               );
             }).toList(),
           ),
           // Nüfus deltası
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           Text(
             'Nüfus: ${r.popStart} → ${r.popEnd} '
             '(${r.popEnd - r.popStart >= 0 ? "+" : ""}${r.popEnd - r.popStart})',
-            style: TextStyle(
+            style: AppUi.bodyHi.copyWith(
+              fontSize: 10,
               color: (r.popEnd - r.popStart) > 0
-                  ? const Color(0xFF6FC07A)
-                  : ((r.popEnd - r.popStart) < 0
-                      ? const Color(0xFFE07868)
-                      : MedievalTheme.textSecondary),
-              fontSize: 9.5, fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
+                  ? AppUi.sage
+                  : ((r.popEnd - r.popStart) < 0 ? AppUi.rust : AppUi.textLo),
             ),
           ),
           // Uyarılar
           if (r.warnings.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 7),
             for (final w in r.warnings)
               Padding(
-                padding: const EdgeInsets.only(top: 1.5),
+                padding: const EdgeInsets.only(top: 2),
                 child: Text('⚠ $w',
-                    style: const TextStyle(
-                      color: Color(0xFFE07868),
-                      fontSize: 9,
-                      fontFamily: 'monospace',
-                    )),
+                    style: AppUi.body.copyWith(
+                        fontSize: 9.5, color: AppUi.rust)),
               ),
           ],
         ],
@@ -609,39 +661,24 @@ class DevPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              const SizedBox(
-                width: 60,
-                child: Text('Sim Hızı',
-                    style: TextStyle(
-                      color: MedievalTheme.textSecondary,
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                    )),
+              SizedBox(
+                width: 64,
+                child: Text('SİM HIZI', style: AppUi.label),
               ),
               Text('×${simSpeedBoost.toStringAsFixed(1)}',
-                  style: const TextStyle(
-                    color: MedievalTheme.textAccent,
-                    fontSize: 10,
-                    fontFamily: 'monospace',
-                  )),
-              const SizedBox(width: 8),
+                  style: AppUi.number.copyWith(fontSize: 11)),
+              const SizedBox(width: 9),
               if (simSpeedBoost > 1.01)
-                const Text('⏩ HIZLI',
-                    style: TextStyle(
-                      color: Color(0xFFE9A23B),
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    )),
+                AppChip(label: 'HIZLI', color: _accent, solid: true),
             ],
           ),
           SizedBox(
-            height: 24,
+            height: 26,
             child: Slider(
               value: simSpeedBoost.clamp(1.0, 30.0),
               min: 1.0, max: 30.0,
               activeColor: _accent,
-              inactiveColor: const Color(0x44FFFFFF),
+              inactiveColor: AppUi.line,
               thumbColor: _accent,
               onChanged: onSetSimSpeed,
             ),
@@ -658,15 +695,12 @@ class DevPanel extends StatelessWidget {
         height: 60,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: const Color(0x22000000),
-          border: Border.all(color: const Color(0x33FFFFFF), width: 1),
+          color: AppUi.surface0,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: AppUi.line, width: 1),
         ),
-        child: const Text('Snapshot bekleniyor… (5 sn/snapshot)',
-            style: TextStyle(
-              color: MedievalTheme.textSecondary,
-              fontSize: 9,
-              fontFamily: 'monospace',
-            )),
+        child: Text('Snapshot bekleniyor… (5 sn/snapshot)',
+            style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo)),
       );
     }
     final last = simHistory.last;
@@ -675,30 +709,31 @@ class DevPanel extends StatelessWidget {
       children: [
         // Üst satır: anlık değerler
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
-            color: const Color(0x22000000),
-            border: Border.all(color: const Color(0x33FFFFFF), width: 1),
+            color: AppUi.surface0,
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(color: AppUi.line, width: 1),
           ),
           child: Row(
             children: [
               _statTiny('G', '${last.day}'),
-              const SizedBox(width: 7),
+              const SizedBox(width: 9),
               _statTiny('👥', '${last.population}'),
-              const SizedBox(width: 7),
+              const SizedBox(width: 9),
               _statTiny('🏠', '${last.buildings}'),
             ],
           ),
         ),
-        const SizedBox(height: 5),
+        const SizedBox(height: 7),
         // Kaynak grafikleri (mini sparkline her kaynak için)
         _sparkline('🪵 odun',  (s) => s.wood,  const Color(0xFFC08A4A)),
         _sparkline('🪨 taş',   (s) => s.stone, const Color(0xFFB0B0A8)),
         _sparkline('⚙ demir', (s) => s.iron,  const Color(0xFFAEB6E0)),
         _sparkline('⬛ kömür', (s) => s.coal,  const Color(0xFF6A6A6A)),
-        _sparkline('🍞 yiyec', (s) => s.food,  const Color(0xFF6FC07A)),
-        _sparkline('🪙 altın', (s) => s.gold,  const Color(0xFFE0C040)),
-        _sparkline('👥 nüfus', (s) => s.population * 4, const Color(0xFFE9A23B)),
+        _sparkline('🍞 yiyec', (s) => s.food,  AppUi.sage),
+        _sparkline('🪙 altın', (s) => s.gold,  AppUi.gold),
+        _sparkline('👥 nüfus', (s) => s.population * 4, _accent),
       ],
     );
   }
@@ -707,18 +742,8 @@ class DevPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('$label ',
-              style: const TextStyle(
-                color: MedievalTheme.textSecondary,
-                fontSize: 9,
-                fontFamily: 'monospace',
-              )),
-          Text(value,
-              style: const TextStyle(
-                color: MedievalTheme.textAccent,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-              )),
+              style: AppUi.body.copyWith(fontSize: 9.5, color: AppUi.textLo)),
+          Text(value, style: AppUi.number.copyWith(fontSize: 11)),
         ],
       );
 
@@ -728,17 +753,13 @@ class DevPanel extends StatelessWidget {
     final maxV = values.reduce((a, b) => a > b ? a : b);
     final lastV = values.last;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         children: [
           SizedBox(
-            width: 56,
+            width: 58,
             child: Text(label,
-                style: const TextStyle(
-                  color: MedievalTheme.textSecondary,
-                  fontSize: 9,
-                  fontFamily: 'monospace',
-                )),
+                style: AppUi.body.copyWith(fontSize: 9.5, color: AppUi.textLo)),
           ),
           Expanded(
             child: SizedBox(
@@ -748,17 +769,12 @@ class DevPanel extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
           SizedBox(
             width: 32,
             child: Text('$lastV',
                 textAlign: TextAlign.right,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                )),
+                style: AppUi.number.copyWith(fontSize: 10, color: color)),
           ),
         ],
       ),
@@ -766,51 +782,25 @@ class DevPanel extends StatelessWidget {
   }
 
   /// Büyük vurgulu buton — Hızlı Kurulum gibi öne çıkan aksiyonlar için.
-  Widget _bigPrimaryBtn(String title, String subtitle, VoidCallback onTap) {
-    return _BigBtn(title: title, subtitle: subtitle, onTap: onTap);
+  Widget _bigPrimaryBtn(
+      String title, String subtitle, GameIconData icon, VoidCallback onTap) {
+    return _BigBtn(
+        title: title, subtitle: subtitle, icon: icon, onTap: onTap);
   }
 }
 
 // ── Buton bileşenleri ──────────────────────────────────────────────────────
 
-class _DevBtn extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool active;
-  const _DevBtn(this.label, this.onTap, {this.active = false});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: active
-              ? DevPanel._accent.withValues(alpha: 0.30)
-              : const Color(0xFF221A10),
-          border: Border.all(
-              color: active
-                  ? DevPanel._accent
-                  : const Color(0x44FFFFFF),
-              width: 1),
-        ),
-        child: Text(label,
-            style: const TextStyle(
-              color: MedievalTheme.textPrimary,
-              fontSize: 10,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w600,
-            )),
-      ),
-    );
-  }
-}
-
 class _BigBtn extends StatefulWidget {
   final String title;
   final String subtitle;
+  final GameIconData icon;
   final VoidCallback onTap;
-  const _BigBtn({required this.title, required this.subtitle, required this.onTap});
+  const _BigBtn(
+      {required this.title,
+      required this.subtitle,
+      required this.icon,
+      required this.onTap});
   @override
   State<_BigBtn> createState() => _BigBtnState();
 }
@@ -828,36 +818,42 @@ class _BigBtnState extends State<_BigBtn> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          padding: const EdgeInsets.fromLTRB(13, 11, 13, 11),
           decoration: BoxDecoration(
             color: _hover
-                ? DevPanel._accent.withValues(alpha: 0.24)
-                : DevPanel._accent.withValues(alpha: 0.14),
+                ? Color.alphaBlend(
+                    AppUi.accent.withValues(alpha: 0.24), AppUi.surface2)
+                : Color.alphaBlend(
+                    AppUi.accent.withValues(alpha: 0.12), AppUi.surface1),
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
               color: _hover
-                  ? DevPanel._accent
-                  : DevPanel._accent.withValues(alpha: 0.55),
+                  ? AppUi.accent
+                  : AppUi.accent.withValues(alpha: 0.55),
               width: 1.5,
             ),
+            boxShadow: _hover
+                ? [BoxShadow(color: AppUi.accent.withValues(alpha: 0.3), blurRadius: 12)]
+                : null,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+          child: Row(
             children: [
-              Text(widget.title,
-                  style: const TextStyle(
-                    color: MedievalTheme.textAccent,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                  )),
-              const SizedBox(height: 3),
-              Text(widget.subtitle,
-                  style: const TextStyle(
-                    color: MedievalTheme.textSecondary,
-                    fontSize: 9.5,
-                    fontFamily: 'monospace',
-                  )),
+              GameIcon(widget.icon, size: 20, color: AppUi.accent),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(widget.title,
+                        style: AppUi.bodyHi.copyWith(fontSize: 13)),
+                    const SizedBox(height: 3),
+                    Text(widget.subtitle,
+                        style: AppUi.body.copyWith(
+                            fontSize: 10, color: AppUi.textLo)),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -881,7 +877,7 @@ class _SparkPainter extends CustomPainter {
     final dx = w / (values.length - 1);
     // Arka plan ızgarası — orta yatay çizgi
     final pGrid = Paint()
-      ..color = const Color(0x22FFFFFF)
+      ..color = AppUi.lineSoft
       ..strokeWidth = 1;
     canvas.drawLine(Offset(0, h / 2), Offset(w, h / 2), pGrid);
     // Line strip
@@ -912,32 +908,4 @@ class _SparkPainter extends CustomPainter {
   @override
   bool shouldRepaint(_SparkPainter old) =>
       old.values != values || old.maxV != maxV || old.color != color;
-}
-
-class _ChoiceTinyBtn extends StatelessWidget {
-  final String label;
-  final Color color;
-  final VoidCallback onTap;
-  const _ChoiceTinyBtn(
-      {required this.label, required this.color, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
-        ),
-        child: Text(label,
-            style: TextStyle(
-              color: color,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              fontFamily: 'monospace',
-            )),
-      ),
-    );
-  }
 }

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import '../systems/quest_book.dart';
-import 'cozy_theme.dart';
+import 'app_ui.dart';
 
 /// Köy Defteri — köyün kimlik kademesi (başlık) + akan görev listesi.
-/// Parşömen tarzı: başlıkta kademe adı + ✓ tamamlanan sayısı; aktif görev
-/// ember vurgu + el yazısı ipucu; altta bir sonraki kademe ipucu.
+/// Koyu panel: başlıkta kademe adı + ✓ tamamlanan sayısı; aktif görev
+/// ember vurgu + ipucu; altta bir sonraki kademe ipucu.
 /// Ödüller görseldir (kutlama + köyün çiçeklenmesi) — burada sayı/kaynak yok.
 class ObjectivePanel extends StatelessWidget {
   /// Açık (tamamlanmamış) görevler — ilki `active`.
@@ -37,27 +37,27 @@ class ObjectivePanel extends StatelessWidget {
     final activeIdx = quests.indexWhere((q) => q.active);
 
     return SizedBox(
-      width: 218,
-      child: ParchmentPanel(
-        pinned: true,
-        padding: const EdgeInsets.fromLTRB(11, 9, 11, 11),
+      width: 224,
+      child: AppPanel(
+        accent: AppUi.accent,
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _header(),
             if (!collapsed) ...[
-              const SizedBox(height: 5),
+              const SizedBox(height: 8),
               if (quests.isEmpty)
                 _allClear()
               else
                 for (final q in quests) _row(q),
               if (activeIdx >= 0) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 9),
                 _hintBar(quests[activeIdx]),
               ],
               if (next != null) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 9),
                 _nextTierBar(next!),
               ],
             ],
@@ -70,26 +70,30 @@ class ObjectivePanel extends StatelessWidget {
   Widget _header() {
     return GestureDetector(
       onTap: onToggleCollapse,
+      behavior: HitTestBehavior.opaque,
       child: Row(
         children: [
-          Text(tierIcon, style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 6),
+          Text(tierIcon, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 7),
           Expanded(
             child: Text(tierName.toUpperCase(),
                 overflow: TextOverflow.ellipsis,
-                style: CozyUi.inkTitle.copyWith(
-                  color: CozyUi.ember,
-                  fontSize: 11,
-                  letterSpacing: 1.4,
+                style: AppUi.title.copyWith(
+                  fontSize: 12,
+                  color: AppUi.accentSoft,
+                  letterSpacing: 1.2,
                 )),
           ),
-          Text('✓$completedCount',
-              style: CozyUi.inkLabel.copyWith(fontSize: 10, color: CozyUi.sage)),
-          const SizedBox(width: 4),
-          Icon(
-            collapsed ? Icons.expand_more : Icons.expand_less,
-            size: 14,
-            color: CozyUi.parchmentInk2,
+          GameIcon(GameIconData.star, size: 11, color: AppUi.sage),
+          const SizedBox(width: 3),
+          Text('$completedCount',
+              style: AppUi.number.copyWith(fontSize: 11, color: AppUi.sage)),
+          const SizedBox(width: 7),
+          // Daralt/aç oku — yön collapsed durumuna göre döner.
+          Transform.rotate(
+            angle: collapsed ? 1.5708 : -1.5708,
+            child: GameIcon(GameIconData.chevron,
+                size: 13, color: AppUi.textLo),
           ),
         ],
       ),
@@ -99,28 +103,27 @@ class ObjectivePanel extends StatelessWidget {
   Widget _row(QuestState s) {
     final active = s.active;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.5),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
             width: 16,
             child: Text(s.quest.icon,
                 style: TextStyle(
                   fontSize: 11,
-                  color: active ? CozyUi.ember : CozyUi.parchmentInk2,
+                  color: active ? AppUi.accent : AppUi.textLo,
                 )),
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 6),
           Expanded(
             child: Text(s.quest.label,
-                style: TextStyle(
-                  color: active
-                      ? CozyUi.parchmentInk
-                      : CozyUi.parchmentInk2.withValues(alpha: 0.7),
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                  fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                )),
+                style: active
+                    ? AppUi.bodyHi.copyWith(fontSize: 11)
+                    : AppUi.body.copyWith(
+                        fontSize: 11,
+                        color: AppUi.textMid.withValues(alpha: 0.7),
+                      )),
           ),
         ],
       ),
@@ -129,17 +132,16 @@ class ObjectivePanel extends StatelessWidget {
 
   Widget _hintBar(QuestState active) {
     return Container(
-      margin: const EdgeInsets.only(top: 2),
-      padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+      padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
       decoration: BoxDecoration(
-        color: CozyUi.ember.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: CozyUi.ember.withValues(alpha: 0.40), width: 1),
+        color: AppUi.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.accent.withValues(alpha: 0.4), width: 1),
       ),
       child: Text(active.quest.hint,
-          style: CozyUi.inkMuted.copyWith(
-            color: CozyUi.parchmentInk,
-            fontSize: 9.5,
+          style: AppUi.body.copyWith(
+            fontSize: 10,
+            color: AppUi.textHi,
             height: 1.4,
           )),
     );
@@ -148,7 +150,11 @@ class ObjectivePanel extends StatelessWidget {
   Widget _nextTierBar(CharterTier n) {
     return Text(
       '→ Sonraki: ${n.icon} ${n.name}  (${n.minPolicies} berat · ${n.minQuests} görev)',
-      style: CozyUi.inkMuted.copyWith(fontSize: 8.5, height: 1.3),
+      style: AppUi.body.copyWith(
+        fontSize: 9.5,
+        color: AppUi.textLo,
+        height: 1.3,
+      ),
     );
   }
 
@@ -156,9 +162,9 @@ class ObjectivePanel extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Text('Bu kademe tamam — yeni berat çıkar, köy ilerlesin.',
-          style: CozyUi.inkMuted.copyWith(
-            color: CozyUi.sage,
-            fontSize: 9.5,
+          style: AppUi.body.copyWith(
+            color: AppUi.sage,
+            fontSize: 10,
             height: 1.4,
           )),
     );

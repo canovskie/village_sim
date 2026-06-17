@@ -1,10 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'game_theme.dart';
+import 'app_ui.dart';
 
 /// Asset cache'leri (sprite PNG'leri) hazırlanırken gösterilir.
-/// Pulse eden ateş ışıltısı + ortaçağ teması — ana menü estetiği ile uyumlu.
+/// Pulse eden ateş ışıltısı + koyu oyun teması — ana menü estetiği ile uyumlu.
 class LoadingScreen extends StatefulWidget {
   final VoidCallback? onCancel;
   const LoadingScreen({super.key, this.onCancel});
@@ -44,45 +44,37 @@ class _LoadingScreenState extends State<LoadingScreen>
         if (!didPop) widget.onCancel?.call();
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF1A0F30),
+        backgroundColor: AppUi.surface0,
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 80, height: 80,
+                width: 96,
+                height: 96,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(colors: [
-                    Color.fromRGBO(255, 160, 60, (0.55 * pulse).clamp(0.2, 1.0)),
-                    const Color(0x00FF8030),
+                    AppUi.accent.withValues(alpha: (0.5 * pulse).clamp(0.18, 1.0)),
+                    AppUi.accent.withValues(alpha: 0.0),
                   ]),
                 ),
-                child: const Center(
-                  child: Text('☼',
-                      style: TextStyle(
-                        color: MedievalTheme.textAccent,
-                        fontSize: 32,
-                      )),
-                ),
+                child: GameIcon(GameIconData.flame,
+                    size: 40,
+                    color: Color.lerp(
+                        AppUi.accentDeep, AppUi.accentSoft, pulse)!),
               ),
-              const SizedBox(height: 20),
-              const Text('Köy uyanıyor...',
-                  style: TextStyle(
-                    color: MedievalTheme.textAccent,
+              const SizedBox(height: 22),
+              Text('KÖY UYANIYOR',
+                  style: AppUi.title.copyWith(
                     fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'monospace',
-                    letterSpacing: 2.0,
+                    letterSpacing: 2.4,
+                    color: AppUi.textHi,
                   )),
-              const SizedBox(height: 6),
-              const Text('asset yükleniyor',
-                  style: TextStyle(
-                    color: MedievalTheme.textDim,
-                    fontSize: 10,
-                    fontFamily: 'monospace',
-                    letterSpacing: 1.5,
-                  )),
+              const SizedBox(height: 8),
+              Text('asset yükleniyor',
+                  style: AppUi.label.copyWith(letterSpacing: 1.6)),
             ],
           ),
         ),

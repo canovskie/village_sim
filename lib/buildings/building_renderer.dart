@@ -71,7 +71,7 @@ class BuildingRenderer {
       Offset back, Offset left, Offset right, Offset front,
       {double time = 0, int seed = 0, double dayLight = 1.0,
        double rainIntensity = 0.0, bool isActive = false,
-       bool perfMode = false}) {
+       bool perfMode = false, double fireFuel = 1.0}) {
     // Lamppost — PNG yüklendiyse normal asset yolu; yoksa procedurel fallback.
     if (type == BuildingType.lamppost && !_cache.containsKey(type)) {
       _drawLamppost(canvas, back, left, right, front, time, seed, dayLight);
@@ -123,15 +123,18 @@ class BuildingRenderer {
     }
 
     // Firepit alev — perf mode'da bile çizilir (köy odak noktası, atlamayalım).
-    if (type == BuildingType.firepit && rainIntensity < 0.30) {
+    // Yakıt bittiyse (fireFuel ~0) ateş söner: alev çizilmez.
+    if (type == BuildingType.firepit && rainIntensity < 0.30 && fireFuel > 0.001) {
       final cx = (back.dx + front.dx) * 0.5;
       // Footprint y-merkezi alt zemini → biraz yukarı yer ayarı.
       final cy = (left.dy + right.dy) * 0.5 + 2;
       // Tile genişliği ile orantılı alev ölçeği.
       final tileW = (right.dx - left.dx).abs();
       final s = tileW / 22.0;
-      // Yağmur azalırken alev de yumuşar — intensity 1.0 → 0 (rainIntensity 0 → 0.3).
-      final intensity = (1.0 - rainIntensity / 0.30).clamp(0.0, 1.0);
+      // Yağmur azalırken alev yumuşar; yakıt son 1/3'te kısılır (sönüş telgrafı).
+      final rainFactor = (1.0 - rainIntensity / 0.30).clamp(0.0, 1.0);
+      final fuelFactor = (fireFuel * 3.0).clamp(0.0, 1.0);
+      final intensity = rainFactor < fuelFactor ? rainFactor : fuelFactor;
       FlameRenderer.draw(canvas, cx, cy, s, time, seed, intensity: intensity);
     }
   }

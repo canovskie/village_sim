@@ -58,6 +58,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         final meta = kBuildingMeta[b.type]!;
         v.sleepTarget = (b.col + meta.cols / 2.0, b.row + meta.rows / 2.0);
         v.sleepIsHome = true;
+      } else if (_bedOf(v) case final bed?) {
+        // Evsiz ama saz yatağı var → kendi yatağında uyur (dışarıda, ateş başı).
+        v.sleepTarget = (bed.gridX, bed.gridY);
+        v.sleepIsHome = false;
       } else if (_firepitBuilding != null) {
         final fp = _firepitBuilding!;
         final angle = idx * (2 * pi / _villagers.length);

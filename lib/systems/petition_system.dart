@@ -851,5 +851,42 @@ abstract final class PetitionSystem {
       ),
     ),
 
+    // 🔥 Ateş söndü (scene_fire programatik tetikler — random çıkmaz). Köy odun
+    // bekliyor: acil seferberlik (altın→odun) ya da oduncuları bekle.
+    _PetitionDef(
+      (_) => false,
+      0,
+      const Petition(
+        id: 'fireDied',
+        petitioner: 'Üşüyen köy',
+        icon: '🔥',
+        title: 'Ateş Söndü',
+        tone: PetitionTone.ominous,
+        estate: Estate.hearth,
+        stakes: 'Acil odun al → ateş hemen yanar; bekle → oduncular yetişsin.',
+        body: 'Ocak söndü, köy karanlıkta ve soğukta kaldı. Odun stoğu tükenmiş. '
+            'Komşu köyden acil odun getirtelim mi, yoksa oduncuların yeni odun '
+            'çıkarmasını mı bekleyelim?',
+        options: [
+          PetitionOption(
+            label: 'Acil odun getirt',
+            detail: 'Altın harca; hemen odun gelir, ateşçi ocağı yeniden yakar.',
+            resolution: '🪵 Acil odun getirtildi — ateşçi ocağı yeniden yakıyor.',
+            goldDelta: -10,
+            woodDelta: 8,
+            estateMood: [(Estate.hearth, 0.06)],
+          ),
+          PetitionOption(
+            label: 'Oduncuları bekle',
+            detail: 'Masraf yok; ateş, yeni odun çıkana dek sönük kalır.',
+            resolution: '🪵 Köy oduncuları bekliyor — ocak şimdilik sönük.',
+            moraleAmount: -0.03,
+            moraleDays: 2,
+            estateMood: [(Estate.hearth, -0.05)],
+          ),
+        ],
+      ),
+    ),
+
   ];
 }

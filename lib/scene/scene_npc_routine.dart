@@ -20,6 +20,12 @@ extension _SceneNpcRoutine on _VillageSceneState {
 
     for (final v in _villagers) {
       if (!v.needsErrand) continue;
+      // Yatak peşindeki evsizi saz sistemi sürer (yapacak iş varsa) — rutin
+      // ona dokunmaz, yoksa errand sinyalini tüketip karışır.
+      if (_homelessSeekingBed(v) && _reedTaskAvailable()) {
+        v.needsErrand = false;
+        continue;
+      }
       // Meşgul/uygun değilse sinyali temizle (errand yürütemez).
       if (!v.canRunErrands ||
           v.isInsideBuilding ||

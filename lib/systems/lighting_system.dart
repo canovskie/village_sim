@@ -64,15 +64,17 @@ class LightingSystem {
       final cy = b.row + b.rows / 2.0;
 
       if (b.type == BuildingType.firepit) {
-        // Yağmur alevi söndürdüyse halo da atlanır.
-        if (fireRainFade < 0.02) continue;
+        // Yağmur alevi söndürdüyse VEYA yakıt bittiyse halo da atlanır.
+        final fuelFade = (b.fireFuel * 3.0).clamp(0.0, 1.0);
+        final fireFade = fireRainFade < fuelFade ? fireRainFade : fuelFade;
+        if (fireFade < 0.02) continue;
         // Ateş yeri — sıcak ama göz almasın. Core alpha = intensity × 190
         // (painter); intensity 0.55'e çekildi → peak ~105 alpha, yumuşak.
         // Radius da kısaldı: dış halo bina ölçeğinde kalır, "dev güneş" değil.
         result.add(LightSource(
           gx: cx, gy: cy,
-          radius: (3.8 + darkness * 0.8) * fireRainFade,
-          intensity: 0.55 * fireRainFade,
+          radius: (3.8 + darkness * 0.8) * fireFade,
+          intensity: 0.55 * fireFade,
           warm: const Color(0xFFFF9540),
         ));
       } else if (b.type == BuildingType.lamppost) {

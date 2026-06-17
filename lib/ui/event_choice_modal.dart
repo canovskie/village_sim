@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import '../systems/event_system.dart';
-import 'game_theme.dart';
+import 'app_ui.dart';
 
 /// Karar gerektiren olaylar için tam-ekran modal. Arka planı karartır,
-/// ortada zengin kart: ikon + başlık + olay mesajı + seçenek kartları.
+/// ortada koyu rafine kart: ikon + başlık + olay mesajı + seçenek kartları.
 /// Her seçim kartı: label + detay + etki chip'leri.
 class EventChoiceModal extends StatelessWidget {
   final EventOutcome event;
@@ -16,58 +16,51 @@ class EventChoiceModal extends StatelessWidget {
   });
 
   Color get _accent => switch (event.category) {
-        EventCategory.positive => const Color(0xFF6FBE4A),
-        EventCategory.negative => const Color(0xFFD45A45),
-        EventCategory.neutral  => const Color(0xFFE9A23B),
+        EventCategory.positive => AppUi.sage,
+        EventCategory.negative => AppUi.rust,
+        EventCategory.neutral  => AppUi.accent,
+      };
+
+  String get _categoryLabel => switch (event.category) {
+        EventCategory.positive => 'FIRSAT',
+        EventCategory.negative => 'TEHLİKE',
+        EventCategory.neutral  => 'OLAY',
       };
 
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
       // Tüm arkayı karart — oyuncu odağı modal'a.
-      color: const Color(0xCC050308),
+      color: AppUi.scrim,
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 580),
-          child: Container(
-            margin: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF120D08),
-              border: Border.all(color: _accent.withValues(alpha: 0.85), width: 2),
-              boxShadow: [
-                BoxShadow(
-                    color: _accent.withValues(alpha: 0.35),
-                    blurRadius: 24, spreadRadius: 2),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _header(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
-                  child: Text(event.message,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: MedievalTheme.textPrimary,
-                        fontSize: 12,
-                        height: 1.5,
-                        fontFamily: 'monospace',
-                      )),
-                ),
-                const Divider(height: 1, color: Color(0x33FFFFFF)),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-                  child: Column(
-                    children: [
-                      for (final c in event.choices!) ...[
-                        _choiceCard(c),
-                        if (c != event.choices!.last) const SizedBox(height: 9),
-                      ],
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: AppReveal(
+              child: AppPanel(
+                accent: _accent,
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _header(),
+                    const SizedBox(height: 14),
+                    Text(event.message,
+                        textAlign: TextAlign.center,
+                        style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5)),
+                    const AppDivider(),
+                    for (final c in event.choices!) ...[
+                      _ChoiceCard(
+                        choice: c,
+                        accent: _accent,
+                        onTap: () => onChoose(c),
+                      ),
+                      if (c != event.choices!.last) const SizedBox(height: 9),
                     ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -76,116 +69,128 @@ class EventChoiceModal extends StatelessWidget {
   }
 
   Widget _header() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _accent.withValues(alpha: 0.30),
-            _accent.withValues(alpha: 0.06),
-          ],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        border: Border(
-          bottom: BorderSide(color: _accent.withValues(alpha: 0.55), width: 1),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Büyük ikon kutusu — dramatik
-          Container(
-            width: 64, height: 64,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0A0805),
-              border: Border.all(color: _accent, width: 2),
-            ),
-            child: Text(event.icon, style: const TextStyle(fontSize: 40)),
+    return Row(
+      children: [
+        // Olay ikonu — koyu kare, aksan kenar + soft glow.
+        Container(
+          width: 60,
+          height: 60,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppUi.surface0,
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(color: _accent.withValues(alpha: 0.7), width: 1.5),
+            boxShadow: [
+              BoxShadow(color: _accent.withValues(alpha: 0.28), blurRadius: 14),
+            ],
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('OLAY',
-                    style: TextStyle(
-                      color: _accent.withValues(alpha: 0.7),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 2.2,
-                      fontFamily: 'monospace',
-                    )),
-                const SizedBox(height: 4),
-                Text(event.title,
-                    style: TextStyle(
-                      color: _accent,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                      letterSpacing: 0.5,
-                    )),
-              ],
-            ),
+          child: Text(event.icon, style: const TextStyle(fontSize: 34)),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_categoryLabel,
+                  style: AppUi.label.copyWith(color: _accent)),
+              const SizedBox(height: 4),
+              Text(event.title,
+                  style: AppUi.title.copyWith(fontSize: 18, color: _accent)),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _choiceCard(EventChoice c) {
+/// Hover/press feedback'li olay seçim kartı.
+class _ChoiceCard extends StatefulWidget {
+  final EventChoice choice;
+  final Color accent;
+  final VoidCallback onTap;
+  const _ChoiceCard(
+      {required this.choice, required this.accent, required this.onTap});
+  @override
+  State<_ChoiceCard> createState() => _ChoiceCardState();
+}
+
+class _ChoiceCardState extends State<_ChoiceCard> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.choice;
+    final accent = widget.accent;
     final deltas = c.deltaSummary();
-    return _ChoiceButton(
-      accent: _accent,
-      onTap: () => onChoose(c),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 6, height: 16,
-                  color: _accent,
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Text(c.label,
-                      style: const TextStyle(
-                        color: MedievalTheme.textAccent,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                      )),
-                ),
-                const Icon(Icons.arrow_forward,
-                    color: MedievalTheme.textSecondary, size: 14),
-              ],
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+          decoration: BoxDecoration(
+            color: _hover
+                ? Color.alphaBlend(
+                    accent.withValues(alpha: 0.14), AppUi.surface2)
+                : AppUi.surface1,
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(
+              color: _hover ? accent : AppUi.line,
+              width: _hover ? 1.5 : 1,
             ),
-            const SizedBox(height: 5),
-            Padding(
-              padding: const EdgeInsets.only(left: 15),
-              child: Text(c.detail,
-                  style: const TextStyle(
-                    color: MedievalTheme.textSecondary,
-                    fontSize: 10,
-                    height: 1.4,
-                    fontFamily: 'monospace',
-                  )),
-            ),
-            if (deltas.isNotEmpty) ...[
-              const SizedBox(height: 7),
-              Padding(
-                padding: const EdgeInsets.only(left: 15),
-                child: Wrap(
-                  spacing: 5, runSpacing: 5,
-                  children: deltas.map((d) => _deltaChip(d.$1, d.$2)).toList(),
-                ),
+            boxShadow: _hover
+                ? [BoxShadow(color: accent.withValues(alpha: 0.25), blurRadius: 10)]
+                : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(c.label, style: AppUi.bodyHi.copyWith(fontSize: 13)),
+                  ),
+                  GameIcon(GameIconData.chevron,
+                      size: 14,
+                      color: _hover ? accent : AppUi.textLo),
+                ],
               ),
+              const SizedBox(height: 5),
+              Padding(
+                padding: const EdgeInsets.only(left: 13),
+                child: Text(c.detail,
+                    style: AppUi.body.copyWith(fontSize: 11, height: 1.4)),
+              ),
+              if (deltas.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 13),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children:
+                        deltas.map((d) => _deltaChip(d.$1, d.$2)).toList(),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -194,68 +199,25 @@ class EventChoiceModal extends StatelessWidget {
   Widget _deltaChip(String icon, String label) {
     final isMoral = icon == '😊';
     final isNeg = label.startsWith('-');
+    // Fayda sage ↑ / bedel rust ↓ — sonuçları tipografi+renkle koru.
     final color = isMoral
-        ? const Color(0xFFE9A23B)
-        : (isNeg ? const Color(0xFFE07868) : const Color(0xFF8BD267));
+        ? AppUi.accent
+        : (isNeg ? AppUi.rust : AppUi.sage);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF0A0805),
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color.withValues(alpha: 0.55), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(icon, style: const TextStyle(fontSize: 11)),
-          const SizedBox(width: 3),
+          const SizedBox(width: 4),
           Text(label,
-              style: TextStyle(
-                color: color, fontSize: 9.5,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-              )),
+              style: AppUi.number.copyWith(fontSize: 10.5, color: color)),
         ],
-      ),
-    );
-  }
-}
-
-/// Hover/press feedback için seçim butonu.
-class _ChoiceButton extends StatefulWidget {
-  final Widget child;
-  final Color accent;
-  final VoidCallback onTap;
-  const _ChoiceButton(
-      {required this.child, required this.accent, required this.onTap});
-  @override
-  State<_ChoiceButton> createState() => _ChoiceButtonState();
-}
-
-class _ChoiceButtonState extends State<_ChoiceButton> {
-  bool _hover = false;
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit:  (_) => setState(() => _hover = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            color: _hover
-                ? widget.accent.withValues(alpha: 0.12)
-                : const Color(0xFF0F0A06),
-            border: Border.all(
-              color: _hover
-                  ? widget.accent
-                  : widget.accent.withValues(alpha: 0.35),
-              width: 1.5,
-            ),
-          ),
-          child: widget.child,
-        ),
       ),
     );
   }

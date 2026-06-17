@@ -41,6 +41,7 @@ import 'rendering/tool_renderer.dart';
 import 'world/nature_entity.dart';
 import 'world/decor_entity.dart';
 import 'world/grave.dart';
+import 'world/reed_bed.dart';
 import 'rendering/nature_renderer.dart';
 import 'rendering/decor_renderer.dart';
 import 'rendering/animal_renderer.dart';
@@ -58,6 +59,7 @@ import 'systems/petition_system.dart';
 import 'systems/estate_system.dart';
 import 'ui/dev_panel.dart';
 import 'ui/objective_panel.dart';
+import 'ui/estate_banner.dart';
 import 'systems/quest_book.dart';
 import 'ui/sky_widgets.dart';
 import 'ui/loading_screen.dart';
@@ -85,6 +87,7 @@ import 'scene/scene_data.dart';
 part 'scene/scene_scenarios.dart';
 part 'scene/scene_npc_activity.dart';
 part 'scene/scene_npc_routine.dart';
+part 'scene/scene_reed.dart';
 part 'scene/scene_events.dart';
 part 'scene/scene_placement.dart';
 part 'scene/scene_building_spawn.dart';
@@ -95,6 +98,7 @@ part 'scene/scene_ui.dart';
 part 'scene/scene_firepit_gather.dart';
 part 'scene/scene_petitions.dart';
 part 'scene/scene_estates.dart';
+part 'scene/scene_fire.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_reactions.dart';
 part 'scene/scene_flow.dart';
@@ -212,6 +216,14 @@ class _VillageSceneState extends State<VillageScene>
   // ── Firepit & home sistemi ─────────────────────────────────────────────────
   bool _hasFire = false;
   BuildingEntity? _firepitBuilding;
+  // ── Ateş yakıtı (scene_fire) ───────────────────────────────────────────────
+  // Ateş artık beslenmek ister: yakıt tükenir, ateşçi odun taşır, odun
+  // bittiyse söner → köy çapı huzursuzluk + dilekçe.
+  bool _fireWasBurning = true;            // sönme/yeniden yanma geçişi için
+  double _firekeeperScan = 0;             // ateşçi atama poll sayacı
+  VillagerEntity? _firekeeper;            // o an ateşe odun taşıyan köylü
+  bool _firekeeperLoaded = false;         // ateşçi odunu aldı mı (görsel + teslim)
+  double _firekeeperGiveUp = 0;           // ulaşamazsa görevi bırakma sim zamanı
   BuildingEntity? _selectedBuilding;
   VillagerEntity? _selectedVillager;
   /// Oyuncu "Takip et" eylemini kullanırsa kamera bu NPC'ye demirlenir;
@@ -259,6 +271,9 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Mezarlık — kilise yanında biriken mezarlar (cenaze sistemi) ──────────
   final List<Grave> _graves = [];
+  // Ateş etrafı saz yatakları — evsizler biçtiği sazla kurar, geceleri uyur.
+  final List<ReedBed> _reedBeds = [];
+  double _reedScan = 0; // _tickReed throttle sayacı
 
   // ── Mining (maden kazma) ───────────────────────────────────────────────────
   final List<MineNode> _mineNodes = [];
@@ -608,6 +623,7 @@ class _VillageSceneState extends State<VillageScene>
             if (_devPanelOpen) buildDevPanel(),
             buildEventBanner(),
             buildObjectivesPanel(),
+            buildEstateBanner(),
             if (_notification != null) buildNotificationToast(),
             if (_placing != null ||
                 _farmMode ||

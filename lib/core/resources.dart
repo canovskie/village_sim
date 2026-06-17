@@ -8,6 +8,7 @@ enum ResourceKind {
   coal('♦', 'Kömür', 'coal'),
   food('🌾', 'Yiyecek', 'food'),
   honey('🍯', 'Bal', 'honey'),
+  reed('🌿', 'Saz', 'reed'),
   gold('★', 'Altın', 'gold');
 
   final String icon;
@@ -25,6 +26,7 @@ class ResourceBundle {
   int coal;
   int food;
   int honey;
+  int reed;
   int gold;
 
   ResourceBundle({
@@ -34,6 +36,7 @@ class ResourceBundle {
     this.coal  = 0,
     this.food  = 0,
     this.honey = 0,
+    this.reed  = 0,
     this.gold  = 0,
   });
 
@@ -44,6 +47,7 @@ class ResourceBundle {
         ResourceKind.coal  => coal,
         ResourceKind.food  => food,
         ResourceKind.honey => honey,
+        ResourceKind.reed  => reed,
         ResourceKind.gold  => gold,
       };
 
@@ -55,6 +59,7 @@ class ResourceBundle {
       case ResourceKind.coal:  coal  += amount;
       case ResourceKind.food:  food  += amount;
       case ResourceKind.honey: honey += amount;
+      case ResourceKind.reed:  reed  += amount;
       case ResourceKind.gold:  gold  += amount;
     }
   }
@@ -66,6 +71,7 @@ class ResourceBundle {
       coal  >= c.coal  &&
       food  >= c.food  &&
       honey >= c.honey &&
+      reed  >= c.reed  &&
       gold  >= c.gold;
 
   void spend(ResourceCost c) {
@@ -75,11 +81,12 @@ class ResourceBundle {
     coal  -= c.coal;
     food  -= c.food;
     honey -= c.honey;
+    reed  -= c.reed;
     gold  -= c.gold;
   }
 
   void clear() {
-    wood = stone = iron = coal = food = honey = gold = 0;
+    wood = stone = iron = coal = food = honey = reed = gold = 0;
   }
 
   /// Eksik kaynakları "12 🪵 + 3 🪨" gibi gösterilebilir biçimde döner.
@@ -94,6 +101,7 @@ class ResourceBundle {
     check(ResourceKind.coal,  coal,  c.coal);
     check(ResourceKind.food,  food,  c.food);
     check(ResourceKind.honey, honey, c.honey);
+    check(ResourceKind.reed,  reed,  c.reed);
     check(ResourceKind.gold,  gold,  c.gold);
     return parts.join(' ');
   }
@@ -107,6 +115,7 @@ class ResourceCost {
   final int coal;
   final int food;
   final int honey;
+  final int reed;
   final int gold;
 
   const ResourceCost({
@@ -116,6 +125,7 @@ class ResourceCost {
     this.coal  = 0,
     this.food  = 0,
     this.honey = 0,
+    this.reed  = 0,
     this.gold  = 0,
   });
 
@@ -123,7 +133,7 @@ class ResourceCost {
 
   bool get isFree =>
       wood == 0 && stone == 0 && iron == 0 &&
-      coal == 0 && food == 0 && honey == 0 && gold == 0;
+      coal == 0 && food == 0 && honey == 0 && reed == 0 && gold == 0;
 
   /// Sıfır olmayan kaynakları (kind, amount) listesi olarak döner.
   List<(ResourceKind, int)> get entries => [
@@ -133,6 +143,7 @@ class ResourceCost {
         if (coal  > 0) (ResourceKind.coal,  coal),
         if (food  > 0) (ResourceKind.food,  food),
         if (honey > 0) (ResourceKind.honey, honey),
+        if (reed  > 0) (ResourceKind.reed,  reed),
         if (gold  > 0) (ResourceKind.gold,  gold),
       ];
 }

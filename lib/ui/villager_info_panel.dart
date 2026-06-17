@@ -4,13 +4,14 @@ import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
 import '../rendering/portrait_renderer.dart';
-import 'cozy_theme.dart';
+import 'app_ui.dart';
 
-/// Köylü kartı — üstte ahşap başlık + portre, altta parşömen üstü kişisel
-/// bilgi, yaşam evresi çubuğu, aile bağları ve cozy etkileşim butonları
-/// (Selam / Hediye / Takip / Adını değiştir). Aile chip'leri ve aksiyonlar
-/// üst sahnedeki callback'lere bağlanır — panel kendi state'i sadece
-/// rename modunda kullanır.
+/// Köylü kartı — modern koyu app_ui dilinde. Üstte portre + isim + meslek
+/// rozeti + favori/kapat ikon butonları; altta durum rozetleri, animasyonlu
+/// yaş çubuğu, hâl/ev/bağ satırları, aile chip'leri ve cozy etkileşim
+/// butonları (Selam / Hediye / Takip). Aile chip'leri ve aksiyonlar üst
+/// sahnedeki callback'lere bağlanır — panel kendi state'i sadece rename
+/// modunda kullanır.
 class VillagerInfoPanel extends StatefulWidget {
   final VillagerEntity villager;
   final String? homeLabel;
@@ -93,48 +94,49 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   Widget build(BuildContext context) {
     final v = widget.villager;
     final stage = v.lifeStage;
-    return SizedBox(
-      width: 304,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _header(v, stage),
-          Transform.translate(
-            offset: const Offset(0, -2),
-            child: ParchmentPanel(
-              pinned: false,
-              padding: const EdgeInsets.fromLTRB(13, 12, 13, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _statusStrip(v),
-                  const SizedBox(height: 10),
-                  _ageBar(v, stage),
-                  const SizedBox(height: 9),
-                  _moodRow(v),
-                  const SizedBox(height: 2),
-                  _row('Ev', widget.homeLabel ?? 'Evsiz'),
-                  if (v.greetCount > 0 || v.giftCount > 0) ...[
-                    const SizedBox(height: 2),
-                    _interactionRow(v),
+    return AppReveal(
+      child: SizedBox(
+        width: 312,
+        child: AppPanel(
+          accent: _stageColor(stage),
+          padding: EdgeInsets.zero,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _header(v, stage),
+              Container(height: 1, color: AppUi.line),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _statusStrip(v),
+                    const SizedBox(height: 14),
+                    _ageBar(v, stage),
+                    const SizedBox(height: 12),
+                    _moodRow(v),
+                    _row('Ev', widget.homeLabel ?? 'Evsiz',
+                        icon: GameIconData.home),
+                    if (v.greetCount > 0 || v.giftCount > 0) _interactionRow(v),
+                    if (v.parents.isNotEmpty || v.children.isNotEmpty) ...[
+                      const AppDivider(),
+                      if (v.parents.isNotEmpty)
+                        _familyGroup('EBEVEYNLER', v.parents),
+                      if (v.parents.isNotEmpty && v.children.isNotEmpty)
+                        const SizedBox(height: 9),
+                      if (v.children.isNotEmpty)
+                        _familyGroup('ÇOCUKLAR', v.children),
+                    ],
+                    const SizedBox(height: 14),
+                    _actionRow(v),
                   ],
-                  if (v.parents.isNotEmpty || v.children.isNotEmpty) ...[
-                    const CozyDivider(wood: false),
-                    if (v.parents.isNotEmpty)
-                      _familyGroup('Ebeveynler', v.parents),
-                    if (v.parents.isNotEmpty && v.children.isNotEmpty)
-                      const SizedBox(height: 7),
-                    if (v.children.isNotEmpty)
-                      _familyGroup('Çocuklar', v.children),
-                  ],
-                  const CozyDivider(wood: false),
-                  _actionRow(v),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -146,14 +148,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     final profession = v.hasProfession
         ? '$genderIcon  ${v.type.displayName}'
         : '$genderIcon  ${stage.label}';
-    return WoodPlankPanel(
-      padding: const EdgeInsets.fromLTRB(11, 9, 9, 11),
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(4),
-        topRight: Radius.circular(4),
-        bottomLeft: Radius.zero,
-        bottomRight: Radius.zero,
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
       child: Row(
         children: [
           // Portre — favori ise üstüne ufak kalp rozet.
@@ -164,86 +160,69 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1A0E04),
-                  border: Border.all(color: const Color(0xFF2E1A08), width: 1),
-                  boxShadow: const [
-                    BoxShadow(color: Color(0x88000000), blurRadius: 2, offset: Offset(0, 1)),
-                  ],
+                  color: AppUi.surface0,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppUi.line, width: 1),
                 ),
-                child: CustomPaint(
-                  painter: PortraitPainter(
-                    visual:        v.visual,
-                    stage:         stage,
-                    type:          v.type,
-                    hasProfession: v.hasProfession,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: CustomPaint(
+                    painter: PortraitPainter(
+                      visual:        v.visual,
+                      stage:         stage,
+                      type:          v.type,
+                      hasProfession: v.hasProfession,
+                    ),
                   ),
                 ),
               ),
               if (v.isFavorite)
                 Positioned(
-                  top: -4, right: -4,
+                  top: -5, right: -5,
                   child: Container(
-                    width: 16, height: 16,
+                    width: 18, height: 18,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2A0E08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: CozyUi.rust, width: 1),
+                      color: AppUi.surface2,
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: AppUi.rust, width: 1),
                       boxShadow: [
-                        BoxShadow(color: CozyUi.rust.withValues(alpha: 0.6), blurRadius: 4),
+                        BoxShadow(
+                            color: AppUi.rust.withValues(alpha: 0.6),
+                            blurRadius: 5),
                       ],
                     ),
-                    child: const Text('❤',
-                        style: TextStyle(
-                            color: Color(0xFFFFB99A), fontSize: 9, height: 1.0)),
+                    child: const GameIcon(GameIconData.heart,
+                        size: 9, color: AppUi.rust),
                   ),
                 ),
             ],
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 11),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 _renaming ? _renameField() : _nameLine(v),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: Color.alphaBlend(
-                        CozyUi.ember.withValues(alpha: 0.30),
-                        const Color(0xFF1A0E04)),
-                    borderRadius: BorderRadius.circular(2),
-                    border: Border.all(
-                        color: CozyUi.ember.withValues(alpha: 0.7), width: 1),
-                  ),
-                  child: Text(profession,
-                      style: TextStyle(
-                        color: CozyUi.ember,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        fontFamily: 'monospace',
-                        letterSpacing: 0.5,
-                        shadows: const [
-                          Shadow(color: Color(0xAA000000), blurRadius: 0, offset: Offset(0, 1)),
-                        ],
-                      )),
-                ),
+                const SizedBox(height: 5),
+                AppChip(label: profession.toUpperCase(), color: _stageColor(stage)),
               ],
             ),
           ),
           const SizedBox(width: 6),
           // Favori toggle (kalp) + close
-          _iconCircle(
-            icon: v.isFavorite ? '❤' : '♡',
-            iconColor: v.isFavorite ? const Color(0xFFFFB99A) : const Color(0xFFD2B679),
+          AppIconButton(
+            icon: GameIconData.heart,
+            size: 26,
+            active: v.isFavorite,
+            tint: AppUi.rust,
             onTap: widget.onToggleFavorite,
           ),
-          const SizedBox(width: 4),
-          _iconCircle(
-            icon: '✕',
-            iconColor: const Color(0xFFD2B679),
+          const SizedBox(width: 5),
+          AppIconButton(
+            icon: GameIconData.close,
+            size: 26,
             onTap: widget.onClose,
           ),
         ],
@@ -259,20 +238,13 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         children: [
           Flexible(
             child: Text(v.name,
-                style: CozyUi.carvedTitle.copyWith(
-                    fontSize: 13, letterSpacing: 1.6,
-                    color: const Color(0xFFF1D89A)),
+                style: AppUi.title.copyWith(fontSize: 15),
                 overflow: TextOverflow.ellipsis),
           ),
           if (widget.onRename != null)
             const Padding(
-              padding: EdgeInsets.only(left: 4),
-              child: Text('✎',
-                  style: TextStyle(
-                    color: Color(0x99D2B679),
-                    fontSize: 10,
-                    height: 1.0,
-                  )),
+              padding: EdgeInsets.only(left: 6),
+              child: GameIcon(GameIconData.gear, size: 10, color: AppUi.textLo),
             ),
         ],
       ),
@@ -281,7 +253,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   Widget _renameField() {
     return SizedBox(
-      height: 22,
+      height: 26,
       child: Row(
         children: [
           Expanded(
@@ -294,90 +266,43 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
               inputFormatters: [
                 FilteringTextInputFormatter.deny(RegExp(r'[\r\n\t]')),
               ],
-              style: CozyUi.carvedTitle.copyWith(
-                fontSize: 13, letterSpacing: 1.0,
-                color: const Color(0xFFF1D89A),
-              ),
-              cursorColor: CozyUi.ember,
-              cursorWidth: 1.2,
+              style: AppUi.title.copyWith(fontSize: 14, letterSpacing: 0.8),
+              cursorColor: AppUi.accent,
+              cursorWidth: 1.4,
               decoration: const InputDecoration(
                 isDense: true,
                 counterText: '',
-                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 filled: true,
-                fillColor: Color(0xFF1A0E04),
+                fillColor: AppUi.surface0,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(3)),
-                  borderSide: BorderSide(color: CozyUi.ember, width: 1),
+                  borderRadius: BorderRadius.all(Radius.circular(AppUi.radiusSm)),
+                  borderSide: BorderSide(color: AppUi.accent, width: 1),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(3)),
-                  borderSide: BorderSide(color: Color(0xFF3A2410), width: 1),
+                  borderRadius: BorderRadius.all(Radius.circular(AppUi.radiusSm)),
+                  borderSide: BorderSide(color: AppUi.line, width: 1),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(3)),
-                  borderSide: BorderSide(color: CozyUi.ember, width: 1.4),
+                  borderRadius: BorderRadius.all(Radius.circular(AppUi.radiusSm)),
+                  borderSide: BorderSide(color: AppUi.accent, width: 1.4),
                 ),
               ),
             ),
           ),
+          const SizedBox(width: 5),
+          AppIconButton(
+              icon: GameIconData.star,
+              size: 24,
+              tint: AppUi.sage,
+              onTap: _commitRename),
           const SizedBox(width: 4),
-          _miniBtn(label: '✓', color: CozyUi.sage, onTap: _commitRename),
-          const SizedBox(width: 3),
-          _miniBtn(
-              label: '✕',
-              color: const Color(0xFF8A5030),
+          AppIconButton(
+              icon: GameIconData.close,
+              size: 24,
               onTap: () => setState(() => _renaming = false)),
         ],
-      ),
-    );
-  }
-
-  Widget _miniBtn({required String label, required Color color, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 18, height: 20,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A0E04),
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(color: color, width: 1),
-        ),
-        child: Text(label,
-            style: TextStyle(
-              color: color, fontSize: 11, fontWeight: FontWeight.w900,
-              fontFamily: 'monospace', height: 1.0,
-            )),
-      ),
-    );
-  }
-
-  Widget _iconCircle({
-    required String icon,
-    required Color iconColor,
-    VoidCallback? onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 22, height: 22,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A0E04),
-          borderRadius: BorderRadius.circular(11),
-          border: Border.all(color: const Color(0xFF3A2410), width: 1),
-          boxShadow: const [
-            BoxShadow(color: Color(0x88000000), blurRadius: 2, offset: Offset(0, 1)),
-          ],
-        ),
-        child: Text(icon,
-            style: TextStyle(
-              color: iconColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              height: 1.0,
-            )),
       ),
     );
   }
@@ -387,44 +312,67 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   Widget _statusStrip(VillagerEntity v) {
     final badges = <Widget>[];
     final (label, color, icon) = _stateChip(v);
-    badges.add(WaxBadge(label: label, color: color, icon: icon));
+    badges.add(_emojiChip(label, color, icon));
     final activity = _activityChip(v);
     if (activity != null) badges.add(activity);
     if (v.isSage) {
-      badges.add(const WaxBadge(label: 'Bilge', color: Color(0xFFB079D4), icon: '✨'));
+      badges.add(_emojiChip('Bilge', const Color(0xFFB079D4), '✨'));
     }
     if (widget.isFollowed) {
-      badges.add(WaxBadge(label: 'Takipte', color: CozyUi.sage, icon: '🎥'));
+      badges.add(_emojiChip('Takipte', AppUi.sage, '🎥'));
     }
     return Wrap(
-      spacing: 5,
-      runSpacing: 5,
+      spacing: 6,
+      runSpacing: 6,
       children: badges,
     );
   }
 
+  /// Durum/aktivite rozetleri — etiketler emoji-veri taşıdığı için
+  /// AppChip'in vektör ikonu yerine emoji + renkli kapsül kullanıyoruz.
+  Widget _emojiChip(String label, Color color, String emoji) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.7), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 10, height: 1.0)),
+          const SizedBox(width: 5),
+          Text(label,
+              style: AppUi.button.copyWith(
+                  fontSize: 9.5, letterSpacing: 1.0, color: AppUi.textHi)),
+        ],
+      ),
+    );
+  }
+
   (String, Color, String) _stateChip(VillagerEntity v) {
-    if (v.isSeatedAtFire) return ('Ateş başı', CozyUi.ember, '🔥');
+    if (v.isSeatedAtFire) return ('Ateş başı', AppUi.accent, '🔥');
     if (v.isSleeping)     return ('Uyuyor',    const Color(0xFF6C7CB2), '💤');
-    if (v.isCarrying)     return ('Taşıyor',   const Color(0xFFC0A040), '📦');
-    if (v.isWalking)      return ('Yürüyor',   CozyUi.sage, '🚶');
-    return ('Boşta', const Color(0xFF8A6D40), '·');
+    if (v.isCarrying)     return ('Taşıyor',   AppUi.gold, '📦');
+    if (v.isWalking)      return ('Yürüyor',   AppUi.sage, '🚶');
+    return ('Boşta', AppUi.textLo, '·');
   }
 
   Widget? _activityChip(VillagerEntity v) {
     switch (v.activity) {
       case VillagerActivity.chat:
-        return const WaxBadge(label: 'Sohbet', color: Color(0xFF6FA0C8), icon: '💬');
+        return _emojiChip('Sohbet', AppUi.info, '💬');
       case VillagerActivity.music:
-        return const WaxBadge(label: 'Müzik', color: Color(0xFFB079D4), icon: '🎸');
+        return _emojiChip('Müzik', const Color(0xFFB079D4), '🎸');
       case VillagerActivity.dance:
-        return const WaxBadge(label: 'Dans', color: Color(0xFFE07895), icon: '💃');
+        return _emojiChip('Dans', const Color(0xFFE07895), '💃');
       case VillagerActivity.warm:
-        return const WaxBadge(label: 'Isınıyor', color: CozyUi.ember, icon: '☕');
+        return _emojiChip('Isınıyor', AppUi.accent, '☕');
       case VillagerActivity.storytelling:
-        return const WaxBadge(label: 'Hikaye', color: Color(0xFFD49C5C), icon: '📖');
+        return _emojiChip('Hikaye', AppUi.accentSoft, '📖');
       case VillagerActivity.listening:
-        return const WaxBadge(label: 'Dinliyor', color: Color(0xFFA8C078), icon: '👂');
+        return _emojiChip('Dinliyor', AppUi.sage, '👂');
       case VillagerActivity.none:
         return null;
     }
@@ -443,35 +391,45 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         Row(
           children: [
             Text(stage.icon, style: const TextStyle(fontSize: 13)),
-            const SizedBox(width: 5),
+            const SizedBox(width: 6),
             Text('${stage.label} · $ageStr',
-                style: CozyUi.inkBody.copyWith(fontWeight: FontWeight.w800)),
+                style: AppUi.bodyHi.copyWith(fontSize: 12)),
             const Spacer(),
             Text(_lifeStageTail(stage, v),
-                style: CozyUi.inkMuted.copyWith(fontSize: 9)),
+                style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo)),
           ],
         ),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: Container(
-            height: 5,
-            decoration: BoxDecoration(
-              color: const Color(0x44000000),
-              border: Border.all(color: const Color(0x55000000), width: 0.5),
-            ),
-            child: FractionallySizedBox(
+        const SizedBox(height: 6),
+        Container(
+          height: 6,
+          decoration: BoxDecoration(
+            color: AppUi.surface0,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: AppUi.line, width: 0.8),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: Align(
               alignment: Alignment.centerLeft,
-              widthFactor: pct,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [
-                      _stageColor(stage).withValues(alpha: 0.95),
-                      _stageColor(stage).withValues(alpha: 0.65),
-                    ],
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: pct),
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOutCubic,
+                builder: (_, val, _) => FractionallySizedBox(
+                  widthFactor: val,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        _stageColor(stage).withValues(alpha: 0.8),
+                        _stageColor(stage),
+                        Color.lerp(_stageColor(stage), Colors.white, 0.28)!,
+                      ]),
+                      boxShadow: [
+                        BoxShadow(
+                            color: _stageColor(stage).withValues(alpha: 0.5),
+                            blurRadius: 5),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -491,8 +449,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   Color _stageColor(LifeStage s) => switch (s) {
         LifeStage.child => const Color(0xFFE6B870),
-        LifeStage.youth => CozyUi.sage,
-        LifeStage.adult => CozyUi.ember,
+        LifeStage.youth => AppUi.sage,
+        LifeStage.adult => AppUi.accent,
         LifeStage.elder => const Color(0xFFB079D4),
       };
 
@@ -512,7 +470,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   Widget _moodRow(VillagerEntity v) {
     final (icon, label) = _moodLabel(v.mood);
     final energyPct = (v.energy * 100).round();
-    return _row('Hâli', '$icon $label · ⚡$energyPct%');
+    return _row('Hâli', '$icon $label · ⚡$energyPct%', icon: GameIconData.heart);
   }
 
   (String, String) _moodLabel(double m) {
@@ -523,14 +481,20 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return ('😐', 'Sakin');
   }
 
-  Widget _row(String label, String value) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
+  Widget _row(String label, String value, {GameIconData? icon}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
         child: Row(
           children: [
-            SizedBox(width: 56, child: Text(label, style: CozyUi.inkLabel)),
+            if (icon != null) ...[
+              GameIcon(icon, size: 13, color: AppUi.textLo),
+              const SizedBox(width: 7),
+            ],
+            SizedBox(
+                width: 48,
+                child: Text(label.toUpperCase(),
+                    style: AppUi.label.copyWith(letterSpacing: 0.6))),
             Flexible(
-              child: Text(value,
-                  style: CozyUi.inkBody.copyWith(fontWeight: FontWeight.w800)),
+              child: Text(value, style: AppUi.bodyHi.copyWith(fontSize: 12)),
             ),
           ],
         ),
@@ -540,20 +504,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     final parts = <String>[];
     if (v.greetCount > 0) parts.add('👋 ${v.greetCount}');
     if (v.giftCount > 0) parts.add('🎁 ${v.giftCount}');
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          const SizedBox(
-              width: 56,
-              child: Text('Bağ', style: CozyUi.inkLabel)),
-          Flexible(
-            child: Text(parts.join('   '),
-                style: CozyUi.inkBody.copyWith(fontWeight: FontWeight.w800)),
-          ),
-        ],
-      ),
-    );
+    return _row('Bağ', parts.join('   '), icon: GameIconData.people);
   }
 
   // ─── Family chips ──────────────────────────────────────────────────────────
@@ -562,11 +513,10 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: CozyUi.inkLabel),
-        const SizedBox(height: 4),
+        AppSectionLabel(label),
         Wrap(
-          spacing: 4,
-          runSpacing: 4,
+          spacing: 5,
+          runSpacing: 5,
           children: members.map(_familyChip).toList(),
         ),
       ],
@@ -575,18 +525,14 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   Widget _familyChip(VillagerEntity v) {
     final chip = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0x55000000),
-        borderRadius: BorderRadius.circular(2),
-        border: Border.all(color: CozyUi.parchmentEdge, width: 0.6),
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppUi.line, width: 1),
       ),
       child: Text('${v.lifeStage.icon} ${v.name}',
-          style: const TextStyle(
-              color: CozyUi.parchmentInk,
-              fontSize: 9,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.w700)),
+          style: AppUi.body.copyWith(color: AppUi.textMid, fontSize: 11)),
     );
     if (widget.onSelect == null) return chip;
     return GestureDetector(onTap: () => widget.onSelect!(v), child: chip);
@@ -598,109 +544,36 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return Row(
       children: [
         Expanded(
-          child: _actionTile(
-            icon: '👋',
+          child: AppButton(
             label: 'Selam',
-            tint: CozyUi.sage,
+            tint: AppUi.sage,
+            expand: true,
             onTap: widget.onGreet,
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 7),
         Expanded(
-          child: _actionTile(
-            icon: '🎁',
+          child: AppButton(
             label: 'Hediye',
-            tint: CozyUi.ember,
-            onTap: widget.onGift,
-            disabled: !widget.canGift,
-            hint: widget.canGift ? null : 'yiyecek yok',
+            sub: widget.canGift ? null : 'yiyecek yok',
+            tint: AppUi.accent,
+            expand: true,
+            onTap: widget.canGift ? widget.onGift : null,
           ),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 7),
         Expanded(
-          child: _actionTile(
-            icon: widget.isFollowed ? '⏹' : '🎥',
+          child: AppButton(
             label: widget.isFollowed ? 'Bırak' : 'Takip',
-            tint: widget.isFollowed ? CozyUi.rust : const Color(0xFF6FA0C8),
+            tint: widget.isFollowed ? AppUi.rust : AppUi.info,
+            kind: widget.isFollowed
+                ? AppButtonKind.filled
+                : AppButtonKind.tonal,
+            expand: true,
             onTap: widget.onToggleFollow,
-            active: widget.isFollowed,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _actionTile({
-    required String icon,
-    required String label,
-    required Color tint,
-    VoidCallback? onTap,
-    bool active = false,
-    bool disabled = false,
-    String? hint,
-  }) {
-    final effectiveTap = disabled ? null : onTap;
-    final accent = tint;
-    return Opacity(
-      opacity: disabled ? 0.45 : 1.0,
-      child: GestureDetector(
-        onTap: effectiveTap,
-        child: Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: active
-                  ? [
-                      Color.alphaBlend(accent.withValues(alpha: 0.55), CozyUi.leatherHi),
-                      Color.alphaBlend(accent.withValues(alpha: 0.30), CozyUi.leather),
-                    ]
-                  : const [Color(0xFFB47542), CozyUi.leather],
-            ),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: active ? accent : const Color(0xFF1F0E04),
-              width: active ? 1.6 : 1.2,
-            ),
-            boxShadow: active
-                ? [
-                    BoxShadow(
-                        color: accent.withValues(alpha: 0.55),
-                        blurRadius: 8,
-                        spreadRadius: 0.3),
-                  ]
-                : const [
-                    BoxShadow(
-                        color: Color(0x66000000),
-                        blurRadius: 3,
-                        offset: Offset(0, 2)),
-                  ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(icon, style: const TextStyle(fontSize: 16, height: 1.0)),
-              const SizedBox(height: 2),
-              Text(
-                hint ?? label,
-                style: TextStyle(
-                  color: const Color(0xFFFCEDC4),
-                  fontSize: hint != null ? 8 : 9.5,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.5,
-                  fontFamily: 'monospace',
-                  shadows: const [
-                    Shadow(color: Color(0xCC1A0E04), blurRadius: 0, offset: Offset(0, 1)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

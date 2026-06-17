@@ -11,6 +11,12 @@ class NatureRenderer {
   static ui.Image? _reeds;
 
   static final Paint _pSprite = AssetStyle.paint();
+  // Biçilmiş sazın anızı — kısa, soluk kesik saplar.
+  static final Paint _pStubble = Paint()
+    ..color = const Color(0xFF7E8A4E)
+    ..strokeWidth = 1.6
+    ..strokeCap = StrokeCap.round
+    ..isAntiAlias = true;
 
   static Future<void> loadAll() async {
     _lotus0 = await _load('assets/nature/lotus_0.png');
@@ -70,11 +76,27 @@ class NatureRenderer {
     int seed = 0,
     double col = 0,
     double row = 0,
+    double growth = 1.0, // 0 = yeni biçilmiş (anız), 1 = olgun
   }) {
     final img = _reeds;
     if (img == null) return;
 
-    const drawH = 86.0; // px yükseklik
+    // Biçilmiş / yeni filiz — kısa anız sapları çiz, sprite yok.
+    if (growth < 0.18) {
+      final rnd = Random(seed);
+      final n = 4 + rnd.nextInt(3);
+      for (int i = 0; i < n; i++) {
+        final dx = (rnd.nextDouble() - 0.5) * 26;
+        final h  = 4.0 + rnd.nextDouble() * 4.0;
+        final lean = (rnd.nextDouble() - 0.5) * 3;
+        canvas.drawLine(
+          Offset(cx + dx, cy), Offset(cx + dx + lean, cy - h), _pStubble);
+      }
+      return;
+    }
+
+    // Büyürken kısadan tam boya uzar (taban sabit).
+    final drawH = 86.0 * (0.4 + 0.6 * growth.clamp(0.0, 1.0));
     final drawW = drawH * img.width / img.height;
 
     final dst = Rect.fromLTWH(cx - drawW / 2, cy - drawH, drawW, drawH);

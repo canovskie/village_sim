@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'game_theme.dart';
+import 'app_ui.dart';
 
 /// Oyun hakkında bilgi, sürüm ve kontroller listesini gösteren panel.
 class AboutScreen extends StatelessWidget {
@@ -27,130 +27,81 @@ class AboutScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0703),
+      backgroundColor: AppUi.surface0,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
+            constraints: const BoxConstraints(maxWidth: 460),
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                decoration: MedievalTheme.panelDecoration(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        MedievalTheme.rivet(),
-                        const Expanded(
-                          child: Center(
-                            child: Text('HAKKINDA',
-                                style: MedievalTheme.titleStyle),
-                          ),
-                        ),
-                        MedievalTheme.rivet(),
-                      ],
-                    ),
-                    MedievalTheme.divider(),
-                    const SizedBox(height: 10),
+              child: AppReveal(
+                child: AppPanel(
+                  accent: AppUi.accent,
+                  padding: const EdgeInsets.fromLTRB(22, 20, 22, 22),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Text('HAKKINDA', style: AppUi.title),
+                      ),
+                      const SizedBox(height: 18),
 
-                    const Center(
-                      child: Text('VILLAGE SIM',
-                          style: TextStyle(
-                            color: MedievalTheme.textAccent,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
-                            letterSpacing: 4.0,
-                          )),
-                    ),
-                    const SizedBox(height: 4),
-                    const Center(
-                      child: Text(_version,
-                          style: TextStyle(
-                            color: MedievalTheme.textSecondary,
-                            fontSize: 10,
-                            fontFamily: 'monospace',
-                            letterSpacing: 1.5,
-                          )),
-                    ),
-                    const SizedBox(height: 12),
-                    const Center(
-                      child: Text(
-                        'Küçük bir köyü ateşten başlatıp\nbüyüten bir piksel simülasyonu.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: MedievalTheme.textPrimary,
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          height: 1.6,
+                      Center(
+                        child: GameIcon(GameIconData.flame,
+                            size: 38, color: AppUi.accent),
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Text('VILLAGE SIM',
+                            style: AppUi.display.copyWith(
+                              fontSize: 26,
+                              color: AppUi.accentSoft,
+                              letterSpacing: 4.0,
+                            )),
+                      ),
+                      const SizedBox(height: 4),
+                      Center(
+                        child: Text(_version,
+                            style: AppUi.label.copyWith(letterSpacing: 1.6)),
+                      ),
+                      const SizedBox(height: 14),
+                      Center(
+                        child: Text(
+                          'Küçük bir köyü ateşten başlatıp\nbüyüten bir piksel simülasyonu.',
+                          textAlign: TextAlign.center,
+                          style: AppUi.body.copyWith(height: 1.5),
                         ),
                       ),
-                    ),
 
-                    const SizedBox(height: 16),
-                    MedievalTheme.divider(),
-                    _SectionLabel('Kontroller'),
-                    for (final (key, desc) in _controls)
-                      _Row(left: key, right: desc),
+                      const SizedBox(height: 18),
+                      const AppSectionLabel('Kontroller'),
+                      const SizedBox(height: 2),
+                      for (final (key, desc) in _controls)
+                        _Row(left: key, right: desc),
 
-                    const SizedBox(height: 12),
-                    MedievalTheme.divider(),
-                    _SectionLabel('Krediler'),
-                    for (final (role, name) in _credits)
-                      _Row(left: role, right: name),
+                      const SizedBox(height: 14),
+                      const AppSectionLabel('Krediler'),
+                      const SizedBox(height: 2),
+                      for (final (role, name) in _credits)
+                        _Row(left: role, right: name),
 
-                    const SizedBox(height: 16),
-                    MedievalTheme.divider(),
-                    const SizedBox(height: 10),
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 11),
-                        decoration: MedievalTheme.buttonDecoration(
-                          active: true,
-                          accentColor: MedievalTheme.activeBorder,
-                        ),
-                        child: const Center(
-                          child: Text('GERİ',
-                              style: TextStyle(
-                                color: MedievalTheme.activeBorder,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'monospace',
-                                letterSpacing: 2.0,
-                              )),
-                        ),
+                      const SizedBox(height: 20),
+                      AppButton(
+                        label: 'GERİ',
+                        icon: GameIconData.chevron,
+                        kind: AppButtonKind.filled,
+                        expand: true,
+                        onTap: () => Navigator.of(context).pop(),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 8, 0, 6),
-      child: Text(text.toUpperCase(),
-          style: const TextStyle(
-            color: MedievalTheme.textAccent,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
-            letterSpacing: 2.0,
-          )),
     );
   }
 }
@@ -163,29 +114,22 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 100,
+            width: 104,
             child: Text(left,
-                style: const TextStyle(
-                  color: MedievalTheme.textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
+                style: AppUi.bodyHi.copyWith(
+                  fontSize: 11.5,
+                  color: AppUi.textMid,
                 )),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(right,
-                style: const TextStyle(
-                  color: MedievalTheme.textPrimary,
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                  height: 1.4,
-                )),
+                style: AppUi.body.copyWith(fontSize: 11.5, height: 1.35)),
           ),
         ],
       ),

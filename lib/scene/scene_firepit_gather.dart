@@ -57,6 +57,7 @@ extension _SceneFirepitGather on _VillageSceneState {
 
   /// Akşam pencerelerinde boştaki NPC'leri yakındaki ateş başına otur'a yolla.
   void _scanGather() {
+    if (!_fireBurning) return; // sönmüş ateşin başına kimse toplanmaz
     final dl = _cycle.dayLight;
     // Sadece akşam: dayLight night threshold ile evening start arası.
     if (dl >= _kEveningGatherStart || dl < kNightThreshold) return;

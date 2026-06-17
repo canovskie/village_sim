@@ -71,6 +71,14 @@ const double kEventMinInterval = 720.0;  // olaylar arası en kısa süre (3 gü
 const double kEventMaxInterval = 1440.0; // olaylar arası en uzun süre (6 gün)
 const double kEventBannerDuration = 6.0; // banner kart ekranda kalma süresi
 
+// ─── Saz / yatak ──────────────────────────────────────────────────────────────
+// Evsizler sazlığı biçer (→ saz kaynağı), ateş etrafına saz yatağı kurar
+// (depodan saz harcar). Biçilen sazlık ~1.5 günde yeniden büyür.
+const double kReedRegrowSeconds = 1.5 * 240.0; // biçilen küme regrow (~1.5 gün)
+const int    kReedYieldPerHarvest = 3;  // bir küme biçince stoğa eklenen saz
+const int    kReedBedCost          = 2; // bir saz yatağının saz maliyeti
+const double kReedCutDuration      = 2.5; // sazlık başında biçme süresi (sn)
+
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────
 // dayLight bu eşiklerin altına düşünce "gece"; üstüne çıkınca "gündüz".
 // Histerez için iki ayrı değer — flicker önler.

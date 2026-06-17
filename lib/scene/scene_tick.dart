@@ -639,6 +639,12 @@ extension _SceneTick on _VillageSceneState {
       }
     }
 
+    // Sazlık yeniden büyür — biçilmiş kümeler su kenarında yavaşça olgunlaşır
+    // (yenilenebilir kaynak). Birkaç küme, her frame ucuz.
+    for (final r in _reeds) {
+      r.tickRegrow(dt, kReedRegrowSeconds);
+    }
+
     // Arı sürüleri — her kovana bağlı, kovan etrafında orbit. Kovan yaşadığı
     // sürece yaşar (spawn/teardown completion hook + rebuild'de). Pure atmosfer.
     for (final sw in _beeSwarms) {
@@ -764,10 +770,15 @@ extension _SceneTick on _VillageSceneState {
       _socialScanTimer = 0;
       _tryStartChats();
     }
+    // Saz yatağı döngüsü — evsizler sazlık biçip ateş etrafına yatak kurar.
+    // Rutinden ÖNCE: yatak peşindeki evsizi sahiplenip rutinden korur.
+    _tickReed(dt);
     // Amaçlı hedef akışı — boşalan köylülere zamana/ihtiyaca göre POI ata.
     _tickRoutine(dt);
     // Ateş başı toplanma + hikaye saati taramaları.
     _tickFirepitGather(dt);
+    // Ateş yakıtı — tükeniş, ateşçi odun taşıma, sönme/yeniden yanma.
+    _tickFire(dt);
     _tickPetitions(dt);
     // Zümre dengesi — moral tabana süzülür + küskün zümre diegetik somurtma.
     _tickEstates(dt);

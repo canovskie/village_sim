@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'game_theme.dart';
+import 'app_ui.dart';
 import 'settings_model.dart';
 
-/// Ses, görüntü ve dil seçeneklerini sunan ortaçağ stilinde panel.
+/// Ses, görüntü ve dil seçeneklerini sunan modern koyu ayar ekranı.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -32,102 +32,110 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0703),
+      backgroundColor: AppUi.scrim,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 460),
             child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-                decoration: MedievalTheme.panelDecoration(),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        MedievalTheme.rivet(),
-                        const Expanded(
-                          child: Center(
-                            child: Text('AYARLAR',
-                                style: MedievalTheme.titleStyle),
+              child: AppReveal(
+                child: AppPanel(
+                  accent: AppUi.accent,
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          GameIcon(GameIconData.gear,
+                              size: 18, color: AppUi.accent),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text('AYARLAR', style: AppUi.title),
                           ),
-                        ),
-                        MedievalTheme.rivet(),
-                      ],
-                    ),
-                    MedievalTheme.divider(),
-                    const SizedBox(height: 6),
-
-                    _SectionLabel('Ses'),
-                    _Slider(
-                      label: 'Müzik',
-                      value: _model.musicVolume,
-                      onChanged: (v) => _model.musicVolume = v,
-                    ),
-                    _Slider(
-                      label: 'Efekt',
-                      value: _model.sfxVolume,
-                      onChanged: (v) => _model.sfxVolume = v,
-                    ),
-
-                    const SizedBox(height: 10),
-                    _SectionLabel('Görüntü'),
-                    _Toggle(
-                      label: 'FPS Göster',
-                      value: _model.showFps,
-                      onChanged: (v) => _model.showFps = v,
-                    ),
-                    _Toggle(
-                      label: 'Olay Sarsıntısı',
-                      value: _model.shakeOnEvents,
-                      onChanged: (v) => _model.shakeOnEvents = v,
-                    ),
-
-                    const SizedBox(height: 10),
-                    _SectionLabel('Dil'),
-                    Row(
-                      children: [
-                        for (final lang in AppLanguage.values) ...[
-                          Expanded(
-                            child: _LangChip(
-                              language: lang,
-                              selected: _model.language == lang,
-                              onTap: () => _model.language = lang,
-                            ),
-                          ),
-                          if (lang != AppLanguage.values.last)
-                            const SizedBox(width: 6),
-                        ],
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-                    MedievalTheme.divider(),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _ActionButton(
-                            label: 'Varsayılan',
-                            accentColor: MedievalTheme.dangerColor,
-                            onTap: _model.resetToDefaults,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: _ActionButton(
-                            label: 'Geri',
-                            accentColor: MedievalTheme.activeBorder,
+                          AppIconButton(
+                            icon: GameIconData.close,
+                            size: 32,
                             onTap: () => Navigator.of(context).pop(),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      const AppDivider(),
+
+                      const AppSectionLabel('SES'),
+                      _Slider(
+                        label: 'Müzik',
+                        value: _model.musicVolume,
+                        onChanged: (v) => _model.musicVolume = v,
+                      ),
+                      _Slider(
+                        label: 'Efekt',
+                        value: _model.sfxVolume,
+                        onChanged: (v) => _model.sfxVolume = v,
+                      ),
+
+                      const SizedBox(height: 12),
+                      const AppSectionLabel('GÖRÜNTÜ'),
+                      _Toggle(
+                        label: 'FPS Göster',
+                        value: _model.showFps,
+                        onChanged: (v) => _model.showFps = v,
+                      ),
+                      _Toggle(
+                        label: 'Olay Sarsıntısı',
+                        value: _model.shakeOnEvents,
+                        onChanged: (v) => _model.shakeOnEvents = v,
+                      ),
+
+                      const SizedBox(height: 12),
+                      const AppSectionLabel('DİL'),
+                      Row(
+                        children: [
+                          for (final lang in AppLanguage.values) ...[
+                            Expanded(
+                              child: _LangChip(
+                                language: lang,
+                                selected: _model.language == lang,
+                                onTap: () => _model.language = lang,
+                              ),
+                            ),
+                            if (lang != AppLanguage.values.last)
+                              const SizedBox(width: 8),
+                          ],
+                        ],
+                      ),
+
+                      const SizedBox(height: 16),
+                      const AppDivider(),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: AppButton(
+                              label: 'VARSAYILAN',
+                              kind: AppButtonKind.ghost,
+                              icon: GameIconData.dice,
+                              expand: true,
+                              onTap: _model.resetToDefaults,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: AppButton(
+                              label: 'GERİ',
+                              kind: AppButtonKind.filled,
+                              icon: GameIconData.chevron,
+                              expand: true,
+                              onTap: () => Navigator.of(context).pop(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -139,25 +147,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 // ── Yardımcı widget'lar ─────────────────────────────────────────────────────
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4, top: 2),
-      child: Text(text.toUpperCase(),
-          style: const TextStyle(
-            color: MedievalTheme.textAccent,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'monospace',
-            letterSpacing: 2.0,
-          )),
-    );
-  }
-}
 
 class _Slider extends StatelessWidget {
   final String label;
@@ -173,22 +162,23 @@ class _Slider extends StatelessWidget {
   Widget build(BuildContext context) {
     final pct = (value * 100).round();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
           SizedBox(
             width: 60,
-            child: Text(label, style: MedievalTheme.labelStyle),
+            child: Text(label, style: AppUi.body),
           ),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 4,
-                activeTrackColor: MedievalTheme.activeBorder,
-                inactiveTrackColor: MedievalTheme.chipBorder,
-                thumbColor: MedievalTheme.textAccent,
-                overlayColor: MedievalTheme.activeBorder.withValues(alpha: 0.2),
+                activeTrackColor: AppUi.accent,
+                inactiveTrackColor: AppUi.surface3,
+                thumbColor: AppUi.accentSoft,
+                overlayColor: AppUi.accent.withValues(alpha: 0.18),
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
               ),
               child: Slider(
                 value: value,
@@ -197,11 +187,12 @@ class _Slider extends StatelessWidget {
             ),
           ),
           SizedBox(
-            width: 38,
+            width: 40,
             child: Text('$pct%',
                 textAlign: TextAlign.right,
-                style: MedievalTheme.smallStyle.copyWith(
-                  color: MedievalTheme.textAccent,
+                style: AppUi.number.copyWith(
+                  fontSize: 12,
+                  color: AppUi.accent,
                 )),
           ),
         ],
@@ -223,36 +214,52 @@ class _Toggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => onChanged(!value),
         child: Row(
           children: [
-            Expanded(child: Text(label, style: MedievalTheme.labelStyle)),
-            Container(
-              width: 56, height: 24,
-              decoration: MedievalTheme.buttonDecoration(active: value),
-              child: Stack(
-                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(3),
-                    child: Container(
-                      width: 16, height: 16,
-                      decoration: BoxDecoration(
-                        color: value
-                            ? MedievalTheme.textAccent
-                            : MedievalTheme.textDim,
-                        border: Border.all(
-                          color: value
-                              ? MedievalTheme.activeBorder
-                              : MedievalTheme.panelBorder,
-                          width: 1,
-                        ),
-                      ),
+            Expanded(child: Text(label, style: AppUi.body)),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 160),
+              curve: Curves.easeOut,
+              width: 50,
+              height: 26,
+              decoration: BoxDecoration(
+                color: value
+                    ? Color.alphaBlend(
+                        AppUi.accent.withValues(alpha: 0.28), AppUi.surface2)
+                    : AppUi.surface0,
+                borderRadius: BorderRadius.circular(13),
+                border: Border.all(
+                  color: value ? AppUi.accent : AppUi.line,
+                  width: 1.2,
+                ),
+                boxShadow: value
+                    ? [
+                        BoxShadow(
+                            color: AppUi.accent.withValues(alpha: 0.35),
+                            blurRadius: 9)
+                      ]
+                    : null,
+              ),
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                alignment:
+                    value ? Alignment.centerRight : Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: value ? AppUi.accentSoft : AppUi.textLo,
                     ),
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -274,70 +281,41 @@ class _LangChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tint = AppUi.accent;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: MedievalTheme.chipDecoration(selected: selected),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? Color.alphaBlend(tint.withValues(alpha: 0.16), AppUi.surface1)
+              : AppUi.surface1,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(
+            color: selected ? tint : AppUi.line,
+            width: selected ? 1.5 : 1,
+          ),
+          boxShadow: selected
+              ? [BoxShadow(color: tint.withValues(alpha: 0.3), blurRadius: 9)]
+              : null,
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(language.code,
-                style: TextStyle(
-                  color: selected
-                      ? MedievalTheme.textAccent
-                      : MedievalTheme.textPrimary,
+                style: AppUi.button.copyWith(
                   fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
                   letterSpacing: 1.5,
+                  color: selected ? AppUi.textHi : AppUi.textMid,
                 )),
             const SizedBox(height: 2),
             Text(language.label,
-                style: TextStyle(
-                  color: selected
-                      ? MedievalTheme.textPrimary
-                      : MedievalTheme.textSecondary,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
+                style: AppUi.body.copyWith(
+                  fontSize: 9.5,
+                  color: selected ? AppUi.textMid : AppUi.textLo,
                 )),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final Color accentColor;
-  final VoidCallback onTap;
-  const _ActionButton({
-    required this.label,
-    required this.accentColor,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 11),
-        decoration: MedievalTheme.buttonDecoration(
-          active: true,
-          accentColor: accentColor,
-        ),
-        child: Center(
-          child: Text(label.toUpperCase(),
-              style: TextStyle(
-                color: accentColor,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                fontFamily: 'monospace',
-                letterSpacing: 1.5,
-              )),
         ),
       ),
     );

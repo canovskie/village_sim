@@ -106,7 +106,9 @@
       "Bash(curl -sSL -o Spectral-Regular.ttf \"https://github.com/google/fonts/raw/main/ofl/spectral/Spectral-Regular.ttf\" -w \"Spectral-Reg: %{http_code} %{size_download}b\\\\n\")",
       "Bash(curl -sSL -o Spectral-Medium.ttf \"https://github.com/google/fonts/raw/main/ofl/spectral/Spectral-Medium.ttf\" -w \"Spectral-Med: %{http_code} %{size_download}b\\\\n\")",
       "Bash(rm -f Cinzel-Bold.ttf Cinzel-Regular.ttf)",
-      "Bash(curl -sSL -o \"Cinzel-VF.ttf\" \"https://github.com/google/fonts/raw/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf\" -w \"VF -> %{http_code} %{size_download}b\\\\n\")"
+      "Bash(curl -sSL -o \"Cinzel-VF.ttf\" \"https://github.com/google/fonts/raw/main/ofl/cinzel/Cinzel%5Bwght%5D.ttf\" -w \"VF -> %{http_code} %{size_download}b\\\\n\")",
+      "Bash(sed -n '118,145p' lib/buildings/building_renderer.dart)",
+      "Bash(sed -n '55,95p' lib/systems/lighting_system.dart)"
     ]
   }
 }

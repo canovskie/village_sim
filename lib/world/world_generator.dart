@@ -268,20 +268,20 @@ class WorldGenerator {
     final mines = <MineNode>[];
     final occupied = <(int, int)>{};
 
-    // Taş: 3-4 grup baz, alan ile ölçekli
-    final stoneGroups = _scaledRange(3, 4);
+    // Taş: 1-2 grup baz, alan ile ölçekli (en çok kullanılan, biraz fazla)
+    final stoneGroups = _scaledRange(1, 2);
     for (int i = 0; i < stoneGroups; i++) {
       _placeGroup(OreType.stone, water, treeTiles, occupied, mines);
     }
 
-    // Demir: 2-3 grup baz, alan ile ölçekli
-    final ironGroups = _scaledRange(2, 3);
+    // Demir: 1 grup baz, alan ile ölçekli
+    final ironGroups = _scaledRange(1, 1);
     for (int i = 0; i < ironGroups; i++) {
       _placeGroup(OreType.iron, water, treeTiles, occupied, mines);
     }
 
-    // Kömür: 1-2 grup baz, alan ile ölçekli
-    final coalGroups = _scaledRange(1, 2);
+    // Kömür: 1 grup baz, alan ile ölçekli
+    final coalGroups = _scaledRange(1, 1);
     for (int i = 0; i < coalGroups; i++) {
       _placeGroup(OreType.coal, water, treeTiles, occupied, mines);
     }

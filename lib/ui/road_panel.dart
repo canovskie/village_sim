@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import '../core/resources.dart';
 import '../world/road_surface.dart';
-import 'cozy_theme.dart';
+import 'app_ui.dart';
 
-/// Yol döşeme rafı — 3 surface chip (toprak / taş / köprü). Ahşap pano +
-/// deri sekme tile'lar; building rack ile aynı dil. Bir chip seçilince road
-/// placement mode aktif, ember halo çevreliyor.
+/// Yol döşeme rafı — 3 surface chip (toprak / taş / köprü). Modern koyu panel;
+/// bir chip seçilince road placement mode aktif, accent (ember) vurgu çevreliyor.
 class RoadPanel extends StatelessWidget {
   final ResourceBundle stockpile;
   final RoadSurface? selected;
@@ -20,20 +19,20 @@ class RoadPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return WoodPlankPanel(
-      padding: const EdgeInsets.fromLTRB(7, 6, 7, 6),
+    return AppPanel(
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           for (final s in RoadSurface.values)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 2),
               child: _Chip(
-                surface:   s,
-                selected:  selected == s,
+                surface: s,
+                selected: selected == s,
                 canAfford: stockpile.canAfford(s.cost),
                 stockpile: stockpile,
-                onTap:     () => onSelect(s),
+                onTap: () => onSelect(s),
               ),
             ),
         ],
@@ -60,76 +59,59 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cost = surface.cost;
+    final tint = AppUi.accent;
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 56,
-        padding: const EdgeInsets.fromLTRB(4, 5, 4, 5),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        width: 58,
+        padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: selected
-                ? [
-                    Color.alphaBlend(
-                        CozyUi.ember.withValues(alpha: 0.40),
-                        const Color(0xFF1A0E04)),
-                    Color.alphaBlend(
-                        CozyUi.ember.withValues(alpha: 0.18),
-                        const Color(0xFF120804)),
-                  ]
-                : const [Color(0xCC1A0E04), Color(0xCC0A0502)],
-          ),
-          borderRadius: BorderRadius.circular(3),
+          color: selected
+              ? Color.alphaBlend(tint.withValues(alpha: 0.20), AppUi.surface2)
+              : AppUi.surface1,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
           border: Border.all(
-            color: selected ? CozyUi.ember : const Color(0xFF1F0E04),
-            width: selected ? 1.6 : 1.2,
+            color: selected ? tint : AppUi.line,
+            width: selected ? 1.6 : 1,
           ),
           boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: CozyUi.ember.withValues(alpha: 0.50),
-                    blurRadius: 8,
-                  ),
-                ]
+              ? [BoxShadow(color: tint.withValues(alpha: 0.4), blurRadius: 9)]
               : null,
         ),
         child: Opacity(
-          opacity: canAfford ? 1.0 : 0.55,
+          opacity: canAfford ? 1.0 : 0.5,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               SizedBox(
                 height: 26,
                 child: Center(
+                  // surface.icon emoji — app_ui'de karşılığı yok, korunuyor.
                   child: Text(surface.icon, style: const TextStyle(fontSize: 20)),
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               SizedBox(
-                height: 20,
+                height: 22,
                 child: Center(
                   child: Text(
                     surface.label,
                     textAlign: TextAlign.center,
                     overflow: TextOverflow.ellipsis,
                     maxLines: 2,
-                    style: TextStyle(
-                      color: canAfford
-                          ? (selected ? CozyUi.ember : const Color(0xFFE5C58A))
-                          : const Color(0xFF7A6240),
-                      fontSize: 8,
+                    style: AppUi.body.copyWith(
+                      fontSize: 8.5,
                       height: 1.15,
-                      fontWeight: FontWeight.w800,
-                      fontFamily: 'monospace',
-                      shadows: const [
-                        Shadow(color: Color(0xCC000000), blurRadius: 0, offset: Offset(0, 1)),
-                      ],
+                      fontWeight: FontWeight.w700,
+                      color: selected
+                          ? AppUi.accentSoft
+                          : (canAfford ? AppUi.textMid : AppUi.textLo),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               _CostLine(cost: cost, stockpile: stockpile),
             ],
           ),
@@ -147,34 +129,27 @@ class _CostLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cost.isFree) {
-      return const Text('Ücretsiz',
-          style: TextStyle(
-            color: CozyUi.sage,
-            fontSize: 8,
-            fontWeight: FontWeight.w800,
-            fontFamily: 'monospace',
-            shadows: [
-              Shadow(color: Color(0xCC000000), blurRadius: 0, offset: Offset(0, 1)),
-            ],
+      return Text('Ücretsiz',
+          style: AppUi.body.copyWith(
+            color: AppUi.sage,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w700,
           ));
     }
     return Wrap(
       alignment: WrapAlignment.center,
-      spacing: 3,
+      spacing: 4,
       runSpacing: 1,
       children: [
         for (final (kind, amount) in cost.entries)
+          // kind.icon emoji — korunuyor.
           Text('${kind.icon}$amount',
-              style: TextStyle(
+              style: AppUi.body.copyWith(
                 color: stockpile.get(kind) >= amount
-                    ? const Color(0xFFE5C58A)
-                    : CozyUi.rust,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                fontFamily: 'monospace',
-                shadows: const [
-                  Shadow(color: Color(0xCC000000), blurRadius: 0, offset: Offset(0, 1)),
-                ],
+                    ? AppUi.textMid
+                    : AppUi.rust,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
               )),
       ],
     );

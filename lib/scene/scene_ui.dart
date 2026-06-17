@@ -202,6 +202,7 @@ extension _SceneUi on _VillageSceneState {
                       reeds: _reeds,
                       decor: _decor,
                       graves: _graves,
+                      reedBeds: _reedBeds,
                       fishers: _fishers,
                       florists: _florists,
                       shepherds: _shepherds,
@@ -1049,6 +1050,29 @@ extension _SceneUi on _VillageSceneState {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  // ── Zümre nabzı tabelası (sağ kenar, daima görünür) ─────────────────────────
+
+  /// Ekranın sağ kenarında sabit, canlı zümre moral göstergesi. Belediye
+  /// panelindeki nabzın ambient kardeşi — her kararın zümreleri nasıl oynattığı
+  /// her an görünür. [[EstateBanner]] kendi nefes animasyonunu yürütür.
+  Widget buildEstateBanner() {
+    return Positioned(
+      right: 12,
+      // Saat panosu + hız/dev/event kontrol satırının altından başla (üst üste
+      // binmeyi önler); soldaki görev paneliyle (top:190) hizalı.
+      top: 190,
+      child: RepaintBoundary(
+        child: ListenableBuilder(
+          listenable: _frame,
+          builder: (_, _) => EstateBanner(
+            estates: _estateSnapshot(),
+            identity: _estates.identityName,
+          ),
         ),
       ),
     );

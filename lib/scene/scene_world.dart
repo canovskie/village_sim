@@ -196,6 +196,7 @@ extension _SceneWorld on _VillageSceneState {
     _waterTiles.clear();
     _lotuses.clear();
     _reeds.clear();
+    _reedBeds.clear();
     _decor.clear();
     _trees.clear();
     _mineNodes.clear();
