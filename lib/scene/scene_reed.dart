@@ -89,9 +89,15 @@ extension _SceneReed on _VillageSceneState {
         final slot = _freeBedSlot();
         if (slot != null) {
           if (_dist(v.gridX, v.gridY, slot.$1, slot.$2) < 1.4) {
+            final firstBed = _reedBeds.isEmpty && !_firstReedBedShown;
             _stockpile.reed -= kReedBedCost;
             _reedBeds.add(ReedBed(gridX: slot.$1, gridY: slot.$2, owner: v));
             v.feel(NpcEmotion.content, 5, moodDelta: 0.08);
+            if (firstBed) {
+              _firstReedBedShown = true;
+              _showNotification(
+                  '🛏 İlk saz yatağı kuruldu — evsizler artık ateş başında uyuyor');
+            }
           } else {
             v.goTo(slot.$1, slot.$2, 1.0);
           }

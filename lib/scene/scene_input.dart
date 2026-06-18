@@ -156,11 +156,65 @@ extension _SceneInput on _VillageSceneState {
   }
 
   void _onCanvasHover(PointerHoverEvent e) {
-    if (_placing == null) return;
+    // Yerleştirme modunda: ghost önizlemesi (hover etiketi gösterme).
+    if (_placing != null) {
+      final tile = _toTile(e.localPosition);
+      if (tile != _ghost) {
+        _ghost = tile;
+        _frame.value = _frame.value + 1;
+      }
+      return;
+    }
+    // Diğer mod araçlarında hover etiketi kapalı (kendi ipuçları var).
+    if (_farmMode || _lumberMode || _mineMode || _placingRoad != null) {
+      _clearHover();
+      return;
+    }
+    // Boş elde: bina/NPC üstüne gelince ad + durum etiketi.
     final tile = _toTile(e.localPosition);
-    if (tile != _ghost) {
-      _ghost = tile;
+    String? title, sub;
+    if (tile != null) {
+      final b = _buildingAt(tile.$1, tile.$2);
+      if (b != null) {
+        title = kBuildingMeta[b.type]?.label ?? '?';
+        sub = _buildingHoverSub(b);
+      } else {
+        final v = _villagerAt(tile.$1, tile.$2);
+        if (v != null) {
+          title = v.name;
+          sub = v.homeBuilding == null
+              ? '${v.type.displayName} · evsiz'
+              : v.type.displayName;
+        }
+      }
+    }
+    if (title != _hoverTitle || sub != _hoverSub || e.localPosition != _hoverPos) {
+      _hoverTitle = title;
+      _hoverSub = sub;
+      _hoverPos = title == null ? null : e.localPosition;
       _frame.value = _frame.value + 1;
     }
+  }
+
+  void _clearHover() {
+    if (_hoverTitle != null || _hoverPos != null) {
+      _hoverTitle = null;
+      _hoverSub = null;
+      _hoverPos = null;
+      _frame.value = _frame.value + 1;
+    }
+  }
+
+  /// Bina hover alt satırı — role/duruma göre kısa durum.
+  String _buildingHoverSub(BuildingEntity b) {
+    final role = b.fn?.role;
+    if (role == BuildingRole.housing) {
+      final w = b.waterLevel < 0.3 ? ' · susuz' : '';
+      return '${b.occupants} sakin$w';
+    }
+    if (b.type == BuildingType.firepit) {
+      return b.fireFuel > 0.001 ? 'yanıyor' : 'sönük';
+    }
+    return b.isActive ? 'çalışıyor' : 'boşta';
   }
 }

@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../systems/petition_system.dart';
+import '../entities/villager_entity.dart';
+import '../characters/villager_type.dart';
+import '../characters/life_stage.dart';
+import '../rendering/portrait_renderer.dart';
 import 'app_ui.dart';
 
 /// Köyden gelen bir ricanın oyuncu-yüzlü karşılığı — Meclis önüne gelen
@@ -15,12 +19,20 @@ class PetitionModal extends StatelessWidget {
   final void Function(PetitionOption) onChoose;
   final VoidCallback onDismiss;
 
+  /// Dilekçeyi getiren gerçek köylü — portre + ad + meslek gösterilir. null ise
+  /// eski stil glif + zümre adı kullanılır.
+  final VillagerEntity? author;
+  /// Portreye/yazara dokununca — bilgi & aile paneli açılır.
+  final VoidCallback? onAuthorTap;
+
   const PetitionModal({
     super.key,
     required this.petition,
     this.state,
     required this.onChoose,
     required this.onDismiss,
+    this.author,
+    this.onAuthorTap,
   });
 
   /// Dilekçe tonuna göre vurgu rengi — etiket/stakes/aksan renklendirmesi.
@@ -100,10 +112,15 @@ class PetitionModal extends StatelessWidget {
   }
 
   Widget _header() {
+    final a = author;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _PetitionGlyph(icon: petition.icon, accent: _toneAccent),
+        // Yazar varsa tıklanabilir portre; yoksa eski glif.
+        if (a != null)
+          GestureDetector(onTap: onAuthorTap, child: _AuthorPortrait(a, _toneAccent))
+        else
+          _PetitionGlyph(icon: petition.icon, accent: _toneAccent),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -117,8 +134,25 @@ class PetitionModal extends StatelessWidget {
               Text(petition.title,
                   style: AppUi.title.copyWith(fontSize: 17, height: 1.1)),
               const SizedBox(height: 4),
-              Text(petition.petitioner,
-                  style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo)),
+              if (a != null) ...[
+                // Gerçek köylü: ad + meslek + "zümre adına" bağlamı.
+                Text('${a.isMale ? '♂' : '♀'}  ${a.name}',
+                    style: AppUi.bodyHi.copyWith(fontSize: 12.5)),
+                const SizedBox(height: 1),
+                Text(
+                    '${a.hasProfession ? a.type.displayName : a.lifeStage.label} · ${petition.petitioner} adına',
+                    style:
+                        AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
+                const SizedBox(height: 7),
+                GestureDetector(
+                  onTap: onAuthorTap,
+                  child:
+                      AppChip(label: '› profili & aile aç', color: _toneAccent),
+                ),
+              ] else
+                Text(petition.petitioner,
+                    style:
+                        AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo)),
               if (petition.note != null) ...[
                 const SizedBox(height: 8),
                 AppChip(label: petition.note!, color: AppUi.rust),
@@ -127,6 +161,41 @@ class PetitionModal extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Dilekçeyi getiren köylünün portresi — koyu kare, ton-aksanlı kenar. Modal
+/// glifinin yerini alır; dokununca bilgi/aile paneli açılır (modal sarar).
+class _AuthorPortrait extends StatelessWidget {
+  final VillagerEntity villager;
+  final Color accent;
+  const _AuthorPortrait(this.villager, this.accent);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.7), width: 1.3),
+        boxShadow: [
+          BoxShadow(color: accent.withValues(alpha: 0.25), blurRadius: 8),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: CustomPaint(
+          painter: PortraitPainter(
+            visual: villager.visual,
+            stage: villager.lifeStage,
+            type: villager.type,
+            hasProfession: villager.hasProfession,
+          ),
+        ),
+      ),
     );
   }
 }

@@ -116,19 +116,13 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                     const SizedBox(height: 14),
                     _ageBar(v, stage),
                     const SizedBox(height: 12),
+                    _moraleBar(v),
+                    const SizedBox(height: 4),
                     _moodRow(v),
                     _row('Ev', widget.homeLabel ?? 'Evsiz',
                         icon: GameIconData.home),
                     if (v.greetCount > 0 || v.giftCount > 0) _interactionRow(v),
-                    if (v.parents.isNotEmpty || v.children.isNotEmpty) ...[
-                      const AppDivider(),
-                      if (v.parents.isNotEmpty)
-                        _familyGroup('EBEVEYNLER', v.parents),
-                      if (v.parents.isNotEmpty && v.children.isNotEmpty)
-                        const SizedBox(height: 9),
-                      if (v.children.isNotEmpty)
-                        _familyGroup('ÇOCUKLAR', v.children),
-                    ],
+                    ..._familyTree(v),
                     const SizedBox(height: 14),
                     _actionRow(v),
                   ],
@@ -467,6 +461,36 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   // ─── Rows ───────────────────────────────────────────────────────────────────
 
   /// Ruh hali + enerji satırı — NPC'nin iç dünyasını oyuncuya gösterir.
+  /// Bireysel moral (kalıcı memnuniyet) + baskın sebep — yaş çubuğunun eşi.
+  Widget _moraleBar(VillagerEntity v) {
+    final m = v.morale.clamp(0.0, 1.0);
+    final c = m >= 0.6
+        ? AppUi.sage
+        : m >= 0.35
+            ? AppUi.accent
+            : AppUi.rust;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppStatBar(
+          label: 'MORAL',
+          value: m,
+          trailing: '${(m * 100).round()}%',
+          color: c,
+          labelWidth: 54,
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 54, top: 3),
+          child: Text('· ${v.moraleReason}',
+              style: AppUi.body.copyWith(
+                  fontSize: 10.5,
+                  color: AppUi.textLo,
+                  fontStyle: FontStyle.italic)),
+        ),
+      ],
+    );
+  }
+
   Widget _moodRow(VillagerEntity v) {
     final (icon, label) = _moodLabel(v.mood);
     final energyPct = (v.energy * 100).round();
@@ -508,6 +532,40 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   }
 
   // ─── Family chips ──────────────────────────────────────────────────────────
+
+  /// Aile ağacı — eş (ortak ebeveyn), ebeveynler, kardeşler (ortak ebeveyn),
+  /// çocuklar. Hepsi yalnız [parents]/[children]'dan türetilir (global liste
+  /// gerekmez). Akrabaya dokununca o köylüye geçilir (onSelect).
+  List<Widget> _familyTree(VillagerEntity v) {
+    final partners = <VillagerEntity>{};
+    for (final c in v.children) {
+      for (final p in c.parents) {
+        if (!identical(p, v)) partners.add(p);
+      }
+    }
+    final siblings = <VillagerEntity>{};
+    for (final p in v.parents) {
+      for (final c in p.children) {
+        if (!identical(c, v)) siblings.add(c);
+      }
+    }
+
+    final groups = <(String, List<VillagerEntity>)>[
+      ('EŞ', partners.toList()),
+      ('EBEVEYNLER', v.parents),
+      ('KARDEŞLER', siblings.toList()),
+      ('ÇOCUKLAR', v.children),
+    ].where((g) => g.$2.isNotEmpty).toList();
+    if (groups.isEmpty) return const [];
+
+    return [
+      const AppDivider(),
+      for (int i = 0; i < groups.length; i++) ...[
+        if (i != 0) const SizedBox(height: 9),
+        _familyGroup(groups[i].$1, groups[i].$2),
+      ],
+    ];
+  }
 
   Widget _familyGroup(String label, List<VillagerEntity> members) {
     return Column(

@@ -125,6 +125,10 @@ class VillagerEntity extends WorkerEntity {
   /// Atanan ev binası (null = evsiz)
   Object? homeBuilding; // BuildingEntity türü, döngüsel import önlemek için Object
 
+  /// Geçici vurgu (sn) — HUD'dan "evsizleri göster" gibi tetiklenir; painter
+  /// bu süre boyunca köylünün etrafına nabız atan bir halka çizer.
+  double highlightTimer = 0;
+
   // Porter/carry sistemi
   Object? _pickupItem;           // ResourceBox veya HayEntity
   Object? carriedItem;           // aktif taşıma sırasında görünür
@@ -214,6 +218,20 @@ class VillagerEntity extends WorkerEntity {
   /// Enerji 0..1 — gündüz/iş tüketir, uyku/ısınma doldurur.
   /// SADECE GÖSTERİM (panelde bar) — hiçbir mantık bunu okumaz/gate'lemez.
   double energy = 1.0;
+
+  // ── Bireysel MORAL (kalıcı yaşam memnuniyeti) ───────────────────────────────
+  /// 0 (perişan) .. 1 (mutlu). [mood]'dan farklı: KALICI ve mantığı etkiler.
+  /// Sahne her ~1sn koşullardan (ev/yiyecek/su/ısınma/zümre durumu) bir hedef
+  /// hesaplar, morale oraya yavaş süzülür; yaşam olayları [feel]'in moodDelta'sı
+  /// ile anlık iter. Etkiler: dilekçeyi en mutsuz ilgili köylü getirir, postür
+  /// kalıcı çöker (mood tabanı), uzun süre çok düşükse köyü terk eder; ayrıca
+  /// zümre + köy moraline beslenir. [VillagerMorale] formülü hesaplar.
+  double morale = 0.6;
+  /// Moral kritik eşik altındayken geçen süre (sn) — göç kararı için birikir,
+  /// toparlayınca hızla erir. Sahne okur.
+  double lowMoraleTime = 0.0;
+  /// Panelde gösterilecek baskın sebep ("evsiz", "aç", "huzurlu" …). Sahne yazar.
+  String moraleReason = 'huzurlu';
   /// Anlık duygu (geçici tepki). [emotionTime] > 0 iken aktif → renderer bunu
   /// GÖVDE DİLİNE çevirir (emoji DEĞİL): yas çöküşü, sevinç zıplaması, korku
   /// geri çekilmesi vb. Solunca [NpcEmotion.none]'a döner.
@@ -238,7 +256,12 @@ class VillagerEntity extends WorkerEntity {
       emotionTime = dur;
       _emotionDur = dur;
     }
-    if (moodDelta != 0) mood = (mood + moodDelta).clamp(-1.0, 1.0);
+    if (moodDelta != 0) {
+      mood = (mood + moodDelta).clamp(-1.0, 1.0);
+      // Yaşam olayı kalıcı morali de iter (doğum/şenlik/ısınma → +, ölüm/
+      // kayıp → −). Koşul-hedefine göre yavaşça geri süzülür.
+      morale = (morale + moodDelta * 0.4).clamp(0.0, 1.0);
+    }
   }
 
   // ── Ölüm animasyonu (collapse + fade) ──────────────────────────────────────
@@ -272,6 +295,7 @@ class VillagerEntity extends WorkerEntity {
   /// İç dünyayı her tick ilerletir: duygu zamanlayıcısı, mood'un nötre dönüşü,
   /// enerji tüketimi/yenilenmesi. [dayLight] gündüz/gece, [resting] uyku/ısınma.
   void tickInnerLife(double dt, double dayLight, bool resting) {
+    if (highlightTimer > 0) highlightTimer -= dt;
     // Ölüm animasyonu sırasında iç dünya donar — sadece çöküş geri sayar.
     if (isDying) {
       _deathT -= dt;
@@ -281,14 +305,24 @@ class VillagerEntity extends WorkerEntity {
       emotionTime -= dt;
       if (emotionTime <= 0) emotion = NpcEmotion.none;
     }
-    // Mood yavaşça nötre döner (gün başına ~0.5 sönüm).
-    if (mood != 0) {
+    // Mood, anlık olaydan sonra MORAL TABANINA döner (nötr 0'a değil): kalıcı
+    // olarak mutsuz köylü görünür biçimde çöker, mutlu olan dik durur. Böylece
+    // bireysel moral, gövde diline kalıcı yansır (gün başına ~0.5 sönüm).
+    final moodFloor = ((morale - 0.62) * 0.85).clamp(-0.55, 0.35);
+    if ((mood - moodFloor).abs() > 0.001) {
       final decay = (dt / kGameDaySeconds) * 0.5;
-      if (mood > 0) {
-        mood = (mood - decay).clamp(0.0, 1.0);
+      if (mood > moodFloor) {
+        mood = (mood - decay).clamp(moodFloor, 1.0);
       } else {
-        mood = (mood + decay).clamp(-1.0, 0.0);
+        mood = (mood + decay).clamp(-1.0, moodFloor);
       }
+    }
+    // Kronik mutsuzluk sayacı — göç kararı için (sahne okur). Düşükken birikir,
+    // toparlayınca 2× hızla erir.
+    if (morale < 0.18) {
+      lowMoraleTime += dt;
+    } else if (lowMoraleTime > 0) {
+      lowMoraleTime = (lowMoraleTime - dt * 2).clamp(0.0, 1e9);
     }
     // Enerji: dinlenirken dolar, gündüz aktifken tükenir (gün döngüsüne göre).
     final rate = dt / kGameDaySeconds;

@@ -107,6 +107,15 @@ class EstateSystem {
     for (final e in Estate.values) e: EstateState(),
   };
 
+  /// Zümre üyelerinin ortalama bireysel morali (sahne her tick besler). Zümre
+  /// mood'u boşlukta sabit tabana değil, ÜYELERİNİN haline doğru süzülür:
+  /// mutsuz bireyler zümreyi küstürür, mutlular yatıştırır. [setMemberMorale]
+  /// yazar, [tick] okur. Üye yoksa global tabana düşülür.
+  final Map<Estate, double> _memberMorale = {};
+
+  void setMemberMorale(Estate e, double avg) =>
+      _memberMorale[e] = avg.clamp(0.0, 1.0);
+
   EstateState _s(Estate e) => _states[e]!;
 
   double moodOf(Estate e) => _s(e).mood;
@@ -180,7 +189,12 @@ class EstateSystem {
     final k = (dt / tau).clamp(0.0, 1.0);
     for (final e in Estate.values) {
       final s = _s(e);
-      s.mood += (_moodBaseline - s.mood) * k;
+      // Dinamik taban: üye morali varsa ona ağırlık ver (bireyler zümreyi
+      // besler), yoksa global tabana düş.
+      final mm = _memberMorale[e];
+      final baseline =
+          mm == null ? _moodBaseline : _moodBaseline * 0.35 + mm * 0.65;
+      s.mood += (baseline - s.mood) * k;
     }
   }
 

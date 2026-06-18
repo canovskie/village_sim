@@ -20,6 +20,16 @@ class GameHUD extends StatelessWidget {
   final bool lowWater, starving;
   final String? eventLabel;
 
+  /// Stok kapasitesi (wood/stone/iron/coal/food tavanı). Hücre tavana
+  /// ulaşınca "dolu" uyarısı gösterilir.
+  final int stockCapacity;
+  /// 0..1 nabız (sahneden _time türevi) — dolu kaynak hücresi bununla yanar.
+  final double fullPulse;
+  /// Moral katkı kırılımı (etiket, delta) — moral barı hover tooltip'i.
+  final List<(String, double)> moraleBreakdown;
+  /// 'evsiz' sayısına tıklanınca evsiz köylüleri kısa süre vurgular.
+  final VoidCallback? onHighlightHomeless;
+
   final bool godMode;
   final VoidCallback onNewMap, onToggleGod, onTriggerEvent;
 
@@ -60,6 +70,10 @@ class GameHUD extends StatelessWidget {
     required this.lowWater,
     required this.starving,
     this.eventLabel,
+    this.stockCapacity = 1 << 30,
+    this.fullPulse = 0,
+    this.moraleBreakdown = const [],
+    this.onHighlightHomeless,
     required this.godMode,
     required this.onNewMap,
     required this.onToggleGod,
@@ -160,14 +174,14 @@ class GameHUD extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(children: [
-              Expanded(child: _ResCell(GameIconData.wood, const Color(0xFFD79A5B), stockpile.wood, woodInTransit)),
-              Expanded(child: _ResCell(GameIconData.stone, const Color(0xFFB8B8B8), stockpile.stone, stoneInTransit)),
-              Expanded(child: _ResCell(GameIconData.iron, const Color(0xFFCED2EC), stockpile.iron, ironInTransit)),
+              Expanded(child: _ResCell(GameIconData.wood, const Color(0xFFD79A5B), stockpile.wood, woodInTransit, capacity: stockCapacity, pulse: fullPulse)),
+              Expanded(child: _ResCell(GameIconData.stone, const Color(0xFFB8B8B8), stockpile.stone, stoneInTransit, capacity: stockCapacity, pulse: fullPulse)),
+              Expanded(child: _ResCell(GameIconData.iron, const Color(0xFFCED2EC), stockpile.iron, ironInTransit, capacity: stockCapacity, pulse: fullPulse)),
             ]),
             const SizedBox(height: 10),
             Row(children: [
-              Expanded(child: _ResCell(GameIconData.coal, const Color(0xFF9A9A9A), stockpile.coal, coalInTransit)),
-              Expanded(child: _ResCell(GameIconData.wheat, AppUi.sage, stockpile.food, foodInTransit)),
+              Expanded(child: _ResCell(GameIconData.coal, const Color(0xFF9A9A9A), stockpile.coal, coalInTransit, capacity: stockCapacity, pulse: fullPulse)),
+              Expanded(child: _ResCell(GameIconData.wheat, AppUi.sage, stockpile.food, foodInTransit, capacity: stockCapacity, pulse: fullPulse)),
               Expanded(child: _ResCell(GameIconData.coin, AppUi.gold, stockpile.gold, 0)),
             ]),
             if (stockpile.honey > 0 || stockpile.reed > 0) ...[
@@ -225,19 +239,25 @@ class GameHUD extends StatelessWidget {
               style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
         ),
         const SizedBox(width: 16),
-        // Evsiz — yan yana; >0 ise vurgulu (rust).
-        GameIcon(GameIconData.home, size: 14,
-            color: homelessCount > 0 ? AppUi.rust : AppUi.textMid),
-        const SizedBox(width: 7),
-        Text('$homelessCount',
-            style: AppUi.number.copyWith(
-                fontSize: 16,
-                color: homelessCount > 0 ? AppUi.rust : AppUi.textMid)),
-        const SizedBox(width: 5),
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text('evsiz',
-              style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
+        // Evsiz — yan yana; >0 ise vurgulu (rust) + tıklanınca köyde vurgulanır.
+        GestureDetector(
+          onTap: homelessCount > 0 ? onHighlightHomeless : null,
+          behavior: HitTestBehavior.opaque,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            GameIcon(GameIconData.home, size: 14,
+                color: homelessCount > 0 ? AppUi.rust : AppUi.textMid),
+            const SizedBox(width: 7),
+            Text('$homelessCount',
+                style: AppUi.number.copyWith(
+                    fontSize: 16,
+                    color: homelessCount > 0 ? AppUi.rust : AppUi.textMid)),
+            const SizedBox(width: 5),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text('evsiz',
+                  style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
+            ),
+          ]),
         ),
         const Spacer(),
         // İmleç ipucu — üstüne gelince meslek dağılımı.
@@ -298,18 +318,82 @@ class GameHUD extends StatelessWidget {
 
   Widget _moraleMeter() {
     final c = _moraleColor;
-    return AppStatBar(
+    final bar = AppStatBar(
       label: 'MORAL',
       value: morale.clamp(0.0, 1.0),
       trailing: '${(morale * 100).round()}%',
       color: c,
       labelWidth: 50,
     );
+    if (moraleBreakdown.isEmpty) return bar;
+    return Tooltip(
+      richMessage: _moraleTooltip(),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xF21A1B22),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0x33FFFFFF)),
+      ),
+      child: bar,
+    );
+  }
+
+  // Moral neden bu seviyede? Katkı kırılımı (taban + olay + politika + ...).
+  InlineSpan _moraleTooltip() {
+    final base = AppUi.body.copyWith(fontSize: 12, height: 1.45);
+    final children = <InlineSpan>[
+      TextSpan(
+        text: 'Moral neden böyle\n',
+        style: AppUi.label.copyWith(
+            fontSize: 10, letterSpacing: 1.4, color: AppUi.accentSoft),
+      ),
+    ];
+    for (final (label, delta) in moraleBreakdown) {
+      final isBase = delta >= 0.49 && label == 'Taban';
+      final col = isBase
+          ? AppUi.textMid
+          : (delta >= 0 ? AppUi.sage : AppUi.rust);
+      final sign = isBase
+          ? ''
+          : (delta >= 0 ? '+' : '−');
+      final pct = isBase
+          ? '${(delta * 100).round()}%'
+          : '$sign${(delta.abs() * 100).round()}%';
+      children.add(TextSpan(
+          text: '$label  ', style: base.copyWith(color: AppUi.textMid)));
+      children.add(TextSpan(
+          text: '$pct\n',
+          style: base.copyWith(color: col, fontWeight: FontWeight.w700)));
+    }
+    children.add(TextSpan(
+        text: '─────\n', style: base.copyWith(color: const Color(0x33FFFFFF))));
+    children.add(TextSpan(
+        text: 'Toplam  ', style: base.copyWith(color: AppUi.textMid)));
+    children.add(TextSpan(
+        text: '${(morale * 100).round()}%',
+        style: base.copyWith(color: _moraleColor, fontWeight: FontWeight.w700)));
+    return TextSpan(children: children);
   }
 
   // ── Sağ-üst saat panosu ────────────────────────────────────────────────────
 
-  Widget _dayPanel() => AppPanel(
+  // Saat panosu hover ipucu — günün evresi + köyün ne yapacağı.
+  String get _timeHint {
+    final t = timeOfDay;
+    final (phase, flavor) = switch (t) {
+      < 0.22 => ('Gece', 'Köy uyuyor — ateş başı sıcak'),
+      < 0.30 => ('Şafak söküyor', 'Köylüler birazdan uyanır'),
+      < 0.45 => ('Sabah', 'İş başı — pazar canlanır'),
+      < 0.55 => ('Öğle', 'Günün en aydınlık vakti'),
+      < 0.68 => ('Öğleden sonra', 'İşler sürüyor'),
+      < 0.78 => ('Akşam yaklaşıyor', 'Köy ateş başına toplanmaya başlar'),
+      < 0.82 => ('Gün batıyor', 'Herkes yavaşça yuvasına/yatağına döner'),
+      _      => ('Gece', 'Köy uyuyor — ateş başı sıcak'),
+    };
+    return 'Gün $dayCount · $phase\n$flavor';
+  }
+
+  Widget _dayPanelInner() => AppPanel(
         width: 146,
         padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
         child: Column(
@@ -331,6 +415,18 @@ class GameHUD extends StatelessWidget {
             ]),
           ],
         ),
+      );
+
+  Widget _dayPanel() => Tooltip(
+        message: _timeHint,
+        textStyle: AppUi.body.copyWith(fontSize: 12, height: 1.4, color: AppUi.textHi),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: const Color(0xF21A1B22),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0x33FFFFFF)),
+        ),
+        child: _dayPanelInner(),
       );
 
   // ── Kontroller ──────────────────────────────────────────────────────────────
@@ -418,24 +514,43 @@ class _ResCell extends StatelessWidget {
   final Color color;
   final int stored;
   final int transit;
-  const _ResCell(this.icon, this.color, this.stored, this.transit);
+  /// Tavan (null = sınırsız: bal/saz/altın). stored>=capacity → "dolu" uyarısı.
+  final int? capacity;
+  /// 0..1 nabız — dolu hücrede kehribar yanıp söner.
+  final double pulse;
+  const _ResCell(this.icon, this.color, this.stored, this.transit,
+      {this.capacity, this.pulse = 0});
+
+  static const _amber = Color(0xFFE8A23A);
 
   @override
   Widget build(BuildContext context) {
     final empty = stored == 0 && transit == 0;
+    final full = capacity != null && stored >= capacity!;
+    // Dolu → kehribar; nabızla parlaklığı değişir (üretim boşa gidiyor uyarısı).
+    final numColor = full
+        ? Color.lerp(_amber, const Color(0xFFFFE0A0), pulse)!
+        : (empty ? AppUi.textLo : AppUi.textHi);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Opacity(
           opacity: empty ? 0.5 : 1.0,
-          child: GameIcon(icon, size: 16, color: color),
+          child: GameIcon(icon, size: 16, color: full ? _amber : color),
         ),
         const SizedBox(width: 6),
         Text('$stored',
-            style: AppUi.number.copyWith(
-                fontSize: 16,
-                color: empty ? AppUi.textLo : AppUi.textHi)),
-        if (transit > 0)
+            style: AppUi.number.copyWith(fontSize: 16, color: numColor)),
+        if (full)
+          Padding(
+            padding: const EdgeInsets.only(left: 3, bottom: 5),
+            child: Text('DOLU',
+                style: AppUi.label.copyWith(
+                    fontSize: 7.5,
+                    letterSpacing: 0.5,
+                    color: _amber.withValues(alpha: 0.6 + 0.4 * pulse))),
+          )
+        else if (transit > 0)
           Padding(
             padding: const EdgeInsets.only(left: 2, bottom: 5),
             child: Text('+$transit',

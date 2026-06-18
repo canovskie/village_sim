@@ -103,6 +103,11 @@ final _pAmbientGrade = Paint()..blendMode = BlendMode.modulate..isAntiAlias = fa
 // Gündüz atmosfer pass'i — fullscreen blend katmanları (güneş formu / hava
 // perspektifi / bloom / sıcak vignette). Blend modu her katmanda set edilir.
 final _pDayGrade = Paint()..isAntiAlias = false;
+// Köylü vurgu halkası (HUD "evsizleri göster") — ayak altı nabızlı kehribar.
+final _pHighlightRing = Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 2.5
+  ..isAntiAlias = true;
 // Per-light warm wash — sprite'ı ışık alanında ısıtır. BlendMode.plus
 // radial gradient, dış halo'dan dar ve daha düşük alfa: hedef sprite hue
 // değişimi, parlama patlaması değil. (Layer paint inline yapılıyor —
@@ -376,6 +381,19 @@ class _VillagerDrawable extends _Drawable {
     // çizer → burada atla.)
     if (!e.isDying) {
       _drawCharShadow(canvas, s.dx, s.dy, kCharScale * e.lifeStage.renderScale);
+    }
+
+    // Geçici vurgu halkası — HUD'dan "evsizleri göster" gibi tetiklenince
+    // ayak altında nabız atan kehribar halka (son saniyede solar).
+    if (e.highlightTimer > 0) {
+      final pulse = 0.5 + 0.5 * sin(time * 6.0);
+      final fade = e.highlightTimer.clamp(0.0, 1.0);
+      final rw = 30.0 + 4.0 * pulse;
+      final ring = Rect.fromCenter(
+          center: Offset(s.dx, s.dy), width: rw, height: rw * 0.46);
+      _pHighlightRing.color =
+          const Color(0xFFFFD25A).withValues(alpha: (0.45 + 0.4 * pulse) * fade);
+      canvas.drawOval(ring, _pHighlightRing);
     }
 
     // Lokal meşale glow + alev — sprite'tan ÖNCE çizilir ki karakter üstüne

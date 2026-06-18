@@ -242,6 +242,9 @@ extension _SceneWorld on _VillageSceneState {
     _firepitBuilding = null;
     _selectedBuilding = null;
 
+    // Kilometre taşı bayrakları
+    _lastPopMilestone = 0;
+    _firstReedBedShown = false;
     // Olay & gün durumunu sıfırla
     _eventTimer = kEventFirstDelay;
     _eventMorale = 0.0;

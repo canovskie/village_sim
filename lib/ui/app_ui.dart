@@ -541,21 +541,26 @@ class AppReveal extends StatefulWidget {
 
 class _AppRevealState extends State<AppReveal>
     with SingleTickerProviderStateMixin {
+  // Gecikmeyi controller süresine katıp Interval ile geciktiriyoruz — böylece
+  // ayrı bir Timer (Future.delayed) açılmaz; test ortamında "timersPending"
+  // assert'i tetiklenmez ve animasyon bitince ticker durur.
+  static const int _revealMs = 260;
+  late final int _delayMs = widget.delay.inMilliseconds;
   late final AnimationController _c = AnimationController(
-      vsync: this, duration: const Duration(milliseconds: 260));
-  late final Animation<double> _a =
-      CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+      vsync: this, duration: Duration(milliseconds: _revealMs + _delayMs));
+  late final Animation<double> _a = CurvedAnimation(
+    parent: _c,
+    curve: Interval(
+      _delayMs / (_revealMs + _delayMs),
+      1.0,
+      curve: Curves.easeOutCubic,
+    ),
+  );
 
   @override
   void initState() {
     super.initState();
-    if (widget.delay == Duration.zero) {
-      _c.forward();
-    } else {
-      Future.delayed(widget.delay, () {
-        if (mounted) _c.forward();
-      });
-    }
+    _c.forward();
   }
 
   @override

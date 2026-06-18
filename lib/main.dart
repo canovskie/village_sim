@@ -58,6 +58,7 @@ import 'ui/event_choice_modal.dart';
 import 'ui/petition_modal.dart';
 import 'systems/petition_system.dart';
 import 'systems/estate_system.dart';
+import 'systems/villager_morale.dart';
 import 'ui/dev_panel.dart';
 import 'ui/objective_panel.dart';
 import 'ui/estate_banner.dart';
@@ -246,6 +247,11 @@ class _VillageSceneState extends State<VillageScene>
   (int, int)? _ghost;
   Size _viewSize = Size.zero;
 
+  // ── Hover etiketi (bina/NPC üstüne gelince imleç yanında küçük kart) ────────
+  String? _hoverTitle;
+  String? _hoverSub;
+  Offset? _hoverPos;
+
   // ── Day/Night ──────────────────────────────────────────────────────────────
   final DayNightCycle _cycle = DayNightCycle();
 
@@ -277,6 +283,10 @@ class _VillageSceneState extends State<VillageScene>
   // Ateş etrafı saz yatakları — evsizler biçtiği sazla kurar, geceleri uyur.
   final List<ReedBed> _reedBeds = [];
   double _reedScan = 0; // _tickReed throttle sayacı
+
+  // Kilometre taşı bildirimleri — bir kez tetiklenir.
+  int _lastPopMilestone = 0;
+  bool _firstReedBedShown = false;
 
   // ── Mining (maden kazma) ───────────────────────────────────────────────────
   final List<MineNode> _mineNodes = [];
@@ -361,6 +371,10 @@ class _VillageSceneState extends State<VillageScene>
   // politika hedefe doğru iter, _morale yavaşça oraya süzülür ve tabana döner.
   // Hiçbir oyun mantığı bunu okumaz — yalnızca HUD/panel gösterir (_stats.morale).
   double _morale = 0.5;
+
+  // Köylülerin ortalama BİREYSEL morali (0..1) — scene_estates._tickVillagerMorale
+  // her tick günceller; köy moraline (moraleTarget) ve panele beslenir.
+  double _avgIndividualMorale = 0.6;
 
   // ── Reaktif ortam (sürekli canlılık) ─────────────────────────────────────
   double _spontaneousTimer = 0; // ara sıra rastgele NPC'ye küçük gövde refleksi
@@ -630,6 +644,7 @@ class _VillageSceneState extends State<VillageScene>
             buildEventBanner(),
             buildObjectivesPanel(),
             buildEstateBanner(),
+            buildHoverLabel(),
             if (_notification != null) buildNotificationToast(),
             if (_placing != null ||
                 _farmMode ||

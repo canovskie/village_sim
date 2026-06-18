@@ -52,6 +52,27 @@ extension _SceneTick on _VillageSceneState {
     _lastTimeOfDay = _cycle.timeOfDay;
   }
 
+  // ── Kilometre taşları ──────────────────────────────────────────────────────
+  // Nüfus eşikleri geçilince bir kez tatlı bildirim. Toplam = köylü + işçiler.
+  void _tickMilestones() {
+    final pop = _villagers.length +
+        _farmers.length +
+        _woodcutters.length +
+        _miners.length +
+        _fishers.length +
+        _builders.length +
+        _shepherds.length +
+        _florists.length;
+    const thresholds = [10, 15, 20, 30, 40, 50, 75, 100];
+    for (final t in thresholds) {
+      if (pop >= t && _lastPopMilestone < t) {
+        _lastPopMilestone = t;
+        _showNotification('🎉 Köy büyüyor — $t köylü!');
+        break;
+      }
+    }
+  }
+
   // ── God mode refill ───────────────────────────────────────────────────────
 
   void _applyGodModeRefill() {
@@ -167,7 +188,10 @@ extension _SceneTick on _VillageSceneState {
             _eventMorale +
             (_villagers.any((v) => v.isSage) ? 0.08 : 0.0) +
             _policyMoralePermanent() +
-            _policyMoraleTemporary())
+            _policyMoraleTemporary() +
+            // Bireysel moral ortalaması köy moraline beslenir: koşullar (ev/
+            // yiyecek/su/ısınma/zümre) bireyler üzerinden DOLAYLI yansır.
+            (_avgIndividualMorale - 0.62) * 0.5)
         .clamp(0.0, 1.0);
     _morale += (moraleTarget - _morale) * (dt * kMoraleEaseRate).clamp(0.0, 1.0);
     _morale = _morale.clamp(0.0, 1.0);
@@ -773,6 +797,8 @@ extension _SceneTick on _VillageSceneState {
     // Saz yatağı döngüsü — evsizler sazlık biçip ateş etrafına yatak kurar.
     // Rutinden ÖNCE: yatak peşindeki evsizi sahiplenip rutinden korur.
     _tickReed(dt);
+    // Kilometre taşları — nüfus eşikleri (bir kez tatlı bildirim).
+    _tickMilestones();
     // Amaçlı hedef akışı — boşalan köylülere zamana/ihtiyaca göre POI ata.
     _tickRoutine(dt);
     // Ateş başı toplanma + hikaye saati taramaları.

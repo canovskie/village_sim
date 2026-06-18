@@ -4,6 +4,32 @@ part of '../main.dart';
 /// HUD, alt araç çubuğu, seçim panelleri, overlay'ler, ipuçları.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneUi on _VillageSceneState {
+  // HUD 'evsiz' sayısına tıklanınca — evsiz köylüleri ~3 sn vurgula (painter
+  // ayak altına nabız halka çizer). Kim nerede uyuyor/dolaşıyor görülür.
+  void _highlightHomeless() {
+    for (final v in _villagers) {
+      if (v.homeBuilding == null) v.highlightTimer = 3.0;
+    }
+    setStateHere(() {});
+  }
+
+  // Moral katkı kırılımı — HUD moral barı hover tooltip'i. _tickBuildingSystems
+  // moraleTarget formülünün AYNISI; oradan koptuysa burayı da güncelle.
+  List<(String, double)> _moraleBreakdown() {
+    final list = <(String, double)>[('Taban', 0.5)];
+    if (_eventMorale.abs() > 0.005) {
+      list.add((_eventLabel ?? 'Olay etkisi', _eventMorale));
+    }
+    if (_villagers.any((v) => v.isSage)) list.add(('Bilge', 0.08));
+    final perm = _policyMoralePermanent();
+    if (perm.abs() > 0.005) list.add(('Politikalar (kalıcı)', perm));
+    final temp = _policyMoraleTemporary();
+    if (temp.abs() > 0.005) list.add(('Politikalar (geçici)', temp));
+    final indiv = (_avgIndividualMorale - 0.62) * 0.5;
+    if (indiv.abs() > 0.005) list.add(('Halkın hâli', indiv));
+    return list;
+  }
+
   // ── Sky / sun / moon / clouds (time-driven) ────────────────────────────────
 
   Widget buildSkyLayer(Size screen) {
@@ -135,6 +161,7 @@ extension _SceneUi on _VillageSceneState {
             onTapUp: _onCanvasTapUp,
             child: MouseRegion(
               onHover: _onCanvasHover,
+              onExit: (_) => setStateHere(_clearHover),
               child: RepaintBoundary(
                 child: ListenableBuilder(
                   listenable: _frame,
@@ -272,6 +299,10 @@ extension _SceneUi on _VillageSceneState {
           ),
           starving: !_godMode && _stockpile.food < kStarveRampFood,
           eventLabel: _eventLabel,
+          stockCapacity: _godMode ? (1 << 30) : _stats.stockCapacity,
+          fullPulse: sin(_time * 3.2) * 0.5 + 0.5,
+          moraleBreakdown: _moraleBreakdown(),
+          onHighlightHomeless: _highlightHomeless,
           effectTimeLeft: _eventMoraleLeft,
           effectDuration: _activeEvent?.duration ?? 1,
           effectPositive: (_eventMorale >= 0),
@@ -1082,6 +1113,60 @@ extension _SceneUi on _VillageSceneState {
   }
 
   // ── Geçici bildirim balonu ─────────────────────────────────────────────────
+
+  // Bina/NPC hover etiketi — imleç yanında küçük kart. _frame'e bağlı (üst
+  // Stack tick'te rebuild olmaz). IgnorePointer: hover olaylarını yemez.
+  Widget buildHoverLabel() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: ListenableBuilder(
+          listenable: _frame,
+          builder: (_, _) {
+            final title = _hoverTitle;
+            final pos = _hoverPos;
+            if (title == null || pos == null) return const SizedBox.shrink();
+            final w = _viewSize.width;
+            // İmlecin sağ-üstüne yerleştir; sağ kenara taşarsa sola al.
+            final left = (pos.dx + 16).clamp(0.0, (w - 180).clamp(0.0, w));
+            final top = (pos.dy + 16).clamp(0.0, double.infinity);
+            return Stack(children: [
+              Positioned(
+                left: left,
+                top: top,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xF21A1B22),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0x33FFFFFF)),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: AppUi.body.copyWith(
+                              fontSize: 12.5,
+                              color: AppUi.textHi,
+                              fontWeight: FontWeight.w700)),
+                      if (_hoverSub != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(_hoverSub!,
+                              style: AppUi.body.copyWith(
+                                  fontSize: 10.5, color: AppUi.textMid)),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ]);
+          },
+        ),
+      ),
+    );
+  }
 
   Widget buildNotificationToast() {
     return Positioned(

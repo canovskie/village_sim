@@ -16,7 +16,9 @@ extension _SceneEstates on _VillageSceneState {
   static const double _kSwayFromMood = 1.0;
 
   void _tickEstates(double dt) {
-    // Moral tabana süzülür (sway sönmez) — kararlar günlerce yankılanır.
+    // Önce bireysel moralleri güncelle → zümrelere üye-morali beslensin.
+    _tickVillagerMorale(dt);
+    // Moral tabana (artık üye moraline) süzülür — kararlar günlerce yankılanır.
     _estates.tick(dt, kGameDaySeconds);
 
     // Kimlik kayması — baskın zümre değiştiyse köy görünür biçimde dönüşür.
@@ -95,23 +97,97 @@ extension _SceneEstates on _VillageSceneState {
     if (pe != null) _estates.nudge(pe, swayGain: 0.05);
   }
 
-  /// Dilekçeyi GETİRECEK gerçek köylüyü seçer (rastgele "Çiftçiler" değil —
-  /// somut biri). Önce dilekçenin zümresinden uygun bir yetişkin; yoksa
-  /// herhangi bir yetişkin (yazar asla boş kalmasın). Uyuyan/içerideki bile
-  /// olabilir — portre + bilgi için kimliği yeterli.
+  // ── Bireysel moral döngüsü ─────────────────────────────────────────────────
+  /// Her tick: koşullardan her köylünün moral hedefini hesaplar, oraya yavaş
+  /// süzer (kalıcı), zümrelere üye-ortalamasını besler, köy ortalamasını
+  /// (`_avgIndividualMorale`) günceller ve kronik mutsuzları göç ettirir.
+  /// Cozy: değerler ölçülü, göç nadir + telegraflı + godMode'da kapalı.
+  void _tickVillagerMorale(double dt) {
+    if (_villagers.isEmpty) {
+      _avgIndividualMorale = 0.6;
+      return;
+    }
+    // Köy-geneli koşullar (bir kez).
+    final starving = _wasStarving;
+    final lowWater = _buildings.any((b) =>
+        b.fn?.role == BuildingRole.housing &&
+        b.occupants > 0 &&
+        b.waterLevel < 0.3);
+    final coldNight = _cycle.dayLight < 0.28 && !_hasFire;
+    final elderPolicy = _policies.eldersExemptFromFood || _policies.peacefulEnd;
+
+    // Hedefe süzme (tau ~0.5 oyun günü) — moral kalıcı, ani zıplamaz.
+    final lerp = (dt / (0.5 * kGameDaySeconds)).clamp(0.0, 0.25);
+
+    final estSum = <Estate, double>{};
+    final estCnt = <Estate, int>{};
+    double sum = 0;
+
+    for (final v in _villagers) {
+      if (v.isDying) {
+        sum += v.morale;
+        continue;
+      }
+      final est = estateOfVillager(v.type, v.lifeStage);
+      final ev = evaluateVillagerMorale(
+        homeless: v.homeBuilding == null,
+        starving: starving,
+        lowWater: lowWater,
+        cold: coldNight && !v.isSleeping,
+        estateMood: _estates.moodOf(est),
+        elderRespected: elderPolicy && v.lifeStage == LifeStage.elder,
+      );
+      v.morale = (v.morale + (ev.target - v.morale) * lerp).clamp(0.0, 1.0);
+      v.moraleReason = ev.reason;
+      sum += v.morale;
+      estSum[est] = (estSum[est] ?? 0) + v.morale;
+      estCnt[est] = (estCnt[est] ?? 0) + 1;
+    }
+    _avgIndividualMorale = sum / _villagers.length;
+
+    // Zümrelere üye morali bildir → zümre mood'u oraya gravite eder.
+    for (final e in Estate.values) {
+      final c = estCnt[e] ?? 0;
+      if (c > 0) _estates.setMemberMorale(e, estSum[e]! / c);
+    }
+
+    // Göç: uzun süre perişan kalan köylü köyü terk eder. Son birkaç köylü
+    // korunur; godMode/showcase'te kapalı. Tek seferde bir kişi.
+    if (!_godMode && _villagers.length > 3) {
+      for (final v in _villagers) {
+        if (!v.isDying && v.lowMoraleTime > 2.2 * kGameDaySeconds) {
+          _emigrateVillager(v);
+          break;
+        }
+      }
+    }
+  }
+
+  /// Kronik mutsuz köylü köyü terk eder — diegetik kayıp (bildirim + zümre yası).
+  void _emigrateVillager(VillagerEntity v) {
+    _showNotification('${v.name} köyü terk etti — uzun süre mutsuzdu');
+    _estates.nudge(estateOfVillager(v.type, v.lifeStage), moodDelta: -0.06);
+    _removeVillager(v);
+  }
+
+  /// Dilekçeyi GETİRECEK köylüyü seçer: dilekçenin zümresinden EN MUTSUZ
+  /// (düşük moralli) somut biri — şikayetin gerçek sahibi. Zümre üyesi yoksa
+  /// köyün en mutsuzu. Tam determinist olmasın diye en düşük moralli birkaç
+  /// aday arasından seçilir. Yazar asla boş kalmaz.
   VillagerEntity? _pickPetitionAuthor(Petition p) {
-    final adults = _villagers
-        .where((v) => v.hasProfession && !v.isDying)
-        .toList();
-    if (adults.isEmpty) return null;
+    final alive = _villagers.where((v) => !v.isDying).toList();
+    if (alive.isEmpty) return null;
+    var pool = alive;
     final e = p.estate;
     if (e != null) {
-      final est = adults
+      final est = alive
           .where((v) => estateOfVillager(v.type, v.lifeStage) == e)
           .toList();
-      if (est.isNotEmpty) return est[_rng.nextInt(est.length)];
+      if (est.isNotEmpty) pool = est;
     }
-    return adults[_rng.nextInt(adults.length)];
+    pool.sort((a, b) => a.morale.compareTo(b.morale));
+    final n = pool.length < 3 ? pool.length : 3;
+    return pool[_rng.nextInt(n)];
   }
 
   /// Dilekçeyi getiren köylüyü seçip saklar (`_petitionAuthor`) ve sahneye

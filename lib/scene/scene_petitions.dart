@@ -91,6 +91,7 @@ extension _ScenePetitions on _VillageSceneState {
       final ctx = _buildPetitionContext();
       _pendingPetition =
           PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
+      _petitionAuthor = _pickPetitionAuthor(_pendingPetition!);
       _petitionDeadline = _kPetitionDeadline;
       _petitionModalOpen = true; // hemen göster
     });
@@ -102,6 +103,7 @@ extension _ScenePetitions on _VillageSceneState {
     if (p == null) return;
     setStateHere(() {
       _pendingPetition = p;
+      _petitionAuthor = _pickPetitionAuthor(p);
       _petitionDeadline = _kPetitionDeadline;
       _petitionModalOpen = true;
     });
@@ -169,6 +171,7 @@ extension _ScenePetitions on _VillageSceneState {
         _petitionCooldowns[p.id] = _time + _kPetitionRepeatCooldown;
       }
       _pendingPetition   = null;
+      _petitionAuthor    = null;
       _petitionModalOpen = false;
       _petitionTimer     = _kPetitionInterval;
       pushPolicyMorale(-0.03, 2.0);
@@ -444,6 +447,7 @@ extension _ScenePetitions on _VillageSceneState {
     return Positioned.fill(
       child: PetitionModal(
         petition: _pendingPetition!,
+        author: _petitionAuthor,
         state: (
           morale: _stats.morale,
           population: _villagers.length,
@@ -452,6 +456,12 @@ extension _ScenePetitions on _VillageSceneState {
         ),
         onChoose: (o) => _resolvePetition(_pendingPetition!, o),
         onDismiss: _dismissPetition,
+        onAuthorTap: _petitionAuthor == null
+            ? null
+            : () => setStateHere(() {
+                  _selectedVillager = _petitionAuthor;
+                  _petitionModalOpen = false; // dilekçe rozette bekler
+                }),
       ),
     );
   }
