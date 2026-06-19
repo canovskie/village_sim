@@ -198,6 +198,24 @@ class EstateSystem {
     }
   }
 
+  /// Kayıt: her zümrenin mood+sway'i. _memberMorale türetilir, kaydedilmez.
+  Map<String, dynamic> toJson() => {
+        for (final e in Estate.values)
+          e.name: {'mood': _s(e).mood, 'sway': _s(e).sway},
+      };
+
+  /// Yükleme: kaydedilmiş mood+sway'i geri yaz. Eksik zümre varsayılanda kalır.
+  void loadJson(Map<String, dynamic> json) {
+    for (final e in Estate.values) {
+      final m = json[e.name];
+      if (m is Map) {
+        final s = _s(e);
+        s.mood = (m['mood'] as num?)?.toDouble() ?? s.mood;
+        s.sway = (m['sway'] as num?)?.toDouble() ?? s.sway;
+      }
+    }
+  }
+
   /// Panel/diegetik için salt-okunur özet — sabit zümre sırasında.
   List<EstateSnapshot> snapshot() {
     final asc = ascendant;

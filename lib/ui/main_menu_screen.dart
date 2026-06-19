@@ -1,8 +1,10 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import '../save/save_manager.dart';
 import 'about_screen.dart';
 import 'app_ui.dart';
+import 'save_slots_screen.dart';
 import 'settings_screen.dart';
 import 'sky_widgets.dart';
 
@@ -10,7 +12,12 @@ import 'sky_widgets.dart';
 /// menü paneli. Diegetik-lite: sahne sıcaklığı verir, UI modern ve sade kalır.
 class MainMenuScreen extends StatefulWidget {
   final VoidCallback onNewGame;
-  const MainMenuScreen({super.key, required this.onNewGame});
+  final void Function(SaveSlotMeta) onContinue;
+  const MainMenuScreen({
+    super.key,
+    required this.onNewGame,
+    required this.onContinue,
+  });
 
   @override
   State<MainMenuScreen> createState() => _MainMenuScreenState();
@@ -21,6 +28,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   late final Ticker _ticker;
   Duration _last = Duration.zero;
   double _time = 0;
+  bool _hasSaves = false;
 
   static const _skyTop = Color(0xFF241640);
   static const _skyMid = Color(0xFFE0883C);
@@ -28,11 +36,27 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   @override
   void initState() {
     super.initState();
+    _refreshHasSaves();
     _ticker = createTicker((elapsed) {
       final dt = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
       _last = elapsed;
       setState(() => _time += dt);
     })..start();
+  }
+
+  Future<void> _refreshHasSaves() async {
+    final has = await SaveManager.instance.hasAnySave();
+    if (mounted) setState(() => _hasSaves = has);
+  }
+
+  Future<void> _openSlots() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => SaveSlotsScreen(onContinue: (meta) {
+        Navigator.of(context).pop();
+        widget.onContinue(meta);
+      }),
+    ));
+    _refreshHasSaves();
   }
 
   @override
@@ -113,6 +137,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         delay: const Duration(milliseconds: 120),
                         child: _MenuCard(
                           onNewGame: widget.onNewGame,
+                          hasSaves: _hasSaves,
+                          onContinue: _openSlots,
                           onSettings: () => Navigator.of(context).push(
                             MaterialPageRoute(
                                 builder: (_) => const SettingsScreen()),
@@ -222,9 +248,12 @@ class _TitleBlock extends StatelessWidget {
 // ─── Menü kartı ──────────────────────────────────────────────────────────────
 
 class _MenuCard extends StatelessWidget {
-  final VoidCallback onNewGame, onSettings, onAbout;
+  final VoidCallback onNewGame, onSettings, onAbout, onContinue;
+  final bool hasSaves;
   const _MenuCard({
     required this.onNewGame,
+    required this.onContinue,
+    required this.hasSaves,
     required this.onSettings,
     required this.onAbout,
   });
@@ -236,10 +265,19 @@ class _MenuCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (hasSaves) ...[
+            _MenuRow(
+              icon: GameIconData.home,
+              label: 'DEVAM ET',
+              primary: true,
+              onTap: onContinue,
+            ),
+            const SizedBox(height: 9),
+          ],
           _MenuRow(
             icon: GameIconData.flame,
             label: 'YENİ KÖY',
-            primary: true,
+            primary: !hasSaves,
             onTap: onNewGame,
           ),
           const SizedBox(height: 9),

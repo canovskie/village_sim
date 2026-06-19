@@ -45,7 +45,22 @@ extension _SceneFlow on _VillageSceneState {
       _grantVisualReward(VisualReward.landmark);
       _reactFestival(); // ateşe toplanma + dans (scene_petitions şablonu)
       _showNotification('${tier.icon} Köyünüz "${tier.name}" oldu!');
+      // Nadir tam ekran sinematik — kademe filmi (bir kez).
+      final cs = cutsceneForTier(newTier);
+      if (cs != null && !_tierCutscenesShown.contains(newTier)) {
+        _tierCutscenesShown.add(newTier);
+        _playCutscene(cs, logEntry: 'Köy "${tier.name}" oldu');
+      }
     }
+  }
+
+  /// Bir sinematiği oynatır (sim duraklar) + hikâye güncesine bir satır ekler.
+  /// Güncedeki satır sinematik atlanırsa bile kalır (anı kaybolmaz).
+  void _playCutscene(Cutscene c, {String? logEntry}) {
+    if (logEntry != null) {
+      _storyLog.add('${_dayCount + 1}. Gün — $logEntry');
+    }
+    setStateHere(() => _activeCutscene = c);
   }
 
   /// Görsel ödül — KAYNAK VERMEZ. Yoğunluğa göre kutlama FX + köy sevinci +

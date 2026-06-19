@@ -43,7 +43,7 @@ extension _ScenePetitions on _VillageSceneState {
 
     _petitionTimer -= dt;
     if (_petitionTimer > 0) return;
-    _petitionTimer = _kPetitionInterval;
+    _petitionTimer = _petitionInterval();
 
     // Yakında çözülmüş (cooldown'daki) dilekçeleri random'dan çıkar.
     final blocked = <String>{
@@ -63,6 +63,22 @@ extension _ScenePetitions on _VillageSceneState {
     _showNotification('📜 ${p.petitioner} bir dilekçe sundu');
   }
 
+  /// Bir zümrenin "küskün" (sullen) sayılması için mood eşiği — bunun altında
+  /// o zümre ısrarla dilekçe gönderir + dilekçe sıklığı artar.
+  static const double _kSullenMood = 0.40;
+
+  /// Şu an gerçekten küskün (sullen eşiği altı) zümre — yoksa null.
+  Estate? _sullenEstate() {
+    final e = _estates.mostAggrieved;
+    if (e == null) return null;
+    return _estates.moodOf(e) < _kSullenMood ? e : null;
+  }
+
+  /// Dilekçeler arası dinamik bekleme: bir zümre küskünse köy daha sık dilekçe
+  /// sunar (huzursuzluk gündemi sıkıştırır). Cozy: en fazla %40 hızlanma.
+  double _petitionInterval() =>
+      _kPetitionInterval * (_sullenEstate() != null ? 0.6 : 1.0);
+
   /// Köyün anlık durumunu dilekçe koşulları için derler.
   PetitionContext _buildPetitionContext() {
     int adults = 0;
@@ -73,6 +89,15 @@ extension _ScenePetitions on _VillageSceneState {
         adults++;
       }
     }
+    // Sürü durumu — yem sıkıntısı / hayvan dilekçelerinin kapısı.
+    int herd = 0;
+    double hungerSum = 0;
+    for (final c in _cows) {
+      if (c.isDying) continue;
+      herd++;
+      hungerSum += c.hunger;
+    }
+    final herdHungry = herd > 0 && hungerSum / herd > 0.5;
     return PetitionContext(
       population: _villagers.length,
       adults: adults,
@@ -81,6 +106,10 @@ extension _ScenePetitions on _VillageSceneState {
       morale: _stats.morale,
       hasChurch: _churchBuilding != null,
       memory: _villageMemory,
+      aggrievedEstate: _sullenEstate(),
+      ascendant: _estates.ascendant,
+      herdSize: herd,
+      herdHungry: herdHungry,
     );
   }
 
@@ -157,7 +186,7 @@ extension _ScenePetitions on _VillageSceneState {
       _pendingPetition   = null;
       _petitionAuthor    = null;
       _petitionModalOpen = false;
-      _petitionTimer     = _kPetitionInterval;
+      _petitionTimer     = _petitionInterval();
     });
     // Boş resolution → mesaj reaksiyonun kendisinden gelir (ör. kayıp ismi).
     if (o.resolution.isNotEmpty) _showNotification(o.resolution);
@@ -173,7 +202,7 @@ extension _ScenePetitions on _VillageSceneState {
       _pendingPetition   = null;
       _petitionAuthor    = null;
       _petitionModalOpen = false;
-      _petitionTimer     = _kPetitionInterval;
+      _petitionTimer     = _petitionInterval();
       pushPolicyMorale(-0.03, 2.0);
     });
     _showNotification(
@@ -277,6 +306,7 @@ extension _ScenePetitions on _VillageSceneState {
     _activeFx.add(ActiveFx(e, dur));
     _gatherAtFire(dur, pose: FirePose.mourn); // yas duruşu — başlar öne eğik
     _feelVillage(NpcEmotion.grief, 10, -0.15);
+    addCameraShake(5, dur: 0.6); // sessiz bir sarsıntı (juice)
     pushPolicyMorale(-0.06, 5.0);
     _showNotification(name != null
         ? '🕯️ $name için anma töreni — köy ateş başında bir araya geldi.'

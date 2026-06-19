@@ -5,6 +5,7 @@ import '../characters/villager_type.dart';
 import '../characters/life_stage.dart';
 import '../rendering/portrait_renderer.dart';
 import 'app_ui.dart';
+import 'petition_scene_card.dart';
 
 /// Köyden gelen bir ricanın oyuncu-yüzlü karşılığı — Meclis önüne gelen
 /// dilekçe. Modern koyu panel diline (AppUi) oturur: rafine yüzey, tek sıcak
@@ -69,6 +70,9 @@ class PetitionModal extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // Konuyu anlatan 2B sahne kartı (sinematik kare hissi).
+                        PetitionSceneCard(petition: petition),
+                        const SizedBox(height: 14),
                         _header(),
                         if (state != null) ...[
                           const SizedBox(height: 13),

@@ -79,8 +79,9 @@ extension _SceneWorld on _VillageSceneState {
     for (final b in _buildings) {
       final f = b.fn;
       if (f == null || f.role != BuildingRole.housing) continue;
-      final occ = _villagers.where((v) => v.homeBuilding == b).length;
-      final slots = f.housingCapacity - occ;
+      // PERF: occupants her tick başında _tickPopulationAndHunger'da tazelenir
+      // → her ev için _villagers'ı yeniden taramak yerine onu kullan (O(n×m)→O(n)).
+      final slots = f.housingCapacity - b.occupants;
       if (slots > 0) free += slots;
     }
     return free;

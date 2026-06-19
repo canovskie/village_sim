@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../characters/villager_type.dart';
 import '../characters/npc_visual.dart';
+import '../characters/personality.dart';
 import '../characters/life_stage.dart';
 import '../core/constants.dart';
 import 'worker_entity.dart';
@@ -47,15 +48,20 @@ class VillagerEntity extends WorkerEntity {
   /// Oyuncu bilgi panelinden istediği zaman yeniden adlandırabilir.
   String name;
 
-  /// Oyuncu bu köylüyü "favori" olarak işaretledi mi (kalp/yıldız). Sadece
-  /// görsel — panel başlığında rozet, ileride hızlı erişim listesi için temel.
+  /// Oyuncu bu köylüyü "favori" olarak işaretledi mi (kalp/yıldız). Panel
+  /// rozeti + kayıp ruh seçiminden korunma.
   bool isFavorite = false;
 
-  /// Oyuncu tarafından kaç kez selamlanmış (etkileşim sayacı, panelde göster).
-  int greetCount = 0;
+  /// Değişmez kişilik tohumu — mizaç/sevdiği/künye bundan deterministik türer.
+  /// Kayıt yalnızca bu int'i tutar; [personality] yüklemede yeniden üretilir.
+  final int personalitySeed;
 
-  /// Oyuncudan kaç hediye aldı.
-  int giftCount = 0;
+  /// Köylünün kişiliği (mizaç + sevdiği şey + künye). Seed'den lazy üretilir.
+  late final Personality personality =
+      Personality.fromSeed(personalitySeed, type);
+
+  /// Kutlanan yıldönümü sayısı — yaş kilometre taşı geçince artar (kişisel an).
+  int annivCount = 0;
 
   /// Aile bağları — bebek doğduğunda evdeki yetişkin sakinler ebeveyn olur
   /// (max 2). Kurucu NPC'lerde boş. Ölüm anında karşı taraf listesinden
@@ -396,18 +402,22 @@ class VillagerEntity extends WorkerEntity {
     required super.startCol,
     required super.startRow,
     int? visualSeed,
+    NpcVisual? visual,
+    int? personalitySeed,
     this.ageDays = 0,
     this.lifespanDays = double.infinity,
-  })  : targetCol = startCol,
+  })  : personalitySeed = personalitySeed ?? _autoPersonalitySeed(),
+        targetCol = startCol,
         targetRow = startRow,
         speed     = _speedFor(type),
         behavior  = _behaviorFor(type),
-        // Visual seed'ten görsel detaylar (saç/ten/göz) gelir, ama cinsiyet
-        // dışarıdan zorlanır → name ile uyumlu kalır.
+        // [visual] verilirse (kayıttan yükleme) birebir o görsel kimlik korunur;
+        // yoksa seed'ten üretilir. Cinsiyet dışarıdan zorlanır → name ile uyumlu.
         super(
-          visual: NpcVisual.fromSeed(
-              visualSeed ?? _autoSeed(type, startCol, startRow),
-              forceMale: male),
+          visual: visual ??
+              NpcVisual.fromSeed(
+                  visualSeed ?? _autoSeed(type, startCol, startRow),
+                  forceMale: male),
         );
 
   /// NPC'nin cinsiyeti — visual.isMale ile aynı (getter pratik erişim).
@@ -415,6 +425,10 @@ class VillagerEntity extends WorkerEntity {
 
   /// Otomatik visual seed — type + spawn pozisyonu hash'i.  Aynı pozisyondan
   /// aynı tipte spawn olan iki NPC olmaz pratikte, ama görsel seed verilebilir.
+  /// Kişilik için rastgele tohum — her köylü farklı kişilik alsın diye varsayılan.
+  /// Kayıttan yüklemede gerçek değer dışarıdan verilir (deterministik kalır).
+  static int _autoPersonalitySeed() => Random().nextInt(0x7FFFFFFF);
+
   static int _autoSeed(VillagerType t, double c, double r) =>
       t.index * 7919
       ^ (c * 1009).toInt() * 13

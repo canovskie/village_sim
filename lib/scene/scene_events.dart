@@ -153,6 +153,19 @@ extension _SceneEvents on _VillageSceneState {
         }
     }
     _feelVillage(emotion, dur, mood);
+
+    // Juice: sarsıcı olaylarda kamera titreşimi (ayar kapalıysa no-op).
+    final shake = switch (e.effect?.fx) {
+      EventFx.fireOutbreak => 12.0,
+      EventFx.storm        => 9.0,
+      EventFx.beastEyes    => 8.0,
+      EventFx.thiefDash    => 6.0,
+      EventFx.meteorShower => 5.0,
+      _ => e.category == EventCategory.negative
+          ? (e.severity == EventSeverity.major ? 10.0 : 5.0)
+          : 0.0,
+    };
+    if (shake > 0) addCameraShake(shake, dur: 0.55);
   }
 
   /// Aktif efektleri her tick decay et + aggregate. Sonra tint/rain/sim

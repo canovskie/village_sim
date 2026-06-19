@@ -1110,6 +1110,8 @@ class _CowDrawable extends _Drawable {
       facing:     a.facing4,
       walkPhase:  a.walkPhase,
       isWalking:  a.isWalking,
+      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
+      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
     );
   }
 }
@@ -1127,6 +1129,8 @@ class _SheepDrawable extends _Drawable {
       facing:     a.facing4,
       walkPhase:  a.walkPhase,
       isWalking:  a.isWalking,
+      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
+      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
     );
   }
 }
@@ -1144,6 +1148,8 @@ class _ChickenDrawable extends _Drawable {
       facing:     a.facing4,
       walkPhase:  a.walkPhase,
       isWalking:  a.isWalking,
+      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
+      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
     );
   }
 }

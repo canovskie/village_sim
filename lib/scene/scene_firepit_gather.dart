@@ -66,6 +66,13 @@ extension _SceneFirepitGather on _VillageSceneState {
     int recruited = 0;
     // Karışık tarama — her zaman aynı NPC önde olmasın.
     final candidates = List<VillagerEntity>.from(_villagers)..shuffle(_rng);
+    // Hafif kişilik rengi: ateş/hikâye/sohbet sevenler öne geçer → akşamları
+    // bu köylüler ateş başında daha sık görünür (görünür ama zararsız eğilim).
+    candidates.sort((a, b) {
+      final aw = a.personality.likes.atFireAffinity ? 0 : 1;
+      final bw = b.personality.likes.atFireAffinity ? 0 : 1;
+      return aw - bw;
+    });
     for (final v in candidates) {
       if (recruited >= _kMaxRecruitsPerScan) break;
       if (!_canGather(v)) continue;
@@ -81,6 +88,37 @@ extension _SceneFirepitGather on _VillageSceneState {
           () => point.release(slot, v));
       recruited++;
     }
+  }
+
+  // ── Konfor talebi (ekonomi yumuşak baskısı — pozitif sink) ─────────────────
+  // Köy ara sıra elindeki SURPLUS konfor malını küçük bir şölene çevirir: bal
+  // (lüks) önce, yoksa sağlıklı tampon üstündeki fazla yiyecek. Sonuç: kısa
+  // moral + ateş başı keyiflenme. Mal yoksa SESSİZCE geçer — ceza yok (chill).
+  // Etki: bal (yoksa dekoratifti) + kaynak fazlası sürekli anlam kazanır.
+  void _tickComfort(double dt) {
+    if (_villagers.length < 3) return;
+    _comfortTimer -= dt;
+    if (_comfortTimer > 0) return;
+    _comfortTimer = (1.0 + _rng.nextDouble() * 0.8) * kGameDaySeconds; // ~1-1.8 gün
+
+    final pop = _villagers.length;
+    if (_stockpile.honey >= 3) {
+      _stockpile.honey -= 3;
+      _comfortFeast('🍯 Köy bal şöleni yaptı — tatlı bir keyif yayıldı.', 0.06);
+    } else if (_stockpile.food > pop * 8 + 30) {
+      // Yalnız BOL yiyecek varken (1 günlük tüketim + tampon üstü) — açlık riski yok.
+      _stockpile.food -= 4;
+      _comfortFeast('🍲 Köy küçük bir şölen verdi — karınlar tok, yüzler güleç.', 0.05);
+    }
+    // Hiçbir konfor malı yoksa sessizce geç — hiçbir ceza yok.
+  }
+
+  /// Küçük konfor şöleni — geçici moral + huzur gövde dili + birkaçı ateşe toplanır.
+  void _comfortFeast(String msg, double morale) {
+    pushPolicyMorale(morale, 1.5);
+    _feelVillage(NpcEmotion.content, 8, morale * 0.5);
+    if (_fireBurning) _gatherAtFire(kGameDaySeconds * 0.3, max: 5);
+    _showNotification(msg);
   }
 
   /// Bir köylünün ateşe çağrılmaya uygun olup olmadığı.

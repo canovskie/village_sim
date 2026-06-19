@@ -4,6 +4,26 @@ part of '../main.dart';
 /// uyku hedefi atama + spawn pozisyon temizleme + tek-tıkla canlı köy.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneBuildingSpawn on _VillageSceneState {
+  /// Başlangıç hayvanı — yetişkin ama yaşları çeşitli (hep birlikte
+  /// yaşlanıp aynı anda ölmesinler), ömrü randomize.
+  AnimalEntity _spawnAnimal(
+      AnimalKind kind, BuildOrder o, double col, double row, bool male) {
+    final age = AnimalEntity.kAnimalAdultDay +
+        _rng.nextDouble() *
+            (AnimalEntity.kAnimalElderDay - AnimalEntity.kAnimalAdultDay);
+    final lifespan = AnimalEntity.kAnimalElderDay + 5.0 + _rng.nextDouble() * 9.0;
+    return AnimalEntity(
+      kind: kind,
+      barnCol: o.col,
+      barnRow: o.row,
+      startCol: col,
+      startRow: row,
+      isMale: male,
+      ageDays: age,
+      lifespanDays: lifespan,
+    );
+  }
+
   void _spawnStartingNPCs(BuildingEntity firepit) {
     final cx = firepit.col + 0.5;
     final cy = firepit.row + 0.5;
@@ -176,6 +196,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     // Doğum sevinci — gövde dili: anne/baba kutlar, komşular dönüp bakar.
     mother.feel(NpcEmotion.joy, 5, moodDelta: 0.15);
     father.feel(NpcEmotion.love, 5, moodDelta: 0.12);
+    // Görünür doğum şenliği — parıltı/kutlama baloncukları (juice).
+    baby.chatBubbleIcon = '✨';
+    baby.chatBubbleTime = 5.0;
+    mother.chatBubbleIcon = '🎉';
+    mother.chatBubbleTime = 4.0;
+    father.chatBubbleIcon = '❤️';
+    father.chatBubbleTime = 4.0;
     _reactNearby(sx, sy, 5.0, NpcEmotion.joy, 4.0, moodDelta: 0.05);
     nudgeMorale(0.05); // görünür mutlu olay → moral göstergesini hafif iter
 
@@ -338,36 +365,31 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         _shepherds.add(
           ShepherdEntity(barnCol: o.col, barnRow: o.row),
         );
+        // Cinsiyet: çift bazlı üreme için başlangıçta hem dişi hem erkek olsun.
         const cowOffsets = [
           (-0.6, 2.4),
           ( 1.5, 2.9),
           ( 3.6, 1.6),
         ];
-        for (final (dc, dr) in cowOffsets) {
+        const cowMales = [false, true, false]; // 2 dişi + 1 boğa
+        for (var i = 0; i < cowOffsets.length; i++) {
+          final (dc, dr) = cowOffsets[i];
           final jx = (_rng.nextDouble() - 0.5) * 0.4;
           final jy = (_rng.nextDouble() - 0.5) * 0.4;
-          _cows.add(AnimalEntity(
-            kind: AnimalKind.cow,
-            barnCol: o.col,
-            barnRow: o.row,
-            startCol: o.col + dc + jx,
-            startRow: o.row + dr + jy,
-          ));
+          _cows.add(_spawnAnimal(AnimalKind.cow, o,
+              o.col + dc + jx, o.row + dr + jy, cowMales[i]));
         }
         const sheepOffsets = [
           ( 0.4, 3.2),
           ( 2.6, 2.6),
         ];
-        for (final (dc, dr) in sheepOffsets) {
+        const sheepMales = [false, true]; // 1 koyun + 1 koç
+        for (var i = 0; i < sheepOffsets.length; i++) {
+          final (dc, dr) = sheepOffsets[i];
           final jx = (_rng.nextDouble() - 0.5) * 0.4;
           final jy = (_rng.nextDouble() - 0.5) * 0.4;
-          _cows.add(AnimalEntity(
-            kind: AnimalKind.sheep,
-            barnCol: o.col,
-            barnRow: o.row,
-            startCol: o.col + dc + jx,
-            startRow: o.row + dr + jy,
-          ));
+          _cows.add(_spawnAnimal(AnimalKind.sheep, o,
+              o.col + dc + jx, o.row + dr + jy, sheepMales[i]));
         }
 
       case BuildingType.floristCottage:
@@ -391,16 +413,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           (2.5, 1.4),
           (-0.4, 1.5),
         ];
-        for (final (dc, dr) in chickenOffsets) {
+        const chickenMales = [false, true, false, false]; // 1 horoz
+        for (var i = 0; i < chickenOffsets.length; i++) {
+          final (dc, dr) = chickenOffsets[i];
           final jx = (_rng.nextDouble() - 0.5) * 0.3;
           final jy = (_rng.nextDouble() - 0.5) * 0.3;
-          _cows.add(AnimalEntity(
-            kind: AnimalKind.chicken,
-            barnCol: o.col,
-            barnRow: o.row,
-            startCol: o.col + dc + jx,
-            startRow: o.row + dr + jy,
-          ));
+          _cows.add(_spawnAnimal(AnimalKind.chicken, o,
+              o.col + dc + jx, o.row + dr + jy, chickenMales[i]));
         }
 
       default:

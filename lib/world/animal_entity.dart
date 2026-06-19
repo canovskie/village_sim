@@ -1,10 +1,36 @@
 import 'dart:math';
 
+import '../characters/life_stage.dart' show kGameDaySeconds;
+
 enum AnimalKind { cow, sheep, chicken }
 
 /// 4 yönlü facing — sprite-based hayvanlarda hangi sprite seti kullanılacak.
 /// Hareket yönüne göre güncellenir.
 enum AnimalFacing { n, e, s, w }
+
+/// Hayvan yaşam evresi. Köylü [LifeStage]'inin sadeleştirilmiş hâli — 3 evre.
+/// Yavru otlar ama ürün vermez/üremez; yetişkin üretir+ürer; yaşlı yavaşlar.
+enum AnimalLifeStage { juvenile, adult, elder }
+
+extension AnimalLifeStageX on AnimalLifeStage {
+  /// Sprite çizim ölçeği — yavru küçük, yetişkin tam, yaşlı hafif küçülmüş.
+  double get renderScale => switch (this) {
+        AnimalLifeStage.juvenile => 0.55,
+        AnimalLifeStage.adult => 1.0,
+        AnimalLifeStage.elder => 0.92,
+      };
+
+  /// Türe göre Türkçe etiket (yavru: buzağı/kuzu/civciv).
+  String labelFor(AnimalKind k) => switch (this) {
+        AnimalLifeStage.juvenile => switch (k) {
+            AnimalKind.cow => 'Buzağı',
+            AnimalKind.sheep => 'Kuzu',
+            AnimalKind.chicken => 'Civciv',
+          },
+        AnimalLifeStage.adult => 'Yetişkin',
+        AnimalLifeStage.elder => 'Yaşlı',
+      };
+}
 
 /// Ağıla bağlı serbest dolaşan hayvan. Hunger ↗ zaman; otladıkça (= hareket
 /// ettikçe) düşer. Doyduğunda milkProgress birikir. milkProgress≥1 olunca
@@ -17,6 +43,28 @@ class AnimalEntity {
   final AnimalKind kind;
   final int barnCol;
   final int barnRow;
+
+  /// Cinsiyet — çift bazlı üreme için (aynı ağılda dişi+erkek yetişkin gerek).
+  final bool isMale;
+
+  /// Yaş (oyun günü). Zamanla yaşam evresi ilerler; [lifespanDays]'i geçince
+  /// hayvan sakince hayata veda eder (chill: kaynak cezası yok).
+  double ageDays;
+
+  /// Doğal ölüm yaşı (oyun günü). Yaşlı evresine girince + rastgele bir süre.
+  double lifespanDays;
+
+  /// Üreme sayacı (oyun günü). NaN = uygun değil (yavru/yaşlı/erkek);
+  /// > 0 = sayıyor; ≤ 0 = hazır (sahne partner+kapasite kontrol eder).
+  double fertilityDays = double.nan;
+
+  // ── Ölüm animasyonu ─────────────────────────────────────────────────────
+  /// true → hayvan çöküp solmaya başladı (anlık silme yok; köylüyle simetrik).
+  bool isDying = false;
+  /// 0→1 çöküş/solma ilerlemesi; 1 olunca [deathFinished].
+  double deathProgress = 0.0;
+  bool get deathFinished => isDying && deathProgress >= 1.0;
+  static const double _deathDuration = 2.4; // sn
 
   double gridX;
   double gridY;
@@ -49,25 +97,80 @@ class AnimalEntity {
     required this.barnRow,
     required double startCol,
     required double startRow,
+    this.isMale = false,
+    this.ageDays = kAnimalAdultDay,   // default: yetişkin doğar (ilk spawn)
+    double? lifespanDays,
   }) : gridX   = startCol,
        gridY   = startRow,
        renderX = startCol,
-       renderY = startRow;
+       renderY = startRow,
+       lifespanDays = lifespanDays ?? kAnimalElderDay + 9.0;
 
   /// Wander radius scale — `freeRange` politikası açıkken scene 1.5 yapar.
   /// Default 1.0. AnimalEntity policy'ye erişmesin diye side channel.
   static double kWanderScale = 1.0;
   static double get _wanderRadius => 2.5 * kWanderScale;
+  /// Açlık hız çarpanı — `winterFodder` politikası açıkken scene 0.55 yapar
+  /// (yem stoku → hayvanlar daha geç acıkır, daha verimli). Default 1.0.
+  static double kHungerScale = 1.0;
   static const double _walkSpeed    = 0.65;         // tile/sn, sakin ama uyuşuk değil
   static const double _hungerRate   = 1.0 / 70.0;   // 70 sn'de aç
   static const double _grazeRate    = 1.0 / 30.0;   // 30 sn yürüyüşle doyar
   static const double _milkRate     = 1.0 / 45.0;   // dolu kalınca 45 sn'de hazır
 
-  bool get readyToMilk => milkProgress >= 1.0 && !isBeingMilked;
+  // ── Yaşam evresi eşikleri (oyun günü) ────────────────────────────────────
+  // Hayvanlar köylüden biraz daha kısa ömürlü → sürü yenilenmesi gözle görülür.
+  static const double kAnimalAdultDay = 1.5;   // yavru → yetişkin
+  static const double kAnimalElderDay = 9.0;   // yetişkin → yaşlı
+
+  AnimalLifeStage get lifeStage => ageDays < kAnimalAdultDay
+      ? AnimalLifeStage.juvenile
+      : ageDays < kAnimalElderDay
+          ? AnimalLifeStage.adult
+          : AnimalLifeStage.elder;
+
+  bool get isJuvenile => lifeStage == AnimalLifeStage.juvenile;
+  /// Üretim + üreme yalnızca yetişkinde (yaşlı da üretir ama daha az ürer).
+  bool get isAdult => ageDays >= kAnimalAdultDay;
+  double get renderScale => lifeStage.renderScale;
+
+  bool get readyToMilk =>
+      isAdult && !isDying && milkProgress >= 1.0 && !isBeingMilked;
   double get depth => gridX + gridY;
+
+  /// Çöküş başlat — anlık silme yerine görünür veda (köylüyle simetrik).
+  void startDying() {
+    if (isDying) return;
+    isDying = true;
+    deathProgress = 0.0;
+    isBeingMilked = false;
+    isWalking = false;
+    fertilityDays = double.nan;
+  }
 
   void update(double dt, Random rng,
       {Set<(int, int)> waterTiles = const {}}) {
+    // Çöküş animasyonu — solar + yerinde kalır, başka hiçbir şey işlemez.
+    if (isDying) {
+      deathProgress = (deathProgress + dt / _deathDuration).clamp(0.0, 1.0);
+      isWalking = false;
+      _smoothRender(dt);
+      return;
+    }
+
+    // Yaşlanma — evre & üreme uygunluğu ageDays'ten türetilir.
+    ageDays += dt / kGameDaySeconds;
+    // Üreme sayacı: yetişkin dişiler için aktif (yaşlıda dondurulur).
+    if (!isMale && lifeStage == AnimalLifeStage.adult) {
+      if (fertilityDays.isNaN) {
+        fertilityDays = 6.0 + rng.nextDouble() * 5.0;
+      } else if (fertilityDays > 0) {
+        fertilityDays -= dt / kGameDaySeconds;
+      }
+    } else {
+      fertilityDays = double.nan;
+    }
+
     if (isBeingMilked) {
       isWalking = false;
       walkPhase += dt * 1.2;
@@ -76,13 +179,14 @@ class AnimalEntity {
     }
 
     // Hunger / milk metabolizması — otlarken (duruşta) yer; yürürken aramaz.
-    hunger += dt * _hungerRate;
+    hunger += dt * _hungerRate * kHungerScale;
     if (hunger > 1.0) hunger = 1.0;
     if (_grazeTimer > 0 && hunger > 0.0) {
       hunger -= dt * _grazeRate;
       if (hunger < 0.0) hunger = 0.0;
     }
-    if (hunger < 0.3 && milkProgress < 1.0) {
+    // Ürün sadece yetişkinden; yavru otlar ama süt vermez (büyümek anlam kazanır).
+    if (isAdult && hunger < 0.3 && milkProgress < 1.0) {
       milkProgress += dt * _milkRate;
       if (milkProgress > 1.0) milkProgress = 1.0;
     }

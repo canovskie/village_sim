@@ -8,19 +8,15 @@ import 'app_ui.dart';
 
 /// Köylü kartı — modern koyu app_ui dilinde. Üstte portre + isim + meslek
 /// rozeti + favori/kapat ikon butonları; altta durum rozetleri, animasyonlu
-/// yaş çubuğu, hâl/ev/bağ satırları, aile chip'leri ve cozy etkileşim
-/// butonları (Selam / Hediye / Takip). Aile chip'leri ve aksiyonlar üst
-/// sahnedeki callback'lere bağlanır — panel kendi state'i sadece rename
-/// modunda kullanır.
+/// yaş çubuğu, hâl/ev satırları, KİŞİLİK (mizaç + sevdiği + künye), aile
+/// chip'leri ve Takip butonu. Callback'ler üst sahneye bağlanır — panel kendi
+/// state'i sadece rename modunda kullanır.
 class VillagerInfoPanel extends StatefulWidget {
   final VillagerEntity villager;
   final String? homeLabel;
   final bool isFollowed;
-  final bool canGift;
   final VoidCallback onClose;
   final void Function(VillagerEntity)? onSelect;
-  final VoidCallback? onGreet;
-  final VoidCallback? onGift;
   final VoidCallback? onToggleFollow;
   final VoidCallback? onToggleFavorite;
   final void Function(String)? onRename;
@@ -31,10 +27,7 @@ class VillagerInfoPanel extends StatefulWidget {
     required this.onClose,
     this.homeLabel,
     this.isFollowed = false,
-    this.canGift = true,
     this.onSelect,
-    this.onGreet,
-    this.onGift,
     this.onToggleFollow,
     this.onToggleFavorite,
     this.onRename,
@@ -121,7 +114,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                     _moodRow(v),
                     _row('Ev', widget.homeLabel ?? 'Evsiz',
                         icon: GameIconData.home),
-                    if (v.greetCount > 0 || v.giftCount > 0) _interactionRow(v),
+                    ..._personalitySection(v),
                     ..._familyTree(v),
                     const SizedBox(height: 14),
                     _actionRow(v),
@@ -524,12 +517,58 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         ),
       );
 
-  Widget _interactionRow(VillagerEntity v) {
-    final parts = <String>[];
-    if (v.greetCount > 0) parts.add('👋 ${v.greetCount}');
-    if (v.giftCount > 0) parts.add('🎁 ${v.giftCount}');
-    return _row('Bağ', parts.join('   '), icon: GameIconData.people);
+  // ─── Kişilik — mizaç + sevdiği şey + tek cümlelik künye ────────────────────
+
+  List<Widget> _personalitySection(VillagerEntity v) {
+    final p = v.personality;
+    return [
+      const AppDivider(),
+      AppSectionLabel('KİŞİLİK'),
+      const SizedBox(height: 5),
+      // Mizaç çipleri + sevdiği şey çipi.
+      Wrap(
+        spacing: 5,
+        runSpacing: 5,
+        children: [
+          for (final t in p.traits) _traitChip('${t.icon} ${t.label}'),
+          _likeChip('${p.likes.icon} sever: ${p.likes.label}'),
+        ],
+      ),
+      const SizedBox(height: 7),
+      // Tek cümlelik künye — anlatısal renk.
+      Text(
+        p.backstory,
+        style: AppUi.body.copyWith(
+          color: AppUi.textMid,
+          fontStyle: FontStyle.italic,
+          fontSize: 11.5,
+          height: 1.25,
+        ),
+      ),
+    ];
   }
+
+  Widget _traitChip(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppUi.surface0,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppUi.line, width: 1),
+        ),
+        child: Text(text,
+            style: AppUi.body.copyWith(color: AppUi.textHi, fontSize: 11)),
+      );
+
+  Widget _likeChip(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppUi.accent.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppUi.accent.withValues(alpha: 0.5), width: 1),
+        ),
+        child: Text(text,
+            style: AppUi.body.copyWith(color: AppUi.accentSoft, fontSize: 11)),
+      );
 
   // ─── Family chips ──────────────────────────────────────────────────────────
 
@@ -599,39 +638,13 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   // ─── Aksiyon butonları — cozy etkileşim ────────────────────────────────────
 
   Widget _actionRow(VillagerEntity v) {
-    return Row(
-      children: [
-        Expanded(
-          child: AppButton(
-            label: 'Selam',
-            tint: AppUi.sage,
-            expand: true,
-            onTap: widget.onGreet,
-          ),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: AppButton(
-            label: 'Hediye',
-            sub: widget.canGift ? null : 'yiyecek yok',
-            tint: AppUi.accent,
-            expand: true,
-            onTap: widget.canGift ? widget.onGift : null,
-          ),
-        ),
-        const SizedBox(width: 7),
-        Expanded(
-          child: AppButton(
-            label: widget.isFollowed ? 'Bırak' : 'Takip',
-            tint: widget.isFollowed ? AppUi.rust : AppUi.info,
-            kind: widget.isFollowed
-                ? AppButtonKind.filled
-                : AppButtonKind.tonal,
-            expand: true,
-            onTap: widget.onToggleFollow,
-          ),
-        ),
-      ],
+    return AppButton(
+      label: widget.isFollowed ? 'Takibi bırak' : 'Takip et',
+      icon: GameIconData.people,
+      tint: widget.isFollowed ? AppUi.rust : AppUi.info,
+      kind: widget.isFollowed ? AppButtonKind.filled : AppButtonKind.tonal,
+      expand: true,
+      onTap: widget.onToggleFollow,
     );
   }
 }

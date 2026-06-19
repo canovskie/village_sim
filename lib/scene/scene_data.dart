@@ -208,6 +208,24 @@ const List<PolicyDef> kPolicyDefs = [
       cost: 'Hiçbir tarla da öne geçemez',
       category: PolicyCategory.economy,
       estateMood: [(Estate.laborers, 0.08), (Estate.artisans, -0.04)]),
+  PolicyDef(
+      id: 'herdGrowth',
+      icon: '🐄',
+      label: 'Sürü büyütme',
+      desc: 'Ağıldaki hayvanlar eşleşip yavrular — sürü kendiliğinden büyür.',
+      benefit: 'Buzağı, kuzu ve civcivler sürüyü canlandırır',
+      cost: 'Genç hayvanlar büyüyene dek ürün vermez',
+      category: PolicyCategory.economy,
+      estateMood: [(Estate.laborers, 0.08), (Estate.hearth, 0.03)]),
+  PolicyDef(
+      id: 'winterFodder',
+      icon: '🌾',
+      label: 'Kışlık yem stoku',
+      desc: 'Ahıra yem ayrılır — hayvanlar daha geç acıkır.',
+      benefit: 'Sürü tok ve verimli kalır',
+      cost: 'Sofradan bir pay ahıra gider',
+      category: PolicyCategory.economy,
+      estateMood: [(Estate.laborers, 0.07), (Estate.hearth, -0.04)]),
   // Çevre
   PolicyDef(
       id: 'greenVillage',
@@ -264,6 +282,10 @@ class VillagePolicies {
   bool greenVillage;
   /// Otlama serbest: hayvan wander radius +50%.
   bool freeRange;
+  /// Sürü büyütme: ağıldaki yetişkin çiftler yavrular (çift bazlı üreme).
+  bool herdGrowth;
+  /// Kışlık yem stoku: hayvanlar daha yavaş acıkır (tok=verimli).
+  bool winterFodder;
   /// Bir sonraki politika değişikliğine kadar sim time (sn). Cooldown bitene
   /// kadar UI butonları disabled görünür. Decree ağırlığı için gerekli.
   double cooldownUntilSim;
@@ -282,6 +304,8 @@ class VillagePolicies {
     this.sharedHarvest = false,
     this.greenVillage = false,
     this.freeRange = false,
+    this.herdGrowth = false,
+    this.winterFodder = false,
     this.cooldownUntilSim = 0,
   });
 
@@ -294,7 +318,7 @@ class VillagePolicies {
       'familyEncouragement', 'peacefulEnd', 'eldersExemptFromFood',
       'hospitality', 'apprenticeship', 'slowMaturity', 'neighborliness',
       'familyReunion', 'treePlanting', 'sharedHarvest', 'greenVillage',
-      'freeRange',
+      'freeRange', 'herdGrowth', 'winterFodder',
     ]) {
       if (isOn(id)) n++;
     }
@@ -322,6 +346,8 @@ class VillagePolicies {
         'sharedHarvest' => sharedHarvest,
         'greenVillage' => greenVillage,
         'freeRange' => freeRange,
+        'herdGrowth' => herdGrowth,
+        'winterFodder' => winterFodder,
         _ => false,
       };
 }

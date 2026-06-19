@@ -381,21 +381,38 @@ class CharacterRenderer {
   static const _outline   = Color(0xFF2A1A08);
 
   // ─── PAINT YARDIMCILARI ───────────────────────────────────────────────────
-  static Paint _f(Color c) =>
-      Paint()..color = c..style = PaintingStyle.fill..isAntiAlias = false;
+  // PERF: Her çağrıda yeni Paint yerine 4 önbellekli statik instance — yalnız
+  // color/strokeWidth mutate edilir (style/AA/join/cap bir kez set). Tüm
+  // kullanımlar inline `drawX(..., _f(color))` formunda ve paint çizimde
+  // anında tüketilir → tek paylaşımlı instance güvenli (iki sonuç asla aynı
+  // anda yaşamaz). ~230 alloc/NPC/frame GC baskısını ortadan kaldırır.
+  static final Paint _fPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = false;
+  static Paint _f(Color c) => _fPaint..color = c;
+
+  static final Paint _sPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeJoin = StrokeJoin.miter
+    ..strokeCap = StrokeCap.square
+    ..isAntiAlias = false;
   static Paint _s(Color c, [double w = 1.0]) =>
-      Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = w
-             ..strokeJoin = StrokeJoin.miter..strokeCap = StrokeCap.square
-             ..isAntiAlias = false;
+      _sPaint..color = c..strokeWidth = w;
 
   // ── Yumuşak (anti-aliased) paint'ler — yalnızca yüz/ifade için ───────────
   // Gövde pixel-art kalır (sert kenar); yüz tatlı/yuvarlak olsun diye AA.
-  static Paint _fa(Color c) =>
-      Paint()..color = c..style = PaintingStyle.fill..isAntiAlias = true;
+  static final Paint _faPaint = Paint()
+    ..style = PaintingStyle.fill
+    ..isAntiAlias = true;
+  static Paint _fa(Color c) => _faPaint..color = c;
+
+  static final Paint _saPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeJoin = StrokeJoin.round
+    ..strokeCap = StrokeCap.round
+    ..isAntiAlias = true;
   static Paint _sa(Color c, [double w = 1.0]) =>
-      Paint()..color = c..style = PaintingStyle.stroke..strokeWidth = w
-             ..strokeJoin = StrokeJoin.round..strokeCap = StrokeCap.round
-             ..isAntiAlias = true;
+      _saPaint..color = c..strokeWidth = w;
 
   // ─── ORTAK PARÇALAR ───────────────────────────────────────────────────────
 

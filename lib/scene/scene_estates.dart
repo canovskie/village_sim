@@ -21,6 +21,30 @@ extension _SceneEstates on _VillageSceneState {
     // Moral tabana (artık üye moraline) süzülür — kararlar günlerce yankılanır.
     _estates.tick(dt, kGameDaySeconds);
 
+    // ── Sürü sağlığı → Emekçi zümre morali ──────────────────────────────────
+    // Doğum sevinç verir, ölüm hüzünlendirir (chill: küçük dokunuşlar). Ayrıca
+    // sürü açsa moral yavaşça düşer — bakımsız ahır Emekçileri huzursuz eder.
+    if (_animalBirthsPending > 0) {
+      _estates.nudge(Estate.laborers,
+          moodDelta: 0.02 * _animalBirthsPending);
+      _animalBirthsPending = 0;
+    }
+    if (_animalDeathsPending > 0) {
+      _estates.nudge(Estate.laborers,
+          moodDelta: -0.015 * _animalDeathsPending);
+      _animalDeathsPending = 0;
+    }
+    if (_cows.isNotEmpty) {
+      var hungrySum = 0.0;
+      for (final c in _cows) {
+        if (!c.isDying) hungrySum += c.hunger;
+      }
+      final avgHunger = hungrySum / _cows.length;
+      // avgHunger 0..1; tok sürü hafif +, aç sürü hafif − (günlük tempoda).
+      final delta = (0.25 - avgHunger) * 0.04 * (dt / kGameDaySeconds);
+      _estates.nudge(Estate.laborers, moodDelta: delta);
+    }
+
     // Kimlik kayması — baskın zümre değiştiyse köy görünür biçimde dönüşür.
     final asc = _estates.ascendant;
     if (asc != _identityEstate) {

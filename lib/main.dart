@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'characters/villager_type.dart';
 import 'characters/villager_names.dart';
+import 'characters/npc_visual.dart';
 import 'entities/villager_entity.dart';
 import 'entities/builder_entity.dart';
 import 'entities/build_order.dart';
@@ -12,6 +13,7 @@ import 'entities/worker_entity.dart';
 import 'systems/path_context.dart';
 import 'systems/road_system.dart';
 import 'world/road_surface.dart';
+import 'world/road_tile.dart';
 import 'rendering/game_painter.dart';
 import 'rendering/flame_renderer.dart';
 import 'rendering/smoke_renderer.dart';
@@ -72,6 +74,8 @@ import 'world/hay_entity.dart';
 import 'rendering/resource_renderer.dart';
 import 'core/resources.dart';
 import 'ui/main_menu_screen.dart';
+import 'cutscene/cutscene.dart';
+import 'cutscene/cutscene_player.dart';
 import 'systems/separation_system.dart';
 import 'systems/anchor_system.dart';
 import 'systems/hay_processor.dart';
@@ -82,6 +86,9 @@ import 'systems/lighting_system.dart';
 import 'buildings/building_function.dart';
 import 'characters/life_stage.dart';
 import 'scene/scene_data.dart';
+import 'save/save_manager.dart';
+import 'ui/save_slots_screen.dart';
+import 'ui/settings_model.dart';
 
 // `_VillageSceneState` part-of bölmeleri — her dosya konsept bazında bir
 // alan (yerleştirme, tick döngüsü, world helper'ları, UI, vs).
@@ -103,6 +110,8 @@ part 'scene/scene_fire.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_reactions.dart';
 part 'scene/scene_flow.dart';
+part 'scene/scene_save.dart';
+part 'scene/scene_personality.dart';
 
 void main() => runApp(const VillageSimApp());
 
@@ -131,18 +140,53 @@ class _AppRootState extends State<_AppRoot> {
   bool _inGame = false;
   int _gameKey = 0; // Her yeni oyun için VillageScene'i yeniden oluşturur
 
-  void _startGame() => setState(() {
-    _inGame = true;
-    _gameKey++;
-  });
+  // Aktif oyunun slot kimliği + adı + (varsa) yüklenecek dünya. _loadWorld
+  // null ise taze köy üretilir; doluysa o slottan kaldığı yerden devam edilir.
+  Map<String, dynamic>? _loadWorld;
+  String _slotId = '';
+  String _slotName = 'Köy';
+
+  void _startNew() {
+    setState(() {
+      _loadWorld = null;
+      _slotId = SaveManager.instance.newSlotId();
+      _slotName = 'Köy';
+      _inGame = true;
+      _gameKey++;
+    });
+  }
+
+  Future<void> _continue(SaveSlotMeta meta) async {
+    final data = await SaveManager.instance.readSlot(meta.id);
+    final world = data?['world'];
+    if (world is! Map) {
+      _startNew();
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _loadWorld = Map<String, dynamic>.from(world);
+      _slotId = meta.id;
+      _slotName = meta.name;
+      _inGame = true;
+      _gameKey++;
+    });
+  }
+
   void _exitGame() => setState(() => _inGame = false);
 
   @override
   Widget build(BuildContext context) {
     if (_inGame) {
-      return VillageScene(key: ValueKey(_gameKey), onExitToMenu: _exitGame);
+      return VillageScene(
+        key: ValueKey(_gameKey),
+        onExitToMenu: _exitGame,
+        initialWorld: _loadWorld,
+        slotId: _slotId,
+        slotName: _slotName,
+      );
     }
-    return MainMenuScreen(onNewGame: _startGame);
+    return MainMenuScreen(onNewGame: _startNew, onContinue: _continue);
   }
 }
 
@@ -150,13 +194,24 @@ class _AppRootState extends State<_AppRoot> {
 
 class VillageScene extends StatefulWidget {
   final VoidCallback? onExitToMenu;
-  const VillageScene({super.key, this.onExitToMenu});
+  /// Kaldığı yerden devam için yüklenecek dünya (null = taze köy).
+  final Map<String, dynamic>? initialWorld;
+  /// Bu oyunun yazılacağı kayıt slotu.
+  final String slotId;
+  final String slotName;
+  const VillageScene({
+    super.key,
+    this.onExitToMenu,
+    this.initialWorld,
+    this.slotId = '',
+    this.slotName = 'Köy',
+  });
   @override
   State<VillageScene> createState() => _VillageSceneState();
 }
 
 class _VillageSceneState extends State<VillageScene>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   // ── part-of yardımcısı: setState @protected olduğundan extension'lardan
   // doğrudan çağrılamıyor. Bu wrapper sayesinde scene_*.dart part dosyaları
   // setStateHere(() {...}) ile state mutate edebilir.
@@ -167,6 +222,23 @@ class _VillageSceneState extends State<VillageScene>
   Duration _last = Duration.zero;
   final _rng = Random();
   double _time = 0;
+
+  // ── Kamera sarsıntısı (juice) — sarsıcı olaylarda kısa titreşim ─────────────
+  // SettingsModel.shakeOnEvents kapalıysa hiç tetiklenmez. addCameraShake ile
+  // kurulur, her frame söner; buildGameCanvas kamerayı bu offset'le çizer.
+  double _shakeMag = 0;
+  double _shakeTime = 0;
+  double _shakeDur = 0.5;
+
+  // ── Kayıt (otomatik + manuel) ───────────────────────────────────────────────
+  /// Bu oyunun yazıldığı kayıt slotu.
+  late final String _slotId = widget.slotId;
+  late final String _slotName = widget.slotName;
+  /// Periyodik otomatik kayıt için gerçek-zaman (wall clock) birikimi.
+  double _autoSaveAccum = 0;
+  static const double _kAutoSaveInterval = 30.0; // sn (gerçek zaman)
+  /// Aynı anda iki yazım çakışmasın diye basit kilit.
+  bool _saving = false;
 
   // ── Asset loading ──────────────────────────────────────────────────────────
   /// Tüm sprite cache'leri yüklenene kadar oyun render edilmez.
@@ -331,6 +403,22 @@ class _VillageSceneState extends State<VillageScene>
   /// Reproduction tick throttle — fertility kontrolü her frame gerek değil.
   /// 0.5s aralıkla full villager scan, kullanıcı fark etmez.
   double _reproPollSec = 0;
+  /// Hayvan doğum/ölüm sayaçları — zümre morali beslemesi (scene_estates)
+  /// bunları tüketir: doğum Emekçi moralini ↑, ölüm/açlık ↓.
+  int _animalBirthsPending = 0;
+  int _animalDeathsPending = 0;
+
+  /// Oynayan sinematik (null = yok). Açılış/kademe/final/kriz hepsi buradan.
+  /// Non-null iken sim duraklar (scene_tick) + tam ekran CutscenePlayer overlay.
+  Cutscene? _activeCutscene;
+  /// Hafif hikâye güncesi — büyük anların metin özeti (gün + satır). Kalıcı.
+  /// "Hikâye" panelinden tekrar okunur ([buildStoryButton]/[buildStoryPanel]).
+  final List<String> _storyLog = [];
+  bool _storyPanelOpen = false;
+  /// Kıtlık sinematiği bir kez gösterildi mi (nadir kalsın).
+  bool _famineShown = false;
+  /// Hangi kademeler için sinematik oynatıldı (tekrar oynamasın).
+  final Set<int> _tierCutscenesShown = {};
   /// Geçici moral etkileri — politika olaylarından (göçmen uyumu, aile birleşimi).
   /// Her giriş (untilSim, amount). _time geçince düşer; aktiflerin toplamı
   /// `_eventMorale`'ye eklenir.
@@ -425,6 +513,9 @@ class _VillageSceneState extends State<VillageScene>
   // Geliştirici test paneli açık mı.
   bool _devPanelOpen = false;
 
+  // Ana menüye dönüş onay modal'ı açık mı.
+  bool _exitConfirmOpen = false;
+
   // Köy Defteri paneli daraltılmış mı (oyuncu küçültebilir).
   bool _objectivesCollapsed = false;
 
@@ -451,6 +542,13 @@ class _VillageSceneState extends State<VillageScene>
   // Tick periyotları extension içinde sabit; field'lar burada tutulur.
   double _gatherScanTimer = 0;
   double _storyScanTimer = 0;
+
+  // Kişisel anlar (yıldönümü) tarama sayacı — scene_personality.
+  double _annivScan = 0;
+
+  // Konfor talebi sayacı — köy ara sıra surplus konfor malını şölene çevirir
+  // (bal/fazla yiyecek → moral). Pozitif sink, ceza yok. scene_firepit_gather.
+  double _comfortTimer = 1.2 * kGameDaySeconds;
 
   // Dev: simülasyon hız boost'u. Normal _timeScale ile çarpılır. 1.0 = normal,
   // 30.0 = hızlı denge testi. DevPanel slider'ı set eder.
@@ -519,6 +617,13 @@ class _VillageSceneState extends State<VillageScene>
   // yeniden inşa edilmez, sadece time-driven leaf'ler.
   final ValueNotifier<int> _frame = ValueNotifier<int>(0);
 
+  // PERF: HUD ayrı, DÜŞÜK frekanslı notifier — GameHUD ağacı pahalı ve verisi
+  // (kaynak/nüfus/saat) yavaş değişir. Canvas/gökyüzü 60fps (_frame) kalır,
+  // HUD ~10Hz rebuild olur (_hudFrame). _hudAccum gerçek-zaman biriktirir.
+  final ValueNotifier<int> _hudFrame = ValueNotifier<int>(0);
+  double _hudAccum = 0;
+  static const double _kHudInterval = 0.1; // sn (≈10Hz)
+
   // Ground Picture cache invalidation tokeni — yeni harita üretildikçe artar,
   // painter cache'i bozar. Sadece map içeriği değişince invalidate.
   int _groundVersion = 0;
@@ -532,6 +637,7 @@ class _VillageSceneState extends State<VillageScene>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Gece eşiği geçişi — DayNightCycle edge-trigger eder.
     _cycle.onNightFall = () {
       _assignSleepTargets();
@@ -550,7 +656,16 @@ class _VillageSceneState extends State<VillageScene>
     _pathContext.blockedTiles = _obstacles;
     _pathContext.squeezeTiles = _squeezeTiles;
 
-    _generateWorld();
+    // Kayıttan devam → dünyayı kaldığı yerden kur; yoksa taze köy üret.
+    final save = widget.initialWorld;
+    if (save != null) {
+      restoreWorld(save);
+    } else {
+      _generateWorld();
+      // Yeni oyun → açılış sinematiği + güncenin ilk satırı.
+      _activeCutscene = kOpeningCutscene;
+      _storyLog.add('1. Gün — Köyün kuruluşu');
+    }
     _ticker = createTicker(_onTick);
 
     // Tüm asset cache'lerini paralel yükle. Yüklenmeden ticker başlamaz —
@@ -579,9 +694,22 @@ class _VillageSceneState extends State<VillageScene>
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ticker.dispose();
     _frame.dispose();
+    _hudFrame.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Uygulama arka plana/kapanışa giderken sessizce kaydet — emek kaybı olmasın.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _saveNow();
+    }
   }
 
   // ── Zaman & bildirim helper'ları ───────────────────────────────────────────
@@ -619,7 +747,10 @@ class _VillageSceneState extends State<VillageScene>
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) widget.onExitToMenu?.call();
+        if (!didPop) {
+          _saveNow(); // menüye dönerken sessizce kaydet
+          widget.onExitToMenu?.call();
+        }
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF1A3060),
@@ -641,9 +772,11 @@ class _VillageSceneState extends State<VillageScene>
             if (_petitionModalOpen && _pendingPetition != null)
               buildPetitionModal(),
             if (_devPanelOpen) buildDevPanel(),
+            if (_exitConfirmOpen) buildExitConfirm(),
             buildEventBanner(),
             buildObjectivesPanel(),
             buildEstateBanner(),
+            buildSaveButton(),
             buildHoverLabel(),
             if (_notification != null) buildNotificationToast(),
             if (_placing != null ||
@@ -652,6 +785,15 @@ class _VillageSceneState extends State<VillageScene>
                 _mineMode ||
                 _placingRoad != null)
               buildHintRibbon(),
+            if (_storyPanelOpen) buildStoryPanel(),
+            // Sinematik — her şeyin üstünde, tam ekran. Sim duraklı.
+            if (_activeCutscene != null)
+              Positioned.fill(
+                child: CutscenePlayer(
+                  cutscene: _activeCutscene!,
+                  onDone: () => setStateHere(() => _activeCutscene = null),
+                ),
+              ),
           ],
         ),
       ),

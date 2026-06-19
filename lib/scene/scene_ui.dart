@@ -146,6 +146,28 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
+  // ── Kamera sarsıntısı (juice) ──────────────────────────────────────────────
+
+  /// Sarsıcı bir olayda kamerayı kısa süre titret. Ayar kapalıysa no-op.
+  /// [mag] piksel genliği (~6 hafif, ~14 sert), [dur] saniye.
+  void addCameraShake(double mag, {double dur = 0.5}) {
+    if (!SettingsModel.instance.shakeOnEvents) return;
+    if (_shakeTime <= 0 || mag > _shakeMag) {
+      _shakeMag = mag;
+      _shakeDur = dur;
+      _shakeTime = dur;
+    }
+  }
+
+  /// Anlık sarsıntı offset'i — sona doğru hızla söner (quadratic). 60fps
+  /// (_frame) ile yeniden hesaplanır.
+  Offset get _shakeOffset {
+    if (_shakeTime <= 0 || _shakeDur <= 0) return Offset.zero;
+    final ratio = (_shakeTime / _shakeDur).clamp(0.0, 1.0);
+    final amp = _shakeMag * ratio * ratio;
+    return Offset(sin(_time * 92.0) * amp, cos(_time * 71.0) * amp);
+  }
+
   // ── Oyun canvas'ı (input + painter) ────────────────────────────────────────
 
   Widget buildGameCanvas() {
@@ -173,7 +195,7 @@ extension _SceneUi on _VillageSceneState {
                       pendingOrders: _orders,
                       roadSystem: _roadSystem,
                       pendingRoadOrders: _roadOrders,
-                      camera: _camera,
+                      camera: _camera + _shakeOffset,
                       ghostType: _placing,
                       ghostTile: _ghost,
                       ghostValid: _ghost != null && _placing != null
@@ -265,7 +287,7 @@ extension _SceneUi on _VillageSceneState {
   Widget buildHudLayer() {
     return RepaintBoundary(
       child: ListenableBuilder(
-        listenable: _frame,
+        listenable: _hudFrame, // PERF: ~10Hz (her frame değil)
         builder: (_, _) => GameHUD(
           stockpile: _stockpile,
           woodInTransit: _woodInTransit,
@@ -605,6 +627,7 @@ extension _SceneUi on _VillageSceneState {
   void _applyPolicySideChannels() {
     kMaturityScale = _policies.slowMaturity ? 1.0 / 1.6 : 1.0;
     AnimalEntity.kWanderScale = _policies.freeRange ? 1.5 : 1.0;
+    AnimalEntity.kHungerScale = _policies.winterFodder ? 0.55 : 1.0;
     WoodcutterEntity.kChopSpeedScale = _policies.treePlanting ? 0.85 : 1.0;
   }
 
@@ -748,11 +771,8 @@ extension _SceneUi on _VillageSceneState {
             ? null
             : kBuildingMeta[(v.homeBuilding as BuildingEntity).type]?.label,
         isFollowed: _followedVillager == v,
-        canGift: _stockpile.food > 0,
         onClose: () => setStateHere(() => _selectedVillager = null),
         onSelect: (next) => setStateHere(() => _selectedVillager = next),
-        onGreet: () => _greetVillager(v),
-        onGift: () => _giftVillager(v),
         onToggleFollow: () => _toggleFollowVillager(v),
         onToggleFavorite: () => setStateHere(() => v.isFavorite = !v.isFavorite),
         onRename: (newName) {
@@ -764,45 +784,7 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
-  // ── NPC etkileşim eylemleri (Selam / Hediye / Takip et) ───────────────────
-  // Sade ve "cozy": her aksiyon görsel bir reaksiyon (chat bubble) + küçük
-  // bir niyet ifade eder. Hediye ufak bir köy morali bonusu doğurur, selam
-  // sadece sıcaklık katar (kaynak tüketmez).
-
-  void _greetVillager(VillagerEntity v) {
-    setStateHere(() {
-      v.chatBubbleIcon = '👋';
-      v.chatBubbleTime = 4.5;
-      v.greetCount++;
-      // Selam alan NPC mutlu olur (gövde dili — huzurlu salınış).
-      v.feel(NpcEmotion.content, 3.0, moodDelta: 0.05);
-      // Boş ise küçük "selam aldım" iç sosyal cooldown azalt → kısa süre içinde
-      // başka selamlaşma/chat'e geç olasılığı düşmesin.
-      if (v.socialCooldown > 6) v.socialCooldown = 6;
-      // Komşular dönüp bakar (yerel canlılık dalgası).
-      _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.wonder, 2.0);
-    });
-  }
-
-  void _giftVillager(VillagerEntity v) {
-    if (_stockpile.food <= 0) {
-      _showNotification('🍞 Sepet boş — önce yiyecek topla');
-      return;
-    }
-    setStateHere(() {
-      _stockpile.food -= 1;
-      v.chatBubbleIcon = '❤️';
-      v.chatBubbleTime = 5.5;
-      v.giftCount++;
-      // Hediye alan NPC sevinçle karşılık verir (gövde dili — sıçrama).
-      v.feel(NpcEmotion.joy, 3.5, moodDelta: 0.10);
-      // Köy çapında küçük, 1 oyun günü süren moral bonusu — chill ölçekte.
-      _policyMoraleEffects
-          .add((untilSim: _time + kGameDaySeconds, amount: 0.02));
-      // Komşular sevinen köylüye dönüp bakar.
-      _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.2);
-    });
-  }
+  // ── NPC etkileşim eylemleri (Takip et) ────────────────────────────────────
 
   void _toggleFollowVillager(VillagerEntity v) {
     setStateHere(() {
@@ -1226,6 +1208,107 @@ extension _SceneUi on _VillageSceneState {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Hikâye güncesi paneli — köyün büyük anlarının kronolojik özeti (sinematik
+  /// satırları). Salt-okunur; boşluğa dokun = kapat. "Ulaşılabilir hikâye".
+  Widget buildStoryPanel() {
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setStateHere(() => _storyPanelOpen = false),
+              child: const ColoredBox(color: AppUi.scrim),
+            ),
+          ),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: GestureDetector(
+                onTap: () {},
+                child: AppPanel(
+                  accent: AppUi.accent,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('📖', style: TextStyle(fontSize: 20)),
+                          const SizedBox(width: 10),
+                          Text('Köyün Hikâyesi', style: AppUi.title),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text('Büyük anların güncesi',
+                          style: AppUi.label.copyWith(color: AppUi.textLo)),
+                      const AppDivider(),
+                      if (_storyLog.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text('Henüz yazılacak bir şey yok…',
+                              style: AppUi.body.copyWith(color: AppUi.textLo)),
+                        )
+                      else
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 320),
+                          child: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                for (final entry in _storyLog.reversed)
+                                  Padding(
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 6),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(top: 5),
+                                          child: Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: const BoxDecoration(
+                                              color: AppUi.accent,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(entry,
+                                              style: AppUi.body.copyWith(
+                                                  fontSize: 12.5,
+                                                  height: 1.4)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 14),
+                      Center(
+                        child: GestureDetector(
+                          onTap: () =>
+                              setStateHere(() => _storyPanelOpen = false),
+                          child: AppChip(label: 'kapat', color: AppUi.accent),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

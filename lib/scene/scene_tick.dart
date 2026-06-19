@@ -10,10 +10,18 @@ extension _SceneTick on _VillageSceneState {
   void _onTick(Duration elapsed) {
     final raw = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _last = elapsed;
+    _maybeAutoSave(raw); // periyodik otomatik kayıt (gerçek-zaman birikimi)
+    // HUD'u ~10Hz'de güncelle (her frame değil) — pahalı ağaç, yavaş veri.
+    _hudAccum += raw;
+    if (_hudAccum >= _VillageSceneState._kHudInterval) {
+      _hudAccum = 0;
+      _hudFrame.value = _hudFrame.value + 1;
+    }
+    if (_shakeTime > 0) _shakeTime -= raw; // kamera sarsıntısı sönümü (juice)
     // Karar bekleyen olay açıkken sim durur (sahne kalır, modal odakta).
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
     // arası DevPanel slider'ından gelir; normal oyunda 1.0.
-    final effectiveScale = _pendingChoice != null
+    final effectiveScale = (_pendingChoice != null || _activeCutscene != null)
         ? 0.0
         : _timeScale * _devSpeedBoost;
     // dt clamp scaling: boost 1x ise 50ms hard cap (spiral koruma — render
@@ -39,6 +47,8 @@ extension _SceneTick on _VillageSceneState {
     _tickPostMotion(dt);
     _tickDerivedAndMeta(dt);
     _spontaneousLife(dt);         // sürekli baseline canlılık (rastgele refleks)
+    _tickPersonalMoments(dt);     // kişisel anlar (yıldönümü kutlamaları)
+    _tickComfort(dt);             // konfor talebi (surplus → şölen + moral)
     _frame.value = _frame.value + 1;
   }
 
@@ -177,6 +187,11 @@ extension _SceneTick on _VillageSceneState {
       nudgeMorale(-0.10);
     } else if (_wasStarving && starvation < 0.15) {
       _wasStarving = false;
+    }
+    // Nadir büyük kriz — derin kıtlık bir kez tam ekran sinematikle gelir.
+    if (!_famineShown && starvation > 0.85 && _villagers.length >= 6) {
+      _famineShown = true;
+      _playCutscene(kFamineCutscene, logEntry: 'Kıtlık baş gösterdi');
     }
 
     // ── Moral (pasif gösterge) ────────────────────────────────────────────
@@ -334,6 +349,7 @@ extension _SceneTick on _VillageSceneState {
     if (_reproPollSec <= 0) {
       _reproPollSec = 0.5;
       _tickReproduction();
+      _tickAnimalReproduction();
     }
     _tickMigration(dt);
     _tickNeighborGreet(dt);
@@ -515,11 +531,29 @@ extension _SceneTick on _VillageSceneState {
     for (final c in _cows) {
       c.update(npcDt, _rng, waterTiles: obstacles);
     }
-    // Tavuk Kümesi: pasif yumurta (food) üretimi. Her kümes kEggInterval'de
-    // 1 food spawnlar — çoban gibi NPC iş yapmaya gerek yok, tavuk otonom.
+    // Doğal ölüm — ömrü dolan hayvan anlık silinmez: görünür biçimde çöker+solar
+    // (köylüyle simetrik), animasyon bitince listeden çıkar. Chill: kaynak cezası
+    // yok. Ölüm zümre moralini scene_estates'te beslesin diye sayacı tut.
+    for (final c in _cows) {
+      if (!c.isDying && c.ageDays >= c.lifespanDays) {
+        c.startDying();
+        _animalDeathsPending++;
+      }
+    }
+    _cows.removeWhere((c) => c.deathFinished);
+    // Tavuk Kümesi: pasif yumurta (food) üretimi. Yumurta YALNIZ kümeste
+    // yetişkin tavuk varsa olur — yaşam döngüsü üretime bağlanır (civciv/yaşlı
+    // değil). Tavuksuz/yavru-only kümes timer'ı dondurur.
     // _buildings yalnız tamamlanmış binaları içerir (inşaat _orders'ta).
     for (final b in _buildings) {
       if (b.type != BuildingType.chickenCoop) continue;
+      final hasAdultHen = _cows.any((c) =>
+          c.kind == AnimalKind.chicken &&
+          c.isAdult &&
+          !c.isDying &&
+          c.barnCol == b.col &&
+          c.barnRow == b.row);
+      if (!hasAdultHen) continue;
       b.eggTimer += dt;
       if (b.eggTimer >= kEggInterval) {
         b.eggTimer = 0.0;
@@ -683,6 +717,7 @@ extension _SceneTick on _VillageSceneState {
     final dur = kGameDaySeconds * 0.35; // birkaç dakikalık gece gösterisi
     final e = EventEffect(fx: EventFx.meteorShower, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
+    addCameraShake(4, dur: 0.7); // hafif huşû titreşimi (juice)
     for (final v in _villagers) {
       if (v.isSleeping || v.isInsideBuilding) continue;
       v.chatBubbleIcon = '🌠';
@@ -928,6 +963,70 @@ extension _SceneTick on _VillageSceneState {
       final base = _policies.familyEncouragement ? 2.5 : 5.0;
       final span = _policies.familyEncouragement ? 1.5 : 4.0;
       mother.fertilityDays = base + _rng.nextDouble() * span;
+    }
+  }
+
+  // ── Hayvan üremesi (çift bazlı, köylü deseninin aynası) ────────────────────
+  // Aynı ağıl + aynı tür: fertility'si dolan yetişkin dişi + en az bir yetişkin
+  // erkek varsa yavru doğar. Kapasite (ağıl başına tür limiti) doğal tavan.
+  // chill-gameplay: kaynak maliyeti yok. "Sürü Büyütme" politikası kapalıysa
+  // üreme durur (meclis kararı).
+  static const Map<AnimalKind, int> _herdCapPerBarn = {
+    AnimalKind.cow: 5,
+    AnimalKind.sheep: 5,
+    AnimalKind.chicken: 6,
+  };
+
+  void _tickAnimalReproduction() {
+    if (!_policies.herdGrowth) return;
+    if (_cows.isEmpty) return;
+
+    // Ağıl+tür başına: canlı sayım + en az bir yetişkin erkek var mı?
+    final counts = <(int, int, AnimalKind), int>{};
+    final hasMale = <(int, int, AnimalKind), bool>{};
+    for (final a in _cows) {
+      if (a.isDying) continue;
+      final key = (a.barnCol, a.barnRow, a.kind);
+      counts[key] = (counts[key] ?? 0) + 1;
+      if (a.isMale && a.isAdult) hasMale[key] = true;
+    }
+
+    for (final mother in _cows) {
+      if (mother.isMale || mother.isDying) continue;
+      if (mother.fertilityDays.isNaN || mother.fertilityDays > 0) continue;
+      if (mother.lifeStage != AnimalLifeStage.adult) continue;
+      final key = (mother.barnCol, mother.barnRow, mother.kind);
+      if (hasMale[key] != true) {
+        // Erkek yok — kısa süre sonra tekrar dene (her tick taramamak için).
+        mother.fertilityDays = 0.5 + _rng.nextDouble() * 0.8;
+        continue;
+      }
+      final cap = _herdCapPerBarn[mother.kind] ?? 5;
+      if ((counts[key] ?? 0) >= cap) {
+        // Ağıl dolu — bekle, yer açılınca (ölüm) tekrar dener.
+        mother.fertilityDays = 1.0 + _rng.nextDouble() * 1.0;
+        continue;
+      }
+
+      // Yavru doğar — annenin yanında, ageDays=0 (yavru evresi).
+      final jx = (_rng.nextDouble() - 0.5) * 0.5;
+      final jy = (_rng.nextDouble() - 0.5) * 0.5;
+      _cows.add(AnimalEntity(
+        kind: mother.kind,
+        barnCol: mother.barnCol,
+        barnRow: mother.barnRow,
+        startCol: mother.gridX + jx,
+        startRow: mother.gridY + jy,
+        isMale: _rng.nextBool(),
+        ageDays: 0.0,
+        lifespanDays:
+            AnimalEntity.kAnimalElderDay + 5.0 + _rng.nextDouble() * 9.0,
+      ));
+      counts[key] = (counts[key] ?? 0) + 1;
+      _animalBirthsPending++;
+      // Doğum sonrası bekleme: aile teşviki açıksa hayvanlar da hızlı çoğalır.
+      final base = _policies.familyEncouragement ? 3.0 : 5.0;
+      mother.fertilityDays = base + _rng.nextDouble() * 4.0;
     }
   }
 

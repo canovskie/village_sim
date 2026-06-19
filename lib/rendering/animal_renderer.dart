@@ -78,10 +78,12 @@ class AnimalRenderer {
     required AnimalFacing facing,
     required double walkPhase,
     required bool isWalking,
+    double scale = 1.0,
+    double alpha = 1.0,
   }) {
     _drawSpriteAnimal(_cow, canvas, center,
         facing: facing, walkPhase: walkPhase, isWalking: isWalking,
-        drawH: 36.0, flipForWest: true);
+        drawH: 36.0 * scale, flipForWest: true, alpha: alpha);
   }
 
   /// Sheep çizimi. [center] = ekran üzerinde hayvanın taban (hoof) noktası.
@@ -92,10 +94,12 @@ class AnimalRenderer {
     required AnimalFacing facing,
     required double walkPhase,
     required bool isWalking,
+    double scale = 1.0,
+    double alpha = 1.0,
   }) {
     _drawSpriteAnimal(_sheep, canvas, center,
         facing: facing, walkPhase: walkPhase, isWalking: isWalking,
-        drawH: 28.0, flipForWest: true);
+        drawH: 28.0 * scale, flipForWest: true, alpha: alpha);
   }
 
   /// Chicken çizimi — sheep gibi 4 yön × 4 frame; tüm yönler ayrı sprite,
@@ -106,10 +110,12 @@ class AnimalRenderer {
     required AnimalFacing facing,
     required double walkPhase,
     required bool isWalking,
+    double scale = 1.0,
+    double alpha = 1.0,
   }) {
     _drawSpriteAnimal(_chicken, canvas, center,
         facing: facing, walkPhase: walkPhase, isWalking: isWalking,
-        drawH: 13.0, flipForWest: false);
+        drawH: 13.0 * scale, flipForWest: false, alpha: alpha);
   }
 
   /// Ortak sprite çizim — kind'a göre source map değişir.
@@ -122,6 +128,7 @@ class AnimalRenderer {
     required bool isWalking,
     required double drawH,
     required bool flipForWest,
+    double alpha = 1.0,
   }) {
     final list = source[facing];
     if (list == null || list.isEmpty) return;
@@ -145,7 +152,13 @@ class AnimalRenderer {
       drawH,
     );
     final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
-    canvas.drawImageRect(img, src, dst, _pSprite);
+    final paint = alpha >= 1.0
+        ? _pSprite
+        : (Paint()
+          ..isAntiAlias = _pSprite.isAntiAlias
+          ..filterQuality = _pSprite.filterQuality
+          ..color = _pSprite.color.withValues(alpha: alpha.clamp(0.0, 1.0)));
+    canvas.drawImageRect(img, src, dst, paint);
     canvas.restore();
   }
 }
