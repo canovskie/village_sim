@@ -1777,6 +1777,11 @@ class VillageGamePainter extends CustomPainter {
     canvas.restore();
 
     // ── Ekran uzayı efektleri (zoom'dan etkilenmez) ──────────────────────────
+    // Çok hafif KENAR TÜLÜ — kamera reach dışını göstermez, bu tül ekranın en
+    // kenarında zarif bir atmosfer solması bırakır ("ulaşabildiğin dünyanın
+    // kenarı" hissi). Aydınlık/inci (koyu sis DEĞİL); lighting'ten ÖNCE ki gece
+    // doğal kararsın.
+    _drawEdgeHaze(canvas, size);
     // Lighting pass: gradient karanlık + vignette + lokal ışık + sıcak halo.
     _drawLightingPass(canvas, size);
     // PerfMode: ambient partikül pass'lerini atla (her frame yüzlerce circle).
@@ -1790,6 +1795,34 @@ class VillageGamePainter extends CustomPainter {
     _drawRain(canvas, size);
     // Event overlay — aktif olayların ekran toneu + olaya özel partiküller.
     _drawEventOverlay(canvas, size);
+  }
+
+  // ── Çok hafif kenar tülü (reveal = zoom kısıtının atmosferik çerçevesi) ──────
+  static final Paint _pEdgeHaze = Paint()..isAntiAlias = true;
+
+  void _drawEdgeHaze(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    if (w <= 0 || h <= 0) return;
+    final band = min(w, h) * 0.17;      // tül bandı genişliği (ekran kenarı)
+    // İnci/şafak tonu — şafak/alacakaranlıkta hafif sıcak, gündüz nötr-parlak.
+    final warm = (1.0 - dayLight).clamp(0.0, 1.0);
+    final cr = (0xE4 + 0x14 * warm).round().clamp(0, 255);
+    final cg = (0xE8).clamp(0, 255);
+    final cb = (0xEC - 0x16 * warm).round().clamp(0, 255);
+    const maxA = 0.11;                   // tek kenar tepe opaklığı (çok hafif)
+    final edge  = Color.fromRGBO(cr, cg, cb, maxA);
+    final clear = Color.fromRGBO(cr, cg, cb, 0.0);
+
+    void side(Rect rect, Offset from, Offset to) {
+      _pEdgeHaze.shader =
+          ui.Gradient.linear(from, to, [edge, clear], const [0.0, 1.0]);
+      canvas.drawRect(rect, _pEdgeHaze);
+    }
+
+    side(Rect.fromLTWH(0, 0, w, band), Offset(0, 0), Offset(0, band));           // üst
+    side(Rect.fromLTWH(0, h - band, w, band), Offset(0, h), Offset(0, h - band)); // alt
+    side(Rect.fromLTWH(0, 0, band, h), Offset(0, 0), Offset(band, 0));           // sol
+    side(Rect.fromLTWH(w - band, 0, band, h), Offset(w, 0), Offset(w - band, 0)); // sağ
   }
 
   /// Dünya (grid) noktasını, paint()'teki zoom dönüşümüyle aynı biçimde ekran

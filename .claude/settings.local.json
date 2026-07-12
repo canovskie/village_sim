@@ -181,7 +181,8 @@
       "Bash(awk '/void _unusedCanopy\\\\\\(Canvas/{skip=1} skip && /Devrilen ön-hat ağacı yaprak patlaması —/{skip=0} !skip' lib/rendering/game_painter.dart)",
       "Bash(awk '{print $5\" bytes\"}')",
       "Bash(STATS_TAB=1 flutter run -d macos -t lib/tools/stats_capture_main.dart)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }

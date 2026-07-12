@@ -52,6 +52,29 @@ extension _SceneDivan on _VillageSceneState {
   /// Zümre nabzı rozetindeki sayaç: bekleyen + mayalanan mesele toplamı.
   int _divanAgendaCount() => _divanAgenda().length;
 
+  /// KALICI Divan mührü — yönetişimin her an görünür kapısı (sol üst, HUD
+  /// şeridinin altında). Meclis eskiden üç kat gömülüydü (yan pano → pil →
+  /// modal içi buton) ve bir köylü/bina seçilince o kapı ekrandan kayboluyordu;
+  /// bu mühür hep durur. PERF: gündem sayımı köylü/hane/tarla tarar → 60fps
+  /// `_frame` yerine ~10Hz `_hudFrame`'e bağlı.
+  Widget buildDivanSeal() {
+    return Positioned(
+      left: 14,
+      top: 92,
+      child: RepaintBoundary(
+        child: ListenableBuilder(
+          listenable: _hudFrame,
+          builder: (_, _) => DivanSeal(
+            onTap: _openDivan,
+            agendaCount: _divanAgendaCount(),
+            pendingPetition: _pendingPetition != null,
+            councilReady: _councilReady,
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Gündem türetme ──────────────────────────────────────────────────────────
 
   /// Bekleyen dilekçe (varsa) gündemin tepesinde + mayalanan baskılar (baskıya

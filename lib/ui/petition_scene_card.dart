@@ -48,7 +48,14 @@ PetitionScene petitionSceneFor(Petition p) {
 }
 
 class PetitionSceneCard extends StatelessWidget {
-  final Petition petition;
+  /// Dilekçeden türeyen sahne (klasik kullanım). null ise [scene]+[tone] verilir.
+  final Petition? petition;
+
+  /// Doğrudan sahne/ton (dilekçe olmadan — ör. Divan hero'su `gathering`). Bunlar
+  /// verilince [petition] yok sayılır.
+  final PetitionScene? scene;
+  final PetitionTone tone;
+
   final double height;
 
   /// Kenarlığı kart kendi çizer mi — hero olarak kullanılınca modal altın
@@ -60,11 +67,23 @@ class PetitionSceneCard extends StatelessWidget {
     required this.petition,
     this.height = 92,
     this.drawBorder = true,
-  });
+  })  : scene = null,
+        tone = PetitionTone.neutral;
+
+  /// Dilekçesiz doğrudan sahne — Divan/toplanma hero'su gibi bağlamlar için.
+  const PetitionSceneCard.custom({
+    super.key,
+    required PetitionScene this.scene,
+    this.tone = PetitionTone.neutral,
+    this.height = 92,
+    this.drawBorder = true,
+  }) : petition = null;
 
   @override
   Widget build(BuildContext context) {
-    final accent = switch (petition.tone) {
+    final resolvedScene = scene ?? petitionSceneFor(petition!);
+    final resolvedTone = scene != null ? tone : petition!.tone;
+    final accent = switch (resolvedTone) {
       PetitionTone.warm => AppUi.sage,
       PetitionTone.solemn => AppUi.textMid,
       PetitionTone.ominous => AppUi.rust,
@@ -74,8 +93,8 @@ class PetitionSceneCard extends StatelessWidget {
       height: height,
       child: CustomPaint(
         painter: _SceneCardPainter(
-          scene: petitionSceneFor(petition),
-          tone: petition.tone,
+          scene: resolvedScene,
+          tone: resolvedTone,
         ),
         size: Size.infinite,
       ),

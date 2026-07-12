@@ -165,6 +165,20 @@ class GameHUD extends StatelessWidget {
               ),
             ),
           ),
+          // Orta üst: gök şeridi — güneş ile ay düz bir hat üzerinde birbirini
+          // kovalar (yarım gün arayla). Tıklanmaz, sadece günün nabzı.
+          Positioned(
+            top: 10, left: 0, right: 0,
+            child: IgnorePointer(
+              child: Center(
+                child: _CelestialTrack(
+                  timeOfDay: timeOfDay,
+                  dayLight: dayLight,
+                  pulse: fullPulse,
+                ),
+              ),
+            ),
+          ),
           // Şerit içeriği — tek satır, çerçevesiz.
           Positioned(
             top: 8, left: 16, right: 14,

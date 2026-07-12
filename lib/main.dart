@@ -1043,6 +1043,9 @@ class _VillageSceneState extends State<VillageScene>
             // Bekleyen dilekçe mührü — HUD üstünde, modal kapalıyken (ambient).
             if (_pendingPetition != null && !_petitionModalOpen)
               buildPetitionSeal(),
+            // Divan mührü — yönetişimin KALICI kapısı (sol üst). Sağ-dock paneller
+            // açıkken bile durur: Meclis artık hiçbir seçimle ekrandan kaybolmaz.
+            buildDivanSeal(),
             if (_selectedBuilding != null) buildSelectedBuildingPanel(),
             if (_selectedVillager != null) buildSelectedVillagerPanel(),
             // Karar bekleyen olay — modal açıkken simülasyon dt = 0 (tick

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../systems/house_system.dart';
 import '../systems/petition_system.dart';
 import 'app_ui.dart';
+import 'petition_scene_card.dart';
 
 /// Divan — köyün her zaman açık yönetişim merkezi. Dilekçe artık "araya giren
 /// modal" değil, Divan'a düşen bir mesele. Bu yüzey dört derdi tek yapıda toplar:
@@ -148,6 +149,22 @@ class DivanPanel extends StatelessWidget {
     return '😣';
   }
 
+  /// Hero sahnesinin tonu — köyün moraline göre (mutlu=warm, orta=neutral,
+  /// düşük=ominous). Toplanma sahnesi köyün ruh hâliyle renklenir.
+  PetitionTone get _heroTone => morale >= 0.6
+      ? PetitionTone.warm
+      : morale >= 0.4
+          ? PetitionTone.neutral
+          : PetitionTone.ominous;
+
+  String get _moraleWord {
+    if (morale >= 0.72) return 'köy şen ve dingin';
+    if (morale >= 0.55) return 'köyde huzur var';
+    if (morale >= 0.40) return 'köyün havası kararsız';
+    if (morale >= 0.28) return 'köy tedirgin';
+    return 'köyde huzursuzluk var';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
@@ -161,28 +178,37 @@ class DivanPanel extends StatelessWidget {
           ),
         ),
         Center(
-          child: AppReveal(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(22),
               child: GestureDetector(
                 onTap: () {}, // panel içi dokunuş kapatmasın
-                child: AppPanel(
-                  accent: AppUi.accent,
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _header(),
-                      const SizedBox(height: 12),
-                      Flexible(
-                        child: SingleChildScrollView(
+                child: AppReveal(
+                  child: _GildedFrame(
+                    accent: AppUi.accent,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _hero(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
                           child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              _villageStrip(),
+                              // MECLİS — Divan'ın başrolü: köyü toplamak artık
+                              // panelin en görünür, davetkâr aksiyonu.
+                              if (onConvene != null) ...[
+                                const SizedBox(height: 14),
+                                _meclisAction(),
+                              ],
+                              const SizedBox(height: 16),
                               const AppSectionLabel('GÜNDEM'),
                               _agendaSection(),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 16),
                               const AppSectionLabel('GERİLİMLER'),
                               _tensions(),
                               if (identityBonus != null) ...[
@@ -192,7 +218,7 @@ class DivanPanel extends StatelessWidget {
                               if (laws.isNotEmpty ||
                                   marks.isNotEmpty ||
                                   legacy.abs() > 0.005) ...[
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 16),
                                 const AppSectionLabel('KÖYÜN HÂLİ'),
                                 if (legacy.abs() > 0.005) ...[
                                   _legacyLine(),
@@ -205,8 +231,8 @@ class DivanPanel extends StatelessWidget {
                             ],
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -217,56 +243,278 @@ class DivanPanel extends StatelessWidget {
     );
   }
 
-  // ── Başlık + köy durum şeridi ───────────────────────────────────────────────
+  // ── Hero — sinematik toplanma sahnesi + kimlik + kapat ─────────────────────
 
-  Widget _header() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _hero() {
+    return SizedBox(
+      height: 150,
+      child: Stack(
+        children: [
+          // Köyün moraliyle renklenen toplanma (meclis) sahnesi.
+          Positioned.fill(
+            child: PetitionSceneCard.custom(
+              scene: PetitionScene.gathering,
+              tone: _heroTone,
+              height: 150,
+              drawBorder: false,
+            ),
+          ),
+          // Alt okunaklılık zemini.
+          const Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 98,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xE6100E0B)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Üst künye + kapat.
+          Positioned(
+            left: 14,
+            right: 12,
+            top: 12,
+            child: Row(
+              children: [
+                _kicker('DİVAN'),
+                const Spacer(),
+                GestureDetector(
+                  onTap: onClose,
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xB3100E0B),
+                      shape: BoxShape.circle,
+                      border:
+                          Border.all(color: AppUi.gold.withValues(alpha: 0.3)),
+                    ),
+                    child: const GameIcon(GameIconData.close,
+                        size: 13, color: AppUi.textMid),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Alt: ⚖ madalyon + kimlik başlığı + köyün hâli.
+          Positioned(
+            left: 14,
+            right: 14,
+            bottom: 12,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _sealMedallion(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(identity,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.title.copyWith(
+                            fontSize: 19,
+                            color: AppUi.gold,
+                            shadows: const [
+                              Shadow(color: Color(0xCC000000), blurRadius: 8)
+                            ],
+                          )),
+                      const SizedBox(height: 2),
+                      Text(_moraleWord,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.body.copyWith(
+                              fontSize: 11,
+                              color: AppUi.textMid,
+                              shadows: const [
+                                Shadow(color: Color(0xCC000000), blurRadius: 6)
+                              ])),
+                    ],
+                  ),
+                ),
+                Text(_moraleFace, style: const TextStyle(fontSize: 22)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _kicker(String text) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xB3100E0B),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
+        ),
+        child: Text(text,
+            style: AppUi.label.copyWith(color: AppUi.accent, fontSize: 9)),
+      );
+
+  /// ⚖ mühür madalyonu — hero'nun alt köşesinde, gilded halka.
+  Widget _sealMedallion() {
+    return Container(
+      width: 52,
+      height: 52,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(colors: [
+          Color.alphaBlend(AppUi.accent.withValues(alpha: 0.22), AppUi.surface0),
+          AppUi.surface0,
+        ]),
+        border: Border.all(color: AppUi.gold.withValues(alpha: 0.6), width: 1.6),
+        boxShadow: [
+          BoxShadow(color: AppUi.accent.withValues(alpha: 0.4), blurRadius: 12),
+          const BoxShadow(color: Color(0x99000000), blurRadius: 6),
+        ],
+      ),
+      child: const Text('⚖', style: TextStyle(fontSize: 24)),
+    );
+  }
+
+  // ── Köy durum şeridi (moral/nüfus/yiyecek/altın) ───────────────────────────
+
+  Widget _villageStrip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.line, width: 1),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          _stripCell(_moraleFace, '${(morale * 100).round()}%', 'moral',
+              AppUi.accent,
+              emoji: true),
+          _stripDiv(),
+          _stripCell('👥', '$population', 'nüfus', AppUi.textMid),
+          _stripDiv(),
+          _stripCell('🌾', '$food', 'yiyecek', AppUi.sage),
+          _stripDiv(),
+          _stripCell('🪙', '$gold', 'altın', AppUi.gold),
+        ],
+      ),
+    );
+  }
+
+  Widget _stripDiv() => Container(width: 1, height: 24, color: AppUi.line);
+
+  Widget _stripCell(String glyph, String value, String label, Color color,
+      {bool emoji = false}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('⚖', style: TextStyle(fontSize: 22)),
-        const SizedBox(width: 11),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('DİVAN', style: AppUi.title),
-              const SizedBox(height: 2),
-              Text(identity,
-                  style: AppUi.label.copyWith(
-                      color: AppUi.gold, letterSpacing: 0.6)),
-            ],
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(glyph, style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 4),
+            Text(value, style: AppUi.number.copyWith(fontSize: 13)),
+          ],
         ),
-        _stateStrip(),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: onClose,
-          behavior: HitTestBehavior.opaque,
-          child: const Padding(
-            padding: EdgeInsets.all(2),
-            child: GameIcon(GameIconData.close, size: 16, color: AppUi.textLo),
-          ),
-        ),
+        const SizedBox(height: 2),
+        Text(label,
+            style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 0.8)),
       ],
     );
   }
 
-  Widget _stateStrip() {
-    Widget cell(String txt, Color c, {bool emoji = false}) => Padding(
-          padding: const EdgeInsets.only(left: 10),
-          child: Text(txt,
-              style: emoji
-                  ? const TextStyle(fontSize: 14)
-                  : AppUi.number.copyWith(fontSize: 12.5, color: c)),
-        );
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        cell(_moraleFace, AppUi.textHi, emoji: true),
-        cell('$population', AppUi.textMid),
-        cell('$food', AppUi.sage),
-        cell('$gold', AppUi.gold),
-      ],
+  // ── MECLİS — öne çıkan davetkâr aksiyon kartı ──────────────────────────────
+
+  Widget _meclisAction() {
+    final ready = councilReady;
+    return MouseRegion(
+      cursor: ready ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: ready ? () => onConvene!('address') : null,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: ready
+                  ? [
+                      Color.alphaBlend(
+                          AppUi.accent.withValues(alpha: 0.20), AppUi.surface2),
+                      AppUi.surface1,
+                    ]
+                  : [AppUi.surface1, AppUi.surface0],
+            ),
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(
+                color: ready ? AppUi.accent.withValues(alpha: 0.65) : AppUi.line,
+                width: ready ? 1.4 : 1),
+            boxShadow: ready
+                ? [BoxShadow(color: AppUi.accent.withValues(alpha: 0.22), blurRadius: 14)]
+                : null,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppUi.surface0,
+                  border: Border.all(
+                      color: AppUi.gold.withValues(alpha: ready ? 0.6 : 0.3),
+                      width: 1.4),
+                  boxShadow: ready
+                      ? [BoxShadow(color: AppUi.accent.withValues(alpha: 0.35), blurRadius: 8)]
+                      : null,
+                ),
+                child: Text('⚖',
+                    style: TextStyle(
+                        fontSize: 20,
+                        color: ready ? null : Colors.white.withValues(alpha: 0.5))),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(ready ? 'MECLİS\'İ TOPLA' : 'MECLİS DİNLENİYOR',
+                        style: AppUi.title.copyWith(
+                            fontSize: 14,
+                            letterSpacing: 1.0,
+                            color: ready ? AppUi.textHi : AppUi.textLo)),
+                    const SizedBox(height: 3),
+                    Text(
+                        ready
+                            ? 'Köye söylev ver — köyün kimliğini yönlendir'
+                            : 'Son karardan sonra köy bir süre dinleniyor',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.body
+                            .copyWith(fontSize: 10.5, color: AppUi.textLo)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              GameIcon(GameIconData.chevron,
+                  size: 17, color: ready ? AppUi.accent : AppUi.textLo),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -295,51 +543,7 @@ class DivanPanel extends StatelessWidget {
             _matterRow(agenda[i]),
             if (i != agenda.length - 1) const SizedBox(height: 7),
           ],
-        // Proaktif inisiyatif kanalı — köy istemese de meclisi sen çağır.
-        if (onConvene != null) ...[
-          const SizedBox(height: 10),
-          _addressButton(),
-        ],
       ],
-    );
-  }
-
-  /// 📢 Söylev Ver — her an erişilebilir proaktif meclis (kimliği yönlendir).
-  /// Meclis dinlenirken (cooldown) soluk + ipucu.
-  Widget _addressButton() {
-    final ready = councilReady;
-    return GestureDetector(
-      onTap: ready ? () => onConvene!('address') : null,
-      behavior: HitTestBehavior.opaque,
-      child: Opacity(
-        opacity: ready ? 1.0 : 0.5,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            color: ready
-                ? Color.alphaBlend(
-                    AppUi.accent.withValues(alpha: 0.14), AppUi.surface1)
-                : AppUi.surface0,
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(
-                color: ready
-                    ? AppUi.accent.withValues(alpha: 0.55)
-                    : AppUi.line),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('📢', style: TextStyle(fontSize: 14)),
-              const SizedBox(width: 8),
-              Text(ready ? 'MECLİS ÇAĞIR · SÖYLEV VER' : 'MECLİS DİNLENİYOR',
-                  style: AppUi.label.copyWith(
-                      fontSize: 9.5,
-                      letterSpacing: 1.0,
-                      color: ready ? AppUi.accentSoft : AppUi.textLo)),
-            ],
-          ),
-        ),
-      ),
     );
   }
 
@@ -506,8 +710,8 @@ class DivanPanel extends StatelessWidget {
             style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo)),
       );
     }
-    // Salience sıralı gelir; en fazla 6 açık göster, gerisi özet.
-    final shown = houses.length > 6 ? 6 : houses.length;
+    // Salience sıralı gelir; en fazla 4 açık göster, gerisi özet (sadelik).
+    final shown = houses.length > 4 ? 4 : houses.length;
     return Column(
       children: [
         for (int i = 0; i < shown; i++) ...[
@@ -704,6 +908,266 @@ class DivanPanel extends StatelessWidget {
                   color: AppUi.textMid,
                   fontWeight: FontWeight.w600)),
         ],
+      ),
+    );
+  }
+}
+
+/// İnce altın oyma çerçeveli koyu pano — dilekçe modalıyla AYNI dil (yönetişimin
+/// iki yüzü aynı ağırlıkta görünsün). Hero illüstrasyonunu köşelere yaslar.
+class _GildedFrame extends StatelessWidget {
+  final Widget child;
+  final Color accent;
+  const _GildedFrame({required this.child, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    const r = AppUi.radius;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppUi.surface2, AppUi.surface1],
+        ),
+        borderRadius: BorderRadius.circular(r),
+        border: Border.all(color: AppUi.gold.withValues(alpha: 0.32), width: 1.2),
+        boxShadow: [
+          ...AppUi.softShadow,
+          BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 26),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(r),
+        child: Stack(
+          children: [
+            child,
+            // İçte ince altın hairline — "oyma" derinliği.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  margin: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(r - 4),
+                    border: Border.all(
+                        color: AppUi.gold.withValues(alpha: 0.12), width: 1),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// DİVAN MÜHRÜ — yönetişimin KALICI, her an görünür kapısı. Meclis daha önce üç
+/// kat gömülüydü (yan pano → pil → modal içi buton) ve bir seçim yapılınca kapısı
+/// ekrandan kayboluyordu. Bu mühür hep ekranda durur: dilekçe mührüyle aynı
+/// gilded dil (altın kenar + ⚖ madalyon + nabız), gündem doldukça kızışır.
+/// Dokun → Divan açılır (Meclis oranın başrolü).
+class DivanSeal extends StatefulWidget {
+  final VoidCallback onTap;
+
+  /// Gündemdeki mesele sayısı (bekleyen dilekçe + mayalananlar). 0 = sakin.
+  final int agendaCount;
+
+  /// Köy şu an bir dilekçeye yanıt bekliyor mu — mühür kızarır + nabız hızlanır.
+  final bool pendingPetition;
+
+  /// Meclis çağrılabilir mi (cooldown değilse) — "meclis hazır" ipucu.
+  final bool councilReady;
+
+  const DivanSeal({
+    super.key,
+    required this.onTap,
+    this.agendaCount = 0,
+    this.pendingPetition = false,
+    this.councilReady = false,
+  });
+
+  @override
+  State<DivanSeal> createState() => _DivanSealState();
+}
+
+class _DivanSealState extends State<DivanSeal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+      vsync: this, duration: _dur())
+    ..repeat(reverse: true);
+
+  bool _hover = false;
+
+  Duration _dur() =>
+      Duration(milliseconds: widget.pendingPetition ? 700 : 1900);
+
+  @override
+  void didUpdateWidget(DivanSeal old) {
+    super.didUpdateWidget(old);
+    if (old.pendingPetition != widget.pendingPetition) {
+      _ctrl.duration = _dur();
+      _ctrl
+        ..reset()
+        ..repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  /// Sakin gündemde sönük ember; mesele varsa accent; dilekçe beklerken rust.
+  Color get _accent => widget.pendingPetition
+      ? AppUi.rust
+      : (widget.agendaCount > 0 ? AppUi.accent : AppUi.textLo);
+
+  String get _status {
+    if (widget.pendingPetition) return 'köy söz bekliyor';
+    if (widget.agendaCount > 0) return '${widget.agendaCount} mesele gündemde';
+    if (widget.councilReady) return 'meclis hazır';
+    return 'gündem sakin';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = _accent;
+    // Gündem varken nefes alır; sakinken durur (dikkat çalmaz).
+    final alive = widget.agendaCount > 0 || widget.pendingPetition;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedBuilder(
+          animation: _ctrl,
+          builder: (context, _) {
+            final t = alive ? _ctrl.value : 0.0;
+            final glow = (alive ? 0.20 : 0.08) + t * 0.34 + (_hover ? 0.18 : 0);
+            final scale = 1.0 + t * (widget.pendingPetition ? 0.05 : 0.03) +
+                (_hover ? 0.03 : 0);
+            return Transform.scale(
+              scale: scale,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(8, 7, 13, 7),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [AppUi.surface2, AppUi.surface1],
+                  ),
+                  borderRadius: BorderRadius.circular(AppUi.radius),
+                  border: Border.all(
+                      color: AppUi.gold.withValues(alpha: _hover ? 0.5 : 0.34),
+                      width: 1.1),
+                  boxShadow: [
+                    ...AppUi.softShadow,
+                    BoxShadow(
+                        color: accent.withValues(alpha: glow),
+                        blurRadius: 16,
+                        spreadRadius: 1),
+                  ],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ⚖ madalyon + (varsa) gündem sayacı rozeti.
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 34,
+                          height: 34,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(colors: [
+                              Color.alphaBlend(
+                                  accent.withValues(alpha: 0.22), AppUi.surface0),
+                              AppUi.surface0,
+                            ]),
+                            border: Border.all(
+                                color: AppUi.gold.withValues(alpha: 0.6),
+                                width: 1.2),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: accent.withValues(alpha: 0.35),
+                                  blurRadius: 6),
+                            ],
+                          ),
+                          child: const Text('⚖',
+                              style: TextStyle(fontSize: 16)),
+                        ),
+                        if (widget.agendaCount > 0)
+                          Positioned(
+                            top: -4,
+                            right: -5,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: accent,
+                                borderRadius: BorderRadius.circular(10),
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: accent.withValues(alpha: 0.6),
+                                      blurRadius: 6),
+                                ],
+                              ),
+                              child: Text('${widget.agendaCount}',
+                                  style: AppUi.number.copyWith(
+                                      fontSize: 9, color: AppUi.ink)),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(width: 10),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('DİVAN',
+                            style: AppUi.title
+                                .copyWith(fontSize: 13, letterSpacing: 1.5)),
+                        const SizedBox(height: 3),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: accent,
+                                boxShadow: [
+                                  BoxShadow(
+                                      color: accent
+                                          .withValues(alpha: 0.4 + t * 0.4),
+                                      blurRadius: 5),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(_status,
+                                style: AppUi.label.copyWith(
+                                    fontSize: 7.5,
+                                    letterSpacing: 0.8,
+                                    color: widget.pendingPetition
+                                        ? AppUi.rust
+                                        : AppUi.textLo)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
