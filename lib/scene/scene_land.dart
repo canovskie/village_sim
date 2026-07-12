@@ -34,17 +34,32 @@ extension _SceneLand on _VillageSceneState {
 
   // ── Reach büyümesi (dünyanın açılması) ──────────────────────────────────────
 
-  /// Her frame (scene_tick). Köy büyüdükçe kamera "reach"i yumuşakça genişler →
-  /// izin verilen zoom-out + pan artar, dünya açılır; gerçek kenar yine hiç
-  /// görünmez (reach kenarda ~8 tile tampon bırakır: [_kReachMax]).
+  /// Her frame (scene_tick). Kamera "reach"i büyüdükçe izin verilen zoom-out +
+  /// pan artar → dünya açılır; gerçek kenar yine hiç görünmez (reach kenarda
+  /// ~8 tile tampon bırakır: [_kReachMax]).
   ///
-  /// Karma plan: ilk açılımlar hikâye beat'lerine bağlanacak (Faz 2), sonrası bu
-  /// organik sürücüyle sessizce devam eder.
+  /// **Karma ilerleme (faz anahtarı YOK):** hedef = max(hikâye, organik).
+  ///  • Hikâye: tamamlanan görev başına (scene_flow beat'leri) — erken oyunda
+  ///    bina az / görev çok olduğu için AÇILIMI HİKÂYE SÜRER.
+  ///  • Organik: bina sayısıyla — köy büyüyünce bu baskın gelir, yani hikâye
+  ///    kendiliğinden PASİFLEŞİR ve dünya sessizce açılmaya devam eder.
   void _updateLandExpansion(double dt) {
-    final target = (_VillageSceneState._kReachStart + _buildings.length * 0.8)
-        .clamp(_VillageSceneState._kReachStart, _VillageSceneState._kReachMax);
+    const start = _VillageSceneState._kReachStart;
+    final story   = start + _completedQuests.length * 1.5; // hikâye beat'leri
+    final organic = start + _buildings.length * 0.5;        // köyün büyümesi
+    final target = (story > organic ? story : organic)
+        .clamp(start, _VillageSceneState._kReachMax);
     if (_reachRadius < target) {
       _reachRadius = (_reachRadius + dt * 1.2).clamp(0.0, target); // ~1.2 tile/sn
     }
+
+    // "Dünya açılıyor" anı — reach genişledikçe, oyuncu ZATEN tam zoom-out'taysa
+    // (min'e yapışık) kamerayı yumuşakça geriye bırak → açılan dünya gözünün
+    // önünde belirir. Oyuncu içeri zoom'lamışsa DOKUNMA (elini rahatsız etme).
+    final mz = _minZoomForReach(_viewSize);
+    if (_zoom <= _lastMinZoom * 1.03 + 0.001 && _zoom > mz) {
+      _zoom += (mz - _zoom) * (dt * 1.5).clamp(0.0, 1.0); // yumuşak geri çekilme
+    }
+    _lastMinZoom = mz;
   }
 }

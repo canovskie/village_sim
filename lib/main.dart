@@ -405,6 +405,9 @@ class _VillageSceneState extends State<VillageScene>
   final double _reachCy = kRows / 2;
   double _reachRadius = _kReachStart;  // hikâye beat'leri + organik ile büyür
   bool _cameraCentered = false;        // ilk geçerli frame'de spawn'a ortala
+  // "Dünya açılıyor" anı: reach genişlerken oyuncu TAM zoom-out'a yapışıksa
+  // kamerayı yumuşakça geriye bırakırız (scene_land._updateLandExpansion).
+  double _lastMinZoom = 0.0;
 
   // ── Placement ──────────────────────────────────────────────────────────────
   BuildingType? _placing;
