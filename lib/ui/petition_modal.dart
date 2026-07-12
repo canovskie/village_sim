@@ -279,9 +279,12 @@ class _PetitionHero extends StatelessWidget {
                 const Spacer(),
                 if (petition.note != null)
                   Flexible(
-                    child: AppChip(
-                        label: petition.note!,
-                        color: petition.note!.startsWith('✦')
+                    // AppChip DEĞİL: chip'in Text'i kırpılmadığı için uzun not
+                    // hero satırını taşırıyordu (RenderFlex overflow). Bu rozet
+                    // ellipsis yapar → dar hero'da güvenle sığar.
+                    child: _noteChip(
+                        petition.note!,
+                        petition.note!.startsWith('✦')
                             ? AppUi.gold
                             : AppUi.rust),
                   ),
@@ -370,6 +373,25 @@ class _PetitionHero extends StatelessWidget {
         ),
         child: Text(text,
             style: AppUi.label.copyWith(color: accent, fontSize: 9)),
+      );
+
+  /// Hero not rozeti — AppChip'in kırpılmayan Text'i yerine ellipsis'li sürüm
+  /// (uzun bağlam notu dar hero satırını taşırmasın).
+  Widget _noteChip(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withValues(alpha: 0.7), width: 1),
+        ),
+        child: Text(text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppUi.button.copyWith(
+              fontSize: 9.5,
+              letterSpacing: 1.0,
+              color: AppUi.textHi,
+            )),
       );
 }
 

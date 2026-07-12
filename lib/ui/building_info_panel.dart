@@ -14,8 +14,6 @@ import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
-import '../systems/estate_system.dart';
-import '../systems/house_system.dart';
 import 'app_ui.dart';
 
 /// Bir binaya tıklanınca açılan yönetim kartı. Modern koyu panel: başlık +
@@ -51,16 +49,11 @@ class BuildingInfoPanel extends StatelessWidget {
   final int festivalGoldCost;
 
   final PopulationPlanning? planning;
-  final VillagePolicies? policies;
-  final void Function(String key)? onTogglePolicy;
-  final void Function(FamilyPolicy fp)? onSetFamilyPolicy;
-  final double policyCooldownSec;
 
-  final List<HouseSnapshot>? houses;
-  final String? villageIdentity;
-  /// Köyün baskın kimliğinin SOMUT mekanik bonusu (tarla/verim/sofra/moral) —
-  /// kimlik yoksa null. Zümre nabzında "kimliğin ödülü" satırı olarak gösterilir.
-  final String? identityBonus;
+  /// Divan'ı aç — YÖNETİŞİM (Karar Defteri + hane nabzı) 2026-07-13'te bu
+  /// panelden Divan'a taşındı; belediye yönetişimin koltuğu olduğu için burada
+  /// yalnızca oraya açılan bir kapı kalır. null = kapı gösterilmez.
+  final VoidCallback? onOpenDivan;
 
   const BuildingInfoPanel({
     super.key,
@@ -85,13 +78,7 @@ class BuildingInfoPanel extends StatelessWidget {
     this.festivalFoodCost = 8,
     this.festivalGoldCost = 5,
     this.planning,
-    this.policies,
-    this.onTogglePolicy,
-    this.onSetFamilyPolicy,
-    this.policyCooldownSec = 0,
-    this.houses,
-    this.villageIdentity,
-    this.identityBonus,
+    this.onOpenDivan,
   });
 
   BuildingFunction? get _fn => building.fn;
@@ -403,18 +390,12 @@ class BuildingInfoPanel extends StatelessWidget {
               value: stats.morale,
               trailing: '${(stats.morale * 100).round()}%',
               color: stats.morale > 0.6 ? AppUi.sage : foodColor),
-          if (houses != null && houses!.isNotEmpty) ...[
+          // Yönetişim (KARAR DEFTERİ + hane nabzı) 2026-07-13'te DİVAN'a taşındı
+          // — bu panel yalnızca binanın kendi işini anlatır. Belediye yönetişimin
+          // koltuğu olduğundan buradan Divan'a bir kapı bırakıyoruz.
+          if (onOpenDivan != null) ...[
             const SizedBox(height: 16),
-            _estatePulse(houses!, villageIdentity, identityBonus),
-          ],
-          if (policies != null && onTogglePolicy != null) ...[
-            const SizedBox(height: 16),
-            _PolicyEditor(
-              policies: policies!,
-              onToggle: onTogglePolicy!,
-              onSetFamily: onSetFamilyPolicy,
-              cooldownSec: policyCooldownSec,
-            ),
+            _divanLink(),
           ],
         ];
       case CivicEffect.morale:
@@ -437,98 +418,47 @@ class BuildingInfoPanel extends StatelessWidget {
     }
   }
 
-  /// Hane Nabzı — hanelerin morali (renk noktası) + nüfuz payı (çizgi) +
-  /// köyün kayan kimliği. Emoji yerine renk + tipografi.
-  Widget _estatePulse(
-      List<HouseSnapshot> snap, String? identity, String? bonus) {
-    Color moodColor(EstateMoodTier t) => switch (t) {
-          EstateMoodTier.content => AppUi.sage,
-          EstateMoodTier.neutral => AppUi.textLo,
-          EstateMoodTier.uneasy => AppUi.accent,
-          EstateMoodTier.sullen => AppUi.rust,
-        };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const AppSectionLabel('HANELER'),
-        if (identity != null)
-          Padding(
-            padding: EdgeInsets.only(bottom: bonus != null ? 2 : 8),
-            child: Text('Köy bir yöne kayıyor:  $identity',
-                style: AppUi.body.copyWith(
-                    color: AppUi.textMid, fontStyle: FontStyle.italic)),
-          ),
-        // Kimliğin SOMUT ödülü — köyü bir yöne adamak mekanik avantaj getirir.
-        if (bonus != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Row(
-              children: [
-                const GameIcon(GameIconData.star, size: 10, color: AppUi.gold),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(bonus,
+  /// Divan'a açılan kapı — belediye yönetişimin koltuğu; yasalar/gündem/Meclis
+  /// artık Divan'da toplu duruyor (bu panel kalabalıklaşmasın).
+  Widget _divanLink() {
+    return GestureDetector(
+      onTap: onOpenDivan,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(11, 10, 12, 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [
+            Color.alphaBlend(
+                AppUi.accent.withValues(alpha: 0.16), AppUi.surface1),
+            AppUi.surface0,
+          ]),
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
+        ),
+        child: Row(
+          children: [
+            const Text('⚖', style: TextStyle(fontSize: 17)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('DİVAN\'I AÇ',
+                      style: AppUi.title.copyWith(
+                          fontSize: 12.5, letterSpacing: 1.0)),
+                  const SizedBox(height: 2),
+                  Text('Gündem · Meclis · Karar Defteri',
                       style: AppUi.body
-                          .copyWith(color: AppUi.gold, fontSize: 11)),
-                ),
-              ],
+                          .copyWith(fontSize: 10, color: AppUi.textLo)),
+                ],
+              ),
             ),
-          ),
-        for (final s in snap)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(
-              children: [
-                Container(
-                  width: 8, height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: moodColor(s.tier),
-                    boxShadow: [
-                      BoxShadow(
-                          color: moodColor(s.tier).withValues(alpha: 0.5),
-                          blurRadius: 5)
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 88,
-                  child: Text(s.label,
-                      style: AppUi.body.copyWith(
-                          color: s.ascendant ? AppUi.textHi : AppUi.textMid,
-                          fontWeight:
-                              s.ascendant ? FontWeight.w700 : FontWeight.w500)),
-                ),
-                if (s.ascendant)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 4),
-                    child: GameIcon(GameIconData.star, size: 10, color: AppUi.gold),
-                  ),
-                Expanded(
-                  child: Container(
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AppUi.surface0,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FractionallySizedBox(
-                          widthFactor: s.swayShare.clamp(0.0, 1.0),
-                          child: Container(
-                              color: moodColor(s.tier).withValues(alpha: 0.85)),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
+            const GameIcon(GameIconData.chevron,
+                size: 15, color: AppUi.accent),
+          ],
+        ),
+      ),
     );
   }
 
@@ -902,385 +832,4 @@ class _ThumbPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ThumbPainter old) => old.img != img;
-}
-
-// ─── POLİTİKA EDİTÖRÜ ──────────────────────────────────────────────────────
-// Tab bar + custom ikonlu satırlar + aktif politika rozet stripi + dairesel
-// cooldown indicator. Koyu app_ui dilinde, reaktif animasyonlu.
-
-class _PolicyEditor extends StatefulWidget {
-  final VillagePolicies policies;
-  final void Function(String key) onToggle;
-  final void Function(FamilyPolicy fp)? onSetFamily;
-  final double cooldownSec;
-  const _PolicyEditor({
-    required this.policies,
-    required this.onToggle,
-    required this.cooldownSec,
-    this.onSetFamily,
-  });
-
-  @override
-  State<_PolicyEditor> createState() => _PolicyEditorState();
-}
-
-class _PolicyEditorState extends State<_PolicyEditor> {
-  PolicyCategory _tab = PolicyCategory.family;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.policies;
-    final cd = widget.cooldownSec;
-    final locked = cd > 0;
-    final cdFrac = (cd / 240.0).clamp(0.0, 1.0);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(child: AppSectionLabel('KARAR DEFTERİ')),
-            if (locked) _cooldownRing(cdFrac, cd),
-          ],
-        ),
-        const SizedBox(height: 4),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topLeft,
-          child: _activeChips(p),
-        ),
-        const SizedBox(height: 10),
-        _tabBar(),
-        const SizedBox(height: 8),
-        Container(height: 1, color: AppUi.line),
-        const SizedBox(height: 8),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 230),
-          curve: Curves.easeOutCubic,
-          alignment: Alignment.topCenter,
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, anim) => FadeTransition(
-              opacity: anim,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                        begin: const Offset(0.06, 0), end: Offset.zero)
-                    .animate(anim),
-                child: child,
-              ),
-            ),
-            child: KeyedSubtree(
-              key: ValueKey(_tab),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: _tabContent(p, locked),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _cooldownRing(double frac, double sec) {
-    return SizedBox(
-      width: 24, height: 24,
-      child: Stack(alignment: Alignment.center, children: [
-        SizedBox(
-          width: 24, height: 24,
-          child: CircularProgressIndicator(
-            value: frac,
-            strokeWidth: 2.6,
-            valueColor: const AlwaysStoppedAnimation(AppUi.rust),
-            backgroundColor: AppUi.line,
-          ),
-        ),
-        Text('${sec.ceil()}',
-            style: AppUi.number.copyWith(color: AppUi.rust, fontSize: 9)),
-      ]),
-    );
-  }
-
-  Widget _activeChips(VillagePolicies p) {
-    final active = <Widget>[];
-    if (p.family != FamilyPolicy.open) {
-      active.add(AppChip(label: p.family.label, color: AppUi.accent));
-    }
-    for (final def in kPolicyDefs) {
-      if (p.isOn(def.id)) active.add(AppChip(label: def.label, color: AppUi.accent));
-    }
-    if (active.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Text('Henüz yürürlükte karar yok.',
-            style: AppUi.body.copyWith(
-                color: AppUi.textLo, fontStyle: FontStyle.italic)),
-      );
-    }
-    return Wrap(spacing: 5, runSpacing: 5, children: active);
-  }
-
-  Widget _tabBar() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [for (final c in PolicyCategory.values) _tabPill(c)],
-    );
-  }
-
-  Widget _tabPill(PolicyCategory c) {
-    final selected = _tab == c;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _tab = c),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          margin: const EdgeInsets.symmetric(horizontal: 2),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppUi.accent.withValues(alpha: 0.16)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(7),
-            border: Border.all(
-                color: selected ? AppUi.accent.withValues(alpha: 0.6) : AppUi.line,
-                width: 1),
-          ),
-          child: Center(
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 180),
-              style: TextStyle(
-                  fontFamily: AppUi.fontDisplay,
-                  color: selected ? AppUi.textHi : AppUi.textLo,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.8),
-              child: Text(c.label.toUpperCase()),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _tabContent(VillagePolicies p, bool locked) {
-    final widgets = <Widget>[];
-    if (_tab == PolicyCategory.family) {
-      widgets.add(_subHeader('DOĞURGANLIK SINIRI'));
-      for (final fp in FamilyPolicy.values) {
-        widgets.add(_familyRadio(p, fp, locked));
-      }
-      widgets.add(const SizedBox(height: 8));
-      widgets.add(_subHeader('BONUS'));
-    }
-    final defs = kPolicyDefs.where((d) => d.category == _tab).toList();
-    for (final d in defs) {
-      widgets.add(_policyTile(d, p.isOn(d.id), locked));
-    }
-    return widgets;
-  }
-
-  Widget _subHeader(String label) => Padding(
-        padding: const EdgeInsets.only(bottom: 4, top: 2),
-        child: Text(label,
-            style: AppUi.label.copyWith(fontSize: 8, color: AppUi.textLo)),
-      );
-
-  Widget _policyTile(PolicyDef d, bool on, bool locked) {
-    const dur = Duration(milliseconds: 220);
-    return GestureDetector(
-      onTap: locked ? null : () => widget.onToggle(d.id),
-      child: AnimatedOpacity(
-        duration: dur,
-        opacity: locked ? 0.5 : 1.0,
-        child: AnimatedContainer(
-          duration: dur,
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          decoration: BoxDecoration(
-            color: on ? AppUi.accent.withValues(alpha: 0.10) : AppUi.surface0,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: on ? AppUi.accent.withValues(alpha: 0.45) : AppUi.line,
-                width: 1),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    AnimatedDefaultTextStyle(
-                      duration: dur,
-                      style: AppUi.bodyHi.copyWith(
-                          fontSize: 12.5,
-                          color: on ? AppUi.textHi : AppUi.textMid,
-                          fontWeight: on ? FontWeight.w700 : FontWeight.w600),
-                      child: Text(d.label),
-                    ),
-                    const SizedBox(height: 2),
-                    _consequenceLine('↑', d.benefit, AppUi.sage),
-                    if (d.cost != null)
-                      _consequenceLine('↓', d.cost!, AppUi.rust),
-                    if (d.estateMood.isNotEmpty) _estateEffectRow(d.estateMood),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              _switch(on),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _switch(bool on) {
-    const dur = Duration(milliseconds: 220);
-    return AnimatedContainer(
-      duration: dur,
-      curve: Curves.easeOutCubic,
-      width: 32, height: 18,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(9),
-        color: on ? AppUi.accent : AppUi.surface3,
-        border: Border.all(
-            color: on ? AppUi.accent : AppUi.line, width: 1),
-      ),
-      child: AnimatedAlign(
-        duration: dur,
-        curve: Curves.easeOutCubic,
-        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          width: 12, height: 12,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: on ? AppUi.ink : AppUi.textLo,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _familyRadio(VillagePolicies p, FamilyPolicy fp, bool locked) {
-    const dur = Duration(milliseconds: 200);
-    final selected = p.family == fp;
-    final cb = widget.onSetFamily;
-    return GestureDetector(
-      onTap: (locked || cb == null) ? null : () => cb(fp),
-      child: AnimatedOpacity(
-        duration: dur,
-        opacity: locked ? 0.5 : 1.0,
-        child: AnimatedContainer(
-          duration: dur,
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
-          margin: const EdgeInsets.symmetric(vertical: 2),
-          decoration: BoxDecoration(
-            color: selected ? AppUi.accent.withValues(alpha: 0.10) : AppUi.surface0,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-                color: selected ? AppUi.accent.withValues(alpha: 0.45) : AppUi.line,
-                width: 1),
-          ),
-          child: Row(
-            children: [
-              AnimatedContainer(
-                duration: dur,
-                width: 14, height: 14,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: selected ? AppUi.accent : AppUi.textLo, width: 1.6),
-                  color: selected ? AppUi.accent : Colors.transparent,
-                ),
-                child: AnimatedScale(
-                  duration: dur,
-                  curve: Curves.easeOutBack,
-                  scale: selected ? 1.0 : 0.0,
-                  child: const Center(
-                    child: Icon(Icons.circle, size: 5, color: AppUi.ink),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AnimatedDefaultTextStyle(
-                      duration: dur,
-                      style: AppUi.bodyHi.copyWith(
-                          fontSize: 12.5,
-                          color: selected ? AppUi.textHi : AppUi.textMid,
-                          fontWeight:
-                              selected ? FontWeight.w700 : FontWeight.w600),
-                      child: Text(fp.label),
-                    ),
-                    const SizedBox(height: 2),
-                    _consequenceLine('↑', fp.benefit, AppUi.sage),
-                    if (fp.cost != null)
-                      _consequenceLine('↓', fp.cost!, AppUi.rust),
-                    if (familyPolicyEstateMood(fp).isNotEmpty)
-                      _estateEffectRow(familyPolicyEstateMood(fp)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _estateEffectRow(List<(Estate, double)> effects) => Padding(
-        padding: const EdgeInsets.only(top: 4),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 3,
-          children: [
-            for (final (e, d) in effects)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(e.label,
-                      style: AppUi.body.copyWith(
-                          fontSize: 9.5, color: AppUi.textLo)),
-                  const SizedBox(width: 2),
-                  Text(d > 0 ? '▲' : '▼',
-                      style: TextStyle(
-                          color: d > 0 ? AppUi.sage : AppUi.rust,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w900)),
-                ],
-              ),
-          ],
-        ),
-      );
-
-  Widget _consequenceLine(String prefix, String text, Color color) => Padding(
-        padding: const EdgeInsets.only(top: 1),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(prefix,
-                style: TextStyle(
-                    color: color, fontSize: 10, fontWeight: FontWeight.w900)),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(text,
-                  style: AppUi.body.copyWith(
-                      fontSize: 9.5, color: color.withValues(alpha: 0.92))),
-            ),
-          ],
-        ),
-      );
 }

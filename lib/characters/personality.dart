@@ -90,16 +90,21 @@ class Personality {
 /// şey en güçlü tek ses, mizaç renklendirir; en yüksek skorlu meslek seçilir,
 /// beraberlik [seed] ile deterministik çözülür (aynı kişilik+seed → aynı çağrı).
 ///
-/// Yalnızca **sivil** meslekleri döner (çiftçi/tüccar/demirci/muhafız/büyücü);
-/// madenci & balıkçı kendi bina-NPC'leridir, doğumla edinilmez. Bu, köyde
-/// doğan/göçen köylülerin meslek havuzuyla birebir uyumludur.
+/// Yalnızca **sivil** meslekleri döner (çiftçi/tüccar/demirci/muhafız/rahip/
+/// çoban/avcı/değirmenci/hancı); madenci & balıkçı kendi bina-NPC'leridir,
+/// doğumla edinilmez. Bu, köyde doğan/göçen köylülerin meslek havuzuyla
+/// birebir uyumludur.
 VillagerType callingFor(Personality p, int seed) {
   final score = <VillagerType, double>{
     VillagerType.farmer: 0,
     VillagerType.merchant: 0,
     VillagerType.blacksmith: 0,
     VillagerType.guard: 0,
-    VillagerType.mage: 0,
+    VillagerType.priest: 0,
+    VillagerType.shepherd: 0,
+    VillagerType.hunter: 0,
+    VillagerType.miller: 0,
+    VillagerType.innkeeper: 0,
   };
   void add(VillagerType t, double w) => score[t] = score[t]! + w;
 
@@ -107,28 +112,36 @@ VillagerType callingFor(Personality p, int seed) {
   switch (p.likes) {
     case Likes.harvest:
       add(VillagerType.farmer, 3);
+      add(VillagerType.miller, 1.5); // başak → un, aynı zincir
     case Likes.animals:
-      add(VillagerType.farmer, 3);
+      add(VillagerType.shepherd, 3); // sürünün çağrısı
+      add(VillagerType.farmer, 1);
     case Likes.flowers:
       add(VillagerType.farmer, 2);
-      add(VillagerType.mage, 0.5);
+      add(VillagerType.priest, 0.5);
     case Likes.fishing:
+      add(VillagerType.hunter, 1.5); // sabır + kır
       add(VillagerType.farmer, 1);
-      add(VillagerType.mage, 1);
+      add(VillagerType.priest, 0.5);
     case Likes.market:
       add(VillagerType.merchant, 3);
+      add(VillagerType.innkeeper, 1.5);
     case Likes.company:
+      add(VillagerType.innkeeper, 2.5); // kalabalığı ağırlamak
       add(VillagerType.merchant, 2);
     case Likes.fire:
       add(VillagerType.blacksmith, 3);
+      add(VillagerType.miller, 1); // fırın da ateştir
     case Likes.stories:
-      add(VillagerType.mage, 2);
+      add(VillagerType.priest, 2);
+      add(VillagerType.innkeeper, 1.5); // han sohbeti
       add(VillagerType.merchant, 1);
     case Likes.solitude:
-      add(VillagerType.mage, 2);
+      add(VillagerType.hunter, 2); // ormanın sessizliği
+      add(VillagerType.priest, 2);
       add(VillagerType.blacksmith, 1);
     case Likes.stars:
-      add(VillagerType.mage, 3);
+      add(VillagerType.priest, 3);
   }
 
   // Mizaç — baskın olan 1.5×, ikincil 1.0× ağırlık.
@@ -137,27 +150,35 @@ VillagerType callingFor(Personality p, int seed) {
     switch (p.traits[i]) {
       case Trait.brave:
         add(VillagerType.guard, 3 * w);
+        add(VillagerType.hunter, 2 * w);
       case Trait.proud:
         add(VillagerType.guard, 2 * w);
         add(VillagerType.merchant, 1 * w);
       case Trait.diligent:
         add(VillagerType.blacksmith, 2 * w);
+        add(VillagerType.miller, 2 * w);
         add(VillagerType.farmer, 1 * w);
       case Trait.grumpy:
         add(VillagerType.blacksmith, 2 * w);
+        add(VillagerType.miller, 1 * w);
       case Trait.restless:
+        add(VillagerType.hunter, 2 * w);
         add(VillagerType.guard, 1 * w);
         add(VillagerType.merchant, 1 * w);
       case Trait.curious:
-        add(VillagerType.mage, 2 * w);
+        add(VillagerType.priest, 2 * w);
+        add(VillagerType.hunter, 1 * w);
       case Trait.dreamer:
-        add(VillagerType.mage, 2 * w);
+        add(VillagerType.priest, 2 * w);
       case Trait.shy:
-        add(VillagerType.mage, 1 * w);
+        add(VillagerType.shepherd, 1.5 * w); // sürüyle konuşmak kolaydır
+        add(VillagerType.priest, 1 * w);
         add(VillagerType.farmer, 1 * w);
       case Trait.gentle:
+        add(VillagerType.shepherd, 2 * w);
         add(VillagerType.farmer, 2 * w);
       case Trait.cheerful:
+        add(VillagerType.innkeeper, 2.5 * w);
         add(VillagerType.merchant, 2 * w);
     }
   }

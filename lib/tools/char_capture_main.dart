@@ -37,48 +37,45 @@ class _CharRow extends StatelessWidget {
   const _CharRow();
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(size: const Size(1000, 380), painter: _CharPainter());
+    return CustomPaint(size: const Size(1600, 400), painter: _CharPainter());
   }
 }
 
 class _CharPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // Deterministik ama farklı görünümler
-    final visuals = [
-      NpcVisual.fromSeed(7, forceMale: true),
-      NpcVisual.fromSeed(12, forceMale: true),
-      NpcVisual.fromSeed(3, forceMale: true),
-      NpcVisual.fromSeed(21, forceMale: true),
+    // Yeni meslekler + kıyas için birkaç mevcut meslek (gerçek oyun yolu:
+    // draw dispatch → shaded varyant).
+    const types = [
+      VillagerType.priest,
+      VillagerType.shepherd,
+      VillagerType.hunter,
+      VillagerType.miller,
+      VillagerType.innkeeper,
     ];
-    final labels = ['İNŞAATÇI', 'İNŞAATÇI(iş)', 'DEMİRCİ', 'MADENCİ'];
-    // Diğerleri gerçek oyun yolunu (draw dispatch → _xNpc shaded varyant) kullanır.
-    final draws = <void Function(Canvas, NpcVisual)>[
-      (c, v) => CharacterRenderer.drawBuilder(c, visual: v, working: false),
-      (c, v) => CharacterRenderer.drawBuilder(c,
-          visual: v, working: true, walkPhase: 1.2),
-      (c, v) => CharacterRenderer.draw(c, VillagerType.blacksmith, visual: v),
-      (c, v) => CharacterRenderer.draw(c, VillagerType.miner, visual: v),
+    const labels = [
+      'RAHİP', 'ÇOBAN', 'AVCI', 'DEĞİRMENCİ', 'HANCI'
     ];
-    const scale = 2.2;
-    for (int i = 0; i < draws.length; i++) {
-      final cx = 130.0 + i * 250.0;
+    const scale = 3.4;
+    for (int i = 0; i < types.length; i++) {
+      final cx = 150.0 + i * 300.0;
+      final v = NpcVisual.fromSeed(7 + i * 5, forceMale: true);
       canvas.save();
-      canvas.translate(cx, 300);
+      canvas.translate(cx, 330);
       canvas.scale(scale);
-      draws[i](canvas, visuals[i]);
+      CharacterRenderer.draw(canvas, types[i], visual: v);
       canvas.restore();
       final tp = TextPainter(
         text: TextSpan(
             text: labels[i],
             style: const TextStyle(
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: 13,
                 fontWeight: FontWeight.bold,
-                letterSpacing: 2)),
+                letterSpacing: 1.4)),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(cx - tp.width / 2, 330));
+      tp.paint(canvas, Offset(cx - tp.width / 2, 345));
     }
   }
 

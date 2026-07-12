@@ -71,12 +71,18 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   /// "zanaat yönlendirmesi" politikası gencin yönünü buraya çeker. Belirgin bir
   /// eksiklik yoksa (hepsi dengeli) null döner → çağrı/çıraklık devreye girer.
   VillagerType? _scarcestTrade() {
+    // callingFor()'un sivil havuzuyla BİREBİR aynı olmalı — yoksa politika
+    // ulaşılamayan bir mesleğe yönlendirir ya da yenileri hiç göremez.
     const civilian = [
       VillagerType.farmer,
       VillagerType.merchant,
       VillagerType.blacksmith,
       VillagerType.guard,
-      VillagerType.mage,
+      VillagerType.priest,
+      VillagerType.shepherd,
+      VillagerType.hunter,
+      VillagerType.miller,
+      VillagerType.innkeeper,
     ];
     final count = {for (final t in civilian) t: 0};
     for (final v in _villagers) {
@@ -99,7 +105,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       VillagerType.merchant,
       VillagerType.blacksmith,
       VillagerType.guard,
-      VillagerType.mage,
+      VillagerType.priest,
     ];
     // Kurucu haneler FARKLI olsun — aynı soyad iki bağımsız kurucuya düşmesin.
     final founderSurnames = pickDistinctSurnames(_rng, types.length);

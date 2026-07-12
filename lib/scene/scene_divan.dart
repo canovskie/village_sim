@@ -43,6 +43,12 @@ extension _SceneDivan on _VillageSceneState {
                   }),
           onConvene: _convene,
           councilReady: _councilReady,
+          // KARAR DEFTERİ — eskiden belediye binası panelindeydi; yönetişim tek
+          // merkezde toplansın diye Divan'ın ikinci sekmesine taşındı.
+          policies: _policies,
+          onTogglePolicy: _togglePolicy,
+          onSetFamilyPolicy: _setFamilyPolicy,
+          policyCooldownSec: _policyCooldownRemaining(),
           onClose: _closeDivan,
         ),
       ),

@@ -36,10 +36,11 @@ class _Rows extends StatelessWidget {
   Widget build(BuildContext context) {
     // (timeOfDay, dayLight, etiket)
     const cases = <(double, double, String)>[
-      (0.05, 0.0, 'gece 01:12'),
-      (0.27, 0.35, 'şafak 06:30'),
-      (0.50, 1.0, 'öğle 12:00'),
-      (0.78, 0.25, 'gün batımı 18:43'),
+      (0.00, 0.0, 'gece yarısı 00:00 — ay dipte'),
+      (0.25, 0.3, 'şafak 06:00 — güneş sol ufukta'),
+      (0.375, 0.8, 'kuşluk 09:00'),
+      (0.50, 1.0, 'öğle 12:00 — güneş tepede'),
+      (0.75, 0.2, 'akşam 18:00 — güneş batıyor, ay doğuyor'),
     ];
     return FittedBox(
       child: Column(

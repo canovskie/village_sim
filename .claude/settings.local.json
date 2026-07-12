@@ -182,7 +182,17 @@
       "Bash(awk '{print $5\" bytes\"}')",
       "Bash(STATS_TAB=1 flutter run -d macos -t lib/tools/stats_capture_main.dart)",
       "Bash(git checkout *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(awk 'NR>=436 && NR<=625 && /^  [A-Za-z_].*\\\\\\(|^  List<_Action>|^  Widget /{print NR\": \"$0}' lib/ui/building_info_panel.dart)",
+      "Bash(perl -0pi -e 's/      VillagerType\\\\.mage,\\\\n/      VillagerType.priest,\\\\n/g' lib/scene/scene_building_spawn.dart)",
+      "Bash(perl -0pi -e 's/VillagerType\\\\.mage/VillagerType.priest/g' lib/cutscene/cutscene.dart)",
+      "Bash(sed -i '' \"s|import '../ui/divan_panel.dart';|import '../scene/scene_data.dart';\\\\nimport '../ui/divan_panel.dart';|\" lib/tools/divan_capture_main.dart)",
+      "Bash(sed -i '' \"s|await _capture\\('/tmp/divan\\\\${ready ? '' : '_cooldown'}.png'\\);|await _capture\\('/tmp/divan_tab\\\\${Platform.environment['DIVAN_TAB'] ?? '0'}.png'\\);|\" lib/tools/divan_capture_main.dart)",
+      "Bash(perl -0pi -e 's/const scale = 1\\\\.75;/const scale = 3.4;/; s/final cx = 95\\\\.0 \\\\+ i \\\\* 165\\\\.0;/final cx = 150.0 + i * 300.0;/; s/canvas\\\\.translate\\\\\\(cx, 275\\\\\\);/canvas.translate\\(cx, 330\\);/; s/tp\\\\.paint\\\\\\(canvas, Offset\\\\\\(cx - tp\\\\.width \\\\/ 2, 295\\\\\\)\\\\\\);/tp.paint\\(canvas, Offset\\(cx - tp.width \\\\/ 2, 345\\)\\);/' lib/tools/char_capture_main.dart)",
+      "Bash(perl -0pi -e 's/      VillagerType\\\\.blacksmith, \\\\/\\\\/ kıyas\\\\n      VillagerType\\\\.farmer,     \\\\/\\\\/ kıyas\\\\n//; s/, .demirci\\\\*., .çiftçi\\\\*.//' lib/tools/char_capture_main.dart)",
+      "Bash(perl -0pi -e 's/const Size\\\\\\(1180, 340\\\\\\)/const Size\\(1600, 400\\)/' lib/tools/char_capture_main.dart)",
+      "Bash(rm -f /tmp/divan_tab*.png)",
+      "Bash(DIVAN_TAB=1 flutter run -d macos -t lib/tools/divan_capture_main.dart)"
     ]
   }
 }

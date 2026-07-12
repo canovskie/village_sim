@@ -737,9 +737,13 @@ class _VillagerStatsPanelState extends State<VillagerStatsPanel> {
         VillagerType.merchant => AppUi.gold,
         VillagerType.blacksmith => AppUi.rust,
         VillagerType.guard => AppUi.info,
-        VillagerType.mage => const Color(0xFFB079D4),
+        VillagerType.priest => const Color(0xFF8E9AC4),
         VillagerType.miner => const Color(0xFFB09A7C),
         VillagerType.fisher => const Color(0xFF6FA8C7),
+        VillagerType.shepherd => const Color(0xFFCFC3A8),
+        VillagerType.hunter => const Color(0xFF6E9B6A),
+        VillagerType.miller => const Color(0xFFDDD6C4),
+        VillagerType.innkeeper => const Color(0xFFC07A6A),
       };
 
   GameIconData _profIcon(VillagerType t) => switch (t) {
@@ -747,8 +751,12 @@ class _VillagerStatsPanelState extends State<VillagerStatsPanel> {
         VillagerType.merchant => GameIconData.coin,
         VillagerType.blacksmith => GameIconData.hammer,
         VillagerType.guard => GameIconData.axe,
-        VillagerType.mage => GameIconData.star,
+        VillagerType.priest => GameIconData.church,
         VillagerType.miner => GameIconData.pickaxe,
         VillagerType.fisher => GameIconData.fish,
+        VillagerType.shepherd => GameIconData.herd,
+        VillagerType.hunter => GameIconData.bow,
+        VillagerType.miller => GameIconData.mill,
+        VillagerType.innkeeper => GameIconData.tankard,
       };
 }

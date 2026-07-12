@@ -305,9 +305,13 @@ class PortraitPainter extends CustomPainter {
       case VillagerType.merchant:   return const Color(0xFF4A5030);
       case VillagerType.blacksmith: return const Color(0xFF5A3818);
       case VillagerType.guard:      return const Color(0xFFB8A878);
-      case VillagerType.mage:       return const Color(0xFF2A3040);
+      case VillagerType.priest:     return const Color(0xFF3E4560);
       case VillagerType.miner:      return const Color(0xFF4A4840);
       case VillagerType.fisher:     return const Color(0xFF5A7888);
+      case VillagerType.shepherd:   return const Color(0xFFCFC3A8);
+      case VillagerType.hunter:     return const Color(0xFF2E4632);
+      case VillagerType.miller:     return const Color(0xFF8A8577);
+      case VillagerType.innkeeper:  return const Color(0xFF6A3A3A);
     }
   }
 

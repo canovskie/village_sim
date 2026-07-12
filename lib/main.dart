@@ -77,8 +77,6 @@ import 'ui/divan_panel.dart';
 import 'systems/quest_book.dart';
 import 'ui/loading_screen.dart';
 import 'ui/mode_button.dart';
-import 'ui/expand_compass.dart';
-import 'ui/discovery_minimap.dart';
 import 'world/resource_box.dart';
 import 'world/resource_placement.dart';
 import 'world/hay_entity.dart';
@@ -457,9 +455,6 @@ class _VillageSceneState extends State<VillageScene>
   final Set<(int, int)> _wildTreeTiles = {};
   final int _forestVersion = 0;              // painter repaint tokeni (sabit)
   final List<LeafBurst> _leafBursts = [];    // devrilen ağaç yaprak patlaması (fx)
-  // Otonom açılım yön nudge'ı: null → köy kütlesine doğru (varsayılan); set ise
-  // o yöne bias'lı açılır. Pusula UI (expand_compass) set eder.
-  (double, double)? _expandDir;
 
   // ── Lumber (ağaç kesme) ────────────────────────────────────────────────────
   final List<WoodcutterEntity> _woodcutters = [];
@@ -1028,8 +1023,6 @@ class _VillageSceneState extends State<VillageScene>
             ),
             Positioned.fill(child: buildHudLayer()),
             buildBottomToolbar(),
-            buildExpandCompass(), // otonom açılım yön pusulası (orman varken)
-            buildDiscoveryMinimap(), // keşif mini-haritası (öğrenme kanalı)
             // Akıllı yerleştirme: hayalet geçersiz tile üstündeyse sebep çubuğu.
             if (_placing != null && _placeReason != null) buildPlaceReason(),
             // Bekleyen dilekçe mührü — HUD üstünde, modal kapalıyken (ambient).

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../core/resources.dart';
 import '../world/season.dart';
@@ -165,10 +167,10 @@ class GameHUD extends StatelessWidget {
               ),
             ),
           ),
-          // Orta üst: gök şeridi — güneş ile ay düz bir hat üzerinde birbirini
+          // Orta üst: gök çemberi — güneş ile ay saat yönünde yörüngede birbirini
           // kovalar (yarım gün arayla). Tıklanmaz, sadece günün nabzı.
           Positioned(
-            top: 10, left: 0, right: 0,
+            top: 2, left: 0, right: 0,
             child: IgnorePointer(
               child: Center(
                 child: _CelestialTrack(
@@ -662,12 +664,13 @@ class GameHUD extends StatelessWidget {
   }
 }
 
-// ── Gök şeridi: güneş ↔ ay kovalamacası ──────────────────────────────────────
+// ── Gök çemberi: güneş ↔ ay yörüngesi ───────────────────────────────────────
 
-/// Düz yatay bir hat üzerinde ilerleyen iki gök cismi. Güneş 06:00'da soldan
-/// doğar, 18:00'de sağdan batar; ay tam yarım gün geriden aynı hattı kat eder —
-/// böylece ikisi hattı devirli olarak kovalar. Hattın dışına çıkan cisim
-/// uçlardaki yumuşak solmayla kaybolur, karşı uçtan geri girer.
+/// Günün saatini bir yörünge çemberi olarak gösterir. Güneş ile ay çemberin tam
+/// karşılıklı iki ucunda, saat yönünde döner: güneş soldaki ufuk noktasından
+/// doğar (şafak), tepeye tırmanır (öğle), sağdan batar (akşam) — ve o an ay
+/// soldan doğar. Çemberin yatay çapı ufuk çizgisidir: üstteki yarım daire
+/// gökyüzü, alttaki yer altı (oradaki cisim soluklaşır).
 class _CelestialTrack extends StatelessWidget {
   final double timeOfDay, dayLight, pulse;
   const _CelestialTrack({
@@ -678,8 +681,8 @@ class _CelestialTrack extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: 240,
-        height: 34,
+        width: 68,
+        height: 68,
         child: CustomPaint(
           painter: _CelestialTrackPainter(
             timeOfDay: timeOfDay,
@@ -703,96 +706,92 @@ class _CelestialTrackPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final y = size.height * 0.62;
-    const pad = 12.0;
-    final x0 = pad, x1 = size.width - pad, span = x1 - x0;
+    final c = Offset(size.width / 2, size.height / 2);
+    final r = size.width / 2 - 8;
 
-    // Hat: uçlarda eriyen ince çizgi — kutu değil, sadece bir iz.
+    // Yörünge halkası — üst yarı (gökyüzü) daha belirgin, alt yarı (yer altı)
+    // neredeyse siliniyor: bakan göz "gündüz kavsini" okusun.
+    final ring = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0x59FFFFFF), Color(0x30FFFFFF), Color(0x0DFFFFFF)],
+      ).createShader(Rect.fromCircle(center: c, radius: r));
+    canvas.drawCircle(c, r, ring);
+
+    // Ufuk çizgisi — çemberin yatay çapı; doğuş/batış eşiği.
     canvas.drawLine(
-      Offset(x0, y),
-      Offset(x1, y),
+      Offset(c.dx - r - 3, c.dy),
+      Offset(c.dx + r + 3, c.dy),
       Paint()
-        ..strokeWidth = 1.2
+        ..strokeWidth = 1
         ..strokeCap = StrokeCap.round
         ..shader = const LinearGradient(colors: [
-          Color(0x00FFFFFF), Color(0x3DFFFFFF), Color(0x3DFFFFFF), Color(0x00FFFFFF),
-        ], stops: [0.0, 0.18, 0.82, 1.0]).createShader(
-          Rect.fromLTWH(x0, y - 1, span, 2),
+          Color(0x00FFFFFF), Color(0x38FFFFFF), Color(0x38FFFFFF), Color(0x00FFFFFF),
+        ], stops: [0.0, 0.2, 0.8, 1.0]).createShader(
+          Rect.fromLTWH(c.dx - r - 3, c.dy - 1, (r + 3) * 2, 2),
         ),
     );
-    // Öğle çentiği — hattın ortası.
+    // Tepe (öğle) çentiği.
     canvas.drawLine(
-      Offset(size.width / 2, y - 3),
-      Offset(size.width / 2, y + 3),
+      Offset(c.dx, c.dy - r - 3),
+      Offset(c.dx, c.dy - r + 3),
       Paint()
         ..strokeWidth = 1
         ..color = const Color(0x2EFFFFFF),
     );
 
-    // Hat = tam bir gün. Güneş öğlen (0.5) tam ortada, ay tam yarım gün geriden
-    // aynı yolu yürür — gece yarısı ortaya gelir. İkisi de hep hattadır:
-    // biri sağ uçtan çıkarken diğeri soldan girer, sonsuz kovalamaca.
-    final sunP  = timeOfDay % 1.0;
-    final moonP = (timeOfDay + 0.5) % 1.0;
+    // Saat yönü yörünge: 06:00 → sol ufuk, 12:00 → tepe, 18:00 → sağ ufuk,
+    // 00:00 → dip. (Ekran y aşağı büyüdüğü için sin çıkarılıyor.)
+    final sunA  = math.pi - (timeOfDay - 0.25) * 2 * math.pi;
+    final moonA = sunA + math.pi;
 
-    // Arkadaki (sönük olan) önce çizilsin ki parlak olan üstte kalsın.
-    if (dayLight >= 0.5) {
-      _body(canvas, x0, span, y, moonP, _moon, false);
-      _body(canvas, x0, span, y, sunP, _sun, true);
+    // Ufkun altındaki (sönük) cisim önce çizilsin ki parlak olan üstte kalsın.
+    final sunUp = math.sin(sunA) >= 0;
+    if (sunUp) {
+      _body(canvas, c, r, moonA, _moon, false);
+      _body(canvas, c, r, sunA, _sun, true);
     } else {
-      _body(canvas, x0, span, y, sunP, _sun, true);
-      _body(canvas, x0, span, y, moonP, _moon, false);
+      _body(canvas, c, r, sunA, _sun, true);
+      _body(canvas, c, r, moonA, _moon, false);
     }
   }
 
-  /// t 0..1 → hattın solundan sağına. Uçlarda yumuşakça solar (doğuş/batış).
-  void _body(Canvas canvas, double x0, double span, double y, double t,
+  void _body(Canvas canvas, Offset center, double orbitR, double angle,
       Color color, bool isSun) {
-    final x = x0 + span * t;
+    final p = Offset(
+      center.dx + orbitR * math.cos(angle),
+      center.dy - orbitR * math.sin(angle),
+    );
 
-    final vis = t < 0.06
-        ? t / 0.06
-        : (t > 0.94 ? (1 - t) / 0.06 : 1.0);
-    if (vis <= 0.01) return;
-    // Ufka yakınken hafifçe alçalsın — düz hat ama nefes alan bir yay hissi.
-    final lift = -2.0 * (1 - (2 * t - 1).abs());
+    // Ufkun üstündeyse nöbette: dolgun ve haleli. Altındayken yer altında —
+    // soluk bir iz olarak kalır (kovalamaca okunsun ama göz takip etmesin).
+    final h = math.sin(angle); // +1 tepe, 0 ufuk, -1 dip
+    final up = ((h + 0.12) / 0.24).clamp(0.0, 1.0); // ufuk çevresinde yumuşak geçiş
+    final a = 0.24 + 0.76 * up;
+    final r = (isSun ? 5.2 : 4.4) * (0.75 + 0.25 * up);
 
-    // Nöbetteki cisim parlak ve dolgun; diğeri hattın gerisinde soluk bir iz —
-    // görünür kalır (kovalamaca okunsun) ama göz onu takip etmez.
-    final active = (isSun ? dayLight : 1 - dayLight).clamp(0.0, 1.0);
-    final glow = 0.2 + 0.8 * active;
-    final a = vis * (0.22 + 0.78 * active);
-    final c = Offset(x, y + lift - 6);
-    final r = (isSun ? 5.5 : 4.6) * (0.78 + 0.22 * active);
-
-    // Hale — nabızla çok hafif nefes alır.
-    final halo = (r * 2.6) * (1 + 0.06 * (pulse * 2 - 1));
+    // Hale — nabızla çok hafif nefes alır; gündüz/gece nöbetiyle güçlenir.
+    final glow = 0.2 + 0.8 * up;
     canvas.drawCircle(
-      c,
-      halo,
+      p,
+      (r * 2.6) * (1 + 0.06 * (pulse * 2 - 1)),
       Paint()
-        ..color = color.withValues(alpha: 0.16 * a * glow)
+        ..color = color.withValues(alpha: 0.18 * a * glow)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
-    canvas.drawCircle(c, r, Paint()..color = color.withValues(alpha: a));
+    canvas.drawCircle(p, r, Paint()..color = color.withValues(alpha: a));
 
     if (!isSun) {
       // Ayın gölgeli tarafı — küçük bir hilal ısırığı.
       canvas.drawCircle(
-        c.translate(r * 0.45, -r * 0.25),
+        p.translate(r * 0.45, -r * 0.25),
         r * 0.82,
-        Paint()..color = const Color(0xFF12100D).withValues(alpha: a * 0.75),
+        Paint()..color = const Color(0xFF12100D).withValues(alpha: a * 0.8),
       );
     }
-
-    // Hat üzerinde bıraktığı iz — cismin altındaki hattı kendi rengiyle yakar.
-    canvas.drawLine(
-      Offset(x - 9, y), Offset(x + 9, y),
-      Paint()
-        ..strokeWidth = 1.6
-        ..strokeCap = StrokeCap.round
-        ..color = color.withValues(alpha: 0.30 * a),
-    );
   }
 
   @override

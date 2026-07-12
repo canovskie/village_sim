@@ -608,20 +608,30 @@ class VillagerEntity extends WorkerEntity {
       case VillagerType.merchant:   return 0.9;
       case VillagerType.blacksmith: return 0.8;
       case VillagerType.guard:      return 1.6;
-      case VillagerType.mage:       return 0.7;
+      case VillagerType.priest:     return 0.7; // ağır, ölçülü adım
       case VillagerType.miner:      return 0.85;
       case VillagerType.fisher:     return 1.1;
+      case VillagerType.shepherd:   return 1.0;  // sürünün temposu
+      case VillagerType.hunter:     return 1.45; // sessiz ve çevik
+      case VillagerType.miller:     return 0.9;
+      case VillagerType.innkeeper:  return 0.95;
     }
   }
 
   static WanderBehavior _behaviorFor(VillagerType t) => switch (t) {
         VillagerType.guard      => WanderBehavior.patrol,
-        VillagerType.mage       => WanderBehavior.ponder,
+        VillagerType.priest     => WanderBehavior.ponder,
         VillagerType.merchant   => WanderBehavior.stroll,
         VillagerType.farmer     => WanderBehavior.stroll,
         VillagerType.blacksmith => WanderBehavior.homebody,
         VillagerType.miner      => WanderBehavior.homebody,
         VillagerType.fisher     => WanderBehavior.waterside,
+        // Çoban + avcı köyün dışına açılır (geniş roam) — sürü/orman peşinde.
+        VillagerType.shepherd   => WanderBehavior.stroll,
+        VillagerType.hunter     => WanderBehavior.patrol,
+        // Değirmenci + hancı işinin başında durur.
+        VillagerType.miller     => WanderBehavior.homebody,
+        VillagerType.innkeeper  => WanderBehavior.homebody,
       };
 
   // ── Kişilik parametreleri (etkin davranışa göre) ───────────────────────────

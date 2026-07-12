@@ -112,7 +112,7 @@ const Cutscene kOpeningCutscene = Cutscene([
       CutsceneActor(type: VillagerType.guard, seed: 21, fromX: -0.85, toX: 0.66, y: 0.86, scale: 1.2, walk: true),
       CutsceneActor(type: VillagerType.merchant, seed: 3, fromX: -0.62, toX: 0.52, y: 0.80, scale: 1.05, walk: true),
       CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: -0.42, toX: 0.36, y: 0.82, scale: 1.1, walk: true),
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: -0.22, toX: 0.20, y: 0.78, scale: 1.0, walk: true),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: -0.22, toX: 0.20, y: 0.78, scale: 1.0, walk: true),
     ],
     lines: [
       CutsceneLine(
@@ -126,7 +126,7 @@ const Cutscene kOpeningCutscene = Cutscene([
     zoomFrom: 1.0,
     zoomTo: 1.05,
     actors: [
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.42, y: 0.80, scale: 1.6),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.42, y: 0.80, scale: 1.6),
     ],
     lines: [
       CutsceneLine('Merhaba, yolcu. Ben Maple — bu kafileye yıllardır yol gösteririm.',
@@ -143,7 +143,7 @@ const Cutscene kOpeningCutscene = Cutscene([
     zoomTo: 1.04,
     gate: CutsceneGate.nameVillage,
     actors: [
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
     ],
     lines: [
       CutsceneLine('Söyle bakalım — bu yuvaya ne ad verelim?', speaker: 'Maple'),
@@ -156,7 +156,7 @@ const Cutscene kOpeningCutscene = Cutscene([
     zoomFrom: 1.0,
     zoomTo: 1.04,
     actors: [
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
     ],
     lines: [
       CutsceneLine('Güzel isim. Bir köy, tek bir kıvılcımla başlar.', speaker: 'Maple'),
@@ -177,7 +177,7 @@ const Cutscene kFireLightingCutscene = Cutscene([
     zoomTo: 1.0,
     actors: [
       CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.34, y: 0.80, scale: 1.4, flip: true),
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.66, y: 0.80, scale: 1.45),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.66, y: 0.80, scale: 1.45),
     ],
     lines: [
       CutsceneLine('İlk ateş tutuştu — karanlık vadi bir anda bir yuvaya dönüştü.'),
@@ -222,7 +222,7 @@ const Cutscene _kTier2Cutscene = Cutscene([
     zoomTo: 1.0,
     actors: [
       CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.30, y: 0.82, scale: 1.25, flip: true),
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.50, y: 0.80, scale: 1.3),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.50, y: 0.80, scale: 1.3),
       CutsceneActor(type: VillagerType.guard, seed: 21, fromX: 0.70, y: 0.82, scale: 1.25),
     ],
     lines: [
@@ -241,7 +241,7 @@ const Cutscene _kTier3Cutscene = Cutscene([
     actors: [
       CutsceneActor(type: VillagerType.merchant, seed: 3, fromX: 0.24, y: 0.84, scale: 1.2, flip: true),
       CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.44, y: 0.82, scale: 1.3),
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.62, y: 0.80, scale: 1.3, flip: true),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.62, y: 0.80, scale: 1.3, flip: true),
       CutsceneActor(type: VillagerType.guard, seed: 21, fromX: 0.78, y: 0.84, scale: 1.2),
     ],
     lines: [
@@ -268,7 +268,7 @@ const Cutscene kFamineCutscene = Cutscene([
     zoomTo: 1.0,
     actors: [
       CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.42, y: 0.82, scale: 1.3),
-      CutsceneActor(type: VillagerType.mage, seed: 7, fromX: 0.62, y: 0.80, scale: 1.25, flip: true),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.62, y: 0.80, scale: 1.25, flip: true),
     ],
     lines: [
       CutsceneLine('Yağmurlar geç kaldı, ambarlar boşaldı.'),

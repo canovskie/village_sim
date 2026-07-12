@@ -13,6 +13,7 @@ import '../systems/estate_system.dart';
 import '../systems/house_system.dart';
 import '../systems/petition_system.dart';
 import '../ui/app_ui.dart';
+import '../scene/scene_data.dart';
 import '../ui/divan_panel.dart';
 
 final GlobalKey _key = GlobalKey();
@@ -128,6 +129,14 @@ Future<void> main() async {
               onOpenPetition: () {},
               onConvene: (_) {},
               councilReady: ready,
+              // KARAR DEFTERİ sekmesi (belediye binasından taşındı).
+              policies: VillagePolicies(),
+              onTogglePolicy: (_) {},
+              onSetFamilyPolicy: (_) {},
+              policyCooldownSec: 0,
+              initialTab: int.tryParse(
+                      Platform.environment['DIVAN_TAB'] ?? '0') ??
+                  0,
               onClose: () {},
             ),
           ],
@@ -137,7 +146,7 @@ Future<void> main() async {
   ));
 
   await Future<void>.delayed(const Duration(milliseconds: 1600));
-  await _capture('/tmp/divan${ready ? '' : '_cooldown'}.png');
+  await _capture('/tmp/divan_tab${Platform.environment['DIVAN_TAB'] ?? '0'}.png');
   exit(0);
 }
 

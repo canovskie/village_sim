@@ -251,48 +251,6 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
-  /// Keşif mini-haritası — sisli orman sahnede görünmez; burada üstten sahip
-  /// olunan toprak + göl/maden konumları öğrenilir. Orman varken (bottom-left).
-  Widget buildDiscoveryMinimap() {
-    if (_wilderness.isEmpty) return const SizedBox.shrink();
-    final oreMarkers = <(int, int, Color)>[
-      for (final n in _mineNodes)
-        if (!n.isDepleted)
-          (
-            n.col,
-            n.row,
-            switch (n.type) {
-              OreType.iron => const Color(0xFFC2CAD2),
-              OreType.coal => const Color(0xFF4A4A52),
-              _ => const Color(0xFFB09A7C),
-            }
-          ),
-    ];
-    return Positioned(
-      left: 14,
-      bottom: 56,
-      child: DiscoveryMinimap(
-        cleared: _cleared,
-        water: _waterTiles,
-        oreMarkers: oreMarkers,
-      ),
-    );
-  }
-
-  /// Açılım pusulası — otonom orman kesiminin yönünü belirler. Yalnız açılacak
-  /// orman varken görünür (bottom-right köşe).
-  Widget buildExpandCompass() {
-    if (_wilderness.isEmpty) return const SizedBox.shrink();
-    return Positioned(
-      right: 22,
-      bottom: 150,
-      child: ExpandCompass(
-        dir: _expandDir,
-        onSet: (d) => setStateHere(() => _expandDir = d),
-      ),
-    );
-  }
-
   // ── Alt araç çubuğu: bina/yol panel + Tarla/Kes/Kaz mode butonları ────────
 
   Widget buildBottomToolbar() {
@@ -589,22 +547,14 @@ extension _SceneUi on _VillageSceneState {
         planning: selected.type == BuildingType.townhall
             ? _computePopulationPlanning()
             : null,
-        policies: selected.type == BuildingType.townhall ? _policies : null,
-        onTogglePolicy: selected.type == BuildingType.townhall
-            ? _togglePolicy
+        // Yönetişim (Karar Defteri + hane nabzı) Divan'a taşındı — belediye
+        // panelinde yalnız oraya açılan kapı kalır.
+        onOpenDivan: selected.type == BuildingType.townhall
+            ? () => setStateHere(() {
+                  _selectedBuilding = null;
+                  _divanOpen = true;
+                })
             : null,
-        onSetFamilyPolicy: selected.type == BuildingType.townhall
-            ? _setFamilyPolicy
-            : null,
-        policyCooldownSec: selected.type == BuildingType.townhall
-            ? _policyCooldownRemaining()
-            : 0,
-        houses: selected.type == BuildingType.townhall
-            ? _houses.snapshot()
-            : null,
-        villageIdentity:
-            selected.type == BuildingType.townhall ? _houses.identityName : null,
-        identityBonus: null,
                 ),
               ),
             ),

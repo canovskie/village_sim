@@ -616,6 +616,8 @@ enum GameIconData {
   wood, stone, iron, coal, wheat, coin, honey, drop, reed,
   // insan / iş
   people, axe, pickaxe, fish, hammer,
+  // meslek (rahip / çoban / avcı / değirmenci / hancı)
+  church, herd, bow, mill, tankard,
   // hava
   sun, moon, rain, storm, dawn,
   // aksiyon
@@ -667,6 +669,12 @@ IconData _glyph(GameIconData i) {
     case GameIconData.pickaxe:   return PhosphorIcons.shovel(fill);
     case GameIconData.fish:      return PhosphorIcons.fish(fill);
     case GameIconData.hammer:    return PhosphorIcons.hammer(fill);
+    // meslek
+    case GameIconData.church:    return PhosphorIcons.church(fill);
+    case GameIconData.herd:      return PhosphorIcons.cow(fill);
+    case GameIconData.bow:       return PhosphorIcons.crosshair(fill);
+    case GameIconData.mill:      return PhosphorIcons.windmill(fill);
+    case GameIconData.tankard:   return PhosphorIcons.beerStein(fill);
     // hava
     case GameIconData.sun:       return PhosphorIcons.sun(fill);
     case GameIconData.moon:      return PhosphorIcons.moon(fill);

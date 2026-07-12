@@ -16,7 +16,7 @@ enum Estate {
   /// 🔨 Tüccar + demirci — pazarın, zanaatın, keseyi dolduranların sesi.
   artisans('Zanaatkârlar', '🔨', 'Zanaat Kasabası'),
 
-  /// 🕯️ Büyücü + inananlar (cult/kilise) — inancın, ayinin, mananın sesi.
+  /// 🕯️ Rahip + inananlar (cult/kilise) — inancın, ayinin, duanın sesi.
   faithful('İnananlar', '🕯️', 'Kutsal Köy'),
 
   /// 🏡 Yaşlılar + aileler + ocağı bekleyenler — gelenek ve yuva sesi.
@@ -39,14 +39,18 @@ Estate estateOfVillager(VillagerType type, LifeStage stage) {
     case VillagerType.farmer:
     case VillagerType.miner:
     case VillagerType.fisher:
+    case VillagerType.shepherd: // sürünün peşinde, toprağın sesi
+    case VillagerType.hunter:   // ormanın emekçisi
       return Estate.laborers;
     case VillagerType.merchant:
     case VillagerType.blacksmith:
+    case VillagerType.miller:   // un öğütür, pazara katar
       return Estate.artisans;
-    case VillagerType.mage:
+    case VillagerType.priest:
       return Estate.faithful;
     case VillagerType.guard:
-      return Estate.hearth; // yuvanın bekçisi
+    case VillagerType.innkeeper: // han = köyün ikinci ocağı, konuğu ağırlar
+      return Estate.hearth;
   }
 }
 
