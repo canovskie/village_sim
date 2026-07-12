@@ -174,6 +174,15 @@ const List<PolicyDef> kPolicyDefs = [
       category: PolicyCategory.community,
       estateMood: [(Estate.artisans, 0.10), (Estate.laborers, 0.04), (Estate.faithful, -0.03)]),
   PolicyDef(
+      id: 'tradeGuidance',
+      icon: '🎯',
+      label: 'Zanaat Yönlendirmesi',
+      desc: 'Gençler köyün eksik kalan mesleklerine yönlendirilir.',
+      benefit: 'Kıt zanaatlar el bulur, köy dengelenir',
+      cost: 'Gönlü başka işte olanlar küser',
+      category: PolicyCategory.community,
+      estateMood: [(Estate.artisans, 0.08), (Estate.laborers, 0.05), (Estate.hearth, -0.05)]),
+  PolicyDef(
       id: 'neighborliness',
       icon: '👋',
       label: 'Komşuluk',
@@ -208,6 +217,15 @@ const List<PolicyDef> kPolicyDefs = [
       cost: 'Hiçbir tarla da öne geçemez',
       category: PolicyCategory.economy,
       estateMood: [(Estate.laborers, 0.08), (Estate.artisans, -0.04)]),
+  PolicyDef(
+      id: 'cropRotation',
+      icon: '🌱',
+      label: 'Dönemli ekim',
+      desc: 'Tarlalar sırayla dinlendirilir — toprak bereketlenir, balya başına hasat artar.',
+      benefit: 'Hasat verimi kalıcı +%20',
+      cost: 'Tohum/emek planlaması ister, pazar payı biraz daralır',
+      category: PolicyCategory.economy,
+      estateMood: [(Estate.laborers, 0.07), (Estate.artisans, -0.04)]),
   PolicyDef(
       id: 'herdGrowth',
       icon: '🐄',
@@ -264,6 +282,9 @@ class VillagePolicies {
   /// Çıraklık: bebekler rastgele meslek almak yerine baba ya da annenin
   /// mesleğini öğrenir — "demirci oğlu demirci" hissi.
   bool apprenticeship;
+  /// Zanaat yönlendirmesi: doğan/yetişen gençler kendi çağrıları yerine köyün
+  /// en eksik mesleğine yönlendirilir (çağrısı tutmazsa kırgınlık doğar).
+  bool tradeGuidance;
   /// Geç olgunlaşma: yaşam evresi geçişleri 1.6× yavaş ilerler (çocukluk
   /// uzar, işgücüne katılım gecikir).
   bool slowMaturity;
@@ -278,6 +299,8 @@ class VillagePolicies {
   /// Müşterek hasat: geride kalan tarlalar geçici bonus growth rate alır,
   /// tarlalar dengeli ilerler.
   bool sharedHarvest;
+  /// Dönemli ekim: balya→yiyecek veriminde kalıcı +%20 (toprak dinlenir).
+  bool cropRotation;
   /// Yeşil köy: her tamamlanan binanın çevresine küçük çiçek/çalı kümesi.
   bool greenVillage;
   /// Otlama serbest: hayvan wander radius +50%.
@@ -297,11 +320,13 @@ class VillagePolicies {
     this.eldersExemptFromFood = false,
     this.hospitality = false,
     this.apprenticeship = false,
+    this.tradeGuidance = false,
     this.slowMaturity = false,
     this.neighborliness = false,
     this.familyReunion = false,
     this.treePlanting = false,
     this.sharedHarvest = false,
+    this.cropRotation = false,
     this.greenVillage = false,
     this.freeRange = false,
     this.herdGrowth = false,
@@ -316,9 +341,10 @@ class VillagePolicies {
     var n = family != FamilyPolicy.open ? 1 : 0;
     for (final id in const [
       'familyEncouragement', 'peacefulEnd', 'eldersExemptFromFood',
-      'hospitality', 'apprenticeship', 'slowMaturity', 'neighborliness',
-      'familyReunion', 'treePlanting', 'sharedHarvest', 'greenVillage',
-      'freeRange', 'herdGrowth', 'winterFodder',
+      'hospitality', 'apprenticeship', 'tradeGuidance', 'slowMaturity',
+      'neighborliness',
+      'familyReunion', 'treePlanting', 'sharedHarvest', 'cropRotation',
+      'greenVillage', 'freeRange', 'herdGrowth', 'winterFodder',
     ]) {
       if (isOn(id)) n++;
     }
@@ -339,11 +365,13 @@ class VillagePolicies {
         'eldersExemptFromFood' => eldersExemptFromFood,
         'hospitality' => hospitality,
         'apprenticeship' => apprenticeship,
+        'tradeGuidance' => tradeGuidance,
         'slowMaturity' => slowMaturity,
         'neighborliness' => neighborliness,
         'familyReunion' => familyReunion,
         'treePlanting' => treePlanting,
         'sharedHarvest' => sharedHarvest,
+        'cropRotation' => cropRotation,
         'greenVillage' => greenVillage,
         'freeRange' => freeRange,
         'herdGrowth' => herdGrowth,

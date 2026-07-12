@@ -34,14 +34,6 @@ class TileRenderer {
     Paint()..color = const Color(0xFF9A8B5C)..isAntiAlias = false, // 7
   ];
 
-  // Tile kenar çizgisi — düşük alpha, "grid" hissini azaltır ama tile
-  // sınırını hâlâ görünür tutar.
-  static final _border = Paint()
-    ..color       = const Color(0x22000000)
-    ..style       = PaintingStyle.stroke
-    ..strokeWidth = 1
-    ..isAntiAlias = false;
-
   // Dekor paint havuzu — sabit renkler
   static final _pFlowerYellow = Paint()..color = const Color(0xFFEED854)..isAntiAlias = false;
   static final _pFlowerRed    = Paint()..color = const Color(0xFFE0432E)..isAntiAlias = false;
@@ -71,7 +63,10 @@ class TileRenderer {
       final bytes = await rootBundle.load(path);
       final codec  = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
       final frame  = await codec.getNextFrame();
-      return await AssetStyle.softenAtLoad(frame.image);
+      // Tile = kenar kenara döşenir → clamp (opak kenar), yoksa solan saydam
+      // kenarlar bitişik kareler arası açık dikiş çizgisi yapar.
+      return await AssetStyle.softenAtLoad(frame.image,
+          tileMode: TileMode.clamp);
     } catch (e) {
       debugPrint('TileRenderer: $path yüklenemedi — $e');
       return null;
@@ -84,10 +79,10 @@ class TileRenderer {
       double hw, double hh, int col, int row, {double zoom = 1.0}) {
     final img = _grass;
 
-    // ── Bleed: tile diamond'ı 1 px dışa taşırılır → komşularla overlap,
-    // zoom transform sonrası sub-pixel kayma olsa bile gap kalmaz, arka plan
-    // (sky/scaffold mavisi) sızmaz.
-    const b = 1.0;
+    // ── Bleed: tile diamond'ı dışa taşırılır → komşu tile'lar bu kadar üst
+    // üste biner. Zemin Picture'ı zoom'la küçülünce alt-piksel kayma/dikiş
+    // kalmaz VE tile'lar kesintisiz birleşir (ayrı kenar çizgisi/grid yok).
+    const b = 2.0;
     _diamond
       ..reset()
       ..moveTo(px,          py - b)
@@ -108,19 +103,19 @@ class TileRenderer {
     // ── LOD 0: çok uzaktan — yalnızca düz dolgu, görsel fark yok ──────────
     if (zoom < 0.5 || img == null) {
       canvas.drawPath(_diamond, _fillVariants[variant]);
-      if (zoom >= 0.3) canvas.drawPath(_diamond, _border);
       return;
     }
 
-    // ── LOD 1+2: image-clipped tile + border ──────────────────────────────
+    // ── Image-clipped tile (bleed diamond, kenar çizgisi YOK) ─────────────
+    // _diamond bleed'li; dst aynı oranda şişirilir ki kırpılan köşelerde
+    // saydam dikiş kalmasın (clamp kenar pikseli hafif uzar). Komşu tile'lar
+    // bleed kadar üst üste biner → kesintisiz çayır, ızgara çizgisi yok.
     canvas.save();
     canvas.clipPath(_diamond);
-    final dst = Rect.fromLTWH(px - hw, py, hw * 2, hh * 2);
+    final dst = Rect.fromLTWH(px - hw - b, py - b, (hw + b) * 2, (hh + b) * 2);
     final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
     canvas.drawImageRect(img, src, dst, _imgVariants[variant]);
     canvas.restore();
-
-    canvas.drawPath(_diamond, _border);
 
     // ── LOD 2: yakından — dekor (zoom < 0.8'de görünmüyor zaten) ──────────
     if (zoom >= 0.8) {

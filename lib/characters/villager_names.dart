@@ -21,3 +21,24 @@ String randomVillagerName(Random rng, {required bool male}) {
   final pool = male ? _kMaleNames : _kFemaleNames;
   return pool[rng.nextInt(pool.length)];
 }
+
+/// Hane (soy) adı havuzu — "her soy bir hane". Kurucu/göçmen yeni bir hane
+/// açar; doğan çocuk baba (yoksa anne) tarafının hanesini miras alır.
+const List<String> _kSurnames = [
+  'Demirhan', 'Akpınar', 'Karaca', 'Yıldırım', 'Gündoğdu', 'Yeşilova',
+  'Boztepe', 'Çakır', 'Karaağaç', 'Aydın', 'Seferoğlu', 'Doğan',
+  'Toprak', 'Korkut', 'Alpay', 'Bozok', 'Sarıca', 'Demirtaş',
+  'Yörük', 'Uçar', 'Duran', 'Bağcı',
+];
+
+/// Yeni bir soyun (kurucu/göçmen) hane adını rastgele seçer.
+String randomVillagerSurname(Random rng) =>
+    _kSurnames[rng.nextInt(_kSurnames.length)];
+
+/// [count] kadar FARKLI hane adı seç — kurucular aynı haneye düşmesin. Havuz
+/// yetmezse (çok nadir) sondan tekrar eder.
+List<String> pickDistinctSurnames(Random rng, int count) {
+  final pool = List<String>.of(_kSurnames)..shuffle(rng);
+  if (count <= pool.length) return pool.sublist(0, count);
+  return [for (var i = 0; i < count; i++) pool[i % pool.length]];
+}

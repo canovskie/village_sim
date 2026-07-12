@@ -6,6 +6,7 @@ import 'building_type.dart';
 import '../rendering/asset_style.dart';
 import '../rendering/flame_renderer.dart';
 import '../rendering/smoke_renderer.dart';
+import '../rendering/water_shimmer_renderer.dart';
 
 class BuildingRenderer {
   // ── Sprite önbelleği ────────────────────────────────────────────────────────
@@ -24,6 +25,9 @@ class BuildingRenderer {
   // Tüm bina sprite'larını asenkron yükle. main.dart initState'te çağrılır.
   static Future<void> loadAll() async {
     await _loadSprite(BuildingType.woodenHouse, 'assets/buildings/minihouse.png');
+    await _loadSprite(BuildingType.stoneHouseBlue,  'assets/buildings/stonehouse_blue.png');
+    await _loadSprite(BuildingType.stoneHouseGreen, 'assets/buildings/stonehouse_green.png');
+    await _loadSprite(BuildingType.manor,           'assets/buildings/manor.png');
     await _loadSprite(BuildingType.mill,        'assets/buildings/mill.png');
     await _loadSprite(BuildingType.stable,      'assets/buildings/stable.png');
     await _loadSprite(BuildingType.well,        'assets/buildings/well.png');
@@ -35,8 +39,7 @@ class BuildingRenderer {
     await _loadSprite(BuildingType.firepit,      'assets/buildings/firepit.png');
     await _loadSprite(BuildingType.lumberCamp,   'assets/buildings/lumberjack.png');
     await _loadSprite(BuildingType.mineBuilding, 'assets/buildings/mine.png');
-    // TODO: dedicated barn.png — şimdilik stable.png'yi paylaşır.
-    await _loadSprite(BuildingType.barn,         'assets/buildings/stable.png');
+    await _loadSprite(BuildingType.barn,         'assets/buildings/barn.png');
     await _loadSprite(BuildingType.floristCottage, 'assets/buildings/floristcottage.png');
     await _loadSprite(BuildingType.chickenCoop,    'assets/buildings/chickencoop.png');
     await _loadSprite(BuildingType.lamppost,       'assets/buildings/lamppost.png');
@@ -45,7 +48,33 @@ class BuildingRenderer {
     await _loadSprite(BuildingType.beehive,        'assets/buildings/beehive.png');
     // church.png gelince procedurel şapel yerine sprite çizilir; yoksa fallback.
     await _loadSprite(BuildingType.church,         'assets/buildings/church.png');
+    // tent.png gelince procedurel çadır yerine sprite çizilir; yoksa fallback.
+    await _loadSprite(BuildingType.tent,           'assets/buildings/tent.png');
+    // Köy Meydanı & Kültür Mahallesi — PNG gelene kadar prosedürel placeholder
+    // (_drawCivicPlaceholder). Dosya yoksa _loadSprite sessizce başarısız olur.
+    await _loadSprite(BuildingType.fountain,       'assets/buildings/fountain.png');
+    await _loadSprite(BuildingType.library,        'assets/buildings/library.png');
+    await _loadSprite(BuildingType.bathhouse,      'assets/buildings/bathhouse.png');
+    await _loadSprite(BuildingType.monument,       'assets/buildings/monument.png');
+    // Liman & Ziyaret Mahallesi — PNG gelene kadar prosedürel placeholder.
+    await _loadSprite(BuildingType.dock,           'assets/buildings/dock.png');
+    await _loadSprite(BuildingType.caravanserai,   'assets/buildings/caravanserai.png');
+    await _loadSprite(BuildingType.shrine,         'assets/buildings/shrine.png');
+    await _loadSprite(BuildingType.belltower,      'assets/buildings/belltower.png');
   }
+
+  /// PNG'si henüz gelmemiş kültür mahallesi binaları için prosedürel kutu
+  /// placeholder çizilir (footprint'e oturur, türe göre renk + harf).
+  static const Set<BuildingType> _civicPlaceholders = {
+    BuildingType.fountain,
+    BuildingType.library,
+    BuildingType.bathhouse,
+    BuildingType.monument,
+    BuildingType.dock,
+    BuildingType.caravanserai,
+    BuildingType.shrine,
+    BuildingType.belltower,
+  };
 
   static Future<void> _loadSprite(BuildingType type, String path) async {
     try {
@@ -94,6 +123,16 @@ class BuildingRenderer {
       _drawChurch(canvas, back, left, right, front, time, seed);
       return;
     }
+    // Çadır — tent.png gelene kadar procedurel A-frame bez çadır.
+    if (type == BuildingType.tent && !_cache.containsKey(type)) {
+      _drawTent(canvas, back, left, right, front, time, seed);
+      return;
+    }
+    // Kültür mahallesi — PNG gelene kadar prosedürel kutu placeholder.
+    if (_civicPlaceholders.contains(type) && !_cache.containsKey(type)) {
+      _drawCivicPlaceholder(canvas, type, back, left, right, front, time);
+      return;
+    }
 
     final img  = _cache[type];
     final meta = kBuildingMeta[type];
@@ -105,6 +144,10 @@ class BuildingRenderer {
       _drawAmbientGlow(canvas, type, img, left, right, front, meta, dayLight, time, seed);
     }
     _drawSprite(canvas, img, left, right, front, meta.groundY, meta.groundXCenter, meta.spriteScale);
+    // Su parlaması — şadırvan havuzu / hamam kanalı sprite üstüne işlenir.
+    if (!perfMode) {
+      _drawWaterShimmer(canvas, type, img, left, right, front, meta, dayLight, time, seed);
+    }
     if (!perfMode) {
       _drawLights(canvas, type, img, left, right, front, meta, dayLight, time, seed);
     }
@@ -117,8 +160,13 @@ class BuildingRenderer {
             chimneys, dayLight, rainIntensity: rainIntensity);
       }
 
-      if (isActive) {
+      // Değirmen kendi ÇOK hafif un tozunu alır (aşağıda); jenerik tepe dumanı
+      // ondan çıkarılır — iki tepe efekti kalabalık olmasın (baca zaten ambient).
+      if (isActive && type != BuildingType.mill) {
         _drawActiveSmoke(canvas, img, left, right, front, meta, time, seed);
+      }
+      if (isActive && type == BuildingType.mill) {
+        _drawMillFlourDust(canvas, img, left, right, front, meta, time, seed);
       }
     }
 
@@ -466,6 +514,196 @@ class BuildingRenderer {
     if (time < 0 || seed < 0) {} // unused tick/seed
   }
 
+  // ── Çadır (procedurel A-frame bez çadır) ───────────────────────────────────
+  // İlkel barınak: iki eğik bez panel sırtta birleşir, önde koyu kapı yarığı,
+  // tepede çapraz sırıklar + minik flama (rüzgârda sallanır). Işık soldan →
+  // sol panel açık, sağ panel gölgeli. tent.png gelince _cache hit ile atlanır.
+  static void _drawTent(Canvas canvas,
+      Offset back, Offset left, Offset right, Offset front,
+      double time, int seed) {
+    final cx     = (back.dx + front.dx) / 2;
+    final cyTile = (left.dy + right.dy) / 2;
+    final tileW  = (right.dx - left.dx).abs();
+    final s      = tileW / 64.0;
+
+    const cloth      = Color(0xFFD9C9A6); // ham bez krem
+    const clothShade = Color(0xFFB29A74); // gölge yüz
+    const clothDark  = Color(0xFF8A7553); // taban/ek dikiş
+    const pole       = Color(0xFF6E4E2E); // ahşap sırık
+    const doorDark   = Color(0xFF2A2018); // kapı içi karanlık
+    const flag       = Color(0xFFB5503A); // kiremit flama
+
+    final fill = Paint()..isAntiAlias = true;
+
+    final baseY = cyTile + 4 * s;        // zemin çizgisi (hafif aşağı)
+    final halfW = 15.0 * s;              // taban yarı genişliği
+    final height = 26.0 * s;             // sırt yüksekliği
+    final ridgeX = cx + 2.0 * s;         // sırt hafif sağda (iso derinlik)
+    final ridgeY = baseY - height;
+
+    // Zemin gölgesi
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, baseY + 1 * s), width: 34 * s, height: 11 * s),
+      Paint()..color = const Color(0x33000000)..isAntiAlias = true);
+
+    // 1) Sağ (arka) bez yüzü — gölgeli, hafif derinlik için sağa kayık.
+    final rightFace = Path()
+      ..moveTo(ridgeX, ridgeY)
+      ..lineTo(cx + halfW, baseY)
+      ..lineTo(cx + halfW * 0.55, baseY)
+      ..lineTo(ridgeX - 3 * s, ridgeY + 2 * s)
+      ..close();
+    fill.color = clothShade;
+    canvas.drawPath(rightFace, fill);
+
+    // 2) Sol (ön) bez yüzü — aydınlık ana panel (geniş üçgen).
+    final leftFace = Path()
+      ..moveTo(ridgeX, ridgeY)
+      ..lineTo(cx - halfW, baseY)
+      ..lineTo(cx + halfW, baseY)
+      ..close();
+    fill.color = cloth;
+    canvas.drawPath(leftFace, fill);
+
+    // 3) Taban dikiş bandı (koyu) — bezin yere oturduğu kalın kenar.
+    canvas.drawRect(
+      Rect.fromLTWH(cx - halfW, baseY - 1.5 * s, halfW * 2, 2.2 * s),
+      Paint()..color = clothDark..isAntiAlias = true);
+
+    // 4) Ön kapı yarığı — ortada, alttan yukarı daralan koyu üçgen.
+    final door = Path()
+      ..moveTo(cx, ridgeY + height * 0.30)
+      ..lineTo(cx - 5 * s, baseY - 1 * s)
+      ..lineTo(cx + 5 * s, baseY - 1 * s)
+      ..close();
+    fill.color = doorDark;
+    canvas.drawPath(door, fill);
+    // Kapı bezi kıvrımı (sol kapak hafif açık)
+    final flapPaint = Paint()
+      ..color = clothShade
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4 * s
+      ..isAntiAlias = true;
+    canvas.drawLine(Offset(cx, ridgeY + height * 0.30),
+        Offset(cx - 5 * s, baseY - 1 * s), flapPaint);
+
+    // 5) Sırt çizgisi (ridge hairline) — bezin tepe ek yeri.
+    canvas.drawLine(Offset(ridgeX, ridgeY), Offset(cx, baseY - 1 * s),
+        Paint()
+          ..color = clothDark
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0 * s
+          ..isAntiAlias = true);
+
+    // 6) Çapraz sırıklar — tepede X yapıp dışarı taşar.
+    final polePaint = Paint()
+      ..color = pole
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6 * s
+      ..isAntiAlias = true;
+    canvas.drawLine(Offset(ridgeX - 4 * s, ridgeY - 5 * s),
+        Offset(cx - halfW * 0.7, baseY), polePaint);
+    canvas.drawLine(Offset(ridgeX + 4 * s, ridgeY - 5 * s),
+        Offset(ridgeX + 1 * s, baseY), polePaint);
+
+    // 7) Minik flama — sırık tepesinde rüzgârda dalgalanır.
+    final fx = ridgeX;
+    final fy = ridgeY - 5 * s;
+    final wave = sin(time * 2.3 + seed * 0.5) * 2.0 * s;
+    final pennant = Path()
+      ..moveTo(fx, fy)
+      ..lineTo(fx + 9 * s + wave, fy + 1.5 * s)
+      ..lineTo(fx, fy + 4 * s)
+      ..close();
+    fill.color = flag;
+    canvas.drawPath(pennant, fill);
+  }
+
+  // ── Kültür mahallesi placeholder (prosedürel kutu) ──────────────────────────
+  // PNG gelene kadar binayı footprint'e oturan basit izometrik kutu olarak çizer:
+  // taban diamond → yukarı ekstrüzyon (2 yan duvar + üst yüz) + türe göre renk +
+  // ortada baş harf. PNG yüklenince _cache hit ile bu dal atlanır.
+  static void _drawCivicPlaceholder(Canvas canvas, BuildingType type,
+      Offset back, Offset left, Offset right, Offset front, double time) {
+    // Türe göre renk + etiket.
+    final (Color roof, Color wall, String tag) = switch (type) {
+      BuildingType.fountain  => (const Color(0xFF5B86A6), const Color(0xFF8FB3C9), 'Ş'),
+      BuildingType.library   => (const Color(0xFF8A5A33), const Color(0xFFBE9468), 'K'),
+      BuildingType.bathhouse => (const Color(0xFF3F8C86), const Color(0xFF77B6B0), 'H'),
+      BuildingType.monument  => (const Color(0xFF8C8470), const Color(0xFFBFB8A6), 'A'),
+      BuildingType.dock         => (const Color(0xFF6E4E2E), const Color(0xFF9A7A4E), 'İ'),
+      BuildingType.caravanserai => (const Color(0xFF9C7B4A), const Color(0xFFC9A877), 'H'),
+      BuildingType.shrine       => (const Color(0xFF3F8C86), const Color(0xFF77B6B0), 'T'),
+      BuildingType.belltower    => (const Color(0xFF8C8470), const Color(0xFFBFB8A6), 'Ç'),
+      _                      => (const Color(0xFF777777), const Color(0xFFAAAAAA), '?'),
+    };
+    final tileW = (right.dx - left.dx).abs();
+    final h = tileW * 0.55; // duvar yüksekliği (footprint ile orantılı)
+    Offset up(Offset o) => Offset(o.dx, o.dy - h);
+
+    // Zemin gölgesi (footprint diamond).
+    final shadow = Path()
+      ..moveTo(back.dx, back.dy)
+      ..lineTo(right.dx, right.dy)
+      ..lineTo(front.dx, front.dy)
+      ..lineTo(left.dx, left.dy)
+      ..close();
+    canvas.drawPath(shadow, Paint()..color = const Color(0x33000000)..isAntiAlias = true);
+
+    final fill = Paint()..isAntiAlias = true;
+    // Sol-ön duvar (left→front yüzü, gölgeli).
+    fill.color = _shade(wall, 0.80);
+    canvas.drawPath(Path()
+      ..moveTo(left.dx, left.dy)
+      ..lineTo(front.dx, front.dy)
+      ..lineTo(up(front).dx, up(front).dy)
+      ..lineTo(up(left).dx, up(left).dy)
+      ..close(), fill);
+    // Sağ-ön duvar (front→right yüzü, aydınlık).
+    fill.color = wall;
+    canvas.drawPath(Path()
+      ..moveTo(front.dx, front.dy)
+      ..lineTo(right.dx, right.dy)
+      ..lineTo(up(right).dx, up(right).dy)
+      ..lineTo(up(front).dx, up(front).dy)
+      ..close(), fill);
+    // Üst yüz (çatı diamond).
+    fill.color = roof;
+    final top = Path()
+      ..moveTo(up(back).dx, up(back).dy)
+      ..lineTo(up(right).dx, up(right).dy)
+      ..lineTo(up(front).dx, up(front).dy)
+      ..lineTo(up(left).dx, up(left).dy)
+      ..close();
+    canvas.drawPath(top, fill);
+    // Üst kenar hairline.
+    canvas.drawPath(top, Paint()
+      ..color = _shade(roof, 1.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..isAntiAlias = true);
+
+    // Baş harf — üst yüz merkezinde.
+    final cx = (up(back).dx + up(front).dx) / 2;
+    final cy = (up(left).dy + up(right).dy) / 2;
+    final tp = TextPainter(
+      text: TextSpan(text: tag, style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.92),
+        fontSize: h * 0.5, fontWeight: FontWeight.bold)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(cx - tp.width / 2, cy - tp.height / 2));
+    if (time < 0) {} // unused
+  }
+
+  /// Rengi [k] kadar aydınlat/karart (1.0 = aynı).
+  static Color _shade(Color c, double k) => Color.fromARGB(
+        255,
+        (c.r * 255 * k).clamp(0, 255).round(),
+        (c.g * 255 * k).clamp(0, 255).round(),
+        (c.b * 255 * k).clamp(0, 255).round(),
+      );
+
   static void _drawLamppost(Canvas canvas,
       Offset back, Offset left, Offset right, Offset front,
       double time, int seed, double dayLight) {
@@ -579,6 +817,40 @@ class BuildingRenderer {
         tint: const Color(0xFFB0A898), intensity: 0.85);
   }
 
+  // Değirmen öğütürken dipteki huni/değirmen taşı hizasından yükselen ÇOK hafif
+  // un tozu. Yelkene dokunmaz; sadece "çalışıyor" hissini diegetik verir.
+  // Kasıtlı olarak sönük: tepe alpha ~0.10, birkaç zerre.
+  static void _drawMillFlourDust(
+      Canvas canvas, ui.Image img,
+      Offset left, Offset right, Offset front,
+      BuildingMeta meta, double time, int seed) {
+    final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
+    final spriteH = spriteW * img.height / img.width;
+    final dstL    = front.dx - spriteW * meta.groundXCenter;
+    final dstT    = front.dy - spriteH * meta.groundY;
+    // Huni/taş sağ-alt bölgede.
+    final bx = dstL + 0.66 * spriteW;
+    final by = dstT + 0.80 * spriteH;
+    final paint = Paint()..isAntiAlias = true;
+    const n = 4;
+    for (int i = 0; i < n; i++) {
+      // Deterministik per-zerre ofset — Random allocation'sız (hot-path).
+      final off = ((seed * 2654435761 + i * 40503) & 0xFFFF) / 65536.0;
+      final jx =
+          (((seed ^ (i * 26699)) & 0xFF) / 255.0 - 0.5) * spriteW * 0.05;
+      final phase = (time * 0.28 + off) % 1.0; // 0(dip) → 1(yukarı)
+      final px = bx + jx + sin(time * 0.7 + i * 2.1) * spriteW * 0.015;
+      final py = by - phase * spriteH * 0.11;
+      // Parabolik sönme (0 uçlarda, ~0.10 ortada) — pi'siz.
+      final a = 4.0 * phase * (1.0 - phase) * 0.10;
+      if (a <= 0.008) continue;
+      final ai = (a * 255).round().clamp(0, 255);
+      paint.color = Color((ai << 24) | 0x00F1EBDC); // soluk un beji
+      canvas.drawCircle(
+          Offset(px, py), spriteW * (0.009 + 0.010 * phase), paint);
+    }
+  }
+
   // ── İnşaat animasyonu: tabandan yukarı açılır ────────────────────────────────
   // Smoothstep eğri ile başlangıç + son yumuşar (linear pop yerine). Clip
   // kenarında küçük sin jitter — "tahta yerleşirken sallanıyor" hissi.
@@ -666,6 +938,36 @@ class BuildingRenderer {
       canvas.drawCircle(pos, 72, _pGlow1);
       canvas.drawCircle(pos, 44, _pGlow2);
       canvas.drawCircle(pos, 22, _pGlow3);
+    }
+  }
+
+  // ── Su parlaması ────────────────────────────────────────────────────────────
+  // Sprite dst rect'inden su bölgelerini dünya koordinatına çevirir; her bölgeye
+  // WaterShimmerRenderer ile animasyonlu ışıltı işler.
+  static void _drawWaterShimmer(
+      Canvas canvas,
+      BuildingType type,
+      ui.Image img,
+      Offset left, Offset right, Offset front,
+      BuildingMeta meta,
+      double dayLight,
+      double time,
+      int seed) {
+    final patches = kBuildingWater[type];
+    if (patches == null || patches.isEmpty) return;
+
+    final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
+    final spriteH = spriteW * img.height / img.width;
+    final dstL    = front.dx - spriteW * meta.groundXCenter;
+    final dstT    = front.dy - spriteH * meta.groundY;
+
+    for (final w in patches) {
+      final cx = dstL + w.nx * spriteW;
+      final cy = dstT + w.ny * spriteH;
+      WaterShimmerRenderer.draw(
+        canvas, cx, cy, w.hw * spriteW, w.hh * spriteH, time, seed,
+        dayLight: dayLight, intensity: w.intensity,
+      );
     }
   }
 

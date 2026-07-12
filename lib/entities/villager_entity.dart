@@ -4,6 +4,7 @@ import '../characters/npc_visual.dart';
 import '../characters/personality.dart';
 import '../characters/life_stage.dart';
 import '../core/constants.dart';
+import '../systems/chronicle.dart';
 import 'worker_entity.dart';
 
 enum VillagerState { moving, idle, sleeping, walkingToSleep, walkingToPickup, carrying }
@@ -26,7 +27,9 @@ enum WanderBehavior { patrol, ponder, stroll, homebody, waterside, playful }
 /// [dance] yan yana iki kişi yerinde sallanır. [warm] ateş başında çömelmiş
 /// ısınır. [storytelling] yaşlı NPC ateş başında hikaye anlatır.
 /// [listening] dinleyici — storyteller çevresinde oturan, kıpırdamayan NPC.
-enum VillagerActivity { none, chat, music, dance, warm, storytelling, listening }
+/// [arguing] iki kişi yüz yüze ağız dalaşı (öfke postürü + bağırış baloncuğu),
+/// [brawling] yumruklaşma (öfke + ileri-geri itiş hareketi + kamera sarsıntısı).
+enum VillagerActivity { none, chat, music, dance, warm, storytelling, listening, arguing, brawling }
 
 /// NPC'nin anlık duygusu — "canlılık" altyapısı. Geçici tepki olarak tetiklenir
 /// ([VillagerEntity.feel]); baş üstü ikon + görsel tepki (yürüyüş/irkilme) +
@@ -41,16 +44,39 @@ enum NpcEmotion { none, joy, content, grief, fear, wonder, anger, love }
 enum FirePose { sit, kneel, mourn }
 
 class VillagerEntity extends WorkerEntity {
-  final VillagerType type;
+  /// Meslek. Doğumda çağrı/çıraklık/köy-ihtiyacından atanır; çoğunlukla sabittir
+  /// ama meslek-değiştirme dilekçesi onaylanınca [switchProfession] ile değişir
+  /// ([speed]/[behavior] getter olduğu için yeni mesleğe göre güncellenir).
+  VillagerType type;
 
   /// Köylünün adı — kurucu NPC'lerde rastgele atanır, sonradan doğanlar
   /// _spawnGrownVillager'da random alır. Aile/bildirim sisteminde kullanılır.
   /// Oyuncu bilgi panelinden istediği zaman yeniden adlandırabilir.
   String name;
 
+  /// Hane (soy) adı — politik/sosyal kimlik (Zümre→Hane geçişi). Kurucu/göçmen
+  /// yeni bir hane açar; doğan çocuk baba (yoksa anne) tarafının hanesini miras
+  /// alır. Boş = henüz haneye atanmamış (eski kayıt). Değiştirilebilir; ctor
+  /// [surname] paramıyla veya kayıttan yüklemede atanır.
+  String surname;
+
   /// Oyuncu bu köylüyü "favori" olarak işaretledi mi (kalp/yıldız). Panel
   /// rozeti + kayıp ruh seçiminden korunma.
   bool isFavorite = false;
+
+  /// Bu köylü köyde bir düğünle evlendi mi. Bir kez true olunca tekrar düğün
+  /// adayı seçilmez (scene_wedding kur sürecinin kapısı). Eş ölse bile true
+  /// kalır — cozy: kimse zorla yeniden evlendirilmez.
+  bool wed = false;
+
+  /// Bu köylünün KİŞİSEL yaşam öyküsü — doğum, reşit oluş, evlilik, çocuk,
+  /// bilgelik, kayıp… Panelde zaman çizelgesi olarak okunur (bireye bağlanma).
+  /// `_lifeEvent` ile yazılır, kaydedilir. Kronolojik (en eski = doğum üstte).
+  final List<ChronicleEntry> life = [];
+
+  /// Yaşam-evresi geçişlerini yakalamak için son görülen evre (geçici, türetilir;
+  /// scene `_tickLifeStory` karşılaştırır). null = henüz taranmadı (ilk tick kurar).
+  LifeStage? lastStageSeen;
 
   /// Değişmez kişilik tohumu — mizaç/sevdiği/künye bundan deterministik türer.
   /// Kayıt yalnızca bu int'i tutar; [personality] yüklemede yeniden üretilir.
@@ -63,6 +89,25 @@ class VillagerEntity extends WorkerEntity {
   /// Kutlanan yıldönümü sayısı — yaş kilometre taşı geçince artar (kişisel an).
   int annivCount = 0;
 
+  /// "Çağrısını buldu" anı yaşandı mı — genç→yetişkin geçişinde meslek görünür
+  /// olur ([hasProfession]) ve bu bir kez kutlanır. Yetişkin/yaşlı yaşıyla
+  /// doğanlar (kurucu/göçmen) köyde büyümediği için baştan true (an tetiklenmez);
+  /// bebek olarak doğanlar büyüyünce sahne ([_tickCallingMoments]) tetikler.
+  bool callingFound;
+
+  /// İçindeki çağrı — kişilikten doğan meslek eğilimi (değişmez). Yetişkinlikte
+  /// gerçekleşen [type] ile uyumluysa "çağrısını dinledi"; değilse (çıraklıkla
+  /// başka mesleğe çekilmiş) bir kırgınlık tohumudur (Faz 2).
+  VillagerType get calling => callingFor(personality, personalitySeed);
+
+  /// Mesleğini değiştirir (meslek-değiştirme dilekçesi onaylanınca). [type]
+  /// değişken; [speed]/[behavior] getter olduğundan otomatik yeni mesleğe uyar.
+  /// Devriye uçları yeni personaya göre yeniden türesin diye patrol init sıfırlanır.
+  void switchProfession(VillagerType to) {
+    type = to;
+    _patInit = false;
+  }
+
   /// Aile bağları — bebek doğduğunda evdeki yetişkin sakinler ebeveyn olur
   /// (max 2). Kurucu NPC'lerde boş. Ölüm anında karşı taraf listesinden
   /// referansı kaldırılır.
@@ -71,6 +116,19 @@ class VillagerEntity extends WorkerEntity {
 
   double targetCol;
   double targetRow;
+
+  /// Özel kostüm — meslekten bağımsız görsel override (bkz. [NpcCostume]).
+  /// Normal köylüler `none`; imparatorluk askerleri spawn'da `imperial` set eder.
+  /// Geçici varlık özelliği — kaydedilmez (askerler kayda yazılmaz).
+  NpcCostume costume = NpcCostume.none;
+
+  /// İmparatorluk kostümünde komutan mı — true ise miğfer üstünde uzun kızıl
+  /// sorguç + pelerin (heyetin lideri görünür biçimde ayrışır).
+  bool imperialCommander = false;
+
+  /// İmparatorluk askeri SALDIRI modunda mı (yağma dalışı) — true ise mızrak
+  /// ileri dürtme (jab) pozu + öne saldırgan eğilme (statik mızrak yerine).
+  bool imperialAttacking = false;
 
   VillagerState state = VillagerState.idle;
   double idleTimer = 0;
@@ -83,8 +141,9 @@ class VillagerEntity extends WorkerEntity {
   double _errandDwell = 0;   // hedefe varınca kaç sn oyalanacak
   double _errandWait = 0;    // atanmayı kaç sn bekledi (fallback için)
 
-  /// Çocuklar errand yürütmez (oyuncul dolaşır); yetişkin/genç/yaşlı yürütür.
-  bool get canRunErrands => lifeStage != LifeStage.child;
+  /// Errand/iş koşturması yapabilir mi — çocuk değil VE akut yaralı değil
+  /// (yaralı dinlenip iyileşir; kalıcı sakat çalışır ama yavaş). [injuryDays].
+  bool get canRunErrands => lifeStage != LifeStage.child && injuryDays <= 0;
 
   /// Sahne rutin sistemi çağırır: amaçlı bir hedefe yürü, varınca [dwell] sn
   /// orada oyalan (bir şey yapıyormuş gibi). Amaçsız wander'ın yerini alır.
@@ -106,11 +165,14 @@ class VillagerEntity extends WorkerEntity {
     glanceAround(duration: 0.6);
   }
 
+  /// Ana hız — meslekten türer (getter; meslek değişince güncellenir).
+  /// Yaralı/sakatsa [injuryFactor] ile yavaşlar (görünür aksama).
   @override
-  final double speed;
+  double get speed => _speedFor(type) * injuryFactor;
 
-  /// Bu NPC'nin boş zaman hareket kişiliği — tipe göre sabit.
-  final WanderBehavior behavior;
+  /// Bu NPC'nin boş zaman hareket kişiliği — meslekten türer (getter; meslek
+  /// değişince yeni personaya geçer).
+  WanderBehavior get behavior => _behaviorFor(type);
 
   /// Etrafa bakınma sayacı — boştayken yerinde dönüp gözlem yapar.
   double _lookTimer = 0;
@@ -167,6 +229,48 @@ class VillagerEntity extends WorkerEntity {
   /// Komşuluk politikası kapsamında: bu NPC bir sonraki selamlaşmaya
   /// kaç sn kaldı (poll bazlı azalır). Spam'ı önler.
   double greetCooldown = 0.0;
+
+  /// Bir çekişmeden sonra tekrar kavgaya tutuşmadan önceki bekleme (sn). Spam'ı
+  /// önler — kavga eden köylü bir süre sakinleşir. Kaydedilmez (geçici).
+  double conflictCooldown = 0.0;
+
+  /// AKUT YARALANMA — kalan iyileşme süresi (oyun günü). >0 iken köylü yaralı:
+  /// belirgin yavaşlar, kavgaya giremez, morali düşer. Zamanla 0'a iner (iyileşir).
+  /// Kaydedilir. Kavgada (scene_conflict) atanır.
+  double injuryDays = 0.0;
+
+  /// KALICI SAKATLIK — ağır bir yaralanma kalıcı aksaklık bırakır: ömür boyu
+  /// hafif yavaş (limp). injuryDays bitse de kalır. Kaydedilir.
+  bool disabled = false;
+
+  /// Yaralı/sakat hız çarpanı — akut yaralı çok yavaş (0.55), kalıcı sakat hafif
+  /// aksak (0.8), sağlam 1.0. [speed] bununla ölçeklenir → gövde dili (aksama).
+  double get injuryFactor => injuryDays > 0 ? 0.55 : (disabled ? 0.8 : 1.0);
+
+  /// Küslükler — bu köylünün dargın olduğu kişiler → küslüğün biteceği sim zamanı
+  /// ([_time]). Kavga sonrası kurulur; süresi dolunca lazy temizlenir. Küs çiftler
+  /// selamlaşmaz ve yeniden kavgaya daha yatkındır. Kayıtta indeksle serileşir.
+  final Map<VillagerEntity, double> grudges = {};
+
+  /// [other] ile şu an (sim zamanı [now]) aktif bir küslük var mı.
+  bool hasGrudgeWith(VillagerEntity other, double now) {
+    final until = grudges[other];
+    return until != null && until > now;
+  }
+
+  /// KAN DAVASI — bu köylünün kan düşmanları (kalıcı, süresiz). Bir kavga
+  /// ölümle bitince katil + maktul aileleri karşılıklı kan düşmanı olur; doğan
+  /// bebek ebeveynlerinin düşmanlığını miras alır. Kan düşmanları asla
+  /// selamlaşmaz, sürekli kavgaya çekilir, intikam cinayeti zinciri sürebilir.
+  /// Yalnız sulh dilekçesiyle temizlenir. Kayıtta indeksle serileşir.
+  final Set<VillagerEntity> bloodEnemies = {};
+
+  bool isBloodEnemy(VillagerEntity o) => bloodEnemies.contains(o);
+  bool get inFeud => bloodEnemies.isNotEmpty;
+
+  /// Bu köylünün kan davasında işlediği cinayet sayısı — "suçlu" (idam/sürgün
+  /// hedefi) belirlemede en çok kan dökeni öne çıkarır. Kaydedilir.
+  int feudKills = 0;
 
   /// Bilge yaşlı — random event "Bilge Yaşlı Belirdi" ile yalnız bir köylüye
   /// atanır (yaşam boyu kalır). Köyde bilge varken ufak moral bonusu doğar.
@@ -238,6 +342,15 @@ class VillagerEntity extends WorkerEntity {
   double lowMoraleTime = 0.0;
   /// Panelde gösterilecek baskın sebep ("evsiz", "aç", "huzurlu" …). Sahne yazar.
   String moraleReason = 'huzurlu';
+
+  // ── Servet (göreceli varlık) ───────────────────────────────────────────────
+  /// Köylünün biriktirdiği soyut varlık ("sikke"). Çalışan yetişkinler her gün
+  /// mesleklerine göre kazanır; moral (üretkenlik) + ev kademesi çarpar; küçük
+  /// bir yaşam gideri asimptota çeker (sınırsız büyümez). Çocuk/mesleksiz
+  /// kazanmaz → gider zamanla sıfıra indirir. SADECE göreli karşılaştırma için
+  /// (Köy Nüfus Defteri'nde "zenginlik" sütunu); şimdilik hiçbir mantık harcamaz.
+  /// [_tickVillagerMorale] besler, kayıtta saklanır. Bkz. [wealthDailyIncome].
+  double wealth = 0;
   /// Anlık duygu (geçici tepki). [emotionTime] > 0 iken aktif → renderer bunu
   /// GÖVDE DİLİNE çevirir (emoji DEĞİL): yas çöküşü, sevinç zıplaması, korku
   /// geri çekilmesi vb. Solunca [NpcEmotion.none]'a döner.
@@ -398,6 +511,7 @@ class VillagerEntity extends WorkerEntity {
   VillagerEntity({
     required this.type,
     required this.name,
+    this.surname = '',
     required bool male,
     required super.startCol,
     required super.startRow,
@@ -407,10 +521,11 @@ class VillagerEntity extends WorkerEntity {
     this.ageDays = 0,
     this.lifespanDays = double.infinity,
   })  : personalitySeed = personalitySeed ?? _autoPersonalitySeed(),
+        // Yetişkin/yaşlı yaşıyla doğan (kurucu/göçmen) çağrısını "köyde büyürken"
+        // bulmadı → an tetiklenmesin. Bebek (ageDays≈0) büyüyünce keşfeder.
+        callingFound = ageDays >= kAdultStartDay,
         targetCol = startCol,
         targetRow = startRow,
-        speed     = _speedFor(type),
-        behavior  = _behaviorFor(type),
         // [visual] verilirse (kayıttan yükleme) birebir o görsel kimlik korunur;
         // yoksa seed'ten üretilir. Cinsiyet dışarıdan zorlanır → name ile uyumlu.
         super(
@@ -418,10 +533,23 @@ class VillagerEntity extends WorkerEntity {
               NpcVisual.fromSeed(
                   visualSeed ?? _autoSeed(type, startCol, startRow),
                   forceMale: male),
-        );
+        ) {
+    // Yetişkin/yaşlı doğanlar (kurucu/göçmen) köye zaten birikmiş bir varlıkla
+    // gelir → Nüfus Defteri ilk günden çeşitli görünsün (seed'ten deterministik).
+    // Bebekler 0'dan başlar, büyüyüp meslek edinince kazanmaya başlar.
+    if (ageDays >= kAdultStartDay) {
+      wealth = 14 + (this.personalitySeed.abs() % 55).toDouble();
+    }
+  }
 
   /// NPC'nin cinsiyeti — visual.isMale ile aynı (getter pratik erişim).
   bool get isMale => visual.isMale;
+
+  /// Hane etiketi — "Demirhan Hanesi" biçimi; soyad yoksa boş (eski kayıt).
+  String get houseLabel => surname.isEmpty ? '' : '$surname Hanesi';
+
+  /// Ad + hane — "Ayşe Demirhan"; soyad yoksa yalnız ad.
+  String get fullName => surname.isEmpty ? name : '$name $surname';
 
   /// Otomatik visual seed — type + spawn pozisyonu hash'i.  Aynı pozisyondan
   /// aynı tipte spawn olan iki NPC olmaz pratikte, ama görsel seed verilebilir.

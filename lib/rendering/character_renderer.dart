@@ -124,6 +124,13 @@ class CharacterRenderer {
     NpcVisual? visual,
     double time = 0,
     LifeStage stage = LifeStage.adult,
+    /// Mesleğden bağımsız özel kostüm — `imperial` ise tip/meslek görünümü
+    /// yerine imparatorluk askeri çizilir (bkz. [NpcCostume]).
+    NpcCostume costume = NpcCostume.none,
+    /// İmparatorluk kostümünde komutan mı (uzun kızıl sorguç + pelerin).
+    bool commander = false,
+    /// İmparatorluk askeri saldırı modunda mı — mızrak ileri dürtme (jab) pozu.
+    bool attacking = false,
   }) {
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
@@ -136,9 +143,16 @@ class CharacterRenderer {
       anim = anim.copyWith(armL: _kTorchArmAngle);
     }
 
+    // Özel kostüm (imparatorluk askeri) tip/meslek/evreyi önceler — köyün
+    // yabancısı her zaman tam zırhlı görünür.
+    if (costume == NpcCostume.imperial && visual != null) {
+      final v = stage == LifeStage.elder ? visual.elderly() : visual;
+      _imperialSoldierNpc(canvas, anim, v, time,
+          commander: commander, attacking: attacking);
+    }
     // Çocuk/genç henüz meslek edinmemiş → standart köylü görünümü, tipten
     // bağımsız. Yetişkin/yaşlı meslek görünür; yaşlıda saç kıra döner.
-    if (visual != null && !stage.hasProfession) {
+    else if (visual != null && !stage.hasProfession) {
       _peasantNpc(canvas, anim, visual, time, child: stage == LifeStage.child);
     } else {
       final v = (visual != null && stage == LifeStage.elder)
@@ -1580,6 +1594,114 @@ class CharacterRenderer {
     _shadedRect(c, const Rect.fromLTWH(-16, 4, 22, 22), const Color(0xFF8B4513));
     // Merkez kabara
     _shadedRect(c, const Rect.fromLTWH(-8, 10, 8, 8), _ironGrey);
+    c.restore();
+  }
+
+  // ─── İMPARATORLUK ASKERİ (dış güç — kostüm override) ──────────────────────
+  // Köyün muhafızından kasıtlı AYRIK: soğuk çelik kürişit + kızıl tabard +
+  // tam miğfer. Komutan uzun kızıl sorguç + pelerin taşır → heyetin lideri
+  // gözle ayrışır. Köylü paletinin sıcak ahşap/keten tonlarından uzak.
+  static const _impSteel   = Color(0xFF6A707C); // soğuk çelik plaka
+  static const _impSteelDk = Color(0xFF3A3E47); // çelik gölge
+  static const _impCrimson = Color(0xFF8E1B1B); // imparatorluk kızılı
+  static const _impCrimDk  = Color(0xFF5A0F0F); // kızıl gölge
+  static const _impGold    = Color(0xFFC8A042); // amblem altını
+
+  static void _imperialSoldierNpc(Canvas c, _Anim anim, NpcVisual v, double time,
+      {bool commander = false, bool attacking = false}) {
+    final hose = tintCloth(_impSteelDk, v.clothingShift * 0.3);
+
+    // Saldırı modunda mızrak ileri DÜRTÜLÜR (jab) + gövde öne saldırgan eğilir.
+    // ~1.5 rad mızrağı yatay-ileri çevirir; jab salınımı içeri/dışarı dürtme.
+    final jab = sin(time * 8.0);
+    final spearArm = attacking ? 1.5 + jab * 0.30 : anim.armR;
+    final atkLean = attacking ? 0.18 + jab.clamp(0.0, 1.0) * 0.07 : 0.0;
+
+    _shadow(c);
+
+    // Komutan pelerini — gövdenin ARKASINA (bacaklardan önce) düşer.
+    if (commander) {
+      c.save();
+      _applyTorsoTransform(c, anim);
+      final cape = Path()
+        ..moveTo(-12, -70)
+        ..lineTo(12, -70)
+        ..lineTo(16, -14)
+        ..lineTo(-16, -14)
+        ..close();
+      c.drawPath(cape, _f(_impCrimson));
+      c.drawPath(cape, _s(_impCrimDk));
+      // Orta katlanma gölgesi (kumaş hacmi).
+      c.drawRect(const Rect.fromLTWH(-2, -68, 4, 54), _f(_impCrimDk));
+      c.restore();
+    }
+
+    _shadedLeg(c, -6, anim.legL, hose, const Color(0xFF26282E), legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hose, const Color(0xFF26282E), legLift: anim.legLiftR);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+    // Saldırgan öne atılma — gövde + kafa + miğfer hep birlikte eğilir.
+    if (atkLean != 0) {
+      c.translate(0, -40);
+      c.rotate(atkLean);
+      c.translate(0, 40);
+    }
+
+    // Çelik kürişit (göğüs plakası).
+    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), _impSteel);
+    // Plaka katman çizgileri (lamel).
+    for (final y in [-60.0, -52.0, -44.0]) {
+      c.drawRect(Rect.fromLTWH(-12, y, 24, 1.4), _f(_impSteelDk));
+    }
+    // Kızıl tabard — göğüs ortasından bele inen şerit.
+    _shadedRect(c, const Rect.fromLTWH(-5, -68, 10, 34), _impCrimson);
+    // Tabard üstünde altın amblem (çift bant).
+    c.drawRect(const Rect.fromLTWH(-5, -58, 10, 2), _f(_impGold));
+    c.drawRect(const Rect.fromLTWH(-3, -52, 6, 2), _f(_impGold));
+
+    // Çelik omuzluk (pauldron) plakaları.
+    _shadedRect(c, const Rect.fromLTWH(-29, -75, 17, 11), _impSteel);
+    _shadedRect(c, const Rect.fromLTWH( 12, -75, 17, 11), _impSteel);
+
+    // Sol kol + imparatorluk kalkanı.
+    _shadedArm(c, -20, anim.armL, _impSteel, v.skin, (arm) {
+      _shadedRect(arm, const Rect.fromLTWH(-17, 2, 23, 24), _impCrimson);
+      _shadedRect(arm, const Rect.fromLTWH(-15, 4, 19, 20), _impCrimDk);
+      // Altın hat + merkez çelik kabara.
+      arm.drawRect(const Rect.fromLTWH(-15, 12, 19, 2), _f(_impGold));
+      arm.drawRect(const Rect.fromLTWH(-9, 8, 4, 12), _f(_impGold));
+      _shadedRect(arm, const Rect.fromLTWH(-8, 11, 6, 6), _impSteel);
+    });
+    // Sağ kol + mızrak (uzun çelik uçlu). Saldırıda [spearArm] ileri dürter.
+    _shadedArm(c, 20, spearArm, _impSteel, v.skin, (arm) {
+      _shadedRect(arm, const Rect.fromLTWH(3, -46, 3, 88), _woodBrown);
+      _shadedRect(arm, const Rect.fromLTWH(0, -62, 9, 18), _impSteel);
+      arm.drawRect(const Rect.fromLTWH(2, -64, 5, 4), _f(lighter(_impSteel, 0.18)));
+    });
+
+    _shadedHead(c, v, time);
+
+    // ── Tam miğfer (çelik) — başı kaplar ────────────────────────────────────
+    _shadedRect(c, const Rect.fromLTWH(-11, -101, 22, 19), _impSteel);
+    // Alın bandı + burun koruyucu.
+    c.drawRect(const Rect.fromLTWH(-13, -92, 26, 4), _f(_impSteelDk));
+    c.drawRect(const Rect.fromLTWH( -2, -93,  4, 12), _f(_impSteelDk));
+    // Yanak plakaları (yüzü çerçeveler).
+    c.drawRect(const Rect.fromLTWH(-12, -90, 3, 9), _f(_impSteel));
+    c.drawRect(const Rect.fromLTWH(  9, -90, 3, 9), _f(_impSteel));
+
+    if (commander) {
+      // Komutan — uzun kızıl at-kılı sorguç (miğfer tepesinden yukarı).
+      _shadedRect(c, const Rect.fromLTWH(-3, -118, 6, 18), _impCrimson);
+      c.drawRect(const Rect.fromLTWH(-1, -118, 2, 18), _f(lighter(_impCrimson, 0.12)));
+      // Sorguç tabanı (altın taç).
+      c.drawRect(const Rect.fromLTWH(-5, -102, 10, 3), _f(_impGold));
+    } else {
+      // Asker — kısa enine çelik ibik (front-to-back ridge).
+      _shadedRect(c, const Rect.fromLTWH(-2, -108, 4, 8), _impSteelDk);
+      c.drawRect(const Rect.fromLTWH(-1, -107, 2, 7), _f(_impCrimDk));
+    }
     c.restore();
   }
 

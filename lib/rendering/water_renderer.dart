@@ -31,7 +31,7 @@ class WaterRenderer {
   // ── Static Paint havuzu ────────────────────────────────────────────────────
   static final _pFill    = Paint()..isAntiAlias = false;
   static final _pBorderLod = Paint()
-    ..color       = const Color(0xFF082848)
+    ..color       = const Color(0x2E2E6B7A)
     ..style       = PaintingStyle.stroke
     ..strokeWidth = 1.0
     ..isAntiAlias = false;
@@ -44,11 +44,6 @@ class WaterRenderer {
     ..style       = PaintingStyle.stroke
     ..strokeWidth = 1.0
     ..isAntiAlias = true;
-  static final _pBorder  = Paint()
-    ..color       = const Color(0xFF082848)
-    ..style       = PaintingStyle.stroke
-    ..strokeWidth = 1.0
-    ..isAntiAlias = false;
   static final _pFoam    = Paint()
     ..strokeWidth = 1.5
     ..isAntiAlias = false;
@@ -77,13 +72,17 @@ class WaterRenderer {
     final w2 = _sin(time * 1.50 + phase + 1.9) * 0.5 + 0.5;
     final w3 = _sin(time * 0.40 + phase + 3.3) * 0.5 + 0.5;
 
-    final baseR = (14  + w3 * 12  + dayLight * 8 );
-    final baseG = (62  + w1 * 28  + dayLight * 20);
-    final baseB = (138 + w2 * 55  + dayLight * 30);
+    // Resimsel/suluboya teal taban — eski doygun lacivert yerine yumuşak,
+    // açık, yeşilimsi-mavi. Düz "mavi kare" hissini kırar; kıyı sığ suyuyla
+    // (coastline) ton bütünlüğü kurar.
+    final baseR = (40  + w3 * 14  + dayLight * 16);
+    final baseG = (98  + w1 * 24  + dayLight * 22);
+    final baseB = (124 + w2 * 38  + dayLight * 24);
 
-    // Gökyüzü yansıması — base renge skyTint'i 0.22 ağırlıkla karıştır.
+    // Gökyüzü yansıması — base renge skyTint'i karıştır. Suluboya hissi için
+    // ağırlık yükseltildi (0.22 → 0.32) → su gökle daha çok nefes alır.
     // dayLight=0 gecede yansıma daha az hissedilir (sky zaten karanlık).
-    const mix    = 0.22;
+    const mix    = 0.32;
     final skyR   = skyTint.r * 255;
     final skyG   = skyTint.g * 255;
     final skyB   = skyTint.b * 255;
@@ -113,16 +112,16 @@ class WaterRenderer {
     canvas.save();
     canvas.clipPath(_diamond);
 
-    // Dalga bandı 1
+    // Dalga bandı 1 — yumuşatıldı (alpha düşük, teal'e yakın)
     final b1y = py + hh * (0.25 + w1 * 0.65);
     _pWave1.color = Color.fromARGB(
-        (w1 * 45 + dayLight * 15).toInt().clamp(0, 255), 110, 210, 255);
+        (w1 * 30 + dayLight * 12).toInt().clamp(0, 255), 150, 220, 230);
     canvas.drawRect(Rect.fromLTWH(px - hw, b1y, hw * 2, 2), _pWave1);
 
     // Dalga bandı 2
     final b2y = py + hh * (0.05 + w2 * 0.90);
     _pWave2.color = Color.fromARGB(
-        (w2 * 60 + dayLight * 20).toInt().clamp(0, 255), 190, 235, 255);
+        (w2 * 42 + dayLight * 16).toInt().clamp(0, 255), 205, 240, 245);
     canvas.drawRect(Rect.fromLTWH(px - hw, b2y, hw * 2, 1), _pWave2);
 
     // Sparkle noktaları
@@ -192,7 +191,9 @@ class WaterRenderer {
 
     canvas.restore();
 
-    canvas.drawPath(_diamond, _pBorder);
+    // NOT: Eski sert lacivert per-tile çerçeve (_pBorder) KALDIRILDI — bitişik
+    // su tile'larını "mavi kare" hissinden çıkarıp sürekli, suluboya bir su
+    // yüzeyine çevirir. Kara-su sınırı ayrıca foam + kum overlay ile çizilir.
   }
 
   static void drawFoam(Canvas canvas, double px, double py, double hw, double hh,

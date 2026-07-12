@@ -13,6 +13,7 @@ import 'road_renderer.dart';
 import '../core/constants.dart';
 import 'tile_renderer.dart';
 import '../world/tree_entity.dart';
+import '../world/leaf_burst.dart';
 import 'tree_renderer.dart';
 import '../entities/woodcutter_entity.dart';
 import '../entities/lumber_camp_entity.dart';
@@ -20,6 +21,7 @@ import '../world/mine_node.dart';
 import 'mine_renderer.dart';
 import '../entities/miner_entity.dart';
 import 'water_renderer.dart';
+import 'ocean_renderer.dart';
 import '../world/nature_entity.dart';
 import '../world/decor_entity.dart';
 import '../world/grave.dart';
@@ -38,12 +40,14 @@ import 'flame_renderer.dart';
 import 'particle_renderer.dart';
 import 'smoke_renderer.dart';
 import '../farm/farm_tile.dart';
+import '../world/season.dart';
 import '../entities/farm_farmer.dart';
 import '../farm/farm_renderer.dart';
 import '../entities/fisher_entity.dart';
 import '../entities/florist_entity.dart';
 import '../entities/shepherd_entity.dart';
 import '../world/animal_entity.dart';
+import '../world/egg_entity.dart';
 import '../world/bird_flock.dart';
 import '../world/bee_flock.dart';
 import '../world/resource_box.dart';
@@ -118,6 +122,15 @@ final _pWarmWash      = Paint()..blendMode = BlendMode.lighten..isAntiAlias = tr
 // "düz siyah" olmaktan kurtarır, ışığa kontrast üretir.
 final _pMoonFill = Paint()..blendMode = BlendMode.plus..isAntiAlias = false;
 
+// Sohbet baloncuğu — fill + stroke. Renk (alpha) her frame değişir, ama
+// nesne değil: çağrı başına .color set edilir → frame başına 2 Paint allocation
+// (konuşan NPC × frame) kalkar, çıktı bit-aynı. Dosyanın _pXxx havuz deseni.
+final _pBubbleFill = Paint()..isAntiAlias = true;
+final _pBubbleBorder = Paint()
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 1
+  ..isAntiAlias = true;
+
 // Map border
 final _pMapBorder = Paint()
   ..color = const Color(0xFF1E4820)..style = PaintingStyle.stroke
@@ -144,6 +157,10 @@ final _pFireflyCore = Paint()..isAntiAlias = true;
 // Gündüz polen/toz zerreleri — küçük blur kaldırıldı, anti-aliased crisp circle.
 final _pPollen = Paint()..isAntiAlias = true;
 
+// Mevsim partikülleri — kış kar tanesi + sonbahar sürüklenen yaprak.
+final _pSnow = Paint()..isAntiAlias = true;
+final _pLeaf = Paint()..isAntiAlias = true;
+
 // Ghost
 final _pGhostFill   = Paint()..isAntiAlias = false;
 final _pGhostBorder = Paint()..style = PaintingStyle.stroke..strokeWidth = 2..isAntiAlias = false;
@@ -157,10 +174,13 @@ final _pGhostBorder = Paint()..style = PaintingStyle.stroke..strokeWidth = 2..is
 // _pSplash: yere çarpan damlanın droplet/crown daireleri (fill, AA).
 // _pSplashRing: çarpma noktasında genişleyen iso oval (stroke, AA).
 // _pRainMist: yoğun yağmurda hafif mavi-gri atmosfer perde overlay.
+// PERF: arka+orta katman (en yoğun, en sönük) AA KAPALI — AA'lı ince çizgi
+// Skia'da pahalı; bu katmanlar hızlı akan sönük perde, aliasing fark edilmez.
+// Hero ön katman (_pRainBold) + kuyruk (_pRainTail) AA kalır (okunur damlalar).
 final _pRain     = Paint()
   ..strokeWidth = 1.0
   ..strokeCap = StrokeCap.round
-  ..isAntiAlias = true;
+  ..isAntiAlias = false;
 final _pRainBold = Paint()
   ..strokeWidth = 1.6
   ..strokeCap = StrokeCap.round
@@ -276,6 +296,11 @@ final Path _scratchPath = Path();
 // Sahne drawable buffer'ı — her frame clear edilip yeniden doldurulur.
 // Spread/sort her frame allocate yapmasın diye top-level static.
 final List<_Drawable> _sceneBuffer = [];
+
+// Occlusion AABB buffer'ı — _drawOcclusionSilhouettes içinde her frame clear
+// edilip yeniden doldurulur (tek call içinde kurulup tüketilir). _sceneBuffer
+// gibi top-level static → frame başına yeni List allocation'ı yok.
+final List<(BuildingEntity, Rect)> _occBoxes = [];
 
 // ─── Occlusion silhouette (C) parametreleri ─────────────────────────────────
 // Bina gövde yüksekliği tahmini = footprint ekran yüksekliği * scale + base (px).
@@ -453,7 +478,10 @@ class _VillagerDrawable extends _Drawable {
           torchPhase:    e.torchPhase,
           visual:        e.visual,
           time:          time,
-          stage:         e.lifeStage);
+          stage:         e.lifeStage,
+          costume:       e.costume,
+          commander:     e.imperialCommander,
+          attacking:     e.imperialAttacking);
       canvas.restore();
       return;
     }
@@ -553,8 +581,15 @@ class _VillagerDrawable extends _Drawable {
           break;
       }
     }
+    // Yumruklaşma — gövde rakibe doğru ileri-geri saldırır (gerçek hareket,
+    // emoji değil). Öfke postürüyle birleşince inandırıcı bir arbede olur.
+    double brawlShove = 0;
+    if (e.activity == VillagerActivity.brawling) {
+      final dir = e.effectiveFacingRight ? 1.0 : -1.0;
+      brawlShove = sin(time * 13.0 + e.gridX * 1.3) * 2.6 * dir;
+    }
     canvas.save();
-    canvas.translate(s.dx,
+    canvas.translate(s.dx + brawlShove,
         s.dy - danceBounce - talkBob - moodLift + sitYOff - emoBounce - emoLift);
     if (danceSway != 0) canvas.rotate(danceSway);
     if (sitSway != 0)   canvas.rotate(sitSway);
@@ -579,7 +614,10 @@ class _VillagerDrawable extends _Drawable {
         torchPhase:    e.torchPhase,
         visual:        e.visual,
         time:          time,
-        stage:         e.lifeStage);
+        stage:         e.lifeStage,
+        costume:       e.costume,
+        commander:     e.imperialCommander,
+        attacking:     e.imperialAttacking);
     // Müzik aktivitesinde eline saz/bağlama çiz — sprite scale'inde, göğüs
     // hizasında. Karakter sprite ile birlikte çizilir ki flip etse de doğru
     // tarafta olsun.
@@ -683,21 +721,19 @@ class _VillagerDrawable extends _Drawable {
     final cy = base.dy - 26 + yBob;
 
     // Baloncuk arka planı — yumuşak beyaz kart + ince koyu çerçeve.
-    final bgPaint = Paint()
+    final bgPaint = _pBubbleFill
       ..color = Color.fromARGB((alpha * 0.92).round(), 250, 246, 232);
-    final borderPaint = Paint()
-      ..color = Color.fromARGB((alpha * 0.78).round(), 70, 50, 30)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1
-      ..isAntiAlias = true;
+    final borderPaint = _pBubbleBorder
+      ..color = Color.fromARGB((alpha * 0.78).round(), 70, 50, 30);
     final rect = RRect.fromRectAndRadius(
       Rect.fromCenter(center: Offset(cx, cy), width: 18, height: 16),
       const Radius.circular(4),
     );
     canvas.drawRRect(rect, bgPaint);
     canvas.drawRRect(rect, borderPaint);
-    // Küçük "kuyruk" üçgeni (sprite'a doğru).
-    final tail = Path()
+    // Küçük "kuyruk" üçgeni (sprite'a doğru). Paylaşımlı scratch path (leaf draw).
+    final tail = _scratchPath
+      ..reset()
       ..moveTo(cx - 2, cy + 7)
       ..lineTo(cx + 2, cy + 7)
       ..lineTo(cx, cy + 11)
@@ -1236,7 +1272,8 @@ class _TreeDrawable extends _Drawable {
         time: time, seed: t.col * 17 + t.row * 31,
         chopPhase: t.chopPhase,
         growthScale: t.growthScale,
-        col: t.col + 0.5, row: t.row + 0.5);
+        col: t.col + 0.5, row: t.row + 0.5,
+        fellProgress: t.fellProgress);
   }
 }
 
@@ -1424,6 +1461,37 @@ class _ResourceBoxDrawable extends _Drawable {
   }
 }
 
+class _EggDrawable extends _Drawable {
+  final EggEntity e;
+  final double time;
+  _EggDrawable(this.e, this.time);
+  @override double get depth => e.depth;
+  @override
+  void draw(Canvas canvas, Size size, Offset camera) {
+    final s = gridToScreen(e.gridX, e.gridY, size, camera);
+    // Drop animasyonu (ilk 0.4s yukarıdan iner).
+    double y = s.dy - 3;
+    final since = time - e.spawnTime;
+    if (since < 0.4) {
+      final t = since / 0.4;
+      y -= (1 - t) * (1 - t) * 9;
+    }
+    // Çatlamaya yakın hafif sallanma (willHatch).
+    double wob = 0;
+    if (e.willHatch && e.age > e.resolveAt - 2.0) {
+      wob = sin(time * 18 + e.gridX) * 1.3;
+    }
+    final c = Offset(s.dx + wob, y);
+    canvas.drawOval(
+        Rect.fromCenter(center: Offset(s.dx, s.dy - 0.5), width: 7, height: 3.5),
+        Paint()..color = const Color(0x33000000));
+    canvas.drawOval(Rect.fromCenter(center: c, width: 6.5, height: 8.5),
+        Paint()..color = const Color(0xFFF3E9D2));
+    canvas.drawOval(Rect.fromCenter(center: c.translate(-1, -1.6), width: 2.4, height: 3.4),
+        Paint()..color = const Color(0xFFFFFDF5));
+  }
+}
+
 class _HayDrawable extends _Drawable {
   final HayEntity h;
   final double time;
@@ -1454,6 +1522,13 @@ class _HayDrawable extends _Drawable {
 
 class VillageGamePainter extends CustomPainter {
   final List<VillagerEntity> villagers;
+  /// Gezgin tüccarlar — sakin köylülerden ayrı listede çizilir ama görsel
+  /// olarak [_VillagerDrawable] ile (MerchantEntity extends VillagerEntity).
+  final List<VillagerEntity> merchants;
+  /// İmparatorluk askerleri — dış güç heyeti; köylülerden ayrı listede ama
+  /// aynı [_VillagerDrawable] ile (ImperialSoldier extends VillagerEntity,
+  /// NpcCostume.imperial kostümü çizilir).
+  final List<VillagerEntity> soldiers;
   final List<BuildingEntity> buildings;
   final List<BuilderEntity>  builders;
   final List<BuildOrder>     pendingOrders;
@@ -1492,6 +1567,21 @@ class VillageGamePainter extends CustomPainter {
   final (int, int, int, int)? farmSelection;
 
   final List<TreeEntity>       trees;
+  /// Sahip olunan (açık) kara — sis kapsamı bunun dışını örter.
+  final Set<(int, int)>        cleared;
+  /// Vahşi orman tile'ları (scene_land) — entity'siz yoğun kanopi olarak çizilir.
+  final Set<(int, int)>        wilderness;
+  /// Sınır halkasındaki gerçek ağaç tile'ları — kanopi bunların üstüne çizmesin
+  /// (orada zaten _TreeDrawable var; çift çizim engeli).
+  final Set<(int, int)>        wildTreeTiles;
+  /// Açık (revealed) kenardan her açılmamış tile'ın BFS derinliği (1 = kenar).
+  /// Sabah-sisi feather'ını sürer: kenar seyrek/şeffaf → iç dolu (gizler).
+  final Map<(int, int), int>   forestDepth;
+  /// Yeni açılan tile'ların dissolve animasyonu (tile → kalan süre). Sisi
+  /// aniden değil, eriyip yukarı savrularak kaldırır.
+  final Map<(int, int), double> revealAnim;
+  /// Devrilen ön-hat ağacı yaprak patlamaları (kısa ömürlü fx).
+  final List<LeafBurst>        leafBursts;
   final List<WoodcutterEntity> woodcutters;
   /// Oduncu kulübesinin otonom NPC'leri — woodcutter'dan ayrı tip.
   final List<LumberCampEntity> lumberCamps;
@@ -1517,11 +1607,23 @@ class VillageGamePainter extends CustomPainter {
   final double zoom;
   final List<ResourceBox> resourceBoxes;
   final List<HayEntity>   hayEntities;
+  final List<EggEntity>   eggs;
   /// Suya yansıtılan gökyüzü tonu — _cycle.skyMid'den geçer.
   final Color skyReflection;
+  /// Adayı çevreleyen deniz (OceanRenderer) için zaman/güneş bilgisi.
+  /// _cycle'dan geçer; gökyüzü widget'ı kaldırıldı, atmosfer artık denizde.
+  final double timeOfDay;
+  final Season season;
+  final Color sunColor;
+  final double sunOpacity;
+  final double moonOpacity;
   /// Ground katman cache invalidation tokeni. Bu değer değişince Picture
   /// yeniden üretilir. VillageScene yeni harita ürettiğinde artırır.
   final int groundVersion;
+  /// Kanopi (vahşi orman) cache invalidation tokeni. _wilderness/_wildTreeTiles
+  /// değişince (arazi açılınca / yeni map / yükleme) artar → kanopi Picture'ı
+  /// yeniden üretilir.
+  final int forestVersion;
   /// Dünya-uzayında ışık kaynakları. LightingSystem.collect ile üretilir;
   /// hem renderer hem oyun mantığı (gelecekteki "ışıkta mı?" sorgusu) için
   /// ortak kaynak.
@@ -1546,6 +1648,8 @@ class VillageGamePainter extends CustomPainter {
 
   const VillageGamePainter({
     required this.villagers,
+    this.merchants = const [],
+    this.soldiers = const [],
     required this.buildings,
     required this.builders,
     required this.pendingOrders,
@@ -1566,6 +1670,12 @@ class VillageGamePainter extends CustomPainter {
     this.farmers       = const [],
     this.farmSelection,
     this.trees         = const [],
+    this.cleared       = const {},
+    this.wilderness    = const {},
+    this.leafBursts    = const [],
+    this.wildTreeTiles = const {},
+    this.forestDepth   = const {},
+    this.revealAnim    = const {},
     this.woodcutters   = const [],
     this.lumberCamps   = const [],
     this.lumberSelection,
@@ -1586,8 +1696,15 @@ class VillageGamePainter extends CustomPainter {
     this.zoom          = 1.0,
     this.resourceBoxes = const [],
     this.hayEntities   = const [],
+    this.eggs          = const [],
     this.skyReflection = const Color(0xFFA0C0E0),
+    this.timeOfDay     = 0.5,
+    this.season        = Season.spring,
+    this.sunColor      = const Color(0xFFFFF1C0),
+    this.sunOpacity    = 0.0,
+    this.moonOpacity   = 0.0,
     this.groundVersion = 0,
+    this.forestVersion = 0,
     this.lightSources  = const [],
     this.eventTint     = const Color(0x00000000),
     this.activeFx      = const {},
@@ -1600,6 +1717,21 @@ class VillageGamePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     _sceneTime = time;
+
+    // ── Deniz arka planı (ekran-uzayı, zoom'dan bağımsız) ────────────────────
+    // Adayı çevreleyen suluboya deniz; eski düz gök boşluğunun yerini alır.
+    // Ada elması + sahne bunun üstüne çizilir, kıyı şeridi ikisini birleştirir.
+    OceanRenderer.draw(
+      canvas, size,
+      time: time,
+      dayLight: dayLight,
+      skyMid: skyReflection,
+      sunColor: sunColor,
+      sunOpacity: sunOpacity,
+      moonOpacity: moonOpacity,
+      timeOfDay: timeOfDay,
+    );
+
     // ── Zoom: dünya içeriği ekran merkezine göre ölçeklenir ──────────────────
     final cx = size.width  / 2;
     final cy = size.height / 2;
@@ -1622,6 +1754,7 @@ class VillageGamePainter extends CustomPainter {
     }
 
     _drawGround(canvas, size);
+    _drawReveal(canvas, size);
     _drawFarmTiles(canvas, size);
     _drawWaterFoam(canvas, size);
     // Bina gölgeleri — sahne sprite'larından ÖNCE, zemin üstüne. Bu sayede
@@ -1633,6 +1766,7 @@ class VillageGamePainter extends CustomPainter {
     if (lumberSelection != null) _drawLumberSelection(canvas, size);
     if (mineSelection   != null) _drawMineSelection(canvas, size);
     _drawScene(canvas, size);
+    _drawLeafBursts(canvas, size);
     _drawMarkedTrees(canvas, size);
     _drawMarkedMines(canvas, size);
     if (ghostType != null && ghostTile != null) {
@@ -1649,6 +1783,7 @@ class VillageGamePainter extends CustomPainter {
     if (!perfMode) {
       _drawFireflies(canvas, size);
       _drawPollen(canvas, size);
+      _drawSeasonParticles(canvas, size);
       _drawBirdFlocks(canvas, size);
       _drawBeeSwarms(canvas, size);
     }
@@ -1726,6 +1861,96 @@ class VillageGamePainter extends CustomPainter {
       final r = (0.8 + tw * 0.9) * zoom;
       _pPollen.color = Color.fromARGB(a, 0xFF, 0xF2, 0xC8);
       canvas.drawCircle(p, r, _pPollen);
+    }
+  }
+
+  // ── Mevsim partikülleri (kar / yaprak) ─────────────────────────────────────
+  // Ekran uzayında, lighting pass üstünde çizilen prosedürel atmosfer. Kış:
+  // yavaşça süzülen kar; sonbahar: tumbling sürüklenen yaprak. Durumsuz —
+  // konum index + time'dan türer. Pure atmosfer, game state'i etkilemez.
+  void _drawSeasonParticles(Canvas canvas, Size size) {
+    switch (season) {
+      case Season.winter:
+        _drawSnow(canvas, size);
+      case Season.autumn:
+        _drawLeaves(canvas, size);
+      case Season.spring:
+      case Season.summer:
+        break;
+    }
+  }
+
+  void _drawSnow(Canvas canvas, Size size) {
+    if (zoom < 0.35) return;
+    final n = perfMode ? 24 : (zoom < 0.6 ? 38 : 60);
+    // 3 derinlik katmanı: uzak (küçük/yavaş/soluk) → yakın (büyük/hızlı/parlak).
+    _drawSnowLayer(canvas, size, count: n,        speed: 0.05,
+        rMin: 0.7, rMax: 1.3, alpha: 0.34, seed: 211,  sway: 12);
+    _drawSnowLayer(canvas, size, count: n * 2 ~/ 3, speed: 0.085,
+        rMin: 1.2, rMax: 1.9, alpha: 0.55, seed: 877,  sway: 18);
+    _drawSnowLayer(canvas, size, count: n ~/ 2,    speed: 0.13,
+        rMin: 1.7, rMax: 2.6, alpha: 0.78, seed: 1559, sway: 26);
+  }
+
+  void _drawSnowLayer(Canvas canvas, Size size, {
+    required int count,
+    required double speed,
+    required double rMin,
+    required double rMax,
+    required double alpha,
+    required int seed,
+    required double sway,
+  }) {
+    final yRange = size.height + 8;
+    for (int i = 0; i < count; i++) {
+      final baseX = ((i * 1733 + seed + 97) % 997) / 997.0 * size.width;
+      final yPhase = ((i * 619 + seed + 53) % 991) / 991.0;
+      final y = ((yPhase + time * speed) % 1.0) * yRange - 4;
+      final x = baseX + sin(time * 0.6 + i * 1.3) * sway;
+      if (x < -6 || x > size.width + 6) continue;
+      final tw = sin(time * 1.1 + i * 2.0) * 0.5 + 0.5;
+      final a = (alpha * (0.7 + tw * 0.3) * 255).round().clamp(0, 255);
+      final r = rMin + (rMax - rMin) * ((i % 7) / 6.0);
+      _pSnow.color = Color.fromARGB(a, 0xFA, 0xFC, 0xFF);
+      canvas.drawCircle(Offset(x, y), r, _pSnow);
+    }
+  }
+
+  // Sonbahar yaprakları — kardan az, daha geniş salınımlı + tumbling rotasyon.
+  static const List<int> _leafColors = [
+    0xFFD98A3D, // amber
+    0xFFC4602A, // turuncu-pas
+    0xFFB5471F, // kızıl
+    0xFFE0A53A, // altın
+    0xFF8A5A2B, // kahve
+  ];
+
+  void _drawLeaves(Canvas canvas, Size size) {
+    if (zoom < 0.35) return;
+    final count = perfMode ? 12 : (zoom < 0.6 ? 16 : 26);
+    final yRange = size.height + 16;
+    final lw = (5.5 * zoom).clamp(3.5, 8.0);
+    final lh = (3.2 * zoom).clamp(2.0, 5.0);
+    for (int i = 0; i < count; i++) {
+      final baseX = ((i * 1733 + 311) % 997) / 997.0 * size.width;
+      final yPhase = ((i * 619 + 131) % 991) / 991.0;
+      final speed = 0.045 + (i % 5) * 0.011;
+      final y = ((yPhase + time * speed) % 1.0) * yRange - 8;
+      final x = baseX + sin(time * 0.5 + i * 1.7) * (22 + (i % 4) * 8);
+      if (x < -12 || x > size.width + 12) continue;
+      final tw = sin(time * 0.9 + i * 1.4) * 0.5 + 0.5;
+      final a = (0.82 * (0.65 + tw * 0.35) * 255).round().clamp(0, 255);
+      _pLeaf.color = Color(_leafColors[i % _leafColors.length])
+          .withAlpha(a);
+      canvas.save();
+      canvas.translate(x, y);
+      // Tumbling — düşerken kendi ekseninde döner (yaprak hissi).
+      canvas.rotate(time * (1.0 + (i % 3) * 0.4) + i * 2.1);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: lw, height: lh),
+        _pLeaf,
+      );
+      canvas.restore();
     }
   }
 
@@ -1901,21 +2126,169 @@ class VillageGamePainter extends CustomPainter {
     _gcHeight  = size.height;
   }
 
-  void _drawWaterTiles(Canvas canvas, Size size) {
-    if (waterTiles.isEmpty) return;
+  /// Viewport'un kapsadığı tile col/row aralığı (clamp'li). Köşe min/max'ı
+  /// inline hesaplanır — frame başına 4 minik liste + .reduce allocation'ı yok.
+  /// _drawWaterTiles + _drawWaterFoam ortak viewport bucketing'i.
+  (int, int, int, int) _visibleTileBounds(Size size) {
     final (minX, maxX, minY, maxY) = _visBounds(size);
     final tl = screenToGrid(Offset(minX, minY), size, camera);
     final tr = screenToGrid(Offset(maxX, minY), size, camera);
     final bl = screenToGrid(Offset(minX, maxY), size, camera);
     final br = screenToGrid(Offset(maxX, maxY), size, camera);
-    final colMin = [tl.$1, tr.$1, bl.$1, br.$1]
-        .reduce(min).floor().clamp(0, kCols - 1);
-    final colMax = [tl.$1, tr.$1, bl.$1, br.$1]
-        .reduce(max).ceil().clamp(0, kCols - 1);
-    final rowMin = [tl.$2, tr.$2, bl.$2, br.$2]
-        .reduce(min).floor().clamp(0, kRows - 1);
-    final rowMax = [tl.$2, tr.$2, bl.$2, br.$2]
-        .reduce(max).ceil().clamp(0, kRows - 1);
+    final colMin = min(min(tl.$1, tr.$1), min(bl.$1, br.$1))
+        .floor().clamp(0, kCols - 1);
+    final colMax = max(max(tl.$1, tr.$1), max(bl.$1, br.$1))
+        .ceil().clamp(0, kCols - 1);
+    final rowMin = min(min(tl.$2, tr.$2), min(bl.$2, br.$2))
+        .floor().clamp(0, kRows - 1);
+    final rowMax = max(max(tl.$2, tr.$2), max(bl.$2, br.$2))
+        .ceil().clamp(0, kRows - 1);
+    return (colMin, colMax, rowMin, rowMax);
+  }
+
+  // ── SABAH SİSİ reveal (scene_land) ──────────────────────────────────────────
+  // Açılmamış dünya = köyü çevreleyen AYDINLIK, yumuşak, sürüklenen sabah sisi
+  // (koyu orman duvarı DEĞİL — tam tersi: hafif, parlak, düşük görsel yük).
+  // Altındaki gen içeriği (ağaç/dekor/maden) _drawScene'de zaten sisli tile'da
+  // atlanır → sis boş zemini örter. forestDepth kenarı feather'lar (kenar seyrek
+  // → iç dolu, gizler). Yeni açılan tile'lar (revealAnim) sisini eriterek bırakır.
+  // Görsel: üst üste binen yumuşak bulut püskülleri (sert diamond DEĞİL) → bulut
+  // bankası hissi. Viewport-cull'lı, cache yok.
+  static final Paint _pFogFloor = Paint()..isAntiAlias = true;
+  static final Paint _pFogHaze  = Paint()..isAntiAlias = true;
+
+  static double _ss(double x) {
+    x = x.clamp(0.0, 1.0);
+    return x * x * (3 - 2 * x);
+  }
+
+  /// Sis derinliğinden (1=kenar) opaklık: kenar seyrek/feather → iç dolu (gizler).
+  static double _mistStrength(int depth) => 0.28 + 0.62 * _ss((depth - 1) / 3.0);
+
+  void _drawReveal(Canvas canvas, Size size) {
+    if (wilderness.isEmpty && revealAnim.isEmpty) return;
+    final (colMin, colMax, rowMin, rowMax) = _visibleTileBounds(size);
+
+    // Aydınlık inci-sis tonu; şafak/alacakaranlıkta hafif SICAK (daha az mavi),
+    // gündüz daha nötr-parlak. Asla koyu değil.
+    final warm = (1.0 - dayLight).clamp(0.0, 1.0);
+    final baseR = (0xE8 + 0x12 * warm).round().clamp(0, 255);
+    final baseG = (0xEA + 0x06 * warm).round().clamp(0, 255);
+    final baseB = (0xE9 - 0x14 * warm).round().clamp(0, 255);
+    // Gece hafif kısılsın ki fener/ay ile uyumlu kalsın (yine de açık).
+    final lum = (0.82 + 0.18 * dayLight).clamp(0.72, 1.0);
+
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
+    final floor = Path();
+
+    // Bir tile'a yumuşak sis çiz: alçak base diamond (zemini kesin örter) + üstüne
+    // sürüklenen elips bulut püskülü (yumuşak radial). [s] = opaklık 0..1,
+    // [lift] = dissolve'da yukarı savrulma (px).
+    void mist(int col, int row, double s, double lift) {
+      if (s <= 0.02) return;
+      final center = gridToScreen(col + 0.5, row + 0.5, size, camera);
+      final cx = center.dx, cy = center.dy - lift;
+      final h = (col * 73856093) ^ (row * 19349663);
+      final drift = sin(time * 0.16 + (h & 255) * 0.041) * 5.0;
+      final wob   = cos(time * 0.13 + (h >> 5 & 255) * 0.037) * 3.0;
+      final shim  = 0.90 + 0.10 * sin(time * 0.11 + (h >> 9 & 255) * 0.029);
+      final a = (s * lum * shim).clamp(0.0, 1.0);
+
+      // Base diamond — zemin sızmasın (bulut püskülleri arası boşluğu kapatır).
+      floor
+        ..reset()
+        ..moveTo(cx, cy - hh)
+        ..lineTo(cx + hw, cy)
+        ..lineTo(cx, cy + hh)
+        ..lineTo(cx - hw, cy)
+        ..close();
+      _pFogFloor.color =
+          Color.fromRGBO(baseR, baseG, baseB, (a * 0.85).clamp(0.0, 1.0));
+      canvas.drawPath(floor, _pFogFloor);
+
+      // Bulut püskülü — yumuşak elips radial (çekirdek parlak → kenar eriyik).
+      const rad = kTileW * 0.95;
+      _pFogHaze.shader = ui.Gradient.radial(Offset.zero, rad, [
+        Color.fromRGBO(baseR, baseG, baseB, a),
+        Color.fromRGBO(baseR, baseG, baseB, (a * 0.55).clamp(0.0, 1.0)),
+        Color.fromRGBO(baseR, baseG, baseB, 0.0),
+      ], const [0.0, 0.55, 1.0]);
+      canvas.save();
+      canvas.translate(cx + drift, cy - hh * 0.25 + wob);
+      canvas.scale(1.08, 0.66);
+      canvas.drawCircle(Offset.zero, rad, _pFogHaze);
+      canvas.restore();
+    }
+
+    // Açılmamış tile → derinlik feather'lı sis. Açık tile ama sise KOMŞU →
+    // üstüne hafif tül (sert diamond seam'i kır, geçiş yumuşak olsun).
+    for (int row = rowMin; row <= rowMax; row++) {
+      for (int col = colMin; col <= colMax; col++) {
+        if (wilderness.contains((col, row))) {
+          final depth = forestDepth[(col, row)] ?? 4;
+          mist(col, row, _mistStrength(depth), 0.0);
+        } else if (wilderness.contains((col, row - 1)) ||
+            wilderness.contains((col, row + 1)) ||
+            wilderness.contains((col - 1, row)) ||
+            wilderness.contains((col + 1, row))) {
+          mist(col, row, 0.16, 0.0);
+        }
+      }
+    }
+
+    // Dissolve — yeni açılmış tile'lar (artık cleared) sisini eriterek yukarı
+    // savurur (~_kRevealDissolve sn). Görünürlerse çiz.
+    if (revealAnim.isNotEmpty) {
+      revealAnim.forEach((key, remain) {
+        final (col, row) = key;
+        if (col < colMin || col > colMax || row < rowMin || row > rowMax) return;
+        final t = (remain / 1.6).clamp(0.0, 1.0); // 1=taze, 0=bitti
+        mist(col, row, 0.90 * t * t, (1.0 - t) * 18.0);
+      });
+    }
+  }
+
+  // Devrilen ön-hat ağacı yaprak patlaması — kısa ömürlü prosedürel partiküller
+  // (seed+yaştan; per-yaprak storage yok). Yayıl + yerçekimiyle düş + solar.
+  static final Paint _pLeafBurst = Paint()..isAntiAlias = true;
+
+  void _drawLeafBursts(Canvas canvas, Size size) {
+    if (leafBursts.isEmpty) return;
+    for (final lb in leafBursts) {
+      final t    = (lb.age / LeafBurst.lifetime).clamp(0.0, 1.0);
+      final base = gridToScreen(lb.x, lb.y, size, camera);
+      const n = 10;
+      for (int i = 0; i < n; i++) {
+        final h    = (lb.seed + i * 0x9E3779B1) & 0xFFFFFF;
+        final ang  = (h & 0xFF) / 255.0 * 2 * pi;
+        final spd  = 12 + (h >> 8 & 0xFF) / 255.0 * 20;
+        final lw   = 3.0 + (h >> 4 & 3);
+        final dx   = cos(ang) * spd * t;
+        final dy   = sin(ang) * spd * t * 0.45 + t * t * 30 - 14; // yayıl+düş
+        final leafCol = (h & 1) == 0
+            ? const Color(0xFF6FA046)  // yeşil
+            : const Color(0xFFC79A3E); // sonbahar sarısı
+        _pLeafBurst.color =
+            leafCol.withValues(alpha: ((1 - t) * 0.95).clamp(0.0, 1.0));
+        canvas.save();
+        canvas.translate(base.dx + dx, base.dy + dy);
+        canvas.rotate(ang + t * 5);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+                center: Offset.zero, width: lw, height: lw * 0.55),
+            Radius.circular(lw * 0.3)),
+          _pLeafBurst);
+        canvas.restore();
+      }
+    }
+  }
+
+
+  void _drawWaterTiles(Canvas canvas, Size size) {
+    if (waterTiles.isEmpty) return;
+    final (colMin, colMax, rowMin, rowMax) = _visibleTileBounds(size);
     const hw = kTileW / 2;
     const hh = kTileH / 2;
     for (int row = rowMin; row <= rowMax; row++) {
@@ -1937,22 +2310,23 @@ class VillageGamePainter extends CustomPainter {
     if (waterTiles.isEmpty) return;
     const hw = kTileW / 2;
     const hh = kTileH / 2;
-    // _visBounds döngü DIŞINDA — her tile için yeniden hesaplamayı önler
-    final (minX, maxX, minY, maxY) = _visBounds(size);
-    for (final (col, row) in waterTiles) {
-      final hasLandNeighbor =
-          !waterTiles.contains((col,     row - 1)) ||
-          !waterTiles.contains((col + 1, row    )) ||
-          !waterTiles.contains((col,     row + 1)) ||
-          !waterTiles.contains((col - 1, row    ));
-      if (!hasLandNeighbor) continue;
-      final s  = gridToScreen(col.toDouble(), row.toDouble(), size, camera);
-      final px = s.dx.roundToDouble();
-      final py = s.dy.roundToDouble();
-      if (px < minX || px > maxX) continue;
-      if (py < minY || py > maxY) continue;
-      WaterRenderer.drawFoam(canvas, px, py, hw, hh, time,
-          col * 17 + row * 31);
+    // PERF: TÜM su karelerini gezmek yerine yalnız GÖRÜNÜR col/row aralığını
+    // tara (_drawWaterTiles ile aynı viewport bucketing). Geniş denizde her
+    // frame yüzlerce off-screen tile + gridToScreen israfını keser. Görsel aynı.
+    final (colMin, colMax, rowMin, rowMax) = _visibleTileBounds(size);
+    for (int row = rowMin; row <= rowMax; row++) {
+      for (int col = colMin; col <= colMax; col++) {
+        if (!waterTiles.contains((col, row))) continue;
+        final hasLandNeighbor =
+            !waterTiles.contains((col,     row - 1)) ||
+            !waterTiles.contains((col + 1, row    )) ||
+            !waterTiles.contains((col,     row + 1)) ||
+            !waterTiles.contains((col - 1, row    ));
+        if (!hasLandNeighbor) continue;
+        final s = gridToScreen(col.toDouble(), row.toDouble(), size, camera);
+        WaterRenderer.drawFoam(canvas, s.dx.roundToDouble(), s.dy.roundToDouble(),
+            hw, hh, time, col * 17 + row * 31);
+      }
     }
   }
 
@@ -1969,14 +2343,22 @@ class VillageGamePainter extends CustomPainter {
       ..lineTo(p2.dx, p2.dy)
       ..lineTo(p3.dx, p3.dy)
       ..close();
-    // Önce yumuşak kıyı sisi (kenarı karanlığa eritir), sonra ince kara çizgisi.
-    // 3 katman stroke (azalan alpha, artan kalınlık)  → blur'suz soft edge.
-    // Berrak gecede sis %55'e kadar çekilir → ufuk görünür, sahne nefes alır.
-    var mistA = (0x6E - (0x6E - 0x1E) * dayLight.clamp(0.0, 1.0)).round();
-    mistA = (mistA * (1.0 - nightClarity * 0.55)).round();
-    _pEdgeMistOuter.color = Color.fromARGB((mistA * 0.25).round(), 0x0A, 0x10, 0x18);
-    _pEdgeMistMid.color   = Color.fromARGB((mistA * 0.55).round(), 0x0A, 0x10, 0x18);
-    _pEdgeMistInner.color = Color.fromARGB(mistA, 0x0A, 0x10, 0x18);
+    // ── Kıyı şeridi: ada elmasının kenarı denizle "ada" gibi buluşur ────────
+    // Eski koyu sis yerine sığ su şelfi (turkuaz hâle, dışa doğru açılır) +
+    // ada kıyısında kırılan animasyonlu köpük + ıslak su çizgisi. Aynı 4
+    // stroke katmanı, sadece renklendirildi → ek allocation yok.
+    // Gece: lit düşer → renkler kararır (overlay zaten geceyi taşır).
+    final lit = (0.34 + dayLight.clamp(0.0, 1.0) * 0.66) *
+        (1.0 - nightClarity * 0.20);
+    int a(double v) => (v * lit).round().clamp(0, 255);
+    // Sığ su şelfi — dıştan içe açılan turkuaz hâle (kıyının "sığ" bandı).
+    _pEdgeMistOuter.color = Color.fromARGB(a(0x24), 0x6E, 0xB6, 0xBE);
+    _pEdgeMistMid.color   = Color.fromARGB(a(0x40), 0x9A, 0xCF, 0xD2);
+    // Köpük — kıyıda kırılan beyaz dalga, yavaşça nabız atar.
+    final foam = 0.62 + 0.38 * (sin(time * 1.25) * 0.5 + 0.5);
+    _pEdgeMistInner.color = Color.fromARGB(a(0x6E * foam), 0xE6, 0xF4, 0xF2);
+    // Islak su çizgisi — yeşil yerine koyu teal (kara/su keskin sınırı kalksın).
+    _pMapBorder.color = Color.fromARGB(a(0xCC), 0x1C, 0x46, 0x50);
     canvas.drawPath(_scratchPath, _pEdgeMistOuter);
     canvas.drawPath(_scratchPath, _pEdgeMistMid);
     canvas.drawPath(_scratchPath, _pEdgeMistInner);
@@ -1995,7 +2377,8 @@ class VillageGamePainter extends CustomPainter {
       final py = s.dy.roundToDouble();
       if (px < minX || px > maxX) continue;
       if (py < minY || py > maxY) continue;
-      FarmRenderer.drawTile(canvas, px, py, hw, hh, t.stage, t.growthProgress);
+      FarmRenderer.drawTile(canvas, px, py, hw, hh, t.stage, t.growthProgress,
+          season);
     }
   }
 
@@ -2246,6 +2629,9 @@ class VillageGamePainter extends CustomPainter {
         final list = _decorBuckets[(bx, by)];
         if (list == null) continue;
         for (final d in list) {
+          // Wilderness (orman duvarı altı) dekoru sisin üstünden sızmasın —
+          // cleared tile'lardaki undergrowth/kütük görünür (mutual exclusive).
+          if (wilderness.contains((d.col, d.row))) continue;
           if (inView(d.col + 0.5, d.row + 0.5, upSmall, sideS)) {
             _sceneBuffer.add(_DecorDrawable(d, time));
           }
@@ -2281,6 +2667,7 @@ class VillageGamePainter extends CustomPainter {
         final list = _lotusBuckets[(bx, by)];
         if (list == null) continue;
         for (final l in list) {
+          if (wilderness.contains((l.col, l.row))) continue; // açılmamış = sisli
           if (inView(l.col + 0.5, l.row + 0.5, upSmall, sideS)) {
             _sceneBuffer.add(_LotusDrawable(l, time));
           }
@@ -2303,6 +2690,7 @@ class VillageGamePainter extends CustomPainter {
         final list = _reedBuckets[(bx, by)];
         if (list == null) continue;
         for (final r in list) {
+          if (wilderness.contains((r.col, r.row))) continue; // orman altı sızmasın
           if (inView(r.col + 0.5, r.row + 0.5, upSmall, sideS)) {
             _sceneBuffer.add(_ReedDrawable(r, time));
           }
@@ -2315,6 +2703,11 @@ class VillageGamePainter extends CustomPainter {
         _sceneBuffer.add(_ResourceBoxDrawable(b, time));
       }
     }
+    for (final e in eggs) {
+      if (inView(e.gridX, e.gridY, upSmall, sideS)) {
+        _sceneBuffer.add(_EggDrawable(e, time));
+      }
+    }
     for (final h in hayEntities) {
       if (h.isDelivered || h.isBeingCarried) continue;
       if (inView(h.gridX, h.gridY, upSmall, sideS)) {
@@ -2323,6 +2716,16 @@ class VillageGamePainter extends CustomPainter {
     }
     for (final e in villagers) {
       if (e.isInsideBuilding) continue;
+      if (inView(e.renderX, e.renderY, upChar, sideM)) {
+        _sceneBuffer.add(_VillagerDrawable(e, time, dayLight));
+      }
+    }
+    for (final e in merchants) {
+      if (inView(e.renderX, e.renderY, upChar, sideM)) {
+        _sceneBuffer.add(_VillagerDrawable(e, time, dayLight));
+      }
+    }
+    for (final e in soldiers) {
       if (inView(e.renderX, e.renderY, upChar, sideM)) {
         _sceneBuffer.add(_VillagerDrawable(e, time, dayLight));
       }
@@ -2418,6 +2821,7 @@ class VillageGamePainter extends CustomPainter {
         if (list == null) continue;
         for (final n in list) {
           if (n.isDepleted) continue;
+          if (wilderness.contains((n.col, n.row))) continue; // açılmamış = sisli
           bool hidden = false;
           for (final mr in _mineRects) {
             if (n.col >= mr.$1 && n.col < mr.$1 + mr.$3 &&
@@ -2464,6 +2868,14 @@ class VillageGamePainter extends CustomPainter {
         final list = _treeBuckets[(bx, by)];
         if (list == null) continue;
         for (final t in list) {
+          // DERİN orman ağaçları kanopi cache'inde çizilir (entity yok zaten).
+          // ÖN HAT (wildTreeTiles) gerçek ağaçları burada _TreeDrawable olarak
+          // çizilir — net, kesilebilir, doğru depth-sort. Sadece derin orman
+          // tile'ındaki (olası) ağaç atlanır.
+          if (wilderness.contains((t.col, t.row)) &&
+              !wildTreeTiles.contains((t.col, t.row))) {
+            continue;
+          }
           if (inView(t.col + 0.5, t.row + 0.5, upTall, sideS)) {
             _sceneBuffer.add(_TreeDrawable(t, time));
           }
@@ -2498,7 +2910,7 @@ class VillageGamePainter extends CustomPainter {
     // Önde çizilen binaların footprint + ekran AABB'si. Kutunun üstü, gerçek
     // çatıya yaklaşsın diye binanın footprint ekran yüksekliğiyle ORANTILI tahmin
     // edilir (kuyu kısa, kilise uzun) → ne gökyüzüne taşar ne örtmeyi kaçırır.
-    final occ = <(BuildingEntity, Rect)>[];
+    final occ = _occBoxes..clear();
     for (final d in _sceneBuffer) {
       final b = d.building;
       if (b == null) continue;
@@ -3638,28 +4050,30 @@ class VillageGamePainter extends CustomPainter {
     // ile çarpılarak slant (x kayması) verir.
     final wind = sin(time * 0.35) * 0.10 + 0.06; // -0.04..0.16 (eğim oranı)
 
+    // PERF: damla sayıları düşürüldü (AA kapalı arka/orta + kısılmış sayı →
+    // per-frame drawLine maliyeti ~3× azaldı). perfMode'da daha da agresif.
     // Arka katman — kısa, soluk, yavaş; çok damla → sürekli "perde" hissi
     _drawRainLayer(canvas, size,
-        count: 130, speed: 0.34, length: 8.0,
+        count: perfMode ? 0 : 70, speed: 0.34, length: 8.0,
         slant: wind * 8.0,
         r: 130, g: 165, b: 200, alpha: 0.22 * intensity,
         seed: 1731, bold: false);
     // Orta katman — yoğunluk asıl katman
     _drawRainLayer(canvas, size,
-        count: 180, speed: 0.52, length: 14.0,
+        count: perfMode ? 60 : 110, speed: 0.52, length: 14.0,
         slant: wind * 14.0,
         r: 190, g: 220, b: 245, alpha: 0.38 * intensity,
         seed: 4221, bold: false);
     // Ön katman — uzun, parlak + soluk arka iz; sayısı az tutulur ki
     // bireysel damlalar okunsun, perde değil hareket hissi versin.
     _drawRainLayer(canvas, size,
-        count: 55, speed: 0.78, length: 22.0,
+        count: perfMode ? 30 : 50, speed: 0.78, length: 22.0,
         slant: wind * 22.0,
         r: 225, g: 242, b: 255, alpha: 0.50 * intensity,
-        seed: 8917, bold: true, withTail: true);
+        seed: 8917, bold: true, withTail: !perfMode);
 
-    // Yere çarpma — sahnede dağıtık periyodik splash slot'ları.
-    _drawGroundSplashes(canvas, size, intensity);
+    // Yere çarpma — sahnede dağıtık periyodik splash slot'ları. perfMode'da atla.
+    if (!perfMode) _drawGroundSplashes(canvas, size, intensity);
 
     // Yoğun yağmurda hafif mavi-gri perde (atmosfer derinliği).
     if (intensity > 0.5) {
@@ -3718,7 +4132,8 @@ class VillageGamePainter extends CustomPainter {
   void _drawGroundSplashes(Canvas canvas, Size size, double intensity) {
     // Sahne genelinde sabit slot pozisyonları + her slot kendi faz/periyod.
     // count yoğunluğa lineer ölçek — zayıf yağmurda az splash, kuvvetlide çok.
-    final count = (55 * intensity).round();
+    // PERF: 55→38 (her splash ~4 AA op; toplam çarpan).
+    final count = (38 * intensity).round();
     if (count == 0) return;
 
     for (int i = 0; i < count; i++) {
@@ -3797,6 +4212,7 @@ class VillageGamePainter extends CustomPainter {
       old.farmSelection   != farmSelection   ||
       old.lumberSelection != lumberSelection ||
       old.villagers       != villagers       ||
+      old.merchants       != merchants       ||
       old.buildings       != buildings       ||
       old.builders        != builders        ||
       old.pendingOrders   != pendingOrders   ||
@@ -3818,8 +4234,10 @@ class VillageGamePainter extends CustomPainter {
       old.cows            != cows            ||
       old.zoom            != zoom            ||
       old.resourceBoxes   != resourceBoxes   ||
+      old.eggs            != eggs            ||
       old.hayEntities     != hayEntities     ||
       old.groundVersion   != groundVersion   ||
+      old.forestVersion   != forestVersion   ||
       old.lightSources    != lightSources    ||
       old.ambientTint     != ambientTint     ||
       old.ambientStrength != ambientStrength ||

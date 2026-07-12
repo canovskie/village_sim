@@ -85,6 +85,9 @@ class _Chimney {
 
 const Map<BuildingType, String> _kAssets = {
   BuildingType.woodenHouse:    'assets/buildings/minihouse.png',
+  BuildingType.stoneHouseBlue: 'assets/buildings/stonehouse_blue.png',
+  BuildingType.stoneHouseGreen:'assets/buildings/stonehouse_green.png',
+  BuildingType.manor:          'assets/buildings/manor.png',
   BuildingType.mill:           'assets/buildings/mill.png',
   BuildingType.stable:         'assets/buildings/stable.png',
   BuildingType.well:           'assets/buildings/well.png',
@@ -102,6 +105,14 @@ const Map<BuildingType, String> _kAssets = {
   BuildingType.lamppost:       'assets/buildings/lamppost.png',
   BuildingType.barn:           'assets/buildings/stable.png',
   BuildingType.church:         'assets/buildings/church.png',
+  BuildingType.fountain:       'assets/buildings/fountain.png',
+  BuildingType.library:        'assets/buildings/library.png',
+  BuildingType.bathhouse:      'assets/buildings/bathhouse.png',
+  BuildingType.monument:       'assets/buildings/monument.png',
+  BuildingType.dock:           'assets/buildings/dock.png',
+  BuildingType.caravanserai:   'assets/buildings/caravanserai.png',
+  BuildingType.shrine:         'assets/buildings/shrine.png',
+  BuildingType.belltower:      'assets/buildings/belltower.png',
 };
 
 // ─── Screen ──────────────────────────────────────────────────────────────────

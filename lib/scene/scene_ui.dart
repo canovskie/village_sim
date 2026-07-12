@@ -25,125 +25,12 @@ extension _SceneUi on _VillageSceneState {
     if (perm.abs() > 0.005) list.add(('Politikalar (kalıcı)', perm));
     final temp = _policyMoraleTemporary();
     if (temp.abs() > 0.005) list.add(('Politikalar (geçici)', temp));
+    if (_governanceLegacy.abs() > 0.005) {
+      list.add(('Kararların mirası', _governanceLegacy));
+    }
     final indiv = (_avgIndividualMorale - 0.62) * 0.5;
     if (indiv.abs() > 0.005) list.add(('Halkın hâli', indiv));
     return list;
-  }
-
-  // ── Sky / sun / moon / clouds (time-driven) ────────────────────────────────
-
-  Widget buildSkyLayer(Size screen) {
-    // Güneş / Ay ark sabitleri — ekran boyutuna bağlı (frame'den bağımsız).
-    const kSunSize = 32.0;
-    const kMoonSize = 24.0;
-    final arcCx = screen.width / 2;
-    final arcBy = screen.height * 0.50;
-    final arcR = screen.width * 0.42;
-
-    // Time-driven katmanlar — ListenableBuilder ile her tick yalnızca
-    // bu blok rebuild olur (RepaintBoundary ile diğer katmanları
-    // etkilemeden). Outer Scaffold/PopScope ağacı tick'te rebuild OLMAZ.
-    return RepaintBoundary(
-      child: ListenableBuilder(
-        listenable: _frame,
-        builder: (context, _) {
-          final sunNorm = ((_cycle.timeOfDay - 0.25) / 0.50).clamp(0.0, 1.0);
-          final sunAngle = pi * sunNorm;
-          final sunX = arcCx + arcR * cos(sunAngle) - kSunSize / 2;
-          final sunY = arcBy - arcR * sin(sunAngle) - kSunSize / 2;
-          final moonT = (_cycle.timeOfDay + 0.5) % 1.0;
-          final moonNorm = ((moonT - 0.25) / 0.50).clamp(0.0, 1.0);
-          final moonAngle = pi * moonNorm;
-          final moonX = arcCx + arcR * cos(moonAngle) - kMoonSize / 2;
-          final moonY = arcBy - arcR * sin(moonAngle) - kMoonSize / 2;
-          final w = screen.width;
-          final wrap = w + 240.0;
-          const clouds = <(double, double, double, double, double, double)>[
-            (0.08, 22.0, 0.55, 2.5, 0.30, 0.50),
-            (0.40, 14.0, 0.60, 2.8, 0.35, 0.40),
-            (0.76, 32.0, 0.50, 2.2, 0.28, 0.50),
-            (0.18, 58.0, 0.85, 5.0, 0.65, 0.35),
-            (0.55, 48.0, 0.95, 5.5, 0.70, 0.30),
-            (0.88, 68.0, 0.75, 4.5, 0.60, 0.45),
-            (0.04, 96.0, 1.30, 9.0, 1.00, 0.25),
-            (0.38, 116.0, 1.45, 9.5, 1.00, 0.20),
-            (0.72, 88.0, 1.20, 8.5, 1.00, 0.30),
-          ];
-          return Stack(
-            children: [
-              PixelSky(topColor: _cycle.skyTop, midColor: _cycle.skyMid),
-              Positioned.fill(
-                child: StarField(opacity: _cycle.starOpacity, time: _time),
-              ),
-              Positioned(
-                left: sunX,
-                top: sunY,
-                child: Opacity(
-                  opacity: _cycle.sunOpacity,
-                  child: PixelSun(color: _cycle.sunColor),
-                ),
-              ),
-              Positioned(
-                left: moonX - 58,
-                top: moonY - 58,
-                child: Opacity(
-                  opacity: _cycle.moonOpacity,
-                  child: SizedBox(
-                    width: 140,
-                    height: 140,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Container(
-                          width: 140,
-                          height: 140,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                Color(0x30C8E8FF),
-                                Color(0x00C8E8FF),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: RadialGradient(
-                              colors: [
-                                Color(0x55DDEEFF),
-                                Color(0x00DDEEFF),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const PixelMoon(),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              for (final cfg in clouds)
-                Positioned(
-                  left: ((cfg.$1 * w) + (_time * cfg.$4)) % wrap - 120,
-                  top: cfg.$2,
-                  child: Opacity(
-                    opacity: _cycle.cloudOpacity,
-                    child: PixelCloud(
-                      dark: _cycle.rainIntensity > cfg.$6,
-                      scale: cfg.$3,
-                      parallax: cfg.$5,
-                    ),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
   }
 
   // ── Kamera sarsıntısı (juice) ──────────────────────────────────────────────
@@ -181,6 +68,10 @@ extension _SceneUi on _VillageSceneState {
             onScaleUpdate: _onCanvasScaleUpdate,
             onScaleEnd: _onCanvasScaleEnd,
             onTapUp: _onCanvasTapUp,
+            // Çoklu dikim: yerleştirme modunda basılı tut + sürükle.
+            onLongPressStart: _onCanvasLongPressStart,
+            onLongPressMoveUpdate: _onCanvasLongPressMoveUpdate,
+            onLongPressEnd: _onCanvasLongPressEnd,
             child: MouseRegion(
               onHover: _onCanvasHover,
               onExit: (_) => setStateHere(_clearHover),
@@ -190,6 +81,8 @@ extension _SceneUi on _VillageSceneState {
                   builder: (_, _) => CustomPaint(
                     painter: VillageGamePainter(
                       villagers: _villagers,
+                      merchants: _merchants,
+                      soldiers: _soldiers,
                       buildings: _buildings,
                       builders: _builders,
                       pendingOrders: _orders,
@@ -222,6 +115,13 @@ extension _SceneUi on _VillageSceneState {
                             )
                           : null,
                       trees: _trees,
+                      cleared: _cleared,
+                      wilderness: _wilderness,
+                      wildTreeTiles: _wildTreeTiles,
+                      forestDepth: _forestDepth,
+                      revealAnim: _revealAnim,
+                      forestVersion: _forestVersion,
+                      leafBursts: _leafBursts,
                       woodcutters: _woodcutters,
                       lumberSelection:
                           (_lumberMode &&
@@ -259,7 +159,13 @@ extension _SceneUi on _VillageSceneState {
                       zoom: _zoom,
                       resourceBoxes: _resourceBoxes,
                       hayEntities: _hayEntities,
+                      eggs: _eggs,
                       skyReflection: _cycle.skyMid,
+                      timeOfDay: _cycle.timeOfDay,
+                      season: _season,
+                      sunColor: _cycle.sunColor,
+                      sunOpacity: _cycle.sunOpacity,
+                      moonOpacity: _cycle.moonOpacity,
                       groundVersion: _groundVersion,
                       lightSources: _lightSources,
                       ambientTint: _cycle.ambientTint,
@@ -310,6 +216,8 @@ extension _SceneUi on _VillageSceneState {
           rainIntensity: _cycle.rainIntensity,
           dayLight: _cycle.dayLight,
           dayCount: _dayCount,
+          season: _season,
+          seasonProgress: seasonProgress(_dayCount, _cycle.timeOfDay),
           buildingCount: _buildings.length,
           pendingOrderCount: _orders.where((o) => !o.completed).length,
           morale: _stats.morale,
@@ -330,13 +238,59 @@ extension _SceneUi on _VillageSceneState {
           effectPositive: (_eventMorale >= 0),
           onToggleDev: () =>
               setStateHere(() => _devPanelOpen = !_devPanelOpen),
+          muted: SettingsModel.instance.muted,
+          onToggleMute: () =>
+              setStateHere(() => SettingsModel.instance.toggleMute()),
           godMode: _godMode,
           onNewMap: () => setStateHere(() => _generateWorld()),
+          onOpenRoster: () => setStateHere(() => _statsPanelOpen = true),
           onToggleGod: () => setStateHere(() => _godMode = !_godMode),
           onTriggerEvent: _triggerRandomEvent,
           timeScale: _timeScale,
           onCycleSpeed: _cycleSpeed,
         ),
+      ),
+    );
+  }
+
+  /// Keşif mini-haritası — sisli orman sahnede görünmez; burada üstten sahip
+  /// olunan toprak + göl/maden konumları öğrenilir. Orman varken (bottom-left).
+  Widget buildDiscoveryMinimap() {
+    if (_wilderness.isEmpty) return const SizedBox.shrink();
+    final oreMarkers = <(int, int, Color)>[
+      for (final n in _mineNodes)
+        if (!n.isDepleted)
+          (
+            n.col,
+            n.row,
+            switch (n.type) {
+              OreType.iron => const Color(0xFFC2CAD2),
+              OreType.coal => const Color(0xFF4A4A52),
+              _ => const Color(0xFFB09A7C),
+            }
+          ),
+    ];
+    return Positioned(
+      left: 14,
+      bottom: 56,
+      child: DiscoveryMinimap(
+        cleared: _cleared,
+        water: _waterTiles,
+        oreMarkers: oreMarkers,
+      ),
+    );
+  }
+
+  /// Açılım pusulası — otonom orman kesiminin yönünü belirler. Yalnız açılacak
+  /// orman varken görünür (bottom-right köşe).
+  Widget buildExpandCompass() {
+    if (_wilderness.isEmpty) return const SizedBox.shrink();
+    return Positioned(
+      right: 22,
+      bottom: 150,
+      child: ExpandCompass(
+        dir: _expandDir,
+        onSet: (d) => setStateHere(() => _expandDir = d),
       ),
     );
   }
@@ -350,106 +304,209 @@ extension _SceneUi on _VillageSceneState {
       left: 0,
       right: 0,
       child: Center(
+        // Ateş yokken kategori yok — yalnız ateş yeri kartı. Sonra: kategori
+        // sekmeleri (üstte) + seçili kategorinin içeriği (altta). Tek sıralık
+        // kalabalık yerine derli toplu, ölçeklenebilir palet.
+        child: !_hasFire
+            ? BuildingPanel(
+                stockpile: _stockpile,
+                selected: _placing,
+                hasFirepit: false,
+                onSelect: _onSelectBuilding,
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildCategoryContent(),
+                  const SizedBox(height: 6),
+                  _buildCategoryTabs(),
+                ],
+              ),
+      ),
+    );
+  }
+
+  /// Seçili kategorinin içeriği — bina kategorisinde palet, Arazi/Yol'da
+  /// yol döşeme + Tarla/Kes/Kaz modları.
+  Widget _buildCategoryContent() {
+    if (_buildCategory == BuildCategory.araziYol) return _buildLandRoadTools();
+    return BuildingPanel(
+      stockpile: _stockpile,
+      selected: _placing,
+      hasFirepit: _hasFire,
+      category: _buildCategory,
+      onSelect: _onSelectBuilding,
+    );
+  }
+
+  /// Kategori sekmeleri — alt çubuğun kalabalık tek sırasını gruplara böler.
+  Widget _buildCategoryTabs() {
+    return AppPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final cat in BuildCategory.values) ...[
+            if (cat != BuildCategory.values.first) const SizedBox(width: 4),
+            _categoryTab(cat),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _categoryTab(BuildCategory cat) {
+    final sel = _buildCategory == cat;
+    return GestureDetector(
+      onTap: () => setStateHere(() => _buildCategory = cat),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+          color: sel
+              ? Color.alphaBlend(
+                  AppUi.accent.withValues(alpha: 0.22), AppUi.surface2)
+              : AppUi.surface0,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(
+              color: sel ? AppUi.accent : AppUi.line, width: sel ? 1.4 : 1),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            BuildingPanel(
-              stockpile: _stockpile,
-              selected: _placing,
-              hasFirepit: _hasFire,
-              onSelect: (type) => setStateHere(() {
-                _farmMode = false;
-                _lumberMode = false;
-                _mineMode = false;
-                _placingRoad = null;
-                if (_placing == type) {
-                  _placing = null;
-                  _ghost = null;
-                } else {
-                  _placing = type;
-                  _ghost = null;
-                }
-              }),
-            ),
-            const SizedBox(width: 6),
-            RoadPanel(
-              stockpile: _stockpile,
-              selected: _placingRoad,
-              onSelect: (s) => setStateHere(() {
-                _placing = null;
-                _ghost = null;
-                _farmMode = false;
-                _lumberMode = false;
-                _mineMode = false;
-                _placingRoad = _placingRoad == s ? null : s;
-                _roadStrokeTiles.clear();
-              }),
-            ),
-            const SizedBox(width: 6),
-            ModeButton(
-              icon: '🌾',
-              label: 'Tarla',
-              active: _farmMode,
-              accentColor: const Color(0xFF88CC22),
-              onTap: () => setStateHere(() {
-                _placing = null;
-                _ghost = null;
-                _placingRoad = null;
-                _lumberMode = false;
-                _lumberStart = null;
-                _lumberEnd = null;
-                _mineMode = false;
-                _mineStart = null;
-                _mineEnd = null;
-                _farmMode = !_farmMode;
-                _farmStart = null;
-                _farmEnd = null;
-              }),
-            ),
-            const SizedBox(width: 4),
-            ModeButton(
-              icon: '🪓',
-              label: 'Kes',
-              active: _lumberMode,
-              accentColor: const Color(0xFFCC6600),
-              onTap: () => setStateHere(() {
-                _placing = null;
-                _ghost = null;
-                _placingRoad = null;
-                _farmMode = false;
-                _farmStart = null;
-                _farmEnd = null;
-                _mineMode = false;
-                _mineStart = null;
-                _mineEnd = null;
-                _lumberMode = !_lumberMode;
-                _lumberStart = null;
-                _lumberEnd = null;
-              }),
-            ),
-            const SizedBox(width: 4),
-            ModeButton(
-              icon: '⛏',
-              label: 'Kaz',
-              active: _mineMode,
-              accentColor: const Color(0xFF8888CC),
-              onTap: () => setStateHere(() {
-                _placing = null;
-                _ghost = null;
-                _placingRoad = null;
-                _farmMode = false;
-                _farmStart = null;
-                _farmEnd = null;
-                _lumberMode = false;
-                _lumberStart = null;
-                _lumberEnd = null;
-                _mineMode = !_mineMode;
-                _mineStart = null;
-                _mineEnd = null;
-              }),
-            ),
+            Text(cat.icon, style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 5),
+            Text(cat.label.toUpperCase(),
+                style: AppUi.button.copyWith(
+                    fontSize: 9.5,
+                    letterSpacing: 0.8,
+                    color: sel ? AppUi.accentSoft : AppUi.textMid)),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Bina seçimi — modları temizle, aynı binaya basınca bırak (toggle).
+  void _onSelectBuilding(BuildingType type) => setStateHere(() {
+        _farmMode = false;
+        _lumberMode = false;
+        _mineMode = false;
+        _placingRoad = null;
+        if (_placing == type) {
+          _placing = null;
+          _ghost = null;
+        } else {
+          _placing = type;
+          _ghost = null;
+        }
+      });
+
+  /// Arazi/Yol sekmesi içeriği — yol döşeme + Tarla/Kes/Kaz modları.
+  Widget _buildLandRoadTools() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        RoadPanel(
+          stockpile: _stockpile,
+          selected: _placingRoad,
+          onSelect: (s) => setStateHere(() {
+            _placing = null;
+            _ghost = null;
+            _farmMode = false;
+            _lumberMode = false;
+            _mineMode = false;
+            _placingRoad = _placingRoad == s ? null : s;
+            _roadStrokeTiles.clear();
+          }),
+        ),
+        const SizedBox(width: 6),
+        ModeButton(
+          icon: '🌾',
+          label: 'Tarla',
+          active: _farmMode,
+          accentColor: const Color(0xFF88CC22),
+          onTap: () => setStateHere(() {
+            _placing = null;
+            _ghost = null;
+            _placingRoad = null;
+            _lumberMode = false;
+            _lumberStart = null;
+            _lumberEnd = null;
+            _mineMode = false;
+            _mineStart = null;
+            _mineEnd = null;
+            _farmMode = !_farmMode;
+            _farmStart = null;
+            _farmEnd = null;
+          }),
+        ),
+        const SizedBox(width: 4),
+        ModeButton(
+          icon: '🪓',
+          label: 'Kes',
+          active: _lumberMode,
+          accentColor: const Color(0xFFCC6600),
+          onTap: () => setStateHere(() {
+            _placing = null;
+            _ghost = null;
+            _placingRoad = null;
+            _farmMode = false;
+            _farmStart = null;
+            _farmEnd = null;
+            _mineMode = false;
+            _mineStart = null;
+            _mineEnd = null;
+            _lumberMode = !_lumberMode;
+            _lumberStart = null;
+            _lumberEnd = null;
+          }),
+        ),
+        const SizedBox(width: 4),
+        ModeButton(
+          icon: '⛏',
+          label: 'Kaz',
+          active: _mineMode,
+          accentColor: const Color(0xFF8888CC),
+          onTap: () => setStateHere(() {
+            _placing = null;
+            _ghost = null;
+            _placingRoad = null;
+            _farmMode = false;
+            _farmStart = null;
+            _farmEnd = null;
+            _lumberMode = false;
+            _lumberStart = null;
+            _lumberEnd = null;
+            _mineMode = !_mineMode;
+            _mineStart = null;
+            _mineEnd = null;
+          }),
+        ),
+      ],
+    );
+  }
+
+  /// Akıllı yerleştirme ipucu — hayalet geçersiz tile üstündeyken NEDEN
+  /// kurulamadığını inşa çubuğunun hemen üstünde gösterir (öğretici).
+  Widget buildPlaceReason() {
+    return Positioned(
+      bottom: 132,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: const Color(0xF21A0E04),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppUi.rust, width: 1),
+            ),
+            child: Text('🚫 $_placeReason',
+                style: AppUi.bodyHi.copyWith(fontSize: 12, color: AppUi.rust)),
+          ),
         ),
       ),
     );
@@ -474,9 +531,14 @@ extension _SceneUi on _VillageSceneState {
               child: Container(color: const Color(0x2D000000)),
             ),
           ),
-          Align(
-            alignment: const Alignment(0, -0.55),
-            child: BuildingInfoPanel(
+          // Sağ-dock: tüm seçim panelleri tutarlı biçimde sağ kenarda açılır.
+          Positioned(
+            top: 64,
+            right: 14,
+            bottom: 96,
+            child: SafeArea(
+              child: SingleChildScrollView(
+                child: BuildingInfoPanel(
         building: selected,
         residents:
             _villagers.where((v) => v.homeBuilding == selected).toList(),
@@ -487,11 +549,16 @@ extension _SceneUi on _VillageSceneState {
               m.gridY >= selected.row - 0.5 &&
               m.gridY < selected.row + selected.rows + 0.5;
         }).toList(),
-        barnCows: selected.type == BuildingType.barn
+        barnCows: (selected.type == BuildingType.barn ||
+                selected.type == BuildingType.chickenCoop)
             ? _cows
                 .where((c) => c.barnCol == selected.col && c.barnRow == selected.row)
                 .toList()
             : const [],
+        onBuyAnimal: (selected.type == BuildingType.barn ||
+                selected.type == BuildingType.chickenCoop)
+            ? (kind) => _buyAnimal(selected, kind)
+            : null,
         barnShepherd: selected.type == BuildingType.barn
             ? _shepherds
                 .where((sh) => sh.barnCol == selected.col && sh.barnRow == selected.row)
@@ -510,6 +577,14 @@ extension _SceneUi on _VillageSceneState {
           }
         }),
         onFestival: () => _hostFestival(selected),
+        // Yık (kısmi iade) + Taşı (tam iade + yeniden yerleştir). Ateş yeri
+        // korunur (panelde gösterme).
+        onDemolish: selected.type == BuildingType.firepit
+            ? null
+            : () => _demolishBuilding(selected, refund: 0.5),
+        onMove: selected.type == BuildingType.firepit
+            ? null
+            : () => _demolishBuilding(selected, refund: 1.0, reselect: true),
         onRefillWater: selected.type == BuildingType.well
             ? () => _runWaterService(selected)
             : null,
@@ -526,11 +601,14 @@ extension _SceneUi on _VillageSceneState {
         policyCooldownSec: selected.type == BuildingType.townhall
             ? _policyCooldownRemaining()
             : 0,
-        estates: selected.type == BuildingType.townhall
-            ? _estateSnapshot()
+        houses: selected.type == BuildingType.townhall
+            ? _houses.snapshot()
             : null,
         villageIdentity:
-            selected.type == BuildingType.townhall ? _estates.identityName : null,
+            selected.type == BuildingType.townhall ? _houses.identityName : null,
+        identityBonus: null,
+                ),
+              ),
             ),
           ),
         ],
@@ -578,6 +656,11 @@ extension _SceneUi on _VillageSceneState {
           msg = _policies.apprenticeship
               ? '📜 Çıraklık yürürlükte — meslek babadan geçer.'
               : '📜 Çıraklık kaldırıldı.';
+        case 'tradeGuidance':
+          _policies.tradeGuidance = !_policies.tradeGuidance;
+          msg = _policies.tradeGuidance
+              ? '📜 Zanaat yönlendirmesi — gençler kıt mesleklere yöneltilir.'
+              : '📜 Zanaat yönlendirmesi kaldırıldı.';
         case 'slowMaturity':
           _policies.slowMaturity = !_policies.slowMaturity;
           msg = _policies.slowMaturity
@@ -603,6 +686,11 @@ extension _SceneUi on _VillageSceneState {
           msg = _policies.sharedHarvest
               ? '📜 Müşterek hasat — geri kalan tarla hızlanır.'
               : '📜 Müşterek hasat kaldırıldı.';
+        case 'cropRotation':
+          _policies.cropRotation = !_policies.cropRotation;
+          msg = _policies.cropRotation
+              ? '📜 Dönemli ekim — toprak dinlenir, hasat verimi artar.'
+              : '📜 Dönemli ekim kaldırıldı.';
         case 'greenVillage':
           _policies.greenVillage = !_policies.greenVillage;
           msg = _policies.greenVillage
@@ -762,10 +850,16 @@ extension _SceneUi on _VillageSceneState {
 
   Widget buildSelectedVillagerPanel() {
     final v = _selectedVillager!;
+    // Sağ-dock: bina paneliyle tutarlı, hep sağ kenarda. Backdrop YOK — oyun
+    // etkileşimli kalır (haritada başka köylüye tıklayıp panele geçilebilir).
+    // Yüksekse scroll eder (yaşam öyküsü uzun olabilir).
     return Positioned(
-      bottom: 120,
-      left: 14,
-      child: VillagerInfoPanel(
+      top: 64,
+      right: 14,
+      bottom: 96,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: VillagerInfoPanel(
         villager: v,
         homeLabel: v.homeBuilding == null
             ? null
@@ -780,6 +874,84 @@ extension _SceneUi on _VillageSceneState {
           if (cleaned.isEmpty || cleaned.length > 20) return;
           setStateHere(() => v.name = cleaned);
         },
+        // Kan davası yargısı — geri alınamaz, onay ister.
+        onExile: () => setStateHere(() => _pendingJudgment = (v, false)),
+        onExecute: () => setStateHere(() => _pendingJudgment = (v, true)),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Kan davası yargısı onay modalı — sürgün/idam geri alınamaz, oyuncu onaylar.
+  /// `_pendingJudgment` = (hedef, idam mı). Mirror: buildExitConfirm pattern.
+  Widget buildJudgmentConfirm() {
+    final (v, lethal) = _pendingJudgment!;
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setStateHere(() => _pendingJudgment = null),
+              child: Container(color: const Color(0x99000000)),
+            ),
+          ),
+          Center(
+            child: AppPanel(
+              width: 340,
+              accent: AppUi.rust,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(lethal ? '⚖️ İdam kararı' : '🚷 Sürgün kararı',
+                      style: AppUi.title),
+                  const SizedBox(height: 8),
+                  Text(
+                    lethal
+                        ? '${v.name} halkın önünde idam edilecek. Kan davası kanla '
+                            'kapanır ama köyü dehşet sarar. Bu karar geri alınamaz.'
+                        : '${v.name} köyden sürülecek. Kan davası uzaklaştırmayla '
+                            'diner. Bu karar geri alınamaz.',
+                    style: AppUi.body.copyWith(color: AppUi.textMid),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: AppButton(
+                          label: 'Vazgeç',
+                          kind: AppButtonKind.ghost,
+                          onTap: () => setStateHere(() => _pendingJudgment = null),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: AppButton(
+                          label: lethal ? 'İdam et' : 'Sürgün et',
+                          kind: AppButtonKind.filled,
+                          tint: AppUi.rust,
+                          onTap: () {
+                            setStateHere(() {
+                              _pendingJudgment = null;
+                              _selectedVillager = null;
+                              if (lethal) {
+                                _executeVillager(v);
+                              } else {
+                                _exileVillager(v);
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -893,6 +1065,7 @@ extension _SceneUi on _VillageSceneState {
             _policies.eldersExemptFromFood = true;
             _policies.hospitality = true;
             _policies.apprenticeship = true;
+            _policies.tradeGuidance = true;
             _policies.slowMaturity = true;
             _policies.neighborliness = true;
             _policies.familyReunion = true;
@@ -910,6 +1083,7 @@ extension _SceneUi on _VillageSceneState {
             _policies.eldersExemptFromFood = false;
             _policies.hospitality = false;
             _policies.apprenticeship = false;
+            _policies.tradeGuidance = false;
             _policies.slowMaturity = false;
             _policies.neighborliness = false;
             _policies.familyReunion = false;
@@ -945,7 +1119,19 @@ extension _SceneUi on _VillageSceneState {
             }
           }),
           onSpawnMigrant: () => setStateHere(_spawnMigrant),
+          onSummonImperial: () {
+            setStateHere(() => _devPanelOpen = false); // yaklaşan kolon görünsün
+            _devSummonImperial();
+          },
           onForcePetition: _forcePetition,
+          onForcePetitionShortFuse: () {
+            setStateHere(() => _devPanelOpen = false); // mühür/modal görünsün
+            _forcePetitionShortFuse();
+          },
+          onForcePetitionAudience: () {
+            setStateHere(() => _devPanelOpen = false); // zorla modal görünsün
+            _forcePetitionAudienceNow();
+          },
           petitions: [
             for (final p in PetitionSystem.all) (p.id, '${p.icon} ${p.title}'),
           ],
@@ -1002,6 +1188,16 @@ extension _SceneUi on _VillageSceneState {
               _showNotification('Yan yana iki yetişkin NPC bulunamadı');
             }
           },
+          onStartConflict: () {
+            if (!_devStartConflict()) {
+              _showNotification('Yan yana iki uygun yetişkin NPC bulunamadı');
+            }
+          },
+          onIgniteFeud: () => setStateHere(() {
+            if (!_devIgniteFeud()) {
+              _showNotification('Kan davası için 2 uygun köylü bulunamadı');
+            }
+          }),
           onClearActivities: () => setStateHere(_devClearActivities),
           onMeteorShower: () => setStateHere(_startMeteorShower),
         ),
@@ -1078,16 +1274,21 @@ extension _SceneUi on _VillageSceneState {
   /// her an görünür. [[EstateBanner]] kendi nefes animasyonunu yürütür.
   Widget buildEstateBanner() {
     return Positioned(
-      right: 12,
-      // Saat panosu + hız/dev/event kontrol satırının altından başla (üst üste
-      // binmeyi önler); soldaki görev paneliyle (top:190) hizalı.
+      // Görevler paneliyle simetrik: aynı kenar boşluğu (14) + aynı top (190).
+      right: 14,
       top: 190,
       child: RepaintBoundary(
         child: ListenableBuilder(
           listenable: _frame,
-          builder: (_, _) => EstateBanner(
-            estates: _estateSnapshot(),
-            identity: _estates.identityName,
+          builder: (_, _) => HouseBanner(
+            houses: _houses.snapshot(),
+            imperial: _imperialSnapshot(),
+            identity: _houses.identityName,
+            collapsed: _estateCollapsed,
+            onToggleCollapse: () =>
+                setStateHere(() => _estateCollapsed = !_estateCollapsed),
+            onOpenDivan: _openDivan,
+            agendaCount: _divanAgendaCount(),
           ),
         ),
       ),
@@ -1193,7 +1394,7 @@ extension _SceneUi on _VillageSceneState {
                 ? 'Tarla — sürükle seç, bırak onayla'
                 : _placingRoad != null
                 ? '${_placingRoad!.label} — sürükle döşe'
-                : '${kBuildingMeta[_placing!]!.label} — haritaya tıkla',
+                : '${kBuildingMeta[_placing!]!.label} — tıkla (basılı tut: çoklu)',
             style: TextStyle(
               color: _mineMode
                   ? const Color(0xFFAABBFF)
@@ -1209,6 +1410,48 @@ extension _SceneUi on _VillageSceneState {
           ),
         ),
       ),
+    );
+  }
+
+  /// Bir köylünün ev kademesi → Nüfus Defteri etiketi + sıralama katı.
+  /// tier: 0 evsiz · 1 çadır · 2 ahşap · 3 taş · 4 konak.
+  (String, int) _housingInfo(VillagerEntity v) {
+    final home = v.homeBuilding;
+    if (home == null) return ('Evsiz', 0);
+    switch ((home as BuildingEntity).type) {
+      case BuildingType.manor:
+        return ('Konak', 4);
+      case BuildingType.stoneHouseBlue:
+      case BuildingType.stoneHouseGreen:
+        return ('Taş Ev', 3);
+      case BuildingType.woodenHouse:
+        return ('Ahşap Ev', 2);
+      case BuildingType.tent:
+        return ('Çadır', 1);
+      default:
+        return ('Barınak', 2);
+    }
+  }
+
+  /// Köy Nüfus Defteri modalı — köylülerin hane/meslek/servet/moral istatistikleri
+  /// (Köylüler + Haneler sekmeleri). Salt-okunur; satıra dokun = detay paneli açılır.
+  Widget buildStatsPanel() {
+    final rows = [
+      for (final v in _villagers)
+        if (!v.isDying)
+          () {
+            final (label, tier) = _housingInfo(v);
+            return VillagerStatRow(v, label, tier);
+          }(),
+    ];
+    return VillagerStatsPanel(
+      rows: rows,
+      houses: _houses.snapshot(),
+      onClose: () => setStateHere(() => _statsPanelOpen = false),
+      onSelect: (v) => setStateHere(() {
+        _statsPanelOpen = false;
+        _selectedVillager = v;
+      }),
     );
   }
 
@@ -1244,7 +1487,10 @@ extension _SceneUi on _VillageSceneState {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text('Büyük anların güncesi',
+                      Text(
+                          _achievedMilestones.isEmpty
+                              ? 'Büyük anların güncesi'
+                              : 'Büyük anların güncesi · 🏆 ${_achievedMilestones.length} başarım',
                           style: AppUi.label.copyWith(color: AppUi.textLo)),
                       const AppDivider(),
                       if (_storyLog.isEmpty)
@@ -1270,23 +1516,44 @@ extension _SceneUi on _VillageSceneState {
                                       children: [
                                         Padding(
                                           padding:
-                                              const EdgeInsets.only(top: 5),
-                                          child: Container(
-                                            width: 6,
-                                            height: 6,
-                                            decoration: const BoxDecoration(
-                                              color: AppUi.accent,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
+                                              const EdgeInsets.only(top: 1),
+                                          child: Text(entry.icon,
+                                              style: const TextStyle(
+                                                  fontSize: 15)),
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
-                                          child: Text(entry,
-                                              style: AppUi.body.copyWith(
-                                                  fontSize: 12.5,
-                                                  height: 1.4)),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              if (entry.day > 0)
+                                                Text('${entry.day}. Gün',
+                                                    style: AppUi.label.copyWith(
+                                                        color: AppUi.textLo,
+                                                        fontSize: 10)),
+                                              Text(entry.text,
+                                                  style: entry.milestone
+                                                      ? AppUi.body.copyWith(
+                                                          fontSize: 12.5,
+                                                          height: 1.4,
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: AppUi.accent)
+                                                      : AppUi.body.copyWith(
+                                                          fontSize: 12.5,
+                                                          height: 1.4)),
+                                            ],
+                                          ),
                                         ),
+                                        if (entry.milestone)
+                                          const Padding(
+                                            padding: EdgeInsets.only(
+                                                left: 6, top: 1),
+                                            child: Text('🏆',
+                                                style:
+                                                    TextStyle(fontSize: 12)),
+                                          ),
                                       ],
                                     ),
                                   ),

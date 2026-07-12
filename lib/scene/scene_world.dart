@@ -16,6 +16,17 @@ extension _SceneWorld on _VillageSceneState {
     return null;
   }
 
+  /// Ekran koordinatını SÜREKLİ (snap'siz) dünya grid koordinatına çevirir —
+  /// köylü tutup-bırak sürüklemesi için (akıcı takip). Harita içindeyse (fc,fr),
+  /// dışındaysa null.
+  (double, double)? _toWorld(Offset pos) {
+    final center = Offset(_viewSize.width / 2, _viewSize.height / 2);
+    final adjusted = (pos - center) / _zoom + center;
+    final (fc, fr) = screenToGrid(adjusted, _viewSize, _camera);
+    if (fc >= 0 && fc < kCols && fr >= 0 && fr < kRows) return (fc, fr);
+    return null;
+  }
+
   BuildingEntity? _buildingAt(int col, int row) {
     for (final b in _buildings) {
       if (col >= b.col &&
@@ -51,10 +62,12 @@ extension _SceneWorld on _VillageSceneState {
   /// Su üzerindeki tüm entity'leri en yakın kuru tile'a taşır.
   /// Verilen pozisyona en yakın su-olmayan tile'ı spiral aramayla bulur.
   (double, double) _nearestLand(double gx, double gy) {
+    bool blocked(int c, int r) =>
+        _waterTiles.contains((c, r)) || _wilderness.contains((c, r));
     final c0 = gx.round();
     final r0 = gy.round();
-    if (!_waterTiles.contains((c0, r0))) return (gx, gy);
-    for (int radius = 1; radius < 12; radius++) {
+    if (!blocked(c0, r0)) return (gx, gy);
+    for (int radius = 1; radius < 16; radius++) {
       for (int dc = -radius; dc <= radius; dc++) {
         for (int dr = -radius; dr <= radius; dr++) {
           if (dc.abs() != radius && dr.abs() != radius) {
@@ -62,7 +75,7 @@ extension _SceneWorld on _VillageSceneState {
           }
           final nc = (c0 + dc).clamp(0, kCols - 1);
           final nr = (r0 + dr).clamp(0, kRows - 1);
-          if (!_waterTiles.contains((nc, nr))) {
+          if (!blocked(nc, nr)) {
             return (nc.toDouble(), nr.toDouble());
           }
         }
@@ -113,6 +126,9 @@ extension _SceneWorld on _VillageSceneState {
     for (final t in _waterTiles) {
       if (!_roadSystem.hasBridgeAt(t.$1, t.$2)) _obstacles.add(t);
     }
+    // Vahşi orman: yoğun ağaç duvarı — NPC giremez, oraya inşa edilemez.
+    // (Sınır ağacı tile'ları da _wilderness içinde olduğundan otomatik engel.)
+    _obstacles.addAll(_wilderness);
     for (final n in _mineNodes) {
       if (!n.isDepleted) _obstacles.add((n.col, n.row));
     }
@@ -220,16 +236,23 @@ extension _SceneWorld on _VillageSceneState {
     _builders.clear();
     _villagers.clear();
     _resourceBoxes.clear();
+    _eggs.clear();
     _hayEntities.clear();
     _birdFlocks.clear();
     _beeSwarms.clear();
     _pendingPetition = null;
     _petitionModalOpen = false;
+    _petitionForced = false;
     _petitionTimer = 1.0 * kGameDaySeconds;
     _petitionDeadline = 0;
     _petitionFollowUps.clear();
     _petitionCooldowns.clear();
     _villageMemory.clear();
+    _divanOpen = false;
+    _councilSession = null;
+    _councilSpeaker = null;
+    _councilCooldownUntil = 0;
+    _governanceLegacy = 0;
 
     _stockpile.clear();
     // Başlangıç kaynak paketi — oyuncunun erken oyun sıkışmaması için.
@@ -278,6 +301,10 @@ extension _SceneWorld on _VillageSceneState {
     _decor.addAll(result.decor);
     _trees.addAll(result.trees);
     _mineNodes.addAll(result.mineNodes);
+
+    // Arazi: merkezde açıklık aç, gen ormanını yoğun vahşi ormanla değiştir,
+    // sınır halkasına kesilebilir ağaçları diz. _trees'i yeniden kurar.
+    _initLand();
 
     // Yeni map → ground picture cache invalid.
     _groundVersion++;

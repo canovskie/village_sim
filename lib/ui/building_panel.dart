@@ -14,19 +14,28 @@ class BuildingPanel extends StatelessWidget {
   final void Function(BuildingType) onSelect;
   final bool hasFirepit;
 
+  /// Yalnız bu kategorideki binalar gösterilir (null = hepsi). Ateş yoksa
+  /// kategori yok sayılır — sadece ateş yeri kartı çıkar.
+  final BuildCategory? category;
+
   const BuildingPanel({
     super.key,
     required this.stockpile,
     required this.selected,
     required this.onSelect,
     this.hasFirepit = false,
+    this.category,
   });
 
   @override
   Widget build(BuildContext context) {
-    final types = hasFirepit
-        ? BuildingType.values.where((t) => kBuildingMeta.containsKey(t)).toList()
-        : [BuildingType.firepit];
+    final types = !hasFirepit
+        ? [BuildingType.firepit]
+        : BuildingType.values
+            .where((t) =>
+                kBuildingMeta.containsKey(t) &&
+                (category == null || kBuildingCategory[t] == category))
+            .toList();
     if (types.isEmpty) return const SizedBox.shrink();
 
     return AppPanel(

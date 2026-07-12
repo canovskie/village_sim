@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
 // ─── Harita & izometri ───────────────────────────────────────────────────────
-const int kCols = 72;
-const int kRows = 54;
+// Harita büyük: kamera "reach" hep içeride tuttuğu için gerçek kenar asla
+// kadraja girmez; reveal (zoom kısıtı) haritayı yavaş yavaş açar. Entity
+// yoğunluğu _areaScale cap'i ile sınırlı (perf: tick maliyeti sabit).
+const int kCols = 108;
+const int kRows = 81;
 const double kTileW = 64.0;   // piksel sanatı için 2:1 standart (64x32)
 const double kTileH = 32.0;
 const double kCharScale = 0.34;
@@ -18,7 +21,7 @@ const double kFisherSpeed        = 2.5;
 const double kFarmerSpeed        = 3.5;
 
 // ─── Çalışma süreleri (saniye) ───────────────────────────────────────────────
-const double kChopDuration         = 18.0; // woodcutter + lumberCamp ortak — huzurlu tempo
+const double kChopDuration         = 45.0; // woodcutter + lumberCamp ortak — odun seli olmasın diye 2.5× yavaşlatıldı (tarla temposuyla paralel)
 const double kFishDuration         = 7.0;
 /// Tavuk kümesi başına bir yumurta (1 food) üretim aralığı (saniye).
 /// Balıkçı bir tutuşta ~7 sn'de 1 food üretir; kümes pasif olduğu için biraz

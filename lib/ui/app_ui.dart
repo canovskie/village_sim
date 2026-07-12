@@ -1,35 +1,41 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-/// Modern, sıcak-koyu oyun UI dili. Skeuomorphic ahşap/parşömen yerine:
-/// koyu rafine paneller, tek sıcak vurgu (ember), güçlü tipografi
-/// (Cinzel başlık + Spectral gövde), vektör ikon seti, reaktif animasyon.
-///
-/// Tasarım hedefi: Against the Storm / Manor Lords çıtası — ciddi, cilalı,
-/// "oyun arayüzü"; flash-oyun değil.
+/// Manor Lords çıtası: sade, diegetik, ferah. Skeuomorphic ahşap/parşömen YOK,
+/// çamurlu çikolata palet YOK, sıcak-kahve YOK. Bunun yerine: rafine SOĞUK-nötr
+/// grafit "ink" yüzeyler (kanallar birbirine yakın, B≥R → kahve değil, serin
+/// kömür/grafit), HUD için çerçevesiz okunabilirlik scrim'i, güçlü tipografi
+/// (Cinzel + Spectral), tutarlı Phosphor ikon seti, ölçülü tek vurgu.
 abstract final class AppUi {
-  // ── Yüzeyler (sıcak koyu) ───────────────────────────────────────────────
-  static const scrim     = Color(0xCC0E0A06); // modal arka karartma
-  static const surface0  = Color(0xFF17120C); // en derin
-  static const surface1  = Color(0xFF211A12); // panel gövdesi
-  static const surface2  = Color(0xFF2B2118); // yükseltilmiş / header
-  static const surface3  = Color(0xFF362A1E); // hover / seçili
-  static const line      = Color(0xFF3E2F20); // hairline kenar
-  static const lineSoft  = Color(0x22FFFFFF); // ince iç ışık
+  // ── Yüzeyler (soğuk-nötr grafit — de-wood edilmiş) ──────────────────────
+  // RGB kanalları birbirine yakın, hafif MAVİ eğik (B ≥ R) → "ahşap/kahve"
+  // değil, serin grafit-kömür.
+  static const scrim     = Color(0xD6080A0C); // modal arka karartma
+  static const surface0  = Color(0xFF0C0D0F); // en derin (track/oyuk)
+  static const surface1  = Color(0xFF14161A); // panel gövdesi
+  static const surface2  = Color(0xFF1C1F24); // yükseltilmiş / header
+  static const surface3  = Color(0xFF272B31); // hover / seçili
+  static const line      = Color(0xFF2E333A); // hairline kenar (nötr-soğuk)
+  static const lineSoft  = Color(0x14FFFFFF); // ince üst iç ışık
 
-  // ── Metin ───────────────────────────────────────────────────────────────
-  static const textHi  = Color(0xFFF4E9D2); // ana
-  static const textMid = Color(0xFFCBB892); // ikincil
-  static const textLo  = Color(0xFF94815F); // soluk / etiket
+  // ── Metin (nötr off-white — ne parşömen sıcaklığı ne slate mavisi) ──────
+  static const textHi  = Color(0xFFF0EEE9); // ana
+  static const textMid = Color(0xFFBEBAB2); // ikincil
+  static const textLo  = Color(0xFF87817A); // soluk / etiket
+
+  // Vurgu üstüne oturan koyu "ink" (dolu buton/chip metni).
+  static const ink = Color(0xFF150D06);
 
   // ── Vurgular ─────────────────────────────────────────────────────────────
-  static const accent     = Color(0xFFE98A38); // ember — ana vurgu
-  static const accentSoft = Color(0xFFF4B273);
-  static const accentDeep = Color(0xFFB5621F);
-  static const sage       = Color(0xFF92C166); // pozitif
+  // Grafit taban SOĞUK kalır; ana vurgu ise ocak/ember SICAKLIĞI verir —
+  // "ateşi yak" temasının kalbi. (Robotik mavi accent DEĞİL.)
+  static const accent     = Color(0xFFE49139); // ember — ana vurgu
+  static const accentSoft = Color(0xFFF3B978);
+  static const accentDeep = Color(0xFFB0611E);
+  static const sage       = Color(0xFF7FC08C); // pozitif
   static const rust       = Color(0xFFD8552E); // tehlike
-  static const gold       = Color(0xFFE9C552); // para / lüks
-  static const info       = Color(0xFF5FAAD2); // su / lojistik
+  static const gold       = Color(0xFFD9C15E); // para / lüks
+  static const info       = Color(0xFF52B9B0); // su / lojistik (teal)
 
   // ── Tipografi ────────────────────────────────────────────────────────────
   static const fontDisplay = 'Cinzel';   // başlık / oyma kapital
@@ -96,8 +102,10 @@ abstract final class AppUi {
   static const radiusSm = 9.0;
 
   static List<BoxShadow> get softShadow => const [
-        BoxShadow(color: Color(0x66000000), blurRadius: 18, offset: Offset(0, 8)),
-        BoxShadow(color: Color(0x33000000), blurRadius: 4, offset: Offset(0, 1)),
+        // Geniş & yumuşak ambient — "ağır slab" değil, havada yüzen rafine derinlik.
+        BoxShadow(color: Color(0x47000000), blurRadius: 30, offset: Offset(0, 14)),
+        // Tek piksellik temas gölgesi.
+        BoxShadow(color: Color(0x24000000), blurRadius: 3, offset: Offset(0, 1)),
       ];
 }
 
@@ -217,7 +225,7 @@ class _AppButtonState extends State<AppButton> {
       case AppButtonKind.danger:
         bg = hot ? Color.lerp(tint, Colors.white, 0.12)! : tint;
         border = Color.lerp(tint, Colors.black, 0.35)!;
-        fg = const Color(0xFF1A0E04);
+        fg = AppUi.ink;
         break;
       case AppButtonKind.tonal:
         bg = hot
@@ -318,6 +326,9 @@ class AppIconButton extends StatefulWidget {
   final Color? tint;
   final double size;
   final String? text; // ikon yerine kısa metin (örn "2×")
+  /// Çerçevesiz: durağanda şeffaf (kutu yok), yalnız hover/aktifte yüzey çıkar.
+  /// Ferah HUD strip'i için.
+  final bool ghost;
 
   const AppIconButton({
     super.key,
@@ -327,6 +338,7 @@ class AppIconButton extends StatefulWidget {
     this.tint,
     this.size = 38,
     this.text,
+    this.ghost = false,
   });
 
   @override
@@ -355,10 +367,12 @@ class _AppIconButtonState extends State<AppIconButton> {
                 ? Color.alphaBlend(tint.withValues(alpha: 0.24), AppUi.surface2)
                 : hot
                     ? AppUi.surface3
-                    : AppUi.surface1,
+                    : (widget.ghost ? Colors.transparent : AppUi.surface1),
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
-                color: widget.active ? tint : AppUi.line,
+                color: widget.active
+                    ? tint
+                    : (widget.ghost && !hot ? Colors.transparent : AppUi.line),
                 width: widget.active ? 1.5 : 1),
             boxShadow: widget.active
                 ? [BoxShadow(color: tint.withValues(alpha: 0.4), blurRadius: 10)]
@@ -482,14 +496,14 @@ class AppChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            GameIcon(icon!, size: 11, color: solid ? const Color(0xFF1A0E04) : color),
+            GameIcon(icon!, size: 11, color: solid ? AppUi.ink : color),
             const SizedBox(width: 5),
           ],
           Text(label,
               style: AppUi.button.copyWith(
                 fontSize: 9.5,
                 letterSpacing: 1.0,
-                color: solid ? const Color(0xFF1A0E04) : AppUi.textHi,
+                color: solid ? AppUi.ink : AppUi.textHi,
               )),
         ],
       ),
@@ -589,10 +603,11 @@ class _AppRevealState extends State<AppReveal>
   }
 }
 
-// ─── Vektör ikon seti ────────────────────────────────────────────────────────
+// ─── Phosphor ikon seti ──────────────────────────────────────────────────────
 //
-// Emoji yerine tek tutarlı çizim dili. Her ikon line/fill karışımı, dengeli
-// ağırlık. GameIconData enum + tek CustomPainter.
+// Elle çizilen tutarsız CustomPainter seti yerine tek tutarlı çizim dili:
+// Phosphor (ağırlıklı 'fill'). GameIconData enum aynı kalır — çağrı yerleri
+// değişmez; her değer bir Phosphor glyph'ine eşlenir. Premium, dengeli, okunaklı.
 
 enum GameIconData {
   // menü
@@ -607,6 +622,8 @@ enum GameIconData {
   pause, play, festival, demolish, tax, sell, dice, bolt, map, bug, speed,
   // durum
   cog, heart, home, warehouse,
+  // ses
+  sound, soundOff,
 }
 
 class GameIcon extends StatelessWidget {
@@ -616,364 +633,66 @@ class GameIcon extends StatelessWidget {
   const GameIcon(this.icon, {super.key, this.size = 16, required this.color});
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: CustomPaint(painter: _GameIconPainter(icon, color)),
-      );
+  Widget build(BuildContext context) =>
+      Icon(_glyph(icon), size: size, color: color);
 }
 
-class _GameIconPainter extends CustomPainter {
-  final GameIconData icon;
-  final Color color;
-  _GameIconPainter(this.icon, this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    final c = Offset(w / 2, h / 2);
-    final u = w / 24.0; // 24-grid birim
-    final stroke = Paint()
-      ..color = color
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0 * u
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-    final fill = Paint()
-      ..color = color
-      ..isAntiAlias = true
-      ..style = PaintingStyle.fill;
-
-    Offset p(double x, double y) => Offset(x * u, y * u);
-    Path poly(List<List<double>> pts, {bool close = true}) {
-      final path = Path()..moveTo(pts.first[0] * u, pts.first[1] * u);
-      for (final pt in pts.skip(1)) {
-        path.lineTo(pt[0] * u, pt[1] * u);
-      }
-      if (close) path.close();
-      return path;
-    }
-
-    switch (icon) {
-      case GameIconData.flame:
-        final path = Path()
-          ..moveTo(c.dx, p(0, 3).dy)
-          ..quadraticBezierTo(p(19, 9).dx, p(19, 9).dy, p(16.5, 17).dx, p(16.5, 17).dy)
-          ..quadraticBezierTo(c.dx, p(12, 24).dy, p(7.5, 17).dx, p(7.5, 17).dy)
-          ..quadraticBezierTo(p(5, 9).dx, p(5, 9).dy, c.dx, p(12, 3).dy)
-          ..close();
-        canvas.drawPath(path, fill);
-        break;
-      case GameIconData.gear:
-        const teeth = 8;
-        for (int i = 0; i < teeth; i++) {
-          final a = i / teeth * math.pi * 2;
-          canvas.drawCircle(
-              c + Offset(math.cos(a), math.sin(a)) * 9 * u, 1.7 * u, fill);
-        }
-        canvas.drawCircle(c, 6.5 * u, stroke);
-        canvas.drawCircle(c, 2.6 * u, fill);
-        break;
-      case GameIconData.scroll:
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                Rect.fromLTWH(5 * u, 3 * u, 14 * u, 18 * u),
-                Radius.circular(2 * u)),
-            stroke);
-        for (int i = 0; i < 3; i++) {
-          final y = (8 + i * 4) * u;
-          canvas.drawLine(Offset(8 * u, y), Offset(16 * u, y),
-              stroke..strokeWidth = 1.4 * u);
-        }
-        break;
-      case GameIconData.chevron:
-        canvas.drawPath(
-            poly([[9, 5], [15, 12], [9, 19]], close: false), stroke);
-        break;
-      case GameIconData.close:
-        canvas.drawLine(p(6, 6), p(18, 18), stroke);
-        canvas.drawLine(p(18, 6), p(6, 18), stroke);
-        break;
-      case GameIconData.star:
-        _star(canvas, c, 9 * u, 4.2 * u, fill);
-        break;
-      case GameIconData.wood:
-        // tomruk istifi — alt iki kütük ucu + üstte bir kütük (halka damarlı)
-        void log(Offset o) {
-          canvas.drawCircle(o, 3.6 * u, stroke..strokeWidth = 1.8 * u);
-          canvas.drawCircle(o, 1.5 * u, stroke..strokeWidth = 1.2 * u);
-        }
-        log(Offset(8 * u, 15 * u));
-        log(Offset(16 * u, 15 * u));
-        log(Offset(12 * u, 8.5 * u));
-        break;
-      case GameIconData.stone:
-        canvas.drawPath(
-            poly([[4, 16], [8, 8], [16, 8], [20, 16], [16, 20], [8, 20]]), fill);
-        break;
-      case GameIconData.iron:
-        // külçe
-        canvas.drawPath(
-            poly([[5, 15], [8, 10], [16, 10], [19, 15], [16, 17], [8, 17]]), fill);
-        canvas.drawLine(p(8, 13), p(16, 13),
-            Paint()..color = AppUi.surface1..strokeWidth = 1.2 * u);
-        break;
-      case GameIconData.coal:
-        canvas.drawPath(
-            poly([[6, 15], [9, 9], [15, 9], [18, 14], [14, 19], [9, 18]]), fill);
-        break;
-      case GameIconData.wheat:
-        canvas.drawLine(p(12, 21), p(12, 8), stroke);
-        for (int i = 0; i < 3; i++) {
-          final y = (8 + i * 3.5);
-          canvas.drawPath(
-              poly([[12, y + 1], [8, y], [12, y - 2.5]], close: false), stroke);
-          canvas.drawPath(
-              poly([[12, y + 1], [16, y], [12, y - 2.5]], close: false), stroke);
-        }
-        break;
-      case GameIconData.coin:
-        canvas.drawCircle(c, 8 * u, fill);
-        canvas.drawCircle(c, 8 * u, stroke..color = color.withValues(alpha: 0.4));
-        final star = Paint()..color = AppUi.surface1..isAntiAlias = true;
-        _star(canvas, c, 4.6 * u, 2.0 * u, star);
-        break;
-      case GameIconData.honey:
-        canvas.drawPath(
-            poly([[8, 5], [16, 5], [19, 12], [12, 21], [5, 12]]), fill);
-        break;
-      case GameIconData.drop:
-        final path = Path()
-          ..moveTo(c.dx, p(12, 3).dy)
-          ..quadraticBezierTo(p(19, 14).dx, p(19, 14).dy, c.dx, p(12, 21).dy)
-          ..quadraticBezierTo(p(5, 14).dx, p(5, 14).dy, c.dx, p(12, 3).dy)
-          ..close();
-        canvas.drawPath(path, fill);
-        break;
-      case GameIconData.reed:
-        // saz/ot — üç eğik bıçak + tepelerinde başak
-        for (final dx in [-4.0, 0.0, 4.0]) {
-          final bx = 12 + dx;
-          canvas.drawPath(
-              Path()
-                ..moveTo(bx * u, 21 * u)
-                ..quadraticBezierTo((bx + dx * 0.3) * u, 12 * u,
-                    (bx + dx * 0.5) * u, 5 * u),
-              stroke);
-          canvas.drawOval(
-              Rect.fromCenter(
-                  center: Offset((bx + dx * 0.5) * u, 5 * u),
-                  width: 2.4 * u, height: 4.5 * u),
-              fill);
-        }
-        break;
-      case GameIconData.people:
-        canvas.drawCircle(Offset(9 * u, 9 * u), 3 * u, fill);
-        canvas.drawCircle(Offset(16 * u, 10 * u), 2.4 * u, fill);
-        canvas.drawPath(
-            poly([[3.5, 20], [4.5, 14], [13.5, 14], [14.5, 20]]), fill);
-        canvas.drawPath(
-            poly([[13, 20], [14, 15], [20, 15], [21, 20]]), fill);
-        break;
-      case GameIconData.axe:
-        canvas.drawLine(p(8, 20), p(15, 6), stroke);
-        canvas.drawPath(
-            poly([[14, 4], [20, 7], [16, 12], [12, 8]]), fill);
-        break;
-      case GameIconData.pickaxe:
-        canvas.drawLine(p(12, 20), p(12, 8), stroke);
-        canvas.drawPath(
-            poly([[4, 9], [12, 6], [20, 9]], close: false),
-            stroke..strokeWidth = 2.2 * u);
-        break;
-      case GameIconData.fish:
-        final body = Path()
-          ..moveTo(p(4, 12).dx, p(4, 12).dy)
-          ..quadraticBezierTo(10 * u, 5 * u, 17 * u, 12 * u)
-          ..quadraticBezierTo(10 * u, 19 * u, 4 * u, 12 * u)
-          ..close();
-        canvas.drawPath(body, fill);
-        canvas.drawPath(poly([[17, 8], [21, 12], [17, 16]]), fill);
-        canvas.drawCircle(Offset(8 * u, 11 * u), 1.0 * u,
-            Paint()..color = AppUi.surface1);
-        break;
-      case GameIconData.hammer:
-        canvas.drawLine(p(7, 20), p(14, 11), stroke);
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                Rect.fromLTWH(12 * u, 5 * u, 8 * u, 5 * u),
-                Radius.circular(1.5 * u)),
-            fill);
-        break;
-      case GameIconData.sun:
-        canvas.drawCircle(c, 5 * u, fill);
-        for (int i = 0; i < 8; i++) {
-          final a = i / 8 * math.pi * 2;
-          final d = Offset(math.cos(a), math.sin(a));
-          canvas.drawLine(c + d * 7.5 * u, c + d * 10 * u, stroke);
-        }
-        break;
-      case GameIconData.moon:
-        final path = Path()
-          ..addArc(Rect.fromCircle(center: c, radius: 8 * u), -math.pi / 2, math.pi)
-          ..arcToPoint(Offset(c.dx, c.dy - 8 * u),
-              radius: Radius.circular(10 * u), clockwise: false);
-        canvas.drawPath(path, fill);
-        break;
-      case GameIconData.rain:
-        _cloud(canvas, u, fill);
-        for (final dx in [-4.0, 0.0, 4.0]) {
-          canvas.drawLine(Offset((12 + dx) * u, 16 * u),
-              Offset((11 + dx) * u, 20 * u), stroke);
-        }
-        break;
-      case GameIconData.storm:
-        _cloud(canvas, u, fill);
-        canvas.drawPath(
-            poly([[13, 14], [9, 20], [12, 20], [10, 23]], close: false), stroke);
-        break;
-      case GameIconData.dawn:
-        // ufuk çizgisi + yarım güneş + yukarı ışınlar
-        canvas.drawArc(Rect.fromCircle(center: Offset(12 * u, 18 * u), radius: 5 * u),
-            math.pi, math.pi, false, fill);
-        for (int i = 0; i < 5; i++) {
-          final a = math.pi + (i + 0.5) / 5 * math.pi;
-          final d = Offset(math.cos(a), math.sin(a));
-          canvas.drawLine(Offset(12 * u, 18 * u) + d * 6.5 * u,
-              Offset(12 * u, 18 * u) + d * 8.5 * u, stroke);
-        }
-        canvas.drawLine(p(3, 18), p(21, 18), stroke);
-        break;
-      case GameIconData.pause:
-        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(7 * u, 6 * u, 3.5 * u, 12 * u), Radius.circular(1 * u)), fill);
-        canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(13.5 * u, 6 * u, 3.5 * u, 12 * u), Radius.circular(1 * u)), fill);
-        break;
-      case GameIconData.play:
-        canvas.drawPath(poly([[8, 6], [18, 12], [8, 18]]), fill);
-        break;
-      case GameIconData.festival:
-        // havai fişek patlaması — merkez + ışınlar uçlarında kıvılcım
-        canvas.drawCircle(c, 1.8 * u, fill);
-        for (int i = 0; i < 8; i++) {
-          final a = i / 8 * math.pi * 2;
-          final d = Offset(math.cos(a), math.sin(a));
-          canvas.drawLine(c + d * 3.5 * u, c + d * 7.5 * u,
-              stroke..strokeWidth = 1.8 * u);
-          canvas.drawCircle(c + d * 9 * u, 1.0 * u, fill);
-        }
-        break;
-      case GameIconData.demolish:
-        // çöp kutusu — kapak + gövde + dikey çizgiler
-        canvas.drawLine(p(5, 7), p(19, 7), stroke);
-        canvas.drawLine(p(10, 7), p(10, 5), stroke..strokeWidth = 1.6 * u);
-        canvas.drawLine(p(14, 5), p(14, 7), stroke);
-        final body = poly([[7, 8], [8, 19], [16, 19], [17, 8]]);
-        canvas.drawPath(body, fill);
-        final notch = Paint()..color = AppUi.surface1..isAntiAlias = true;
-        canvas.drawRect(Rect.fromLTWH(10.5 * u, 10 * u, 1.3 * u, 7 * u), notch);
-        canvas.drawRect(Rect.fromLTWH(13 * u, 10 * u, 1.3 * u, 7 * u), notch);
-        break;
-      case GameIconData.tax:
-        for (int i = 0; i < 3; i++) {
-          canvas.drawOval(
-              Rect.fromCenter(
-                  center: Offset(12 * u, (16 - i * 3.5) * u),
-                  width: 12 * u, height: 4 * u),
-              i == 2 ? fill : stroke..strokeWidth = 1.6 * u);
-        }
-        break;
-      case GameIconData.sell:
-        canvas.drawCircle(Offset(9 * u, 9 * u), 5 * u, stroke);
-        canvas.drawLine(p(13, 13), p(19, 19), stroke);
-        canvas.drawLine(p(9, 7), p(9, 11), stroke..strokeWidth = 1.4 * u);
-        break;
-      case GameIconData.dice:
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                Rect.fromLTWH(5 * u, 5 * u, 14 * u, 14 * u),
-                Radius.circular(3 * u)),
-            stroke);
-        for (final o in [[9.0, 9.0], [15.0, 9.0], [12.0, 12.0], [9.0, 15.0], [15.0, 15.0]]) {
-          canvas.drawCircle(Offset(o[0] * u, o[1] * u), 1.2 * u, fill);
-        }
-        break;
-      case GameIconData.bolt:
-        canvas.drawPath(poly([[13, 3], [6, 13], [11, 13], [9, 21], [18, 10], [12, 10]]), fill);
-        break;
-      case GameIconData.map:
-        canvas.drawPath(
-            poly([[4, 6], [10, 4], [16, 6], [20, 4], [20, 18], [16, 20], [10, 18], [4, 20]]),
-            stroke);
-        canvas.drawLine(p(10, 4), p(10, 18), stroke..strokeWidth = 1.3 * u);
-        canvas.drawLine(p(16, 6), p(16, 20), stroke..strokeWidth = 1.3 * u);
-        break;
-      case GameIconData.bug:
-        canvas.drawOval(Rect.fromCenter(center: c, width: 10 * u, height: 13 * u), fill);
-        canvas.drawCircle(Offset(12 * u, 6 * u), 2.4 * u, fill);
-        for (final dy in [9.0, 12.0, 15.0]) {
-          canvas.drawLine(Offset(7 * u, dy * u), Offset(3 * u, (dy - 1) * u), stroke..strokeWidth = 1.4 * u);
-          canvas.drawLine(Offset(17 * u, dy * u), Offset(21 * u, (dy - 1) * u), stroke..strokeWidth = 1.4 * u);
-        }
-        break;
-      case GameIconData.speed:
-        canvas.drawPath(poly([[6, 6], [13, 12], [6, 18]]), fill);
-        canvas.drawPath(poly([[12, 6], [19, 12], [12, 18]]), fill);
-        break;
-      case GameIconData.cog:
-        canvas.drawCircle(c, 4 * u, stroke);
-        for (int i = 0; i < 6; i++) {
-          final a = i / 6 * math.pi * 2;
-          final d = Offset(math.cos(a), math.sin(a));
-          canvas.drawLine(c + d * 5 * u, c + d * 8 * u, stroke..strokeWidth = 2.4 * u);
-        }
-        break;
-      case GameIconData.heart:
-        final path = Path()
-          ..moveTo(c.dx, p(12, 19).dy)
-          ..cubicTo(p(2, 11).dx, p(2, 11).dy, p(6, 4).dx, p(6, 4).dy, c.dx, p(12, 8).dy)
-          ..cubicTo(p(18, 4).dx, p(18, 4).dy, p(22, 11).dx, p(22, 11).dy, c.dx, p(12, 19).dy)
-          ..close();
-        canvas.drawPath(path, fill);
-        break;
-      case GameIconData.home:
-        canvas.drawPath(poly([[4, 11], [12, 4], [20, 11]], close: false), stroke);
-        canvas.drawRRect(
-            RRect.fromRectAndRadius(
-                Rect.fromLTWH(6 * u, 11 * u, 12 * u, 9 * u),
-                Radius.circular(1 * u)),
-            stroke);
-        break;
-      case GameIconData.warehouse:
-        canvas.drawPath(poly([[3, 10], [12, 5], [21, 10], [21, 20], [3, 20]]), stroke);
-        canvas.drawLine(p(8, 14), p(16, 14), stroke..strokeWidth = 1.5 * u);
-        canvas.drawLine(p(8, 17), p(16, 17), stroke..strokeWidth = 1.5 * u);
-        break;
-    }
+// GameIconData → Phosphor glyph. Çoğu 'fill' (küçük boyda kütle + okunaklılık);
+// saf-çizgi olanlar (chevron/close) 'bold' daha temiz; confetti 'regular'.
+IconData _glyph(GameIconData i) {
+  const fill = PhosphorIconsStyle.fill;
+  const bold = PhosphorIconsStyle.bold;
+  const regular = PhosphorIconsStyle.regular;
+  switch (i) {
+    // menü
+    case GameIconData.flame:     return PhosphorIcons.flame(fill);
+    case GameIconData.gear:      return PhosphorIcons.gearSix(fill);
+    case GameIconData.scroll:    return PhosphorIcons.scroll(fill);
+    case GameIconData.chevron:   return PhosphorIcons.caretRight(bold);
+    case GameIconData.close:     return PhosphorIcons.x(bold);
+    case GameIconData.star:      return PhosphorIcons.star(fill);
+    // kaynak
+    case GameIconData.wood:      return PhosphorIcons.tree(fill);
+    case GameIconData.stone:     return PhosphorIcons.mountains(fill);
+    case GameIconData.iron:      return PhosphorIcons.cube(fill);
+    case GameIconData.coal:      return PhosphorIcons.stack(fill);
+    case GameIconData.wheat:     return PhosphorIcons.grains(fill);
+    case GameIconData.coin:      return PhosphorIcons.coins(fill);
+    case GameIconData.honey:     return PhosphorIcons.hexagon(fill);
+    case GameIconData.drop:      return PhosphorIcons.drop(fill);
+    case GameIconData.reed:      return PhosphorIcons.plant(fill);
+    // insan / iş
+    case GameIconData.people:    return PhosphorIcons.usersThree(fill);
+    case GameIconData.axe:       return PhosphorIcons.axe(fill);
+    case GameIconData.pickaxe:   return PhosphorIcons.shovel(fill);
+    case GameIconData.fish:      return PhosphorIcons.fish(fill);
+    case GameIconData.hammer:    return PhosphorIcons.hammer(fill);
+    // hava
+    case GameIconData.sun:       return PhosphorIcons.sun(fill);
+    case GameIconData.moon:      return PhosphorIcons.moon(fill);
+    case GameIconData.rain:      return PhosphorIcons.cloudRain(fill);
+    case GameIconData.storm:     return PhosphorIcons.cloudLightning(fill);
+    case GameIconData.dawn:      return PhosphorIcons.sunHorizon(fill);
+    // aksiyon
+    case GameIconData.pause:     return PhosphorIcons.pause(fill);
+    case GameIconData.play:      return PhosphorIcons.play(fill);
+    case GameIconData.festival:  return PhosphorIcons.confetti(regular);
+    case GameIconData.demolish:  return PhosphorIcons.trash(fill);
+    case GameIconData.tax:       return PhosphorIcons.handCoins(fill);
+    case GameIconData.sell:      return PhosphorIcons.storefront(fill);
+    case GameIconData.dice:      return PhosphorIcons.diceFive(fill);
+    case GameIconData.bolt:      return PhosphorIcons.lightning(fill);
+    case GameIconData.map:       return PhosphorIcons.mapTrifold(fill);
+    case GameIconData.bug:       return PhosphorIcons.bug(fill);
+    case GameIconData.speed:     return PhosphorIcons.fastForward(fill);
+    // durum
+    case GameIconData.cog:       return PhosphorIcons.gear(fill);
+    case GameIconData.heart:     return PhosphorIcons.heart(fill);
+    case GameIconData.home:      return PhosphorIcons.house(fill);
+    case GameIconData.warehouse: return PhosphorIcons.warehouse(fill);
+    // ses
+    case GameIconData.sound:     return PhosphorIcons.speakerHigh(fill);
+    case GameIconData.soundOff:  return PhosphorIcons.speakerSlash(fill);
   }
-
-  void _star(Canvas canvas, Offset c, double rOuter, double rInner, Paint paint) {
-    final path = Path();
-    for (int i = 0; i < 10; i++) {
-      final r = i.isEven ? rOuter : rInner;
-      final a = -math.pi / 2 + i * math.pi / 5;
-      final pt = c + Offset(math.cos(a), math.sin(a)) * r;
-      i == 0 ? path.moveTo(pt.dx, pt.dy) : path.lineTo(pt.dx, pt.dy);
-    }
-    path.close();
-    canvas.drawPath(path, paint);
-  }
-
-  void _cloud(Canvas canvas, double u, Paint fill) {
-    canvas.drawCircle(Offset(9 * u, 11 * u), 4 * u, fill);
-    canvas.drawCircle(Offset(15 * u, 11 * u), 5 * u, fill);
-    canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            Rect.fromLTWH(6 * u, 11 * u, 12 * u, 4 * u), Radius.circular(2 * u)),
-        fill);
-  }
-
-  @override
-  bool shouldRepaint(_GameIconPainter old) =>
-      old.icon != icon || old.color != color;
 }
+

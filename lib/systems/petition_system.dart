@@ -1,4 +1,5 @@
 import 'dart:math';
+import '../world/season.dart';
 import 'estate_system.dart';
 
 /// Dilekçeye bağlı görsel/anlık tepki — sahne bunu somut animasyona çevirir
@@ -11,8 +12,13 @@ enum PetitionFx {
   mourn,       // bir köylü kaybı + sessiz uğurlama (animasyon yok, moral ↓↓)
   cult,        // BESPOKE: ayin çemberi + köylüler toplanır (yeni inanç)
   remembrance, // BESPOKE: anma günü — köy toplanır + mum töreni (KİMSE ölmez)
-  wedding,     // BESPOKE: iki köylü evlenir — ateş başında dans + kalp/yaprak yağmuru
+  wedding,     // BESPOKE: sade düğün — gerçek çift ateş başında, kalp/yaprak yağmuru
+  weddingGrand,// BESPOKE: coşkulu düğün — önce tam ekran 2B sinematik, sonra alay/şenlik
   harvestBounty, // BESPOKE: tarlalar altın ışıltıyla olgunlaşır + bereket zerresi yükselir
+  callingGranted,// BESPOKE: dilekçe sahibi mesleğini bırakıp çağrısının peşinden gider
+  feudPeace,     // BESPOKE: iki aile barışır — kan davası sona erer (husumet silinir)
+  feudExile,     // BESPOKE: kan davasının suçlusu köyden sürülür → husumet kapanır
+  feudExecute,   // BESPOKE: suçlu 2B sahnede idam edilir → kan davası kanla kapanır
 }
 
 /// Dilekçenin duygu tonu — modal/mühür vurgu rengini ve havasını belirler.
@@ -169,6 +175,26 @@ class PetitionContext {
   final int herdSize;
   /// Sürü ortalama açlığı yüksek mi (bakımsız ahır) — yem sıkıntısı dilekçesi.
   final bool herdHungry;
+  /// Aktif mevsim — mevsime özel dilekçelerin kapısı (yaz kuraklığı vb).
+  final Season season;
+  /// Köyde işlenen (büyüyen/hasada hazır) tarla var mı — tarım dilekçelerinin
+  /// kapısı (tarla yoksa kuraklık/hasat dilekçesi anlamsız).
+  final bool hasCrops;
+  /// Mesleği içindeki çağrıya uymayan (kırgın) en az bir köylü var mı — meslek
+  /// değiştirme dilekçesinin kapısı.
+  final bool hasResentful;
+  /// Köyde aktif bir kan davası var mı — sulh (barışma) dilekçesinin kapısı.
+  final bool hasFeud;
+
+  // ── Aktif yasalar (politika↔dilekçe köprüsü) ───────────────────────────────
+  // Yürürlükteki bir yasa köyde sosyal bir karşılık doğurabilir: lehte olan
+  // zümre teşekkür/şölen ister, aleyhte olan zümre geri adım talep eder.
+  /// Dönemli ekim yürürlükte mi — çiftçi takvim şöleni dilekçesinin kapısı.
+  final bool cropRotation;
+  /// Misafirperverlik yürürlükte mi — gezgin yerleşme dilekçesinin kapısı.
+  final bool hospitality;
+  /// Köyde boş yatak (yerleşilecek hane) var mı — yerleşme dilekçesinin kapısı.
+  final bool hasHousing;
 
   const PetitionContext({
     required this.population,
@@ -182,6 +208,13 @@ class PetitionContext {
     this.ascendant,
     this.herdSize = 0,
     this.herdHungry = false,
+    this.season = Season.spring,
+    this.hasCrops = false,
+    this.hasResentful = false,
+    this.hasFeud = false,
+    this.cropRotation = false,
+    this.hospitality = false,
+    this.hasHousing = false,
   });
 
   bool remembers(String flag) => memory.contains(flag);
@@ -247,6 +280,102 @@ abstract final class PetitionSystem {
     // gündeme gelir (canFire = aggrievedEstate + roll ağırlık boost). Cozy:
     // gidermek küçük bir jest, savsaklamak yalnızca o zümreyi biraz daha küstürür.
     // ════════════════════════════════════════════════════════════════════════
+
+    // 🌫️ Bir köylü çağrısının peşinden gitmek ister — mesleği gönlüne uymuyor.
+    // Yazar sahnede o kırgın köylüdür (_pickPetitionAuthor özel-durumu).
+    _PetitionDef(
+      (c) => c.hasResentful && c.population >= 4,
+      1.1,
+      const Petition(
+        id: 'professionCalling',
+        petitioner: 'Gönlü başka işte bir köylü',
+        icon: '🌫️',
+        title: 'Çağrısının Peşinden Gitmek İstiyor',
+        tone: PetitionTone.solemn,
+        note: '↩ Bu köylü uzun süredir mesleğine küs',
+        stakes: 'İzin ver → gönlü açılır ama eski el eksilir; reddet → küskünlük derinleşir.',
+        body: 'Köyün biri uzun zamandır yaptığı işte mutsuz; içinde bambaşka '
+            'bir çağrı var. Yıllardır taşıdığı zanaatı bırakıp gönlünün çektiği '
+            'işe geçmek için izin istiyor. Bırakırsan biri o eski işten eksilir, '
+            'ama bu kez kendi yolunda yürür.',
+        options: [
+          PetitionOption(
+            label: 'Bırak, çağrısının peşinden gitsin',
+            detail: 'Köylü mesleğini değiştirir — gönlü açılır, kırgınlığı diner.',
+            resolution: '',
+            moraleAmount: 0.04,
+            moraleDays: 2,
+            fx: PetitionFx.callingGranted,
+            estateMood: [(Estate.hearth, 0.10), (Estate.artisans, -0.05)],
+          ),
+          PetitionOption(
+            label: 'Mesleğinde kalsın',
+            detail: 'Köy düzeni korunur ama köylünün küskünlüğü derinleşir.',
+            resolution: '🌫️ Köylü mesleğinde kalmak zorunda kaldı — içi buruk.',
+            moraleAmount: -0.05,
+            moraleDays: 2,
+            estateMood: [(Estate.hearth, -0.10), (Estate.artisans, 0.04)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🩸 Kan davası — köy yaşlıları iki aileyi barıştırman için yalvarır.
+    _PetitionDef(
+      (c) => c.hasFeud,
+      1.4,
+      const Petition(
+        id: 'feudReconcile',
+        petitioner: 'Köyün yaşlıları',
+        icon: '🩸',
+        title: 'Kan Davasını Bitir',
+        tone: PetitionTone.ominous,
+        note: '↩ İki aile birbirine kan kustu',
+        stakes: 'Sulh → husumet silinir, köy nefes alır; reddet → ölüm döngüsü sürer.',
+        body: 'İki aile arasındaki kan davası köyü zehirliyor — her karşılaşma '
+            'bir kavgaya, kimi kavga bir mezara dönüyor. Köyün yaşlıları bir sulh '
+            'meclisi topladı: barışı dayatırsan husumet diner. Reddedersen kan '
+            'kanı çağırmaya devam eder.',
+        options: [
+          PetitionOption(
+            label: 'Sulh dayat — barıştır',
+            detail: 'Diyet öde, iki aileyi barıştır; husumet silinir, köy yarasını sarar.',
+            resolution: '',
+            goldDelta: -6, // diyet / barış bedeli
+            moraleAmount: 0.10,
+            moraleDays: 4,
+            fx: PetitionFx.feudPeace,
+            estateMood: [(Estate.faithful, 0.12), (Estate.hearth, 0.12)],
+          ),
+          PetitionOption(
+            label: 'Suçluyu sürgün et',
+            detail: 'En çok kan dökeni köyden kov — kan davası uzaklaştırmayla diner.',
+            resolution: '',
+            fx: PetitionFx.feudExile,
+            moraleAmount: -0.04,
+            moraleDays: 2,
+            estateMood: [(Estate.faithful, 0.04), (Estate.hearth, -0.06)],
+          ),
+          PetitionOption(
+            label: 'Suçluyu idam et',
+            detail: 'Son çare: halkın önünde idam. Kan davası kanla biter ama köyü dehşet sarar.',
+            resolution: '',
+            fx: PetitionFx.feudExecute,
+            moraleAmount: -0.10,
+            moraleDays: 4,
+            estateMood: [(Estate.faithful, 0.06), (Estate.hearth, -0.12)],
+          ),
+          PetitionOption(
+            label: 'Karışma — kan davası sürsün',
+            detail: 'Husumet devam eder; intikam döngüsü köyü kanatmaya devam eder.',
+            resolution: '🩸 Sulh reddedildi — kan davası gölgesi köyün üstünde.',
+            moraleAmount: -0.08,
+            moraleDays: 3,
+            estateMood: [(Estate.faithful, -0.10), (Estate.hearth, -0.10)],
+          ),
+        ],
+      ),
+    ),
 
     // 😤 Emekçiler yorgun — bir nefes molası ister.
     _PetitionDef(
@@ -560,6 +689,88 @@ abstract final class PetitionSystem {
       ),
     ),
 
+    // ════════════════════════════════════════════════════════════════════════
+    // YASA-DUYARLI DİLEKÇELER — yürürlükteki bir yasa köyde canlı bir sosyal
+    // karşılık doğurur (politika↔dilekçe köprüsü). Çıkardığın kanun unutulmaz:
+    // lehine olan zümre teşekkür eder, aleyhine olan geri adım ister.
+    // ════════════════════════════════════════════════════════════════════════
+
+    // 🌱 Dönemli ekim yürürlükte → tarla bereketlenir ama "pazar payı daralır"
+    // (yasanın bedeli). Zanaatkârlar yakınır, emekçiler savunur — sen tartarsın.
+    _PetitionDef(
+      (c) => c.cropRotation && c.adults >= 5,
+      0.55,
+      const Petition(
+        id: 'rotationMarket',
+        petitioner: 'Tezgâh esnafı',
+        icon: '🌱',
+        title: 'Dönemli Ekim Pazarı Daraltıyor',
+        tone: PetitionTone.neutral,
+        estate: Estate.artisans,
+        note: '⚖ Yürürlükteki yasa: Dönemli ekim',
+        stakes: 'Kanunda diren → emekçi sevinir, esnaf küser; esnek davran → tersi.',
+        body: 'Dönemli ekim toprağı şenlendirdi ama tarlalar sırayla '
+            'dinlendiği için pazara çıkan ürün azaldı. Zanaatkârlar tezgâhların '
+            'boş kaldığından yakınıyor: "Ya takvim biraz gevşesin, ya bize bir '
+            'pay ayrılsın." Emekçiler ise bereketli toprağı korumakta kararlı.',
+        options: [
+          PetitionOption(
+            label: 'Takvimde diren',
+            detail: 'Toprağın bereketi sürer; emekçiler memnun, esnaf homurdanır.',
+            resolution: '🌱 Dönemli ekim aynen sürüyor — tarlalar dinlenmeye devam.',
+            estateMood: [(Estate.laborers, 0.10), (Estate.hearth, 0.04), (Estate.artisans, -0.12)],
+          ),
+          PetitionOption(
+            label: 'Esnafa pay ayır',
+            detail: 'Pazara biraz altın akıtılır; esnaf rahatlar, emekçi buruk.',
+            resolution: '🔨 Pazara destek verildi — esnaf rahatladı, emekçi biraz küstü.',
+            goldDelta: -5,
+            estateMood: [(Estate.artisans, 0.14), (Estate.laborers, -0.08)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🚪 Misafirperverlik yürürlükte + boş hane var → bir gezgin köye yerleşmek
+    // istiyor. Açık kapı politikasının görünür sosyal karşılığı.
+    _PetitionDef(
+      (c) => c.hospitality && c.hasHousing && c.population >= 5 && c.food >= 8,
+      0.6,
+      const Petition(
+        id: 'wandererSettles',
+        petitioner: 'Yolu düşmüş bir gezgin',
+        icon: '🚪',
+        title: 'Bir Gezgin Yerleşmek İstiyor',
+        tone: PetitionTone.warm,
+        estate: Estate.artisans,
+        note: '⚖ Yürürlükteki yasa: Misafirperverlik',
+        stakes: 'Kabul et → köye taze el ve haber; geri çevir → kapın boşa açık kalır.',
+        body: 'Açık kapı politikan duyulmuş: uzaktan gelen bir gezgin köyün '
+            'sıcaklığına vurulmuş, boş bir haneye yerleşip burada kök salmak '
+            'istiyor. Eli iş tutuyor, dilinde uzak diyarların haberleri var. '
+            'Ama bir boğaz daha sofraya ortak olacak.',
+        options: [
+          PetitionOption(
+            label: 'Hoş geldin, yerleş',
+            detail: 'Gezgin köye katılır; taze bir el, sıcak bir karşılama.',
+            resolution: '🚪 Gezgin köye yerleşti — açık kapı bir dost kazandırdı.',
+            foodDelta: -3,
+            moraleAmount: 0.05,
+            moraleDays: 3,
+            estateMood: [(Estate.artisans, 0.12), (Estate.hearth, 0.05), (Estate.laborers, -0.03)],
+          ),
+          PetitionOption(
+            label: 'Bu sefer olmaz',
+            detail: 'Gezgin yoluna devam eder; kapın açık ama sofran dar kaldı.',
+            resolution: '🚪 Gezgin geri çevrildi — açık kapı bu sefer kapandı.',
+            moraleAmount: -0.03,
+            moraleDays: 2,
+            estateMood: [(Estate.artisans, -0.08), (Estate.hearth, 0.03)],
+          ),
+        ],
+      ),
+    ),
+
     // 🎉 Çiftçiler hasat şenliği ister.
     _PetitionDef(
       (c) => c.food >= 30,
@@ -641,6 +852,89 @@ abstract final class PetitionSystem {
             fx: PetitionFx.cropBlight,
             setsFlags: ['fields.neglected'],
             estateMood: [(Estate.laborers, -0.16)],
+          ),
+        ],
+      ),
+    ),
+
+    // ☀️ Yaz kuraklığı — MEVSİMSEL. Yazın işlenen tarla varken güneş ekini
+    // kavurur; kuyu suyu kritik. KARAR: emek/altın harca → kurtar, ya da bırak.
+    // Etki: YİYECEK + Emekçi morali. "fields.tended" iyi bakım hatırlanır.
+    _PetitionDef(
+      (c) => c.season == Season.summer && c.hasCrops && c.food >= 5,
+      0.95,
+      const Petition(
+        id: 'summerDrought',
+        petitioner: 'Bunalmış çiftçiler',
+        icon: '☀️',
+        title: 'Yaz Kuraklığı Bastırdı',
+        tone: PetitionTone.ominous,
+        estate: Estate.laborers,
+        stakes: 'Su taşı → ekin kurtulur; bırak → güneş başakları kavurur.',
+        body: 'Günlerdir damla yağmur yok. Toprak çatladı, başaklar sararmaya '
+            'başladı. Çiftçiler kuyudan su taşımak için fazladan el ve biraz '
+            'altın istiyor — yoksa bu yazın hasadı güneşte kavrulacak.',
+        options: [
+          PetitionOption(
+            label: 'Su taşıyın, kanal açın',
+            detail: 'Altın + emek harca; kuyudan tarlaya su taşınır, ekin kurtulur.',
+            resolution: '💧 Tarlalara su yetişti — ekin kuraklığı atlattı.',
+            goldDelta: -7,
+            moraleAmount: 0.02,
+            moraleDays: 2,
+            setsFlags: ['fields.tended'],
+            estateMood: [(Estate.laborers, 0.12), (Estate.artisans, -0.04)],
+          ),
+          PetitionOption(
+            label: 'Yağmuru bekleyin',
+            detail: 'Müdahale yok — güneş başakları kavurur, hasat azalır.',
+            resolution: '🌾 Hasadın çoğu güneşte kavruldu — ambar dar kaldı.',
+            foodDelta: -12,
+            moraleAmount: -0.04,
+            moraleDays: 3,
+            fx: PetitionFx.cropBlight,
+            setsFlags: ['fields.neglected'],
+            estateMood: [(Estate.laborers, -0.14)],
+          ),
+        ],
+      ),
+    ),
+
+    // ❄️ Kış erzak meclisi — MEVSİMSEL. Kışın tarlalar donmuşken ambar
+    // konuşur. KARAR: sıkı tut (erzak korunur, köy biraz kısılır) ya da
+    // bolca paylaş (moral↑ ama erzak erir). Etki: YİYECEK + moral + Ocak/Emekçi.
+    _PetitionDef(
+      (c) => c.season == Season.winter && c.population >= 4 && c.food >= 8,
+      0.85,
+      const Petition(
+        id: 'winterProvisions',
+        petitioner: 'Köy meclisi',
+        icon: '❄️',
+        title: 'Kış Erzağı Nasıl Bölüşülecek?',
+        tone: PetitionTone.neutral,
+        estate: Estate.hearth,
+        stakes: 'Sıkı tut → erzak dayanır; bolca paylaş → köy ısınır, ambar erir.',
+        body: 'Tarlalar dondu, hasat yok. Ambardaki erzak bahara kadar idare '
+            'edilmeli. Meclis soruyor: kışı sıkı bir hesapla mı geçirelim, '
+            'yoksa soğuk günlerde sofrayı bolca açıp köyü ısıtalım mı?',
+        options: [
+          PetitionOption(
+            label: 'Sıkı tutun, hesaplı bölün',
+            detail: 'Erzak korunur; köy biraz kısılır ama bahara güvenle çıkar.',
+            resolution: '🥖 Erzak hesaplı bölündü — ambar bahara dayanacak.',
+            moraleAmount: -0.02,
+            moraleDays: 2,
+            estateMood: [(Estate.hearth, 0.06), (Estate.laborers, 0.04)],
+          ),
+          PetitionOption(
+            label: 'Sofrayı açın, paylaşın',
+            detail: 'Erzaktan cömertçe harcanır; köy ısınır ama ambar incelir.',
+            resolution: '🔥 Kış sofrası bol kuruldu — köy ısındı, ambar inceldi.',
+            foodDelta: -10,
+            moraleAmount: 0.06,
+            moraleDays: 3,
+            fx: PetitionFx.festival,
+            estateMood: [(Estate.hearth, 0.08), (Estate.faithful, 0.04)],
           ),
         ],
       ),
@@ -761,11 +1055,12 @@ abstract final class PetitionSystem {
       ),
     ),
 
-    // 💍 Köy düğünü — iki köylü yuva kurmak istiyor. Etki alanı: SOSYAL + moral.
-    // Animasyon: ateş başında dans + yükselen kalpler + yaprak/konfeti yağmuru.
+    // 💍 Köy düğünü — GERÇEK bir çift yuva kurar. Random roll DEĞİL: scene_wedding
+    // kur sürecini izler, çift olgunlaşınca bu dilekçeyi id ile sunar (couple'a
+    // bağlı). canFire=false + weight=0 → asla rastgele/dev-random çıkmaz.
     _PetitionDef(
-      (c) => c.adults >= 4,
-      0.7,
+      (c) => false,
+      0.0,
       const Petition(
         id: 'villageWedding',
         petitioner: 'Sevdalı bir çift',
@@ -784,7 +1079,7 @@ abstract final class PetitionSystem {
             goldDelta: -4,
             moraleAmount: 0.10,
             moraleDays: 4,
-            fx: PetitionFx.wedding,
+            fx: PetitionFx.weddingGrand,
             estateMood: [(Estate.hearth, 0.10), (Estate.laborers, 0.04), (Estate.artisans, -0.04)],
           ),
           PetitionOption(
@@ -902,6 +1197,130 @@ abstract final class PetitionSystem {
             resolution: '🧒 Gençlere kulak verildi — köyde taze bir rüzgâr esti.',
             setsFlags: ['council.youth'],
             estateMood: [(Estate.laborers, 0.08), (Estate.artisans, 0.08), (Estate.hearth, -0.12)],
+          ),
+        ],
+      ),
+    ),
+
+    // ─── BÜYÜK KARARLAR — DÖRT zümreyi birden oynatan ağır tercihler ──────────
+    // Politik dengenin doruğu: tek bir karar tüm köyü yeniden hizalar. Net
+    // "doğru" yok — iki zümreyi sevindirirken diğer ikisini küstürürsün. Köyün
+    // kimliğini gerçekten bu kararlar şekillendirir.
+
+    // 🛣️ Ticaret yolu — dünyaya açıl mı, kendine mi yet? Zanaat+Emek ister,
+    // İnanç+Ocak yabancıdan/yozlaşmadan ürker. Açarsan kervan zinciri başlar.
+    _PetitionDef(
+      (c) => c.population >= 8 &&
+          !c.remembers('road.open') &&
+          !c.remembers('road.closed'),
+      0.6,
+      const Petition(
+        id: 'bigDecisionRoad',
+        petitioner: 'Köy meclisi',
+        icon: '🛣️',
+        title: 'Dünyaya Açılalım mı?',
+        tone: PetitionTone.neutral,
+        stakes: 'Yolu aç → ticaret ve kervan; kapalı kal → gelenek ve huzur.',
+        body: 'Köy bir yol ağzında. Tüccarlar dışarıya bir ticaret yolu açmak '
+            'istiyor — kervanlar, kazanç, uzak haberler gelir. Ama yaşlılar ve '
+            'inananlar tedirgin: "Yabancı yol yabancı âdet getirir, köyün ruhu '
+            'bozulur." Köyün kaderini belirleyecek bir karar.',
+        options: [
+          PetitionOption(
+            label: 'Ticaret yolunu aç',
+            detail: 'Kervanlar gelir, kese dolar; ama gelenek ve huzur sarsılır.',
+            resolution: '🛣️ Ticaret yolu açıldı — köy dünyaya kapısını araladı.',
+            goldDelta: -4,
+            setsFlags: ['road.open'],
+            followUpId: 'roadCaravan',
+            followUpDelayDays: 3.0,
+            estateMood: [(Estate.artisans, 0.16), (Estate.laborers, 0.06), (Estate.faithful, -0.10), (Estate.hearth, -0.10)],
+          ),
+          PetitionOption(
+            label: 'Köy kendine yetsin',
+            detail: 'Kapılar kapalı kalır; gelenek korunur ama ticaret kısılır.',
+            resolution: '🏡 Köy kendi içine kapandı — gelenek korundu, pazar durgun.',
+            setsFlags: ['road.closed'],
+            estateMood: [(Estate.hearth, 0.12), (Estate.faithful, 0.10), (Estate.artisans, -0.12), (Estate.laborers, -0.05)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🏗️ Ortak emek nereye? Değirmen (üretim) mi, sunak (mana) mı? Dört zümre
+    // ikiye bölünür: Emek+Zanaat üretimi, İnanç+Ocak mabedi ister.
+    _PetitionDef(
+      (c) => c.population >= 7 && c.adults >= 4,
+      0.5,
+      const Petition(
+        id: 'bigDecisionProject',
+        petitioner: 'Köyün ustabaşısı',
+        icon: '🏗️',
+        title: 'Ortak Emek Nereye Aksın?',
+        tone: PetitionTone.neutral,
+        stakes: 'Değirmen → bolluk; sunak → maneviyat. İki zümre sevinir, ikisi küser.',
+        body: 'Köy bu mevsim ortak bir büyük işe girişecek ama tek seçim hakkı '
+            'var. Emekçiler ve zanaatkârlar bir değirmen istiyor — un, bolluk, '
+            'kazanç. İnananlar ve yaşlılar ise bir sunak, köyün ruhunu '
+            'kutsayacak bir mabet istiyor. Hangisi?',
+        options: [
+          PetitionOption(
+            label: 'Değirmen kuralım',
+            detail: 'Üretim ve bolluk öne geçer; maneviyat geri planda kalır.',
+            resolution: '🏗️ Değirmen kuruldu — köyde bolluğun çarkı dönmeye başladı.',
+            foodDelta: 6,
+            estateMood: [(Estate.laborers, 0.14), (Estate.artisans, 0.10), (Estate.faithful, -0.10), (Estate.hearth, -0.06)],
+          ),
+          PetitionOption(
+            label: 'Sunak yükseltelim',
+            detail: 'Köyün ruhu kutsanır; üretim hevesi bir süre geri çekilir.',
+            resolution: '🕯️ Sunak yükseldi — köyün üstüne dingin bir kutsallık indi.',
+            moraleAmount: 0.06,
+            moraleDays: 4,
+            fx: PetitionFx.cult,
+            estateMood: [(Estate.faithful, 0.14), (Estate.hearth, 0.10), (Estate.laborers, -0.10), (Estate.artisans, -0.06)],
+          ),
+        ],
+      ),
+    ),
+
+    // 🐪 ZİNCİR: ticaret yolu açıldıysa bir kervan gelir (roadCaravan). canFire
+    // false + weight 0 → yalnız bigDecisionRoad zincirinden tetiklenir.
+    _PetitionDef(
+      (c) => false,
+      0.0,
+      const Petition(
+        id: 'roadCaravan',
+        petitioner: 'Tozlu bir kervan',
+        icon: '🐪',
+        title: 'Yoldan Bir Kervan Geldi',
+        tone: PetitionTone.warm,
+        estate: Estate.artisans,
+        note: '↩ Açtığın ticaret yolundan ilk kervan',
+        stakes: 'Ağırla → kazanç ve coşku; geçir → fırsat kaçar.',
+        body: 'Açtığın yoldan ilk büyük kervan köye ulaştı — develer ipek, '
+            'baharat, uzak diyar haberleriyle dolu. Tüccarlar bir gece '
+            'ağırlanmak, pazar kurmak istiyor. Ağırlamak biraz erzak ister ama '
+            'kese dolar, köy şenlenir.',
+        options: [
+          PetitionOption(
+            label: 'Kervanı ağırla, pazar kurulsun',
+            detail: 'Biraz erzak harca; kervan kazanç ve coşku bırakır.',
+            resolution: '🐪 Kervan ağırlandı — pazar kuruldu, kese doldu, köy şenlendi!',
+            foodDelta: -5,
+            goldDelta: 12,
+            moraleAmount: 0.08,
+            moraleDays: 3,
+            fx: PetitionFx.festival,
+            estateMood: [(Estate.artisans, 0.12), (Estate.laborers, 0.05), (Estate.hearth, 0.03)],
+          ),
+          PetitionOption(
+            label: 'Geçip gitsinler',
+            detail: 'Kervan durmadan geçer; fırsat kaçar, zanaatkârlar burulur.',
+            resolution: '🐪 Kervan durmadan geçti — fırsat bu sefer kaçtı.',
+            moraleAmount: -0.02,
+            moraleDays: 1,
+            estateMood: [(Estate.artisans, -0.08)],
           ),
         ],
       ),

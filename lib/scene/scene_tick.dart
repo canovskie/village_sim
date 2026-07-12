@@ -10,6 +10,7 @@ extension _SceneTick on _VillageSceneState {
   void _onTick(Duration elapsed) {
     final raw = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _last = elapsed;
+    _clampCamera(_viewSize); // kamera reach clamp'i (ilk ortalama + sürekli)
     _maybeAutoSave(raw); // periyodik otomatik kayıt (gerçek-zaman birikimi)
     // HUD'u ~10Hz'de güncelle (her frame değil) — pahalı ağaç, yavaş veri.
     _hudAccum += raw;
@@ -18,10 +19,21 @@ extension _SceneTick on _VillageSceneState {
       _hudFrame.value = _hudFrame.value + 1;
     }
     if (_shakeTime > 0) _shakeTime -= raw; // kamera sarsıntısı sönümü (juice)
+    // Ses ortamı — gerçek-zaman dt ile (sim duraklasa/sinematikte de akar).
+    AudioManager.instance
+        .update(raw, dayLight: _cycle.dayLight, rng: _rng);
+    AudioManager.instance.applyAmbient(
+        dayLight: _cycle.dayLight,
+        rain: _cycle.rainIntensity,
+        hasFire: _hasFire);
     // Karar bekleyen olay açıkken sim durur (sahne kalır, modal odakta).
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
     // arası DevPanel slider'ından gelir; normal oyunda 1.0.
-    final effectiveScale = (_pendingChoice != null || _activeCutscene != null)
+    final effectiveScale = (_pendingChoice != null ||
+            _activeCutscene != null ||
+            _imperialDemand != null ||
+            // Mühlet dolup zorla açılan dilekçe — köy yanıt bekler, sim durur.
+            (_petitionForced && _petitionModalOpen))
         ? 0.0
         : _timeScale * _devSpeedBoost;
     // dt clamp scaling: boost 1x ise 50ms hard cap (spiral koruma — render
@@ -41,13 +53,16 @@ extension _SceneTick on _VillageSceneState {
     final starvation = _tickPopulationAndHunger(dt);
     _tickEventsAndFx(dt);
     _tickWeatherReaction(dt);     // yağmur başla/dur → gövde dili + sığınağa koş
+    _tickLightning(dt);           // fırtınada beyaz gök flash'ı (şekilsiz)
     _tickBuildingSystems(dt, starvation);
     _maybeRebuildSpatialCache(dt);
     _tickEntities(dt);
+    _tickMerchants(dt);          // arada gelip giden gezgin tüccar (ambiyans)
     _tickPostMotion(dt);
     _tickDerivedAndMeta(dt);
     _spontaneousLife(dt);         // sürekli baseline canlılık (rastgele refleks)
     _tickPersonalMoments(dt);     // kişisel anlar (yıldönümü kutlamaları)
+    _tickCallingMoments(dt);      // çağrısını buldu (genç→yetişkin meslek keşfi)
     _tickComfort(dt);             // konfor talebi (surplus → şölen + moral)
     _frame.value = _frame.value + 1;
   }
@@ -59,27 +74,54 @@ extension _SceneTick on _VillageSceneState {
     _cycle.update(dt);
     // Gün sayacı — timeOfDay sarınca (örn. 0.98 → 0.02) yeni gün.
     if (_cycle.timeOfDay < _lastTimeOfDay) _dayCount++;
+    // Şafak — gün doğumu eşiğini (0.25) geçince horoz öter (bir kez/gün).
+    if (_lastTimeOfDay < 0.25 && _cycle.timeOfDay >= 0.25) {
+      AudioManager.instance.playSfx(Sfx.roosterCrow);
+    }
     _lastTimeOfDay = _cycle.timeOfDay;
+    // Mevsim dönümü — gün değişince mevsim de değişmiş olabilir.
+    final season = _season;
+    if (_lastSeason == null) {
+      _lastSeason = season; // ilk tick / yükleme: sessizce kur
+    } else if (season != _lastSeason) {
+      _lastSeason = season;
+      _onSeasonTurn(season);
+    }
   }
 
-  // ── Kilometre taşları ──────────────────────────────────────────────────────
-  // Nüfus eşikleri geçilince bir kez tatlı bildirim. Toplam = köylü + işçiler.
-  void _tickMilestones() {
-    final pop = _villagers.length +
-        _farmers.length +
-        _woodcutters.length +
-        _miners.length +
-        _fishers.length +
-        _builders.length +
-        _shepherds.length +
-        _florists.length;
-    const thresholds = [10, 15, 20, 30, 40, 50, 75, 100];
-    for (final t in thresholds) {
-      if (pop >= t && _lastPopMilestone < t) {
-        _lastPopMilestone = t;
-        _showNotification('🎉 Köy büyüyor — $t köylü!');
-        break;
-      }
+  // ── Şimşek flash ────────────────────────────────────────────────────────────
+  // Fırtınada (yağmur > 0.6) seyrek, ŞEKİLSİZ beyaz gök parlaması. Bir yere
+  // düşmez, çizgi/şekil yok — sadece tüm gökyüzü kısa süre aydınlanır (gerçek
+  // hayattaki gibi). Yumuşak (≤0.30 alfa), bazen çift çakım (flicker).
+  void _tickLightning(double dt) {
+    if (_lightningFlash > 0) {
+      _lightningFlash -= dt * 3.2; // ~0.3s'de söner
+      if (_lightningFlash < 0) _lightningFlash = 0;
+    }
+    // Işık-ses gecikmesi: şimşek çaktıktan kısa süre sonra gök gürültüsü
+    // (uzak fırtına hissi). Fırtına bitse bile bekleyen gümbürtü çalsın.
+    if (_thunderDelay > 0) {
+      _thunderDelay -= dt;
+      if (_thunderDelay <= 0) AudioManager.instance.playSfx(Sfx.thunderClap);
+    }
+    final storm = _cycle.rainIntensity > 0.6;
+    if (!storm) {
+      _lightningTimer = 4.0 + _rng.nextDouble() * 4.0;
+      _lightningPulse = 0;
+      return;
+    }
+    // İkincil çakım (flicker) — ana flash'tan kısa süre sonra hafif darbe.
+    if (_lightningPulse > 0) {
+      _lightningPulse -= dt;
+      if (_lightningPulse <= 0) _lightningFlash = 0.17;
+    }
+    _lightningTimer -= dt;
+    if (_lightningTimer <= 0) {
+      _lightningTimer = 6.0 + _rng.nextDouble() * 11.0;
+      _lightningFlash = 0.26 + _rng.nextDouble() * 0.04; // göz yormayan tavan
+      _lightningPulse = _rng.nextBool() ? 0.08 + _rng.nextDouble() * 0.05 : 0.0;
+      // Uzak gök gürültüsü flash'tan ~0.5–1.4s sonra (mesafe hissi).
+      _thunderDelay = 0.5 + _rng.nextDouble() * 0.9;
     }
   }
 
@@ -127,7 +169,11 @@ extension _SceneTick on _VillageSceneState {
         _fishers.length +
         _builders.length;
     if (!_godMode && mouths > 0) {
-      _foodHunger += dt * mouths * (kFoodPerVillagerPerDay / kGameDaySeconds);
+      // Kimlik bonusu: Köklü Yuva tutumlu sofra kurar (_identityFoodMul=0.85).
+      _foodHunger += dt *
+          mouths *
+          _identityFoodMul *
+          (kFoodPerVillagerPerDay / kGameDaySeconds);
       if (_foodHunger >= 1.0) {
         final eat = _foodHunger.floor();
         _foodHunger -= eat;
@@ -164,14 +210,11 @@ extension _SceneTick on _VillageSceneState {
     if (_fxRainBoost > _cycle.rainIntensity) {
       _cycle.rainIntensity = _fxRainBoost;
     }
-    if (!_godMode && _villagers.isNotEmpty) {
-      _eventTimer -= dt;
-      if (_eventTimer <= 0) {
-        _triggerRandomEvent();
-        _eventTimer =
-            kEventMinInterval +
-            _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval);
-      }
+    if (_villagers.isNotEmpty) {
+      // Olaylar önce mayalanır (omen: diegetik uyarı), sonra vurur — bkz.
+      // scene_events. Otomatik üretim godMode'da kapalı ama omen İLERLEMESİ
+      // (dev-tetiklenen olay dahil) her zaman işler — gate metodun içinde.
+      _tickEventOmen(dt);
     }
   }
 
@@ -204,6 +247,7 @@ extension _SceneTick on _VillageSceneState {
             (_villagers.any((v) => v.isSage) ? 0.08 : 0.0) +
             _policyMoralePermanent() +
             _policyMoraleTemporary() +
+            _governanceLegacy + // büyük kararların kalıcı ruh izi
             // Bireysel moral ortalaması köy moraline beslenir: koşullar (ev/
             // yiyecek/su/ısınma/zümre) bireyler üzerinden DOLAYLI yansır.
             (_avgIndividualMorale - 0.62) * 0.5)
@@ -254,6 +298,11 @@ extension _SceneTick on _VillageSceneState {
                 sh.barnRow == b.row &&
                 sh.state != ShepherdState.idle,
           );
+        case BuildingType.mill:
+          // Balya teslimleri grindPulse'ı besler (carrier_system); burada
+          // tüketilir. >0 iken değirmen "çalışıyor" → çalışma dumanı + panel.
+          if (b.grindPulse > 0) b.grindPulse -= dt;
+          b.isActive = b.grindPulse > 0 && !b.userPaused;
         default:
           break;
       }
@@ -284,6 +333,9 @@ extension _SceneTick on _VillageSceneState {
     final buildDt = dt * _fxBuilderMul;
 
     for (final v in _villagers) {
+      // Oyuncu elinde tuttuğu köylü dondurulur (tutup-bırak) — AI hareketi
+      // imleci ezmesin; bırakınca normale döner.
+      if (identical(v, _draggedVillager)) continue;
       v.update(
         npcDt,
         kCols,
@@ -331,12 +383,24 @@ extension _SceneTick on _VillageSceneState {
     // Tören _gatherAtFire ile _villagers'ı tarar → ölü listeden çıktıktan SONRA
     // çalışmalı (cenaze sistemi scene_funeral'da).
     final dead = <(VillagerEntity, int)>[];
+    final removed = <VillagerEntity>[];
     _villagers.removeWhere((v) {
       if (!v.deathFinished) return false;
       final orphans = v.children.where((c) => c.parents.isEmpty).length;
       if (v.deathHoldsFuneral) dead.add((v, orphans));
+      removed.add(v);
       return true;
     });
+    // Ölenleri başkalarının sosyal belleğinden temizle (küslük + kan davası) —
+    // stale referans kalmasın. Kan davası yaşayan akrabalar arasında sürer.
+    if (removed.isNotEmpty) {
+      for (final v in _villagers) {
+        for (final r in removed) {
+          v.grudges.remove(r);
+          v.bloodEnemies.remove(r);
+        }
+      }
+    }
     for (final (v, orphans) in dead) {
       _holdFuneral(v, orphans: orphans);
     }
@@ -386,8 +450,9 @@ extension _SceneTick on _VillageSceneState {
       _anchorSystem.rebuild(_buildings);
       _rebuildBeeSwarms();
     }
+    final season = _season;
     for (final t in _farmTiles) {
-      t.update(farmDt);
+      t.update(farmDt, season);
     }
     // Kuyu erişimi anchor sistemi üzerinden — çiftçi 4 yönden birinde
     // boş slot bulur, aynı kuyuda çakışma olmaz.
@@ -399,6 +464,7 @@ extension _SceneTick on _VillageSceneState {
         waterTiles: obstacles,
         softObstacles: softObs,
         anchorSystem: _anchorSystem,
+        farmingActive: !season.isFrozen,
       );
       // Çiftçi hasat sonucunu altın olarak değil yiyecek olarak hay pile
       // yığınıyla üretir; piller balya olur, balyalar depoya taşınır.
@@ -472,19 +538,33 @@ extension _SceneTick on _VillageSceneState {
         _resourceBoxes.add(box);
       }
     }
-    // Fidan büyümesi güncelle. Doğa dostu açıksa kesilen her ağacın yanına
-    // bir fidan dik — sustainable. removeWhere'den ÖNCE: felled tile'ları
-    // bilelim.
+    // Fidan büyümesini güncelle + devrilme animasyonunu ilerlet. Kes'lenen
+    // ağaç anında kaybolmaz: isFelled olunca [fellAge] artar, ağaç tabandan
+    // yana DEVRİLİR; ancak devrilme bitince (kFallDuration) tile açılır/kalkar.
     for (final t in _trees) {
       t.update(dt);
+      if (t.isFelled) t.fellAge += dt;
     }
-    if (_policies.treePlanting) {
-      final felled = _trees.where((t) => t.isFelled).toList();
-      for (final f in felled) {
+    // Devrilmesi tamamlananlar: wild → orman geri çekilir + tile açılır + yaprak
+    // patlaması; scatter → doğa-dostu politikada yerine fidan. (Henüz devrilenler
+    // listede kalır, çizilmeye devam eder.)
+    final done = _trees
+        .where((t) => t.isFelled && t.fellAge >= TreeEntity.kFallDuration)
+        .toList();
+    bool landOpened = false;
+    for (final f in done) {
+      if (f.isWild) {
+        if (_openFrontierTile(f.col, f.row)) {
+          landOpened = true;
+          _leafBursts.add(
+              LeafBurst(f.col + 0.5, f.row + 0.5, _rng.nextInt(1 << 20)));
+        }
+      } else if (_policies.treePlanting) {
         _plantSaplingNear(f.col, f.row);
       }
     }
-    _trees.removeWhere((t) => t.isFelled);
+    _trees.removeWhere((t) => t.isFelled && t.fellAge >= TreeEntity.kFallDuration);
+    if (landOpened) _spatialTimer = 0; // engel/land cache'i ilk tick'te tazele
     for (final m in _miners) {
       m.update(
         npcDt,
@@ -541,25 +621,7 @@ extension _SceneTick on _VillageSceneState {
       }
     }
     _cows.removeWhere((c) => c.deathFinished);
-    // Tavuk Kümesi: pasif yumurta (food) üretimi. Yumurta YALNIZ kümeste
-    // yetişkin tavuk varsa olur — yaşam döngüsü üretime bağlanır (civciv/yaşlı
-    // değil). Tavuksuz/yavru-only kümes timer'ı dondurur.
-    // _buildings yalnız tamamlanmış binaları içerir (inşaat _orders'ta).
-    for (final b in _buildings) {
-      if (b.type != BuildingType.chickenCoop) continue;
-      final hasAdultHen = _cows.any((c) =>
-          c.kind == AnimalKind.chicken &&
-          c.isAdult &&
-          !c.isDying &&
-          c.barnCol == b.col &&
-          c.barnRow == b.row);
-      if (!hasAdultHen) continue;
-      b.eggTimer += dt;
-      if (b.eggTimer >= kEggInterval) {
-        b.eggTimer = 0.0;
-        _stockpile.food += 1;
-      }
-    }
+    _tickEggs(dt);
     // Arı Kovanı: pasif bal üretimi, menzildeki çiçek sayısıyla hızlanır.
     // Çiçeksiz kovan da yavaşça bal verir; florist'in yanına konulan kovan
     // 2-3 kat hızlanır → "doğru yerleşim" ödüllendirilir. Bal lüks/moral.
@@ -607,6 +669,9 @@ extension _SceneTick on _VillageSceneState {
         hayEntities: _hayEntities,
         stockpile: _stockpile,
         anchorSystem: _anchorSystem,
+        baleYieldMultiplier: _season.yieldMultiplier *
+            (_policies.cropRotation ? 1.2 : 1.0) *
+            _identityYieldMul, // kimlik bonusu: Zanaat Kasabası +%15
       );
     }
   }
@@ -765,6 +830,18 @@ extension _SceneTick on _VillageSceneState {
   // ── Türetilmiş HUD sayımları + sosyal + objektif + snapshot ───────────────
 
   void _tickDerivedAndMeta(double dt) {
+    // Otonom arazi açılımı — köy yer istedikçe ön-hat ağaçlarını işaretle
+    // (içeride ~2sn throttle'lı; oduncu AI'sı keser, orman geri çekilir).
+    _updateLandExpansion(dt);
+
+    // Yaprak patlaması fx yaşlandır/temizle (devrilen ağaç juice'u).
+    if (_leafBursts.isNotEmpty) {
+      for (final lb in _leafBursts) {
+        lb.age += dt;
+      }
+      _leafBursts.removeWhere((lb) => lb.dead);
+    }
+
     // HUD "yolda" kaynak sayımları — tek geçiş (build içinde 5 ayrı
     // .where().length taraması yerine; her frame allocation'ı keser).
     _woodInTransit = _stoneInTransit = _ironInTransit = _coalInTransit = 0;
@@ -823,7 +900,12 @@ extension _SceneTick on _VillageSceneState {
     // Kişisel cooldown'lar her tick decay.
     for (final v in _villagers) {
       if (v.socialCooldown > 0) v.socialCooldown -= dt;
+      if (v.conflictCooldown > 0) v.conflictCooldown -= dt;
     }
+    // Çekişme/kavga taraması — nadir, gerçekçi faktörlere bağlı.
+    _tickConflicts(dt);
+    // İmparatorluk vergi heyeti — koşullu (zengin köy dikkat çeker).
+    _tickImperial(dt);
     _socialScanTimer += dt;
     if (_socialScanTimer >= _VillageSceneState._kSocialScanInterval) {
       _socialScanTimer = 0;
@@ -833,7 +915,9 @@ extension _SceneTick on _VillageSceneState {
     // Rutinden ÖNCE: yatak peşindeki evsizi sahiplenip rutinden korur.
     _tickReed(dt);
     // Kilometre taşları — nüfus eşikleri (bir kez tatlı bildirim).
-    _tickMilestones();
+    _tickAchievements();
+    // Bireysel yaşam öyküsü — evre geçişlerini (reşit oluş/yaşlanma) yakala.
+    _tickLifeStory(dt);
     // Amaçlı hedef akışı — boşalan köylülere zamana/ihtiyaca göre POI ata.
     _tickRoutine(dt);
     // Ateş başı toplanma + hikaye saati taramaları.
@@ -841,6 +925,8 @@ extension _SceneTick on _VillageSceneState {
     // Ateş yakıtı — tükeniş, ateşçi odun taşıma, sönme/yeniden yanma.
     _tickFire(dt);
     _tickPetitions(dt);
+    // Düğün yaşam döngüsü — gerçek çift kur yapar → çifte bağlı düğün dilekçesi.
+    _tickWedding(dt);
     // Zümre dengesi — moral tabana süzülür + küskün zümre diegetik somurtma.
     _tickEstates(dt);
 
@@ -1020,13 +1106,111 @@ extension _SceneTick on _VillageSceneState {
         isMale: _rng.nextBool(),
         ageDays: 0.0,
         lifespanDays:
-            AnimalEntity.kAnimalElderDay + 5.0 + _rng.nextDouble() * 9.0,
+            AnimalEntity.kAnimalElderDay + 8.0 + _rng.nextDouble() * 12.0,
       ));
       counts[key] = (counts[key] ?? 0) + 1;
       _animalBirthsPending++;
       // Doğum sonrası bekleme: aile teşviki açıksa hayvanlar da hızlı çoğalır.
       final base = _policies.familyEncouragement ? 3.0 : 5.0;
       mother.fertilityDays = base + _rng.nextDouble() * 4.0;
+    }
+  }
+
+  // ── Yumurta döngüsü ─────────────────────────────────────────────────────────
+  // Kümeste yetişkin DİŞİ tavuk varken periyodik GÖRÜNÜR yumurta bırakılır.
+  // Yumurta bir süre yerde durur, sonra çözülür: toplanır → +1 food, ya da
+  // (şans + kapasite varsa) çatlar → civciv. Görsel + yaşayan döngü.
+  static const double _kEggHatchChance = 0.30;
+  static const double _kEggCollectTime = 7.0;   // toplanma süresi (sn)
+  static const double _kEggHatchTime   = 16.0;  // çatlama süresi (sn)
+  static const int _kMaxEggsPerCoop = 3;        // yerde biriken yumurta tavanı
+
+  void _tickEggs(double dt) {
+    final chickenCap = kAnimalBarnCap[AnimalKind.chicken] ?? 6;
+
+    // Yumurtlama — her kümes için.
+    for (final b in _buildings) {
+      if (b.type != BuildingType.chickenCoop) continue;
+      AnimalEntity? hen;
+      for (final c in _cows) {
+        if (c.kind == AnimalKind.chicken &&
+            !c.isMale &&
+            c.isAdult &&
+            !c.isDying &&
+            c.barnCol == b.col &&
+            c.barnRow == b.row) {
+          hen = c;
+          break;
+        }
+      }
+      if (hen == null) continue; // yetişkin dişi yoksa yumurtlama
+      final eggsHere =
+          _eggs.where((e) => e.barnCol == b.col && e.barnRow == b.row).length;
+      if (eggsHere >= _kMaxEggsPerCoop) continue; // yer doldu, bekle
+      b.eggTimer += dt;
+      if (b.eggTimer >= kEggInterval) {
+        b.eggTimer = 0.0;
+        final chickens = _cows
+            .where((c) =>
+                c.kind == AnimalKind.chicken &&
+                !c.isDying &&
+                c.barnCol == b.col &&
+                c.barnRow == b.row)
+            .length;
+        final willHatch =
+            chickens < chickenCap && _rng.nextDouble() < _kEggHatchChance;
+        _eggs.add(EggEntity(
+          barnCol: b.col,
+          barnRow: b.row,
+          gridX: hen.gridX,
+          gridY: hen.gridY,
+          spawnTime: _time,
+          willHatch: willHatch,
+          resolveAt: willHatch ? _kEggHatchTime : _kEggCollectTime,
+        ));
+      }
+    }
+
+    if (_eggs.isEmpty) return;
+    // Yaşlandır + çözümle.
+    for (final e in _eggs) {
+      e.age += dt;
+    }
+    final resolved = <EggEntity>[];
+    _eggs.removeWhere((e) {
+      if (!e.resolved) return false;
+      resolved.add(e);
+      return true;
+    });
+    for (final e in resolved) {
+      if (e.willHatch) {
+        final chickens = _cows
+            .where((c) =>
+                c.kind == AnimalKind.chicken &&
+                !c.isDying &&
+                c.barnCol == e.barnCol &&
+                c.barnRow == e.barnRow)
+            .length;
+        if (chickens < chickenCap) {
+          _cows.add(AnimalEntity(
+            kind: AnimalKind.chicken,
+            barnCol: e.barnCol,
+            barnRow: e.barnRow,
+            startCol: e.gridX,
+            startRow: e.gridY,
+            isMale: _rng.nextBool(),
+            ageDays: 0.0,
+            lifespanDays:
+                AnimalEntity.kAnimalElderDay + 8.0 + _rng.nextDouble() * 12.0,
+          ));
+          _animalBirthsPending++;
+          AudioManager.instance.playSfx(Sfx.chickenCluck);
+        } else {
+          _stockpile.food += 1; // kapasite doldu → yumurta sofraya
+        }
+      } else {
+        _stockpile.food += 1; // toplandı
+      }
     }
   }
 
@@ -1096,6 +1280,8 @@ extension _SceneTick on _VillageSceneState {
           for (final j in neighbors) {
             final o = _villagers[j];
             if (identical(o, v)) continue;
+            // Küs olanlar / kan düşmanları birbirini selamlamaz (soğuk omuz).
+            if (v.hasGrudgeWith(o, _time) || v.isBloodEnemy(o)) continue;
             final ddx = v.gridX - o.gridX;
             final ddy = v.gridY - o.gridY;
             final d2 = ddx * ddx + ddy * ddy;
@@ -1212,7 +1398,7 @@ extension _SceneTick on _VillageSceneState {
     for (final t in _farmTiles) {
       if (!t.isGrowing) continue;
       if (t.growthProgress < avg - 0.10) {
-        t.update(farmDt * 0.5); // geride kalan +%50
+        t.update(farmDt * 0.5, _season); // geride kalan +%50
       } else if (t.growthProgress > avg + 0.10) {
         t.growthProgress = (t.growthProgress - unit).clamp(0.0, 1.0);
       }
@@ -1238,6 +1424,7 @@ extension _SceneTick on _VillageSceneState {
     if (_rng.nextDouble() > chance) return;
     final sage = elders[_rng.nextInt(elders.length)];
     sage.isSage = true;
+    _lifeEvent(sage, 'Köyün bilgesi oldu', icon: '✨', milestone: true);
     _showNotification(
         '👵 ${sage.name} köyün bilgesi oldu — herkes ondan ilham alıyor.');
   }

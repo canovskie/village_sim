@@ -46,7 +46,10 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
   for (final b in buildings) {
     final f = b.fn;
     if (f == null) continue;
-    if (b.type == BuildingType.well) wellCount++;
+    // Şadırvan da bir su kaynağı — kuyu gibi yakın evleri/ekinleri besler.
+    if (b.type == BuildingType.well || b.type == BuildingType.fountain) {
+      wellCount++;
+    }
     switch (f.role) {
       case BuildingRole.storage:
         capacity += f.storageCapacity;

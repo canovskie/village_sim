@@ -27,6 +27,17 @@ extension _SceneFuneral on _VillageSceneState {
   /// Doğal ölümde çağrılır — köylü zaten _villagers'tan çıkarıldı.
   /// [orphans] = bu ölümle yetim kalan çocuk sayısı (kilise yoksa mesaja girer).
   void _holdFuneral(VillagerEntity v, {required int orphans}) {
+    _award('first_death', 'Köy ilk kez yas tuttu', '🕯️');
+    // Yaşam öyküsü — geride kalanların kaybı (dul eş + yetim çocuklar). v'nin
+    // çocuk/ebeveyn listeleri tören anında hâlâ dolu (karşı taraf koparılmıştı).
+    final partners = <VillagerEntity>{};
+    for (final c in v.children) {
+      if (!c.isDying) _lifeEvent(c, '${v.name}\'i kaybetti', icon: '🕯️');
+      partners.addAll(c.parents);
+    }
+    for (final p in partners) {
+      if (!p.isDying) _lifeEvent(p, 'Eşi ${v.name}\'i kaybetti', icon: '🕯️');
+    }
     final church = _churchBuilding;
 
     if (church != null) {

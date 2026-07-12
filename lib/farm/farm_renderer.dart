@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../rendering/asset_style.dart';
+import '../world/season.dart';
 
 class FarmRenderer {
   static final List<ui.Image?> _stages = List.filled(5, null);
@@ -30,9 +31,20 @@ class FarmRenderer {
     }
   }
 
+  // Mevsim tonu — tarla zeminine ince renk katmanı. Kış uykuda/karlı,
+  // sonbahar altın bereket, yaz kavruk; ilkbahar tonsuz (taze).
+  static final _pSeason = Paint();
+
+  static (Color, BlendMode)? _seasonTint(Season season) => switch (season) {
+        Season.spring => null,
+        Season.summer => (const Color(0x1FE6B84A), BlendMode.overlay),
+        Season.autumn => (const Color(0x33E08A3A), BlendMode.overlay),
+        Season.winter => (const Color(0x59CFE4F2), BlendMode.srcATop),
+      };
+
   static void drawTile(Canvas canvas,
       double px, double py, double hw, double hh,
-      int stage, double progress) {
+      int stage, double progress, Season season) {
 
     _diamond
       ..reset()
@@ -53,6 +65,14 @@ class FarmRenderer {
     if (progress > 0.65 && s < 4) {
       final t = ((progress - 0.65) / 0.35).clamp(0.0, 1.0);
       _blit(canvas, s + 1, dst, t.toDouble());
+    }
+
+    // Mevsim tonu — clip içinde, sadece tarla yüzeyini boyar.
+    if (_seasonTint(season) case (final c, final blend)) {
+      _pSeason
+        ..color = c
+        ..blendMode = blend;
+      canvas.drawRect(dst, _pSeason);
     }
 
     canvas.restore();

@@ -82,7 +82,7 @@ extension _SceneSave on _VillageSceneState {
           savedAt: DateTime.now(),
           day: _dayCount,
           population: _villagers.length,
-          identity: _estates.identityName,
+          identity: _houses.identityName,
         ).toJson(),
         'world': captureWorld(),
       };
@@ -97,7 +97,9 @@ extension _SceneSave on _VillageSceneState {
     }
   }
 
-  /// Sol-alttaki kompakt kontrol kümesi: ana menüye dönüş + manuel kaydet.
+  /// Sol-alttaki menü kümesi — tek "⚙" tutamağı altında menü/kaydet/📖 toplanır
+  /// (dağınık chip'ler yerine derli toplu). Açılınca öğeler gear'ın ÜSTÜNDE
+  /// belirir (alttaki inşa çubuğundan uzakta). Varsayılan kapalı (sade ekran).
   Widget buildSaveButton() {
     return Positioned(
       left: 14,
@@ -107,17 +109,29 @@ extension _SceneSave on _VillageSceneState {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Ana menüye dönüş — onay ister, onaylanınca sessizce kaydedip çıkar.
-            MenuButton(
-              onTap: () => setStateHere(() => _exitConfirmOpen = true),
-            ),
-            const SizedBox(height: 10),
-            SaveButton(onTap: () => _saveNow(manual: true)),
-            const SizedBox(height: 10),
-            // Hikâye güncesi — büyük anların kaydı (sinematik özetleri).
+            if (_menuClusterOpen) ...[
+              // Ana menüye dönüş — onay ister, onaylanınca kaydedip çıkar.
+              MenuButton(
+                onTap: () => setStateHere(() => _exitConfirmOpen = true),
+              ),
+              const SizedBox(height: 10),
+              SaveButton(onTap: () => _saveNow(manual: true)),
+              const SizedBox(height: 10),
+              // Hikâye güncesi — büyük anların kaydı (sinematik özetleri).
+              GestureDetector(
+                onTap: () => setStateHere(() => _storyPanelOpen = true),
+                child: AppChip(label: '📖 Hikâye', color: AppUi.accent),
+              ),
+              const SizedBox(height: 10),
+            ],
+            // Gear tutamağı — her zaman görünür; kümeyi aç/kapa.
             GestureDetector(
-              onTap: () => setStateHere(() => _storyPanelOpen = true),
-              child: AppChip(label: '📖 Hikâye', color: AppUi.accent),
+              onTap: () =>
+                  setStateHere(() => _menuClusterOpen = !_menuClusterOpen),
+              child: AppChip(
+                label: _menuClusterOpen ? '⚙ Kapat' : '⚙ Menü',
+                color: AppUi.accent,
+              ),
             ),
           ],
         ),
@@ -221,6 +235,7 @@ extension _SceneSave on _VillageSceneState {
       'foodHunger': _foodHunger,
       'hasFire': _hasFire,
       'charterTier': _charterTier,
+      'governanceLegacy': _governanceLegacy,
       'lastPopMilestone': _lastPopMilestone,
       'firstReedBedShown': _firstReedBedShown,
       'firepit': bRef(_firepitBuilding),
@@ -230,13 +245,17 @@ extension _SceneSave on _VillageSceneState {
       'water': [for (final t in _waterTiles) [t.$1, t.$2]],
       'stockpile': _stockpileToJson(),
       'policies': _policiesToJson(),
-      'estates': _estates.toJson(),
+      'houses': _houses.toJson(),
       'completedQuests': _completedQuests.toList(),
       'villageMemory': _villageMemory.toList(),
-      // Hikâye güncesi + sinematik durumu (anılar kalıcı).
-      'storyLog': _storyLog,
+      // Hikâye güncesi (yapısal) + başarımlar + sinematik durumu (anılar kalıcı).
+      'storyLog': [for (final e in _storyLog) e.toJson()],
+      'achievedMilestones': _achievedMilestones.toList(),
+      'villageName': _villageName,
       'famineShown': _famineShown,
       'tierCutscenesShown': _tierCutscenesShown.toList(),
+      'imperialFavor': _imperialFavor,
+      'imperialTimer': _imperialTimer,
 
       // ── Varlıklar ──
       'buildings': [for (final b in _buildings) _buildingToJson(b)],
@@ -248,6 +267,8 @@ extension _SceneSave on _VillageSceneState {
       'farmTiles': [for (final t in _farmTiles) _farmTileToJson(t)],
       'farmers': [for (final f in _farmers) _workerBaseToJson(f)],
       'trees': [for (final t in _trees) _treeToJson(t)],
+      // Açılmış kara — vahşi orman/sınır türetildiği tek kaynak (scene_land).
+      'cleared': [for (final (c, r) in _cleared) [c, r]],
       'woodcutters': [for (final w in _woodcutters) _workerBaseToJson(w)],
       'lumberCamps': [for (final c in _lumberCamps) _lumberCampToJson(c)],
       'mineNodes': [for (final n in _mineNodes) _mineNodeToJson(n)],
@@ -270,6 +291,7 @@ extension _SceneSave on _VillageSceneState {
       'petitionTimer': _petitionTimer,
       'petitionDeadline': _petitionDeadline,
       'petitionModalOpen': _petitionModalOpen,
+      'petitionForced': _petitionForced,
       'petitionFollowUps':
           [for (final f in _petitionFollowUps) {'id': f.id, 'fireAtSim': f.fireAtSim}],
       'petitionCooldowns': _petitionCooldowns,
@@ -283,7 +305,6 @@ extension _SceneSave on _VillageSceneState {
           [for (final e in _policyMoraleEffects) {'untilSim': e.untilSim, 'amount': e.amount}],
       'migrationTimerSec': _migrationTimerSec,
       'meteorShowerTimer': _meteorShowerTimer,
-      'identityEstate': _identityEstate?.name,
     };
   }
 
@@ -305,11 +326,13 @@ extension _SceneSave on _VillageSceneState {
         'eldersExemptFromFood': _policies.eldersExemptFromFood,
         'hospitality': _policies.hospitality,
         'apprenticeship': _policies.apprenticeship,
+        'tradeGuidance': _policies.tradeGuidance,
         'slowMaturity': _policies.slowMaturity,
         'neighborliness': _policies.neighborliness,
         'familyReunion': _policies.familyReunion,
         'treePlanting': _policies.treePlanting,
         'sharedHarvest': _policies.sharedHarvest,
+        'cropRotation': _policies.cropRotation,
         'greenVillage': _policies.greenVillage,
         'freeRange': _policies.freeRange,
         'herdGrowth': _policies.herdGrowth,
@@ -340,6 +363,7 @@ extension _SceneSave on _VillageSceneState {
       'visual': _visualToJson(v.visual),
       'personalitySeed': v.personalitySeed,
       'annivCount': v.annivCount,
+      'callingFound': v.callingFound,
       'spawnCol': v.spawnCol,
       'spawnRow': v.spawnRow,
       'x': v.gridX,
@@ -351,6 +375,11 @@ extension _SceneSave on _VillageSceneState {
       'targetCol': v.targetCol,
       'targetRow': v.targetRow,
       'isFavorite': v.isFavorite,
+      'wed': v.wed,
+      if (v.surname.isNotEmpty) 'surname': v.surname,
+      if (v.injuryDays > 0) 'injuryDays': v.injuryDays,
+      if (v.disabled) 'disabled': true,
+      'life': [for (final e in v.life) e.toJson()],
       'fertilityDays': v.fertilityDays.isNaN ? null : v.fertilityDays,
       'birthCount': v.birthCount,
       'isSage': v.isSage,
@@ -359,9 +388,16 @@ extension _SceneSave on _VillageSceneState {
       'morale': v.morale,
       'lowMoraleTime': v.lowMoraleTime,
       'moraleReason': v.moraleReason,
+      'wealth': v.wealth,
       'home': bRef(v.homeBuilding),
       'parents': [for (final p in v.parents) vRef(p)],
       'children': [for (final c in v.children) vRef(c)],
+      'grudges': [
+        for (final e in v.grudges.entries)
+          {'v': vRef(e.key), 'until': e.value}
+      ],
+      'bloodEnemies': [for (final e in v.bloodEnemies) vRef(e)],
+      'feudKills': v.feudKills,
     };
   }
 
@@ -453,6 +489,7 @@ extension _SceneSave on _VillageSceneState {
         'marked': t.isMarkedForCutting,
         'felled': t.isFelled,
         'growing': t.isGrowing,
+        'wild': t.isWild,
       };
 
   Map<String, dynamic> _mineNodeToJson(MineNode n) => {
@@ -517,6 +554,9 @@ extension _SceneSave on _VillageSceneState {
     _reedBeds.clear();
     _decor.clear();
     _trees.clear();
+    _cleared.clear();
+    _wilderness.clear();
+    _wildTreeTiles.clear();
     _mineNodes.clear();
     _buildings.clear();
     _orders.clear();
@@ -535,6 +575,7 @@ extension _SceneSave on _VillageSceneState {
     _builders.clear();
     _villagers.clear();
     _resourceBoxes.clear();
+    _eggs.clear();
     _hayEntities.clear();
     _birdFlocks.clear();
     _beeSwarms.clear();
@@ -544,9 +585,20 @@ extension _SceneSave on _VillageSceneState {
     _villageMemory.clear();
     _completedQuests.clear();
     _storyLog.clear();
+    _achievedMilestones.clear();
     _tierCutscenesShown.clear();
     _activeCutscene = null; // yüklenen oyunda sinematik oynamaz
     _policyMoraleEffects.clear();
+    // Düğün kur state'i geçici — önceki oyundan sızmasın (çift _villagers
+    // yeniden kurulduğunda eski ref'ler geçersiz). _weddingCouple aşağıda
+    // pending'e göre yeniden bağlanır.
+    _brideElect = null;
+    _groomElect = null;
+    _courtshipTimer = 0;
+    _weddingScan = 0;
+    // Omen (olay mayalanması) geçici — yüklemede sıfırla (yeni olay zamanla gelir).
+    _omenEvent = null;
+    _omenLeft = 0;
     _activeFx.clear();
     _stockpile.clear();
     _selectedBuilding = null;
@@ -574,6 +626,7 @@ extension _SceneSave on _VillageSceneState {
     _foodHunger = _d(w['foodHunger']);
     _hasFire = _b(w['hasFire']);
     _charterTier = _i(w['charterTier']);
+    _governanceLegacy = _d(w['governanceLegacy']);
     _lastPopMilestone = _i(w['lastPopMilestone']);
     _firstReedBedShown = _b(w['firstReedBedShown']);
 
@@ -583,15 +636,27 @@ extension _SceneSave on _VillageSceneState {
     }
     _restoreStockpile(w['stockpile']);
     _restorePolicies(w['policies']);
-    if (w['estates'] is Map) {
-      _estates.loadJson(Map<String, dynamic>.from(w['estates'] as Map));
+    if (w['houses'] is Map) {
+      _houses.loadJson(Map<String, dynamic>.from(w['houses'] as Map));
     }
     for (final q in (w['completedQuests'] as List? ?? const [])) {
       _completedQuests.add(q as String);
     }
     for (final s in (w['storyLog'] as List? ?? const [])) {
-      _storyLog.add(s as String);
+      // Yeni format = map; eski kayıt = düz string (gün bilinmez → 0).
+      if (s is Map) {
+        _storyLog.add(ChronicleEntry.fromJson(Map<String, dynamic>.from(s)));
+      } else if (s is String) {
+        _storyLog.add(ChronicleEntry(day: 0, icon: '📜', text: s));
+      }
     }
+    for (final m in (w['achievedMilestones'] as List? ?? const [])) {
+      _achievedMilestones.add(m as String);
+    }
+    _villageName = (w['villageName'] as String?) ?? 'Köy';
+    _imperialFavor = _d(w['imperialFavor'], 0.5);
+    _imperialTimer = _d(w['imperialTimer'], 6.0 * kGameDaySeconds);
+    _imperialDemand = null; // yüklemede aktif ziyaret yok
     _famineShown = _b(w['famineShown']);
     for (final t in (w['tierCutscenesShown'] as List? ?? const [])) {
       _tierCutscenesShown.add(_i(t));
@@ -627,6 +692,19 @@ extension _SceneSave on _VillageSceneState {
       for (final c in (vj['children'] as List? ?? const [])) {
         final ci = _i(c, -1);
         if (ci >= 0 && ci < _villagers.length) v.children.add(_villagers[ci]);
+      }
+      for (final g in (vj['grudges'] as List? ?? const [])) {
+        final gm = g as Map;
+        final gi = _i(gm['v'], -1);
+        if (gi >= 0 && gi < _villagers.length) {
+          v.grudges[_villagers[gi]] = _d(gm['until']);
+        }
+      }
+      for (final e in (vj['bloodEnemies'] as List? ?? const [])) {
+        final ei = _i(e, -1);
+        if (ei >= 0 && ei < _villagers.length) {
+          v.bloodEnemies.add(_villagers[ei]);
+        }
       }
     }
 
@@ -723,6 +801,14 @@ extension _SceneSave on _VillageSceneState {
     for (final raw in (w['mineNodes'] as List? ?? const [])) {
       _mineNodes.add(_mineNodeFromJson(Map<String, dynamic>.from(raw as Map)));
     }
+    // Açılmış kara → vahşi orman/sınır türet (trees + mineNodes yüklendikten
+    // SONRA). Eski kayıtta 'cleared' yoksa boş kalır; _initLand çağrılmaz, bu
+    // yüzden eski kayıtlar tüm haritayı açık (wilderness boş) görür — sorunsuz.
+    for (final raw in (w['cleared'] as List? ?? const [])) {
+      final p = raw as List;
+      _cleared.add((_i(p[0]), _i(p[1])));
+    }
+    if (_cleared.isNotEmpty) _rebuildLandDerived();
     for (final raw in (w['lotuses'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
       _lotuses.add(LotusEntity(
@@ -778,6 +864,11 @@ extension _SceneSave on _VillageSceneState {
     _petitionTimer = _d(w['petitionTimer'], 1.0 * kGameDaySeconds);
     _petitionDeadline = _d(w['petitionDeadline']);
     _petitionModalOpen = _b(w['petitionModalOpen']) && _pendingPetition != null;
+    _petitionForced = _b(w['petitionForced']) && _pendingPetition != null;
+    // Bekleyen düğün çifte bağlıdır (kaydedilmez) — yüklemede uygun bir çift
+    // yeniden bağla ki sahne/sinematik tam deneyimle çözülsün (yoksa jenerik).
+    _weddingCouple =
+        _pendingPetition?.id == 'villageWedding' ? _findCourtship() : null;
     for (final raw in (w['petitionFollowUps'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
       _petitionFollowUps
@@ -800,9 +891,6 @@ extension _SceneSave on _VillageSceneState {
     }
     _migrationTimerSec = _d(w['migrationTimerSec']);
     _meteorShowerTimer = _d(w['meteorShowerTimer'], 4.0 * kGameDaySeconds);
-    final ie = w['identityEstate'];
-    _identityEstate =
-        ie is String ? _enumByName(Estate.values, ie, Estate.hearth) : null;
 
     // 11) Türetilmiş yapıları yeniden kur.
     _applyPolicySideChannels();
@@ -835,11 +923,13 @@ extension _SceneSave on _VillageSceneState {
     _policies.eldersExemptFromFood = _b(j['eldersExemptFromFood']);
     _policies.hospitality = _b(j['hospitality']);
     _policies.apprenticeship = _b(j['apprenticeship']);
+    _policies.tradeGuidance = _b(j['tradeGuidance']);
     _policies.slowMaturity = _b(j['slowMaturity']);
     _policies.neighborliness = _b(j['neighborliness']);
     _policies.familyReunion = _b(j['familyReunion']);
     _policies.treePlanting = _b(j['treePlanting']);
     _policies.sharedHarvest = _b(j['sharedHarvest']);
+    _policies.cropRotation = _b(j['cropRotation']);
     _policies.greenVillage = _b(j['greenVillage']);
     _policies.freeRange = _b(j['freeRange']);
     _policies.herdGrowth = _b(j['herdGrowth']);
@@ -882,6 +972,10 @@ extension _SceneSave on _VillageSceneState {
           : _d(j['lifespanDays']),
     );
     v.annivCount = _i(j['annivCount']);
+    // Eski kayıtta yoksa: yetişkin/yaşlı zaten çağrısını bulmuş say (an tekrar
+    // tetiklenmesin); çocuk/genç ise büyürken keşfedecek.
+    v.callingFound =
+        _b(j['callingFound'], v.ageDays >= kAdultStartDay);
     v.gridX = _d(j['x']);
     v.gridY = _d(j['y']);
     v.renderX = v.gridX;
@@ -891,6 +985,16 @@ extension _SceneSave on _VillageSceneState {
     v.targetCol = _d(j['targetCol'], v.gridX);
     v.targetRow = _d(j['targetRow'], v.gridY);
     v.isFavorite = _b(j['isFavorite']);
+    v.wed = _b(j['wed']);
+    v.surname = (j['surname'] as String?) ?? '';
+    v.injuryDays = _d(j['injuryDays']);
+    v.disabled = _b(j['disabled']);
+    v.feudKills = _i(j['feudKills']);
+    for (final e in (j['life'] as List? ?? const [])) {
+      if (e is Map) {
+        v.life.add(ChronicleEntry.fromJson(Map<String, dynamic>.from(e)));
+      }
+    }
     v.fertilityDays =
         j['fertilityDays'] == null ? double.nan : _d(j['fertilityDays']);
     v.birthCount = _i(j['birthCount']);
@@ -900,6 +1004,8 @@ extension _SceneSave on _VillageSceneState {
     v.morale = _d(j['morale'], 0.6);
     v.lowMoraleTime = _d(j['lowMoraleTime']);
     v.moraleReason = (j['moraleReason'] as String?) ?? 'huzurlu';
+    // Eski kayıtta servet yok → yetişkinlere makul bir taban ver (0'da kalmasın).
+    v.wealth = _d(j['wealth'], v.ageDays >= kAdultStartDay ? 30 : 0);
     return v;
   }
 
@@ -976,6 +1082,7 @@ extension _SceneSave on _VillageSceneState {
       row: _i(j['row']),
       type: _enumByName(TreeType.values, j['type'], TreeType.pine),
       isGrowing: _b(j['growing']),
+      isWild: _b(j['wild']),
     );
     t.isMarkedForCutting = _b(j['marked']);
     t.isFelled = _b(j['felled']);

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../core/resources.dart';
+import '../world/season.dart';
 import 'app_ui.dart';
 
-/// Oyun HUD'u — sol-üst kaynak/nüfus panosu + sağ-üst saat panosu + kontroller.
-/// Modern koyu app_ui dili: temiz paneller, vektör ikonlar, animasyonlu moral.
+/// Oyun HUD'u — Manor Lords çıtası: çerçevesiz, ferah ince üst şerit.
+/// Kutu YOK; üstte aşağı solan okunabilirlik scrim'i, tek satır kaynak/nüfus/
+/// moral solda, saat/mevsim sağda, ghost kontroller en sağda. Köşeler/dünya açık.
 class GameHUD extends StatelessWidget {
   final ResourceBundle stockpile;
   final int woodInTransit, stoneInTransit, ironInTransit, coalInTransit, foodInTransit;
@@ -13,6 +15,8 @@ class GameHUD extends StatelessWidget {
 
   final double timeOfDay, rainIntensity, dayLight;
   final int dayCount;
+  final Season season;
+  final double seasonProgress;
 
   final int buildingCount, pendingOrderCount;
 
@@ -39,6 +43,13 @@ class GameHUD extends StatelessWidget {
 
   final VoidCallback onToggleDev;
 
+  /// Oyun içi hızlı sessiz toggle — ayarlara girmeden tüm sesi kıs/aç.
+  final bool muted;
+  final VoidCallback onToggleMute;
+
+  /// Köy Nüfus Defteri (istatistik) modalını açar — HUD'daki nüfus butonu.
+  final VoidCallback? onOpenRoster;
+
   final double timeScale;
   final VoidCallback onCycleSpeed;
 
@@ -64,6 +75,8 @@ class GameHUD extends StatelessWidget {
     required this.rainIntensity,
     required this.dayLight,
     required this.dayCount,
+    required this.season,
+    this.seasonProgress = 0,
     required this.buildingCount,
     required this.pendingOrderCount,
     required this.morale,
@@ -84,6 +97,9 @@ class GameHUD extends StatelessWidget {
     this.effectDuration = 1,
     this.effectPositive = true,
     required this.onToggleDev,
+    required this.muted,
+    required this.onToggleMute,
+    this.onOpenRoster,
   });
 
   // ── Türetilenler ──────────────────────────────────────────────────────────
@@ -102,14 +118,6 @@ class GameHUD extends StatelessWidget {
     return GameIconData.moon;
   }
 
-  String get _weatherLabel {
-    if (rainIntensity > 0.5) return 'sağanak';
-    if (rainIntensity > 0.0) return 'yağmur';
-    if (dayLight > 0.7) return 'açık';
-    if (dayLight > 0.3) return 'alacakaranlık';
-    return 'gece';
-  }
-
   Color get _moraleColor => morale >= 0.6
       ? AppUi.sage
       : morale >= 0.4
@@ -120,95 +128,146 @@ class GameHUD extends StatelessWidget {
       villagerCount + farmerCount + woodcutterCount + minerCount +
       fisherCount + builderCount + shepherdCount + floristCount;
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  // Tüm HUD tooltip'leri için ortak rafine kutu (palete uyumlu, eski bluish yok).
+  static final BoxDecoration _tipDeco = BoxDecoration(
+    color: const Color(0xF2100E0B),
+    borderRadius: BorderRadius.circular(10),
+    border: Border.all(color: AppUi.line),
+    boxShadow: AppUi.softShadow,
+  );
+  static const EdgeInsets _tipPad =
+      EdgeInsets.symmetric(horizontal: 12, vertical: 9);
+
+  // ── Build: çerçevesiz ince üst şerit ────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
       child: Stack(
         children: [
+          // Üst okunabilirlik scrim'i — KUTU DEĞİL: aşağı doğru solan karartma,
+          // parlak gündüz gökyüzünde de metin/ikon okunur kalsın.
           Positioned(
-            top: 10, left: 10,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _resourceBoard(),
-                  if (starving || lowWater || eventLabel != null) ...[
-                    const SizedBox(height: 8),
-                    _badgeRow(),
-                  ],
-                ],
+            top: 0, left: 0, right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 74,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    // İçeriği örtecek kadar koyu, sonra hızla erir — karanlık
+                    // bant değil, sadece okunabilirlik dokunuşu.
+                    colors: [Color(0x9E000000), Color(0x52000000), Color(0x00000000)],
+                    stops: [0.0, 0.5, 1.0],
+                  ),
+                ),
               ),
             ),
           ),
+          // Şerit içeriği — tek satır, çerçevesiz.
           Positioned(
-            top: 10, right: 10,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {},
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  _dayPanel(),
-                  const SizedBox(height: 8),
-                  _controlRow(),
-                ],
-              ),
+            top: 8, left: 16, right: 14,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Dar pencerede taşma şeridi yerine sessizce kırp.
+                Flexible(
+                  child: ClipRect(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      child: _leftCluster(),
+                    ),
+                  ),
+                ),
+                _rightCluster(),
+              ],
             ),
           ),
+          // Sol-alt: uyarı rozetleri (açlık/susuz/olay) — şeridin hemen altında.
+          if (starving || lowWater || eventLabel != null)
+            Positioned(top: 56, left: 16, child: _badgeRow()),
         ],
       ),
     );
   }
 
-  // ── Sol-üst kaynak panosu ──────────────────────────────────────────────────
+  // ── Sol küme: kaynaklar · nüfus · moral ─────────────────────────────────────
 
-  Widget _resourceBoard() => AppPanel(
-        width: 256,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(children: [
-              Expanded(child: _ResCell(GameIconData.wood, const Color(0xFFD79A5B), stockpile.wood, woodInTransit, capacity: stockCapacity, pulse: fullPulse)),
-              Expanded(child: _ResCell(GameIconData.stone, const Color(0xFFB8B8B8), stockpile.stone, stoneInTransit, capacity: stockCapacity, pulse: fullPulse)),
-              Expanded(child: _ResCell(GameIconData.iron, const Color(0xFFCED2EC), stockpile.iron, ironInTransit, capacity: stockCapacity, pulse: fullPulse)),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: _ResCell(GameIconData.coal, const Color(0xFF9A9A9A), stockpile.coal, coalInTransit, capacity: stockCapacity, pulse: fullPulse)),
-              Expanded(child: _ResCell(GameIconData.wheat, AppUi.sage, stockpile.food, foodInTransit, capacity: stockCapacity, pulse: fullPulse)),
-              Expanded(child: _ResCell(GameIconData.coin, AppUi.gold, stockpile.gold, 0)),
-            ]),
-            if (stockpile.honey > 0 || stockpile.reed > 0) ...[
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(
-                  child: stockpile.honey > 0
-                      ? _ResCell(GameIconData.honey, const Color(0xFFE7B23A), stockpile.honey, 0)
-                      : const SizedBox(),
-                ),
-                Expanded(
-                  child: stockpile.reed > 0
-                      ? _ResCell(GameIconData.reed, const Color(0xFF8FB36A), stockpile.reed, 0)
-                      : const SizedBox(),
-                ),
-                const Expanded(child: SizedBox()),
-              ]),
-            ],
-            const AppDivider(),
-            _populationRow(),
-            const SizedBox(height: 8),
-            _moraleMeter(),
-          ],
-        ),
+  Widget _leftCluster() => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _resources(),
+          _sep(),
+          _popInline(),
+          _sep(),
+          _moraleInline(),
+        ],
       );
 
-  // Profession palette — tooltip + olası inline kullanım.
+  Widget _sep() => Container(
+        width: 1,
+        height: 18,
+        margin: const EdgeInsets.symmetric(horizontal: 11),
+        color: const Color(0x1AFFFFFF),
+      );
+
+  Widget _resources() => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _res(GameIconData.wood, const Color(0xFFD79A5B), stockpile.wood, woodInTransit, capped: true),
+          _res(GameIconData.stone, const Color(0xFFC0C0C0), stockpile.stone, stoneInTransit, capped: true),
+          _res(GameIconData.iron, const Color(0xFFCED2EC), stockpile.iron, ironInTransit, capped: true),
+          _res(GameIconData.coal, const Color(0xFFA6A6A6), stockpile.coal, coalInTransit, capped: true),
+          _res(GameIconData.wheat, AppUi.sage, stockpile.food, foodInTransit, capped: true),
+          _res(GameIconData.coin, AppUi.gold, stockpile.gold, 0),
+          if (stockpile.honey > 0)
+            _res(GameIconData.honey, const Color(0xFFE7B23A), stockpile.honey, 0),
+          if (stockpile.reed > 0)
+            _res(GameIconData.reed, const Color(0xFF8FB36A), stockpile.reed, 0),
+        ],
+      );
+
+  static const _amber = Color(0xFFE8A23A);
+
+  // Tek kaynak: ikon + sayı (+taşımadaki). Tavan dolunca kehribar + nabız.
+  Widget _res(GameIconData icon, Color color, int stored, int transit,
+      {bool capped = false}) {
+    final empty = stored == 0 && transit == 0;
+    final full = capped && stored >= stockCapacity;
+    final iconColor = full ? _amber : color;
+    final numColor = full
+        ? Color.lerp(_amber, const Color(0xFFFFE0A0), fullPulse)!
+        : (empty ? AppUi.textLo : AppUi.textHi);
+    return Padding(
+      padding: const EdgeInsets.only(right: 15),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GameIcon(icon,
+              size: 16,
+              color: empty ? iconColor.withValues(alpha: 0.45) : iconColor),
+          const SizedBox(width: 5),
+          Text('$stored',
+              style: AppUi.number.copyWith(fontSize: 15.5, color: numColor)),
+          if (transit > 0)
+            Padding(
+              padding: const EdgeInsets.only(left: 2, bottom: 5),
+              child: Text('+$transit',
+                  style: AppUi.number.copyWith(
+                      fontSize: 9, color: AppUi.accentSoft)),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ── Nüfus (inline) — hover'da meslek dağılımı ──────────────────────────────
+
+  // Profession palette — tooltip kırılımı.
   static const _farmerC = AppUi.sage;
   static const _woodC   = Color(0xFFE7B374);
   static const _minerC  = Color(0xFFC5CDE9);
@@ -217,52 +276,36 @@ class GameHUD extends StatelessWidget {
   static const _floriC  = Color(0xFFE08AB0);
   static const _buildC  = Color(0xFFD8C088);
 
-  Widget _populationRow() {
+  Widget _popInline() {
     return Tooltip(
       richMessage: _professionBreakdown(),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: _tipPad,
       margin: const EdgeInsets.only(left: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xF21A1B22),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0x33FFFFFF)),
-      ),
-      child: Row(children: [
-        // Köylü — toplam nüfus.
-        GameIcon(GameIconData.people, size: 15, color: AppUi.textMid),
-        const SizedBox(width: 7),
-        Text('$_totalPop', style: AppUi.number.copyWith(fontSize: 16)),
-        const SizedBox(width: 5),
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text('köylü',
-              style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
-        ),
-        const SizedBox(width: 16),
-        // Evsiz — yan yana; >0 ise vurgulu (rust) + tıklanınca köyde vurgulanır.
-        GestureDetector(
-          onTap: homelessCount > 0 ? onHighlightHomeless : null,
-          behavior: HitTestBehavior.opaque,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            GameIcon(GameIconData.home, size: 14,
-                color: homelessCount > 0 ? AppUi.rust : AppUi.textMid),
-            const SizedBox(width: 7),
-            Text('$homelessCount',
-                style: AppUi.number.copyWith(
-                    fontSize: 16,
-                    color: homelessCount > 0 ? AppUi.rust : AppUi.textMid)),
-            const SizedBox(width: 5),
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text('evsiz',
-                  style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 0.8)),
+      decoration: _tipDeco,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GameIcon(GameIconData.people, size: 16, color: AppUi.textMid),
+          const SizedBox(width: 6),
+          Text('$_totalPop', style: AppUi.number.copyWith(fontSize: 15.5)),
+          if (homelessCount > 0) ...[
+            const SizedBox(width: 13),
+            GestureDetector(
+              onTap: onHighlightHomeless,
+              behavior: HitTestBehavior.opaque,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                GameIcon(GameIconData.home, size: 15, color: AppUi.rust),
+                const SizedBox(width: 5),
+                Text('$homelessCount',
+                    style: AppUi.number
+                        .copyWith(fontSize: 15.5, color: AppUi.rust)),
+              ]),
             ),
-          ]),
-        ),
-        const Spacer(),
-        // İmleç ipucu — üstüne gelince meslek dağılımı.
-        GameIcon(GameIconData.chevron, size: 11, color: AppUi.textMid),
-      ]),
+          ],
+          const SizedBox(width: 7),
+          GameIcon(GameIconData.chevron, size: 11, color: AppUi.textLo),
+        ],
+      ),
     );
   }
 
@@ -316,25 +359,57 @@ class GameHUD extends StatelessWidget {
     return TextSpan(children: children);
   }
 
-  Widget _moraleMeter() {
+  // ── Moral (inline) — kalp + ince çubuk + % ─────────────────────────────────
+
+  Widget _moraleInline() {
     final c = _moraleColor;
-    final bar = AppStatBar(
-      label: 'MORAL',
-      value: morale.clamp(0.0, 1.0),
-      trailing: '${(morale * 100).round()}%',
-      color: c,
-      labelWidth: 50,
+    final m = morale.clamp(0.0, 1.0);
+    final child = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GameIcon(GameIconData.heart, size: 15, color: c),
+        const SizedBox(width: 7),
+        Container(
+          width: 58,
+          height: 6,
+          decoration: BoxDecoration(
+            color: const Color(0x40000000),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: m),
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeOutCubic,
+                builder: (_, v, _) => FractionallySizedBox(
+                  widthFactor: v,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        c.withValues(alpha: 0.8),
+                        Color.lerp(c, Colors.white, 0.25)!,
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 7),
+        Text('${(m * 100).round()}%',
+            style: AppUi.number.copyWith(fontSize: 12, color: c)),
+      ],
     );
-    if (moraleBreakdown.isEmpty) return bar;
+    if (moraleBreakdown.isEmpty) return child;
     return Tooltip(
       richMessage: _moraleTooltip(),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: const Color(0xF21A1B22),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0x33FFFFFF)),
-      ),
-      child: bar,
+      padding: _tipPad,
+      decoration: _tipDeco,
+      child: child,
     );
   }
 
@@ -375,7 +450,24 @@ class GameHUD extends StatelessWidget {
     return TextSpan(children: children);
   }
 
-  // ── Sağ-üst saat panosu ────────────────────────────────────────────────────
+  // ── Sağ küme: saat/mevsim + ghost kontroller ───────────────────────────────
+
+  Widget _rightCluster() => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _timeBlock(),
+          const SizedBox(width: 16),
+          _controls(),
+        ],
+      );
+
+  Color get _seasonColor => switch (season) {
+        Season.spring => const Color(0xFF8FD17A),
+        Season.summer => const Color(0xFFE6C260),
+        Season.autumn => const Color(0xFFE08A4B),
+        Season.winter => const Color(0xFF9FC4E0),
+      };
 
   // Saat panosu hover ipucu — günün evresi + köyün ne yapacağı.
   String get _timeHint {
@@ -393,56 +485,101 @@ class GameHUD extends StatelessWidget {
     return 'Gün $dayCount · $phase\n$flavor';
   }
 
-  Widget _dayPanelInner() => AppPanel(
-        width: 146,
-        padding: const EdgeInsets.fromLTRB(14, 11, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('GÜN $dayCount',
-                style: AppUi.label.copyWith(
-                    color: AppUi.accentSoft, fontSize: 10, letterSpacing: 2.4)),
-            const SizedBox(height: 4),
-            Text(_clockText,
-                style: AppUi.number.copyWith(fontSize: 28, letterSpacing: 1.5)),
-            const SizedBox(height: 5),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              GameIcon(_weatherIcon, size: 13, color: AppUi.textMid),
-              const SizedBox(width: 6),
-              Text(_weatherLabel,
-                  style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textMid)),
-            ]),
-          ],
+  Widget _timeBlock() {
+    final inner = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          GameIcon(_weatherIcon, size: 16, color: AppUi.textMid),
+          const SizedBox(width: 8),
+          Text(_clockText,
+              style: AppUi.number.copyWith(fontSize: 22, letterSpacing: 1.0)),
+        ]),
+        const SizedBox(height: 2),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Text('GÜN $dayCount',
+              style: AppUi.label.copyWith(
+                  fontSize: 10, letterSpacing: 1.4, color: AppUi.textMid)),
+          Text('  ·  ',
+              style: AppUi.label.copyWith(fontSize: 10, color: AppUi.textLo)),
+          Text(season.label.toUpperCase(),
+              style: AppUi.label.copyWith(
+                  fontSize: 10, letterSpacing: 1.4, color: _seasonColor)),
+        ]),
+        const SizedBox(height: 5),
+        SizedBox(
+          width: 124,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: seasonProgress.clamp(0.0, 1.0),
+              minHeight: 2,
+              backgroundColor: const Color(0x1FFFFFFF),
+              valueColor:
+                  AlwaysStoppedAnimation(_seasonColor.withValues(alpha: 0.8)),
+            ),
+          ),
         ),
-      );
+      ],
+    );
+    return Tooltip(
+      message: _timeHint,
+      textStyle:
+          AppUi.body.copyWith(fontSize: 12, height: 1.4, color: AppUi.textHi),
+      padding: _tipPad,
+      decoration: _tipDeco,
+      child: inner,
+    );
+  }
 
-  Widget _dayPanel() => Tooltip(
-        message: _timeHint,
-        textStyle: AppUi.body.copyWith(fontSize: 12, height: 1.4, color: AppUi.textHi),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-        decoration: BoxDecoration(
-          color: const Color(0xF21A1B22),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0x33FFFFFF)),
-        ),
-        child: _dayPanelInner(),
-      );
+  // ── Ghost kontroller (çerçevesiz; hover/aktifte yüzey çıkar) ────────────────
 
-  // ── Kontroller ──────────────────────────────────────────────────────────────
-
-  Widget _controlRow() => Row(
+  Widget _controls() => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _speedButton(),
-          const SizedBox(width: 6),
-          AppIconButton(icon: GameIconData.dice, onTap: onTriggerEvent),
-          const SizedBox(width: 6),
-          AppIconButton(icon: GameIconData.bolt, onTap: onToggleGod, active: godMode),
-          const SizedBox(width: 6),
-          AppIconButton(icon: GameIconData.map, onTap: onNewMap),
-          const SizedBox(width: 6),
-          AppIconButton(icon: GameIconData.bug, onTap: onToggleDev),
+          const SizedBox(width: 4),
+          // Köy Nüfus Defteri — köylü hane/meslek/servet/moral istatistikleri.
+          AppIconButton(
+              icon: GameIconData.people,
+              onTap: onOpenRoster,
+              ghost: true,
+              size: 34),
+          const SizedBox(width: 4),
+          AppIconButton(
+            icon: muted ? GameIconData.soundOff : GameIconData.sound,
+            onTap: onToggleMute,
+            active: muted,
+            tint: muted ? AppUi.rust : null,
+            ghost: true,
+            size: 34,
+          ),
+          const SizedBox(width: 4),
+          AppIconButton(
+              icon: GameIconData.dice,
+              onTap: onTriggerEvent,
+              ghost: true,
+              size: 34),
+          const SizedBox(width: 4),
+          AppIconButton(
+              icon: GameIconData.bolt,
+              onTap: onToggleGod,
+              active: godMode,
+              ghost: true,
+              size: 34),
+          const SizedBox(width: 4),
+          AppIconButton(
+              icon: GameIconData.map,
+              onTap: onNewMap,
+              ghost: true,
+              size: 34),
+          const SizedBox(width: 4),
+          AppIconButton(
+              icon: GameIconData.bug,
+              onTap: onToggleDev,
+              ghost: true,
+              size: 34),
         ],
       );
 
@@ -454,7 +591,9 @@ class GameHUD extends StatelessWidget {
           icon: GameIconData.pause,
           onTap: onCycleSpeed,
           active: true,
-          tint: AppUi.rust);
+          tint: AppUi.rust,
+          ghost: true,
+          size: 34);
     }
     final label = timeScale <= 1.01 ? '1×' : timeScale <= 2.01 ? '2×' : '4×';
     return AppIconButton(
@@ -462,10 +601,12 @@ class GameHUD extends StatelessWidget {
       text: label,
       onTap: onCycleSpeed,
       active: boosted,
+      ghost: true,
+      size: 34,
     );
   }
 
-  // ── Uyarı rozetleri ──────────────────────────────────────────────────────
+  // ── Uyarı rozetleri ────────────────────────────────────────────────────────
 
   Widget _badgeRow() => Wrap(spacing: 6, runSpacing: 5, children: [
         if (starving)
@@ -502,61 +643,6 @@ class GameHUD extends StatelessWidget {
             ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-// ─── Kaynak hücresi ──────────────────────────────────────────────────────────
-
-class _ResCell extends StatelessWidget {
-  final GameIconData icon;
-  final Color color;
-  final int stored;
-  final int transit;
-  /// Tavan (null = sınırsız: bal/saz/altın). stored>=capacity → "dolu" uyarısı.
-  final int? capacity;
-  /// 0..1 nabız — dolu hücrede kehribar yanıp söner.
-  final double pulse;
-  const _ResCell(this.icon, this.color, this.stored, this.transit,
-      {this.capacity, this.pulse = 0});
-
-  static const _amber = Color(0xFFE8A23A);
-
-  @override
-  Widget build(BuildContext context) {
-    final empty = stored == 0 && transit == 0;
-    final full = capacity != null && stored >= capacity!;
-    // Dolu → kehribar; nabızla parlaklığı değişir (üretim boşa gidiyor uyarısı).
-    final numColor = full
-        ? Color.lerp(_amber, const Color(0xFFFFE0A0), pulse)!
-        : (empty ? AppUi.textLo : AppUi.textHi);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Opacity(
-          opacity: empty ? 0.5 : 1.0,
-          child: GameIcon(icon, size: 16, color: full ? _amber : color),
-        ),
-        const SizedBox(width: 6),
-        Text('$stored',
-            style: AppUi.number.copyWith(fontSize: 16, color: numColor)),
-        if (full)
-          Padding(
-            padding: const EdgeInsets.only(left: 3, bottom: 5),
-            child: Text('DOLU',
-                style: AppUi.label.copyWith(
-                    fontSize: 7.5,
-                    letterSpacing: 0.5,
-                    color: _amber.withValues(alpha: 0.6 + 0.4 * pulse))),
-          )
-        else if (transit > 0)
-          Padding(
-            padding: const EdgeInsets.only(left: 2, bottom: 5),
-            child: Text('+$transit',
-                style: AppUi.number.copyWith(
-                    fontSize: 9, color: AppUi.accentSoft)),
-          ),
       ],
     );
   }

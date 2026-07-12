@@ -31,9 +31,13 @@ class WorldGenerator {
   final int seed;
   late final Random _rng;
 
-  /// Sol-üst başlangıç bölgesi — su ve maden bu alana girmez.
-  static const _safeC = 20;
-  static const _safeR = 16;
+  /// Başlangıç bölgesi — su ve maden bu alana girmez. Kamera "reach"i köyü hep
+  /// haritanın İÇİNDE tuttuğu için (gerçek kenar asla kadraja girmez) bu bölge
+  /// artık haritanın ORTASINDA, merkez etrafında bir kutu.
+  static const _safeCenterC = kCols ~/ 2;
+  static const _safeCenterR = kRows ~/ 2;
+  static const _safeHalfC = 11;
+  static const _safeHalfR = 9;
 
   WorldGenerator(this.seed) {
     _rng = Random(seed);
@@ -44,8 +48,12 @@ class WorldGenerator {
   /// min 1.0 — küçük haritada bile orijinal yoğunluk korunur.
   double get _areaScale {
     const baseArea = 48.0 * 36.0;
+    // PERF: entity sayısı harita alanıyla lineer şişmesin — cap'le. Büyük harita
+    // (reveal alanı) ucuz zemin/cull ile bedava; ama ağaç/maden/dekor tick
+    // döngüleri ve spatial rebuild entity sayısıyla ölçekleniyor. Cap → per-frame
+    // maliyet sabit. Merkez yine dolu, uzak kenar seyrek (reveal'a uygun).
     final s = (kCols * kRows) / baseArea;
-    return s < 1.0 ? 1.0 : s;
+    return s.clamp(1.0, 4.0);
   }
 
   /// [lo..hi] aralığında int çek, sonra alan oranıyla ölçekle (min 1).
@@ -118,7 +126,8 @@ class WorldGenerator {
   }
 
   bool _inSafe(int c, int r, {int margin = 0}) =>
-      c < _safeC - margin && r < _safeR - margin;
+      (c - _safeCenterC).abs() < _safeHalfC - margin &&
+      (r - _safeCenterR).abs() < _safeHalfR - margin;
 
   // ── Lotus ───────────────────────────────────────────────────────────────────
 

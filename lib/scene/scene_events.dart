@@ -4,14 +4,105 @@ part of '../main.dart';
 /// EventSystem.roll'un üst katmandaki state etkileri burada birleşir.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneEvents on _VillageSceneState {
-  void _triggerRandomEvent() {
+  /// Omen (mayalanma) süresi aralığı (sn) — olay vurmadan önceki diegetik uyarı.
+  static const double _kOmenMin = 4.0;
+  static const double _kOmenMax = 7.0;
+
+  /// Olay zamanlayıcısı + omen ilerlemesi. scene_tick'in ana döngüsünden çağrılır
+  /// (eski doğrudan `_triggerRandomEvent` yerine — artık olay önce mayalanır).
+  void _tickEventOmen(double dt) {
+    // Omen sürüyor mu → dolunca olay vurur. Bu ilerleme godMode'da DA işler ki
+    // dev panelden elle tetiklenen olay (showcase köyü genelde godMode) vursun.
+    if (_omenEvent != null) {
+      _omenLeft -= dt;
+      if (_omenLeft <= 0) _strikeOmen();
+      return;
+    }
+    // Otomatik olay üretimi yalnızca godMode KAPALIYKEN (dev elle tetikler).
+    if (_godMode) return;
+    _eventTimer -= dt;
+    if (_eventTimer <= 0) {
+      _beginOmen();
+      _eventTimer = kEventMinInterval +
+          _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval);
+    }
+  }
+
+  /// DevPanel + tick girişi — bir olay mayalamaya başlar (anında vurmaz).
+  void _triggerRandomEvent() => _beginOmen();
+
+  /// Mayalanmayı başlat: olayı seç, omen süresini ayarla, diegetik uyarıyı oynat.
+  void _beginOmen() {
+    if (_omenEvent != null || _pendingChoice != null) return;
     final ctx = EventContext(
       population: _villagers.length,
       stockpile:  _stockpile,
       buildings:  _buildings,
     );
     final e = EventSystem.roll(_rng, ctx);
+    _omenEvent = e;
+    _omenLeft = _kOmenMin + _rng.nextDouble() * (_kOmenMax - _kOmenMin);
+    _playOmen(e);
+  }
 
+  /// Omen evresi — diegetik uyarı: haberci metni + olayın fx'inin hafif (cezasız)
+  /// ön-titreşimi + köyün tehdide tedirgin bakışı (gövde dili). Sim duraklamaz.
+  void _playOmen(EventOutcome e) {
+    _showNotification(_omenText(e));
+    final positive = e.category == EventCategory.positive;
+    // Negatif: olayın KENDİ fx'inin cezasız ön-titreşimi (felaket önsezisi).
+    // Pozitif: ön-titreşim yok — sürpriz/sevinç sahnede patlar.
+    if (!positive) {
+      final fx = e.effect?.fx ?? EventFx.none;
+      if (fx != EventFx.none) {
+        _activeFx.add(ActiveFx(EventEffect(fx: fx, duration: _omenLeft), _omenLeft));
+        if (fx == EventFx.fireOutbreak && e.effect != null) {
+          _attachFxTargets(e.effect!);
+        }
+      }
+    }
+    // Köy odak noktasına döner — negatifte tedirgin, pozitifte umutla (gövde dili).
+    final (tx, ty) = _eventFocusPoint(e);
+    final emo = positive ? NpcEmotion.wonder : NpcEmotion.fear;
+    final mood = positive ? 0.01 : -0.01;
+    int n = 0;
+    for (final v in _villagers) {
+      if (n >= 6) break;
+      if (v.isInsideBuilding || v.isSleeping || v.isDying) continue;
+      v.lookToward(tx, ty);
+      v.feel(emo, 3.0, moodDelta: mood);
+      n++;
+    }
+  }
+
+  /// Diegetik omen metni — olaydan ÖNCE köyün sezdiği işaret.
+  String _omenText(EventOutcome e) => switch (e.title) {
+        'Kuraklık' => '☀ Gökyüzü günlerdir bulutsuz — toprak çatlamaya başladı…',
+        'Salgın' => '🤒 Birkaç köylü halsiz düştü — bir şeyler yayılıyor olabilir…',
+        'Hayvan Baskını' => '🐺 Ağaç hattından tedirgin uluma sesleri geliyor…',
+        'Hırsız' => '🦹 Pazarın çevresinde şüpheli bir gölge dolaşıyor…',
+        'Fırtına' => '⛈ Ufukta kara bulutlar toplanıyor, rüzgâr sertleşti…',
+        'Ev Yangını' => '🔥 Bir bacadan kıvılcımlar sıçradı — dikkatli olun!',
+        // Pozitif — sevinçli bekleyiş.
+        'Gezgin Ozan' => '🎵 Yoldan bir ozanın ezgisi duyuluyor — köye yaklaşıyor…',
+        'Gezgin Tüccar' => '🛒 Tepenin ardında renkli bir kervan belirdi…',
+        'Bereketli Hasat' => '🌾 Başaklar her zamankinden ağır — bereket yakın…',
+        'Zümre Barışı' => '🤝 Zümreler arasında bir yakınlaşma seziliyor…',
+        _ => '${e.icon} Köyde bir hareketlilik var…',
+      };
+
+  /// Omen doldu → olay gerçekten vurur.
+  void _strikeOmen() {
+    final e = _omenEvent;
+    _omenEvent = null;
+    _omenLeft = 0;
+    if (e == null) return;
+    // Başarım: köyün ilk afeti / ilk bereketi (tek seferlik dönüm noktaları).
+    if (e.category == EventCategory.negative) {
+      _award('first_crisis', 'İlk afetle yüzleşildi', '⛑️');
+    } else if (e.category == EventCategory.positive) {
+      _award('first_blessing', 'Köye ilk bereket uğradı', '✨');
+    }
     if (e.needsChoice) {
       _pendingChoice = e;
       _showNotification('${e.icon} ${e.title} — karar bekliyor');
@@ -55,6 +146,8 @@ extension _SceneEvents on _VillageSceneState {
     }
 
     _reactToEvent(e); // köy gövde diliyle tepki verir (emoji yok, postür)
+    _stageEventResponse(e, choiceLabel: null); // köylüler amaçlı koşuşur (sahne)
+    _chronicle(e.title, icon: e.icon); // büyük an → kalıcı günce
     _showNotification(e.message);
   }
 
@@ -101,8 +194,12 @@ extension _SceneEvents on _VillageSceneState {
     final fx = c.effect ?? base.effect;
     if (fx != null && fx.duration > 0) {
       _activeFx.add(ActiveFx(fx, fx.duration));
-      _attachFxTargets(fx);
+      _attachFxTargets(fx); // fireOutbreak → _burningBuildings (sahne hedefi)
     }
+    // Sahne: seçime göre köylüler amaçlı hareket eder (kova zinciri / kovalama /
+    // kaçış). _attachFxTargets'tan SONRA — yangın hedefi artık biliniyor.
+    _stageEventResponse(base, choiceLabel: c.label);
+    _chronicle('${base.title} — ${c.label}', icon: base.icon); // karar günceye
     _activeEvent = EventOutcome(
       title:    '${base.title} — ${c.label}',
       icon:     base.icon,
@@ -168,6 +265,208 @@ extension _SceneEvents on _VillageSceneState {
     if (shake > 0) addCameraShake(shake, dur: 0.55);
   }
 
+  // ── Sahnelenmiş tepki — köylüler olaya AMAÇLI hareketle yanıt verir ─────────
+  // Salt duygu+sarsıntı değil: tehdide koşar (muhafız/kova zinciri/kovalama) ya
+  // da barınağa/ateşe kaçar. Olayı "dünyada gerçekleşen" bir an yapar.
+
+  /// Olayın (ve varsa seçimin) köy davranışına çevrimi.
+  void _stageEventResponse(EventOutcome base, {String? choiceLabel}) {
+    final (tx, ty) = _eventFocusPoint(base);
+    final (cx, cy) = _villageCenter();
+    final center = (cx.toDouble(), cy.toDouble());
+    switch (base.title) {
+      // ── Pozitif — köye gelen iyilik dünya-içi kutlamayla karşılanır ──────────
+      case 'Gezgin Ozan':
+        _stageCelebration(music: true, dance: true, gather: 7);
+      case 'Gezgin Tüccar':
+        _spawnMerchant(); // olayla birlikte fiziksel tüccar da köşeden gelsin
+        _stageCelebration(atMarket: true, gather: 6);
+      case 'Bereketli Hasat':
+        _stageCelebration(dance: true, gather: 6);
+      case 'Zümre Barışı':
+        _stageReconciliation();
+      // ── Negatif — tehdide amaçlı tepki ──────────────────────────────────────
+      case 'Hayvan Baskını':
+        if (choiceLabel == 'Muhafızları gönder') {
+          _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.anger, dwell: 5);
+        } else {
+          _rallyToward(center.$1, center.$2,
+              count: 5, emotion: NpcEmotion.fear, dwell: 5); // ateşe sığın
+        }
+      case 'Hırsız':
+        if (choiceLabel == 'Peşine düş') {
+          _rallyToward(tx, ty, count: 3, emotion: NpcEmotion.anger, dwell: 3);
+        } // "bırak gitsin" → sadece bakış (reactToEvent yeterli)
+      case 'Ev Yangını':
+        if (choiceLabel == 'Söndürme ekibi') {
+          _rallyToward(tx, ty, count: 5, emotion: NpcEmotion.fear, dwell: 6);
+        } else {
+          _rallyToward(center.$1, center.$2,
+              count: 4, emotion: NpcEmotion.grief, dwell: 5); // geri çekil
+        }
+      case 'Salgın':
+        if (choiceLabel == 'Şifacı çağır') {
+          _rallyToward(center.$1, center.$2,
+              count: 3, emotion: NpcEmotion.fear, dwell: 6); // tedavi etrafı
+        }
+      case 'Kuraklık':
+        _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.fear, dwell: 5); // kuyu
+      case 'Fırtına':
+        _rallyToward(center.$1, center.$2,
+            count: 5, emotion: NpcEmotion.fear, dwell: 5); // barınağa koş
+    }
+  }
+
+  /// Olayın "odak noktası" — köylülerin koşacağı/bakacağı yer (negatifte tehdit,
+  /// pozitifte geliş/toplanma yönü).
+  (double, double) _eventFocusPoint(EventOutcome e) {
+    switch (e.title) {
+      case 'Ev Yangını':
+        if (_burningBuildings.isNotEmpty) {
+          final b = _burningBuildings.first;
+          return (b.col + b.cols / 2.0, b.row + b.rows / 2.0);
+        }
+        return _villageCenterD();
+      case 'Hırsız':
+      case 'Gezgin Tüccar':
+        final m = _firstBuildingOf(BuildingType.market);
+        if (m != null) return (m.col + m.cols / 2.0, m.row + m.rows / 2.0);
+        return _villageEdgePoint();
+      case 'Hayvan Baskını':
+      case 'Gezgin Ozan': // yoldan gelir → kenar yönüne bakılır (geliş hissi)
+        return _villageEdgePoint();
+      case 'Kuraklık':
+        final w = _firstBuildingOf(BuildingType.well);
+        if (w != null) return (w.col + w.cols / 2.0, w.row + w.rows / 2.0);
+        return _villageCenterD();
+      default:
+        return _villageCenterD();
+    }
+  }
+
+  /// Birkaç boştaki köylüyü bir noktaya doğru koşturur (tehdide en yakınlar
+  /// önce → "koşuşturma" hissi) + uygun gövde dili. `goTo` ile güvenilir hareket.
+  void _rallyToward(double x, double y,
+      {int count = 4,
+      NpcEmotion emotion = NpcEmotion.fear,
+      double dwell = 4.0}) {
+    final cands = _villagers
+        .where((v) =>
+            !v.isInsideBuilding &&
+            !v.isSleeping &&
+            v.hasProfession &&
+            !v.isCarrying &&
+            !v.isDying &&
+            !v.sitClaimed &&
+            v.activity == VillagerActivity.none)
+        .toList();
+    cands.sort((a, b) {
+      final da = (a.gridX - x) * (a.gridX - x) + (a.gridY - y) * (a.gridY - y);
+      final db = (b.gridX - x) * (b.gridX - x) + (b.gridY - y) * (b.gridY - y);
+      return da.compareTo(db);
+    });
+    int n = 0;
+    for (final v in cands) {
+      if (n >= count) break;
+      final ox = (_rng.nextDouble() - 0.5) * 1.6;
+      final oy = (_rng.nextDouble() - 0.5) * 1.6;
+      v.goTo((x + ox).clamp(1.0, kCols - 2.0), (y + oy).clamp(1.0, kRows - 2.0),
+          dwell);
+      v.feel(emotion, dwell + 2.0);
+      n++;
+    }
+  }
+
+  /// Pozitif olay sahnesi: birkaç köylü müzik/dans eder, gerisi toplanır (ateş
+  /// ya da pazar başı) — köy gözle görülür biçimde kutlar. Moral/fx olayın
+  /// kendisinden gelir; bu yalnız gövde dilini/toplanmayı sahneler.
+  void _stageCelebration({
+    bool atMarket = false,
+    bool music = false,
+    bool dance = false,
+    int gather = 6,
+  }) {
+    final dur = kGameDaySeconds * 0.4;
+    // Önce müzisyen/dansçılar (activity != none olur → toplanma onları atlamaz).
+    if (music) _startActivityForSome((v) => _tryStartMusicFor(v), 2, dur);
+    if (dance) _startActivityForSome((v) => _tryStartDanceFor(v), 2, dur);
+    // Kalabalık toplanır — tüccarda pazara, diğerlerinde ateşe.
+    if (atMarket) {
+      final m = _firstBuildingOf(BuildingType.market);
+      if (m != null) {
+        _rallyToward(m.col + m.cols / 2.0, m.row + m.rows / 2.0,
+            count: gather, emotion: NpcEmotion.joy, dwell: 6);
+      } else {
+        _gatherAtFire(dur, max: gather);
+      }
+    } else {
+      _gatherAtFire(dur, max: gather);
+    }
+    _feelVillage(NpcEmotion.joy, 8.0, 0.04);
+  }
+
+  /// Bir aktiviteyi (müzik/dans) en fazla [count] uygun boş köylüde başlatır.
+  void _startActivityForSome(
+      bool Function(VillagerEntity) start, int count, double dur) {
+    final idle = _villagers
+        .where((v) =>
+            !v.isInsideBuilding &&
+            !v.isSleeping &&
+            v.hasProfession &&
+            !v.isCarrying &&
+            !v.isDying &&
+            !v.sitClaimed &&
+            v.activity == VillagerActivity.none &&
+            v.socialCooldown <= 0)
+        .toList()
+      ..shuffle(_rng);
+    int n = 0;
+    for (final v in idle) {
+      if (n >= count) break;
+      if (start(v)) {
+        v.socialCooldown = dur;
+        n++;
+      }
+    }
+  }
+
+  /// Zümre barışı: en küskün zümrenin morali belirgin yükselir + köy ateş
+  /// başında dayanışmayla toplanır. Estate sistemine dokunur (event_system'in
+  /// erişemediği) — bu yüzden sahnede yapılır.
+  void _stageReconciliation() {
+    final low = _houses.mostAggrieved;
+    if (low != null) _houses.nudge(low, moodDelta: 0.14);
+    _stageCelebration(dance: true, gather: 7);
+  }
+
+  /// Köy merkezi (double) — `_villageCenter` int sürümünün ondalık karşılığı.
+  (double, double) _villageCenterD() {
+    final (cx, cy) = _villageCenter();
+    return (cx.toDouble(), cy.toDouble());
+  }
+
+  /// Köy merkezinden EN YAKIN harita kenarına doğru bir nokta (tehdit girişi).
+  (double, double) _villageEdgePoint() {
+    final (cx, cy) = _villageCenter();
+    final dl = cx, dr = kCols - cx, dt = cy, db = kRows - cy;
+    var m = dl;
+    if (dr < m) m = dr;
+    if (dt < m) m = dt;
+    if (db < m) m = db;
+    if (m == dl) return (2.0, cy.toDouble());
+    if (m == dr) return ((kCols - 2).toDouble(), cy.toDouble());
+    if (m == dt) return (cx.toDouble(), 2.0);
+    return (cx.toDouble(), (kRows - 2).toDouble());
+  }
+
+  /// Verilen tipteki ilk binayı döner (yoksa null).
+  BuildingEntity? _firstBuildingOf(BuildingType t) {
+    for (final b in _buildings) {
+      if (b.type == t) return b;
+    }
+    return null;
+  }
+
   /// Aktif efektleri her tick decay et + aggregate. Sonra tint/rain/sim
   /// multiplier'ları toplanmış halde kullanıma hazır.
   void _updateActiveFx(double dt) {
@@ -225,7 +524,7 @@ extension _SceneEvents on _VillageSceneState {
     }
     _fxRainBoost   = rain;
     _fxNpcSpeedMul = npc;
-    _fxFarmMul     = farm;
+    _fxFarmMul     = farm * _identityFarmMul; // kimlik bonusu: Bereketli Köy +%15
     _fxBuilderMul  = builder;
     if (!_fxActiveIds.contains(EventFx.fireOutbreak) &&
         _burningBuildings.isNotEmpty) {

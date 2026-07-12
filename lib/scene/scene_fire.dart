@@ -155,10 +155,10 @@ extension _SceneFire on _VillageSceneState {
     _showNotification('🔥 Ateş söndü! Köy karanlıkta, soğukta kaldı — odun lazım.');
     _feelVillage(NpcEmotion.fear, 8, -0.12);
     // Ocak (yuva) en çok yaralanır; inananlar (ayin ateşi) onu izler.
-    _estates.nudge(Estate.hearth, moodDelta: -0.12);
-    _estates.nudge(Estate.faithful, moodDelta: -0.08);
-    _estates.nudge(Estate.laborers, moodDelta: -0.05);
-    _estates.nudge(Estate.artisans, moodDelta: -0.05);
+    _nudgeHousesByEstate(Estate.hearth, moodDelta: -0.12);
+    _nudgeHousesByEstate(Estate.faithful, moodDelta: -0.08);
+    _nudgeHousesByEstate(Estate.laborers, moodDelta: -0.05);
+    _nudgeHousesByEstate(Estate.artisans, moodDelta: -0.05);
     pushPolicyMorale(-0.06, 4.0);
 
     // Dilekçe: köy odun seferberliği bekliyor (boşsa anında sun).
@@ -172,6 +172,6 @@ extension _SceneFire on _VillageSceneState {
   void _onFireRelit() {
     _showNotification('🔥 Ateş yeniden canlandı — köy ısındı.');
     _feelVillage(NpcEmotion.joy, 6, 0.08);
-    _estates.nudge(Estate.hearth, moodDelta: 0.06);
+    _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.06);
   }
 }

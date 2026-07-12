@@ -1,15 +1,19 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import '../save/save_manager.dart';
+import '../tools/light_editor_main.dart';
+import '../tools/placement_editor_main.dart';
 import 'about_screen.dart';
 import 'app_ui.dart';
 import 'save_slots_screen.dart';
 import 'settings_screen.dart';
 import 'sky_widgets.dart';
 
-/// Açılış ekranı — atmosferik akşam sahnesi + zarif altın başlık + temiz koyu
-/// menü paneli. Diegetik-lite: sahne sıcaklığı verir, UI modern ve sade kalır.
+/// Açılış ekranı — atmosferik ŞAFAK sahnesi (yeni köy = yeni başlangıç) +
+/// zarif altın başlık + temiz koyu menü paneli. Ön planda karşılayıcı köylü
+/// silüeti seni bekler. Diegetik-lite: sahne sıcaklığı verir, UI modern kalır.
 class MainMenuScreen extends StatefulWidget {
   final VoidCallback onNewGame;
   final void Function(SaveSlotMeta) onContinue;
@@ -30,8 +34,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   double _time = 0;
   bool _hasSaves = false;
 
-  static const _skyTop = Color(0xFF241640);
-  static const _skyMid = Color(0xFFE0883C);
+  // Sahnedeki güneşin ekran-uzayı merkezi (ışınlar + hâle bundan türetilir).
+  Offset _sunCenter(Size size) =>
+      Offset(size.width * 0.72, size.height * 0.44 + 62);
 
   @override
   void initState() {
@@ -73,13 +78,31 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       backgroundColor: const Color(0xFF160C28),
       body: Stack(
         children: [
-          // ── Atmosfer ──────────────────────────────────────────────────────
-          const PixelSky(topColor: _skyTop, midColor: _skyMid),
-          Positioned.fill(child: StarField(opacity: 0.42, time: _time)),
+          // ── Atmosfer (ŞAFAK) ──────────────────────────────────────────────
+          const _DawnSky(),
+          // Sönmekte olan yıldızlar — sabaha karşı sadece en parlaklar kalır.
+          Positioned.fill(child: StarField(opacity: 0.18, time: _time)),
+          // Uyanan kuşlar — yüksekte gevşek V, yavaş süzülür.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _WakingBirdsPainter(time: _time),
+              ),
+            ),
+          ),
+          // Yükselen güneş (tepelerin ardından doğar — horizon onu kısmen örter).
           Positioned(
-            right: size.width * 0.16,
-            top: size.height * 0.28,
+            left: _sunCenter(size).dx - 66,
+            top: _sunCenter(size).dy - 66,
             child: _SunWithGlow(time: _time),
+          ),
+          // Güneşten köye uzanan yumuşak sabah ışınları.
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _LightRaysPainter(time: _time, sun: _sunCenter(size)),
+              ),
+            ),
           ),
           _DriftingClouds(time: _time, screenWidth: size.width),
           Positioned(
@@ -89,7 +112,17 @@ class _MainMenuScreenState extends State<MainMenuScreen>
               painter: _HorizonPainter(time: _time),
             ),
           ),
-          // Alt sıcak parıltı + kenar vignette
+          // Tepelerin eteğinde sürüklenen sabah sisi.
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: IgnorePointer(
+              child: CustomPaint(
+                size: Size(size.width, size.height * 0.42),
+                painter: _MorningMistPainter(time: _time),
+              ),
+            ),
+          ),
+          // Güneşe doğru yoğunlaşan alt sıcak parıltı (şafak altını).
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: IgnorePointer(
@@ -97,12 +130,20 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                 height: size.height * 0.5,
                 decoration: const BoxDecoration(
                   gradient: RadialGradient(
-                    center: Alignment(0, 1.0),
-                    radius: 0.9,
-                    colors: [Color(0x33FF8A3A), Color(0x00FF8A3A)],
+                    center: Alignment(0.42, 1.0),
+                    radius: 1.0,
+                    colors: [Color(0x3AFFB25A), Color(0x00FFB25A)],
                   ),
                 ),
               ),
+            ),
+          ),
+          // Karşılayıcı köylü — ön planda, şafakla arkadan aydınlanır.
+          Positioned(
+            left: size.width * 0.05,
+            bottom: -4,
+            child: IgnorePointer(
+              child: _WelcomerVillager(time: _time),
             ),
           ),
           const Positioned.fill(
@@ -147,6 +188,14 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                             MaterialPageRoute(
                                 builder: (_) => const AboutScreen()),
                           ),
+                          onLightEditor: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const LightEditorScreen()),
+                          ),
+                          onPlacementEditor: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                                builder: (_) => const PlacementEditorScreen()),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 22),
@@ -174,12 +223,13 @@ class _TitleBlock extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Altın oyma başlık — ahşap pano yok, sadece zarif tipografi.
+        // Oyma altın-ember başlık — ahşap pano yok, gün batımına oturan sıcak
+        // tipografi (uzay/çelik değil).
         ShaderMask(
           shaderCallback: (r) => const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFEEC2), Color(0xFFF1B65C), Color(0xFFC9842F)],
+            colors: [Color(0xFFF7EFDF), Color(0xFFF1C588), Color(0xFFE0913F)],
             stops: [0.0, 0.55, 1.0],
           ).createShader(r),
           child: const Text(
@@ -210,8 +260,8 @@ class _TitleBlock extends StatelessWidget {
                   height: 1,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(colors: [
-                      Color(0x00E98A38),
-                      Color(0xCCE98A38),
+                      Color(0x00E49139),
+                      Color(0xCCE49139),
                     ]),
                   ),
                 ),
@@ -225,8 +275,8 @@ class _TitleBlock extends StatelessWidget {
                   height: 1,
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(colors: [
-                      Color(0xCCE98A38),
-                      Color(0x00E98A38),
+                      Color(0xCCE49139),
+                      Color(0x00E49139),
                     ]),
                   ),
                 ),
@@ -248,7 +298,8 @@ class _TitleBlock extends StatelessWidget {
 // ─── Menü kartı ──────────────────────────────────────────────────────────────
 
 class _MenuCard extends StatelessWidget {
-  final VoidCallback onNewGame, onSettings, onAbout, onContinue;
+  final VoidCallback onNewGame, onSettings, onAbout, onContinue, onLightEditor,
+      onPlacementEditor;
   final bool hasSaves;
   const _MenuCard({
     required this.onNewGame,
@@ -256,6 +307,8 @@ class _MenuCard extends StatelessWidget {
     required this.hasSaves,
     required this.onSettings,
     required this.onAbout,
+    required this.onLightEditor,
+    required this.onPlacementEditor,
   });
 
   @override
@@ -291,6 +344,18 @@ class _MenuCard extends StatelessWidget {
             icon: GameIconData.scroll,
             label: 'HAKKINDA',
             onTap: onAbout,
+          ),
+          const SizedBox(height: 9),
+          _MenuRow(
+            icon: GameIconData.bolt,
+            label: 'IŞIK EDİTÖRÜ',
+            onTap: onLightEditor,
+          ),
+          const SizedBox(height: 9),
+          _MenuRow(
+            icon: GameIconData.hammer,
+            label: 'EBAT EDİTÖRÜ',
+            onTap: onPlacementEditor,
           ),
         ],
       ),
@@ -406,21 +471,44 @@ class _SunWithGlow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pulse = sin(time * 0.5) * 0.06 + 0.94;
     return SizedBox(
-      width: 120, height: 120,
+      width: 132, height: 132,
       child: Stack(
         alignment: Alignment.center,
         children: [
+          // Geniş soluk şafak hâlesi
           Container(
-            width: 120, height: 120,
+            width: 132, height: 132,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: RadialGradient(colors: [
-                Color.fromRGBO(255, 190, 110, 0.55 * pulse),
-                const Color(0x00FFB060),
+                Color.fromRGBO(255, 226, 178, 0.60 * pulse),
+                Color.fromRGBO(255, 190, 120, 0.22 * pulse),
+                const Color(0x00FFC080),
+              ], stops: const [0.0, 0.45, 1.0]),
+            ),
+          ),
+          // Dar parlak çekirdek — yeni doğan güneş sıcak-beyaz
+          Container(
+            width: 54, height: 54,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                Color.fromRGBO(255, 246, 224, 0.9 * pulse),
+                const Color(0x00FFE6BE),
               ]),
             ),
           ),
-          const PixelSun(color: Color(0xFFFFC070)),
+          // Güneş diski — sert kare değil, sıcak-beyaz yumuşak disk
+          Container(
+            width: 30, height: 30,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                Color(0xFFFFFBF0),
+                Color(0xFFFFE7C2),
+              ]),
+            ),
+          ),
         ],
       ),
     );
@@ -526,8 +614,334 @@ class _HorizonPainter extends CustomPainter {
         ..color = Color.fromRGBO(255, 140, 40, (0.32 * fireFlicker).clamp(0.1, 1.0))
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
     );
+
+    // Sabah bacaları — evler uyanıyor, ocaklar tütüyor.
+    void smoke(double cx, double topY) {
+      final smk = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+      for (int i = 0; i < 5; i++) {
+        final t = i / 4.0;
+        final rise = t * 46;
+        final wob = sin(time * 0.9 + i * 0.8 + cx) * (5 + t * 10);
+        final a = (0.20 * (1 - t)).clamp(0.0, 1.0);
+        smk.color = Color.fromRGBO(226, 214, 224, a);
+        canvas.drawCircle(
+            Offset(cx + wob, topY - rise), 3.0 + t * 5.0, smk);
+      }
+    }
+    smoke(w * 0.18, groundY - 34);
+    smoke(w * 0.68, groundY - 36);
   }
 
   @override
   bool shouldRepaint(_HorizonPainter old) => old.time != time;
+}
+
+// ─── Şafak gökyüzü ───────────────────────────────────────────────────────────
+
+/// Çok katmanlı gün doğumu gradyanı: gecenin çivit tepesinden ufkun sıcak
+/// altınına — arada leylak ve gül tonları erimeli geçiş yapar.
+class _DawnSky extends StatelessWidget {
+  const _DawnSky();
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF1C1B46), // şafak öncesi çivit
+            Color(0xFF33285E), // koyu leylak
+            Color(0xFF6E4470), // tozlu gül
+            Color(0xFFC46C4E), // kehribar-gül
+            Color(0xFFEFA451), // ufuk altını
+          ],
+          stops: [0.0, 0.30, 0.54, 0.76, 1.0],
+        ),
+      ),
+      child: SizedBox.expand(),
+    );
+  }
+}
+
+// ─── Sabah ışınları ──────────────────────────────────────────────────────────
+
+/// Yükselen güneşten köye doğru açılan yumuşak yelpaze ışınları. Çok düşük
+/// alfa + additive harman → göz almadan "sabah ferahlığı" hissi.
+class _LightRaysPainter extends CustomPainter {
+  final double time;
+  final Offset sun;
+  _LightRaysPainter({required this.time, required this.sun});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.translate(sun.dx, sun.dy);
+    const n = 7;
+    final len = size.height * 0.95;
+    for (int i = 0; i < n; i++) {
+      // Aşağıya doğru açılan yelpaze + nazik salınım
+      final a = pi / 2 + (i - (n - 1) / 2) * 0.19 + sin(time * 0.25 + i) * 0.025;
+      final width = 30.0 + (i % 3) * 16.0;
+      final alpha = i.isEven ? 0.040 : 0.024;
+      final ex = cos(a) * len, ey = sin(a) * len;
+      final path = Path()
+        ..moveTo(0, 0)
+        ..lineTo(ex - width, ey)
+        ..lineTo(ex + width, ey)
+        ..close();
+      final shader = ui.Gradient.linear(
+        Offset.zero,
+        Offset(ex, ey),
+        [Color.fromRGBO(255, 224, 160, alpha), const Color(0x00FFE0A0)],
+      );
+      canvas.drawPath(
+          path,
+          Paint()
+            ..shader = shader
+            ..blendMode = BlendMode.plus);
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_LightRaysPainter o) => o.time != time || o.sun != sun;
+}
+
+// ─── Sabah sisi ──────────────────────────────────────────────────────────────
+
+class _MorningMistPainter extends CustomPainter {
+  final double time;
+  _MorningMistPainter({required this.time});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final p = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 24);
+    for (int i = 0; i < 4; i++) {
+      final y = h * (0.42 + i * 0.15);
+      final drift = sin(time * 0.14 + i * 1.3) * w * 0.05;
+      final a = (0.11 - i * 0.017).clamp(0.0, 1.0);
+      p.color = Color.fromRGBO(242, 224, 214, a);
+      final rect = Rect.fromCenter(
+        center: Offset(w * 0.5 + drift, y),
+        width: w * 1.25,
+        height: 26 + i * 8.0,
+      );
+      canvas.drawRRect(RRect.fromRectXY(rect, 60, 60), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MorningMistPainter o) => o.time != time;
+}
+
+// ─── Uyanan kuşlar ───────────────────────────────────────────────────────────
+
+/// Yüksekte gevşek V düzeninde, kanat çırparak yavaşça süzülen sabah kuşları.
+class _WakingBirdsPainter extends CustomPainter {
+  final double time;
+  _WakingBirdsPainter({required this.time});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final baseX = (time * 10.0) % (w + 160) - 80;
+    final baseY = size.height * 0.20;
+    final stroke = Paint()
+      ..color = const Color(0x66201830)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    const offsets = [
+      Offset(0, 0), Offset(-22, 10), Offset(22, 10),
+      Offset(-44, 22), Offset(44, 22),
+    ];
+    for (int i = 0; i < offsets.length; i++) {
+      final cx = baseX + offsets[i].dx;
+      final cy = baseY + offsets[i].dy + sin(time * 0.3 + i) * 3;
+      final flap = sin(time * 6.0 + i * 1.1) * 3.5;
+      final path = Path()
+        ..moveTo(cx - 7, cy + flap)
+        ..quadraticBezierTo(cx, cy - 3, cx, cy)
+        ..quadraticBezierTo(cx, cy - 3, cx + 7, cy + flap);
+      canvas.drawPath(path, stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WakingBirdsPainter o) => o.time != time;
+}
+
+// ─── Karşılayıcı köylü ───────────────────────────────────────────────────────
+
+/// Ön planda bekleyen köylü: şafak arkadan geldiği için gövde koyu silüet,
+/// kenarlarda ince sıcak rim-light; elinde sallanan bir fener ışık gölü döker;
+/// öbür eliyle usulca el sallar; hafif nefes salınımı var.
+class _WelcomerVillager extends StatelessWidget {
+  final double time;
+  const _WelcomerVillager({required this.time});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(172, 236),
+      painter: _WelcomerPainter(time: time),
+    );
+  }
+}
+
+class _WelcomerPainter extends CustomPainter {
+  final double time;
+  _WelcomerPainter({required this.time});
+
+  static const _silhouette = Color(0xFF181019);
+  static const _rim = Color(0xFFFFD79E);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final breathe = sin(time * 1.3) * 1.4; // nefes bob'u
+    final feetY = h - 8;
+    final cx = w * 0.46;
+
+    final body = Paint()..color = _silhouette;
+    final rim = Paint()
+      ..color = _rim
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.save();
+    canvas.translate(0, breathe);
+
+    // — Yer gölgesi
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, feetY), width: 74, height: 15),
+      Paint()
+        ..color = const Color(0x552A1220)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+
+    // — Fener ışık gölü (yerde, feneri tutan elin altında sola düşer)
+    final flick = sin(time * 7.0) * 0.12 + 0.88;
+    final lantX = cx - 40;
+    final lantY = h * 0.52;
+    canvas.drawCircle(
+      Offset(lantX, feetY - 4),
+      52,
+      Paint()
+        ..color = Color.fromRGBO(255, 176, 92, 0.28 * flick)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
+    );
+
+    // — Bacaklar
+    final legTop = h * 0.62;
+    canvas.drawRRect(
+        RRect.fromRectXY(Rect.fromLTWH(cx - 15, legTop, 12, feetY - legTop), 3, 3),
+        body);
+    canvas.drawRRect(
+        RRect.fromRectXY(Rect.fromLTWH(cx + 3, legTop, 12, feetY - legTop), 3, 3),
+        body);
+
+    // — Cübbe / gövde (aşağı doğru genişleyen pelerin)
+    final robe = Path()
+      ..moveTo(cx - 20, h * 0.40)
+      ..lineTo(cx + 20, h * 0.40)
+      ..lineTo(cx + 30, feetY - 2)
+      ..lineTo(cx - 30, feetY - 2)
+      ..close();
+    canvas.drawPath(robe, body);
+
+    // — Omuz/başlık
+    canvas.drawCircle(Offset(cx, h * 0.30), 20, body); // kukuleta/omuz kütlesi
+    // — Baş
+    canvas.drawCircle(Offset(cx + 1, h * 0.235), 12.5, body);
+
+    // — Feneri tutan kol (sol, aşağı-dışa) + fener
+    final handX = lantX + 6, handY = lantY + 2;
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx - 16, h * 0.44)
+        ..quadraticBezierTo(cx - 30, h * 0.50, handX, handY),
+      Paint()
+        ..color = _silhouette
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 8
+        ..strokeCap = StrokeCap.round,
+    );
+    // fener gövdesi
+    final lanternSway = sin(time * 1.6) * 2.0;
+    final lx = handX + lanternSway, ly = handY + 12;
+    canvas.drawRRect(
+        RRect.fromRectXY(Rect.fromCenter(center: Offset(lx, ly), width: 13, height: 17), 3, 3),
+        Paint()..color = const Color(0xFF241016));
+    // fener alevi/camı
+    canvas.drawRRect(
+      RRect.fromRectXY(Rect.fromCenter(center: Offset(lx, ly), width: 8, height: 11), 2, 2),
+      Paint()
+        ..color = Color.fromRGBO(255, 198, 110, flick)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+    );
+    canvas.drawCircle(
+      Offset(lx, ly),
+      13,
+      Paint()
+        ..color = Color.fromRGBO(255, 180, 90, 0.5 * flick)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
+
+    // — Sallayan kol (sağ, yukarı — nazik selam)
+    final wave = sin(time * 3.0) * 0.30;
+    final shoulder = Offset(cx + 16, h * 0.42);
+    final elbow = Offset(cx + 30, h * 0.34);
+    final hand = Offset(
+      elbow.dx + cos(-1.2 + wave) * 26,
+      elbow.dy + sin(-1.2 + wave) * 26,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(shoulder.dx, shoulder.dy)
+        ..lineTo(elbow.dx, elbow.dy)
+        ..lineTo(hand.dx, hand.dy),
+      Paint()
+        ..color = _silhouette
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 9
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+    canvas.drawCircle(hand, 5.5, body); // el
+
+    // — Rim-light: şafak arkadan geldiği için sağ/üst kenarlar sıcak parlar
+    canvas.drawPath(
+      Path()
+        ..addArc(Rect.fromCircle(center: Offset(cx + 1, h * 0.235), radius: 12.5),
+            -pi * 0.85, pi * 0.9), // baş sağ-üst yayı
+      rim,
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx + 20, h * 0.40)
+        ..lineTo(cx + 30, feetY - 2), // cübbe sağ kenarı
+      rim..color = _rim.withValues(alpha: 0.55),
+    );
+    // sallayan kolun sıcak konturu
+    canvas.drawPath(
+      Path()
+        ..moveTo(elbow.dx, elbow.dy)
+        ..lineTo(hand.dx, hand.dy),
+      Paint()
+        ..color = _rim.withValues(alpha: 0.7)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..strokeCap = StrokeCap.round,
+    );
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_WelcomerPainter o) => o.time != time;
 }

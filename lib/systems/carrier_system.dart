@@ -1,4 +1,5 @@
 import '../buildings/building_entity.dart';
+import '../buildings/building_function.dart';
 import '../buildings/building_type.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
@@ -22,12 +23,21 @@ void assignCarriers({
   required List<HayEntity> hayEntities,
   required ResourceBundle stockpile,
   required AnchorSystem anchorSystem,
+  double baleYieldMultiplier = 1.0,
 }) {
   final hasAnyAnchor = anchorSystem.warehousePoints.isNotEmpty ||
       anchorSystem.firepitPoints.isNotEmpty;
   if (!hasAnyAnchor) return; // teslim noktası yoksa hiç başlama
   // Hay balyası için depo şartı korunur — eski davranış (sadece warehouse'a).
   final hasWarehouse = anchorSystem.warehousePoints.isNotEmpty;
+
+  // Değirmen(ler): balya öğütme bonusu artık global boolean değil — çalışan
+  // her değirmen katkı sağlar (2'ye kadar yığılır), duraklatılan sayılmaz.
+  final mills = [
+    for (final b in buildings)
+      if (b.type == BuildingType.mill && !b.userPaused) b
+  ];
+  final int millBonus = 2 * (mills.length > 2 ? 2 : mills.length);
 
   for (final v in villagers) {
     if (v.state != VillagerState.idle) continue;
@@ -106,10 +116,25 @@ void assignCarriers({
             point.release(slot, v);
             bale.isDelivered = true;
             hayEntities.remove(bale);
-            // 1 balya = 6 hay pile (= 6 hasat). Balya başına 6 yiyecek;
-            // değirmen +2 bonus.
-            final hasMill = buildings.any((b) => b.type == BuildingType.mill);
-            stockpile.food += hasMill ? 8 : 6;
+            // 1 balya = 6 hay pile (= 6 hasat). Değirmen başına +2 yem (2'ye
+            // kadar yığılır). Sonbahar bereketi balya verimini artırır.
+            final base = 6 + millBonus;
+            stockpile.food += (base * baleYieldMultiplier).round();
+            // En yakın değirmeni öğütmeye geçir → görünür duman + panel doğruluğu.
+            if (mills.isNotEmpty) {
+              var nearest = mills.first;
+              var bd = double.infinity;
+              for (final m in mills) {
+                final dx = m.col - slot.col;
+                final dy = m.row - slot.row;
+                final d = dx * dx + dy * dy;
+                if (d < bd) {
+                  bd = d;
+                  nearest = m;
+                }
+              }
+              nearest.grindPulse = kMillGrindSeconds;
+            }
           },
         );
       }

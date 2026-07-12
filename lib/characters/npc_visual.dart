@@ -111,6 +111,11 @@ class NpcVisual {
 enum HairStyle { bald, short, medium, long, messy }
 enum BeardStyle { none, stubble, full, goatee }
 
+/// Bir NPC'nin mesleğinden bağımsız ÖZEL kostümü — karakter çizici tip yerine
+/// bunu önceler. `none` = normal meslek/köylü görünümü. `imperial` = dış güç
+/// askeri (koyu çelik zırh + kızıl tabard + miğfer), köyde net "yabancı".
+enum NpcCostume { none, imperial }
+
 // ─── Renk havuzları ──────────────────────────────────────────────────────────
 
 const List<Color> _skinTones = [

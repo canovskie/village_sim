@@ -32,6 +32,7 @@ extension _SceneFlow on _VillageSceneState {
       if (!q.check(ctx)) continue;
       _completedQuests.add(q.id);
       _grantVisualReward(q.reward);
+      AudioManager.instance.playSfx(Sfx.bellChime);
       _showNotification('✓ ${q.label}');
       break; // bir scan'de bir ödül → sürekli, sakin akış
     }
@@ -54,12 +55,13 @@ extension _SceneFlow on _VillageSceneState {
     }
   }
 
-  /// Bir sinematiği oynatır (sim duraklar) + hikâye güncesine bir satır ekler.
-  /// Güncedeki satır sinematik atlanırsa bile kalır (anı kaybolmaz).
+  /// Bir sinematiği oynatır (sim duraklar) + hikâye güncesine bir satır ekler
+  /// (`_chronicle`, scene_chronicle). Satır sinematik atlansa bile kalır.
   void _playCutscene(Cutscene c, {String? logEntry}) {
-    if (logEntry != null) {
-      _storyLog.add('${_dayCount + 1}. Gün — $logEntry');
-    }
+    // Çift tetik koruması — aynı sahne zaten oynuyorsa yok say (aksi halde
+    // oynatıcı state'i sıfırlanıp sahne baştan oynar = ekrana art arda 2 kez).
+    if (identical(_activeCutscene, c)) return;
+    if (logEntry != null) _chronicle(logEntry, icon: '🎬', milestone: true);
     setStateHere(() => _activeCutscene = c);
   }
 

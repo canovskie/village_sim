@@ -11,7 +11,7 @@ class AboutScreen extends StatelessWidget {
     ('Oyun Tasarımı', 'Can Kaynar'),
     ('Programlama',   'Can Kaynar + Claude'),
     ('Pixel Art',     'Can Kaynar'),
-    ('Müzik / SFX',   'Henüz yok'),
+    ('Müzik / SFX',   'Ortam & efekt sesleri'),
   ];
 
   static const _controls = [

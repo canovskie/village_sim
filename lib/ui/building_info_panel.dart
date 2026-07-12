@@ -15,6 +15,7 @@ import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
 import '../systems/estate_system.dart';
+import '../systems/house_system.dart';
 import 'app_ui.dart';
 
 /// Bir binaya tıklanınca açılan yönetim kartı. Modern koyu panel: başlık +
@@ -37,9 +38,14 @@ class BuildingInfoPanel extends StatelessWidget {
 
   final VoidCallback? onFestival;
   final VoidCallback? onDemolish;
+  /// Taşı — binayı söküp aynı türü yeniden yerleştirmeye sokar (tam iade,
+  /// bedava taşıma). Yık'ın kardeşi.
+  final VoidCallback? onMove;
   final VoidCallback? onTogglePaused;
   final VoidCallback? onCollectTax;
   final VoidCallback? onRefillWater;
+  /// Ahır/kümes hayvan satın alma — bina boş kurulur, sürü buradan kurulur.
+  final void Function(AnimalKind kind)? onBuyAnimal;
 
   final int festivalFoodCost;
   final int festivalGoldCost;
@@ -50,8 +56,11 @@ class BuildingInfoPanel extends StatelessWidget {
   final void Function(FamilyPolicy fp)? onSetFamilyPolicy;
   final double policyCooldownSec;
 
-  final List<EstateSnapshot>? estates;
+  final List<HouseSnapshot>? houses;
   final String? villageIdentity;
+  /// Köyün baskın kimliğinin SOMUT mekanik bonusu (tarla/verim/sofra/moral) —
+  /// kimlik yoksa null. Zümre nabzında "kimliğin ödülü" satırı olarak gösterilir.
+  final String? identityBonus;
 
   const BuildingInfoPanel({
     super.key,
@@ -68,9 +77,11 @@ class BuildingInfoPanel extends StatelessWidget {
     required this.onSell,
     this.onFestival,
     this.onDemolish,
+    this.onMove,
     this.onTogglePaused,
     this.onCollectTax,
     this.onRefillWater,
+    this.onBuyAnimal,
     this.festivalFoodCost = 8,
     this.festivalGoldCost = 5,
     this.planning,
@@ -78,8 +89,9 @@ class BuildingInfoPanel extends StatelessWidget {
     this.onTogglePolicy,
     this.onSetFamilyPolicy,
     this.policyCooldownSec = 0,
-    this.estates,
+    this.houses,
     this.villageIdentity,
+    this.identityBonus,
   });
 
   BuildingFunction? get _fn => building.fn;
@@ -244,37 +256,88 @@ class BuildingInfoPanel extends StatelessWidget {
   List<Widget> _gatheringVital() {
     final isMine = building.type == BuildingType.mineBuilding;
     final isBarn = building.type == BuildingType.barn;
+    final isCoop = building.type == BuildingType.chickenCoop;
     final out = <Widget>[_statusRow(building.isActive)];
     if (isMine && activeMiners.isNotEmpty) {
       out.add(_row('Madenci', '${activeMiners.length} içeride'));
     }
     if (isBarn) out.addAll(_barnVital());
+    if (isCoop) out.addAll(_coopVital());
     return out;
   }
 
+  /// Bu binadaki yaşayan hayvan sayısı (tür bazlı).
+  int _countKind(AnimalKind k) =>
+      barnCows.where((c) => !c.isDying && c.kind == k).length;
+
   List<Widget> _barnVital() {
-    if (barnCows.isEmpty) return [_row('İnek', '0')];
-    final avgFull =
-        1.0 - (barnCows.fold<double>(0, (s, c) => s + c.hunger) / barnCows.length);
-    final readyCount = barnCows.where((c) => c.readyToMilk).length;
+    final cows = barnCows.where((c) => c.kind == AnimalKind.cow).toList();
+    final out = <Widget>[
+      const SizedBox(height: 6),
+      _row('İnek', '${_countKind(AnimalKind.cow)} baş'),
+      _row('Koyun', '${_countKind(AnimalKind.sheep)} baş'),
+    ];
+    if (cows.isNotEmpty) {
+      final avgFull =
+          1.0 - (cows.fold<double>(0, (s, c) => s + c.hunger) / cows.length);
+      final readyCount = cows.where((c) => c.readyToMilk).length;
+      out.addAll([
+        const SizedBox(height: 6),
+        AppStatBar(
+            label: 'TOKLUK',
+            value: avgFull,
+            trailing: '${(avgFull * 100).round()}%',
+            color: AppUi.sage),
+        const SizedBox(height: 6),
+        _row('Sağıma hazır', '$readyCount'),
+      ]);
+    }
+    out.addAll(_buyButtons(const [AnimalKind.cow, AnimalKind.sheep]));
+    return out;
+  }
+
+  List<Widget> _coopVital() {
+    final hens = barnCows
+        .where((c) => c.kind == AnimalKind.chicken && !c.isMale && !c.isDying)
+        .length;
     return [
       const SizedBox(height: 6),
-      _row('İnek', '${barnCows.length} baş'),
-      const SizedBox(height: 6),
-      AppStatBar(
-          label: 'TOKLUK',
-          value: avgFull,
-          trailing: '${(avgFull * 100).round()}%',
-          color: AppUi.sage),
-      const SizedBox(height: 6),
-      _row('Sağıma hazır', '$readyCount'),
+      _row('Tavuk', '${_countKind(AnimalKind.chicken)}'),
+      _row('Yumurtlayan', '$hens'),
+      ..._buyButtons(const [AnimalKind.chicken]),
     ];
   }
 
+  /// Hayvan satın alma butonları — bina boş kurulur, sürü buradan kurulur.
+  /// Maliyet/kapasite gösterilir; dolu/yetersizse buton soluk (yine de basınca
+  /// sahne nedeni bildirir).
+  List<Widget> _buyButtons(List<AnimalKind> kinds) {
+    if (onBuyAnimal == null) return const [];
+    final out = <Widget>[const SizedBox(height: 10)];
+    for (final k in kinds) {
+      final count = _countKind(k);
+      final cap = kAnimalBarnCap[k] ?? 5;
+      final cost = kAnimalGoldCost[k] ?? 5;
+      final full = count >= cap;
+      final afford = stockpile.gold >= cost;
+      out.add(Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: AppButton(
+          label: full
+              ? '${animalKindLabel(k)} dolu ($count/$cap)'
+              : '${animalKindLabel(k)} al · $cost★   ($count/$cap)',
+          kind: (full || !afford) ? AppButtonKind.ghost : AppButtonKind.tonal,
+          onTap: (full || !afford) ? null : () => onBuyAnimal!(k),
+        ),
+      ));
+    }
+    return out;
+  }
+
   List<Widget> _processingVital() => [
-        _statusRow(true),
+        _statusRow(building.isActive),
         const SizedBox(height: 6),
-        _row('Balya verimi', '+1 yem / balya', icon: GameIconData.wheat),
+        _row('Balya verimi', '+2 yem / balya', icon: GameIconData.wheat),
       ];
 
   List<Widget> _tradeVital(BuildingFunction fn) => [
@@ -340,9 +403,9 @@ class BuildingInfoPanel extends StatelessWidget {
               value: stats.morale,
               trailing: '${(stats.morale * 100).round()}%',
               color: stats.morale > 0.6 ? AppUi.sage : foodColor),
-          if (estates != null && estates!.isNotEmpty) ...[
+          if (houses != null && houses!.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _estatePulse(estates!, villageIdentity),
+            _estatePulse(houses!, villageIdentity, identityBonus),
           ],
           if (policies != null && onTogglePolicy != null) ...[
             const SizedBox(height: 16),
@@ -374,9 +437,10 @@ class BuildingInfoPanel extends StatelessWidget {
     }
   }
 
-  /// Zümre Nabzı — 4 zümrenin morali (renk noktası) + nüfuz payı (çizgi) +
+  /// Hane Nabzı — hanelerin morali (renk noktası) + nüfuz payı (çizgi) +
   /// köyün kayan kimliği. Emoji yerine renk + tipografi.
-  Widget _estatePulse(List<EstateSnapshot> snap, String? identity) {
+  Widget _estatePulse(
+      List<HouseSnapshot> snap, String? identity, String? bonus) {
     Color moodColor(EstateMoodTier t) => switch (t) {
           EstateMoodTier.content => AppUi.sage,
           EstateMoodTier.neutral => AppUi.textLo,
@@ -386,13 +450,29 @@ class BuildingInfoPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const AppSectionLabel('ZÜMRELER'),
+        const AppSectionLabel('HANELER'),
         if (identity != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: bonus != null ? 2 : 8),
             child: Text('Köy bir yöne kayıyor:  $identity',
                 style: AppUi.body.copyWith(
                     color: AppUi.textMid, fontStyle: FontStyle.italic)),
+          ),
+        // Kimliğin SOMUT ödülü — köyü bir yöne adamak mekanik avantaj getirir.
+        if (bonus != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                const GameIcon(GameIconData.star, size: 10, color: AppUi.gold),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(bonus,
+                      style: AppUi.body
+                          .copyWith(color: AppUi.gold, fontSize: 11)),
+                ),
+              ],
+            ),
           ),
         for (final s in snap)
           Padding(
@@ -414,7 +494,7 @@ class BuildingInfoPanel extends StatelessWidget {
                 const SizedBox(width: 8),
                 SizedBox(
                   width: 88,
-                  child: Text(s.estate.label,
+                  child: Text(s.label,
                       style: AppUi.body.copyWith(
                           color: s.ascendant ? AppUi.textHi : AppUi.textMid,
                           fontWeight:
@@ -520,6 +600,15 @@ class BuildingInfoPanel extends StatelessWidget {
         label: building.userPaused ? 'Sürdür' : 'Durdur',
         tint: AppUi.accentSoft,
         onTap: onTogglePaused,
+      ));
+    }
+
+    if (onMove != null) {
+      out.add(_Action(
+        icon: GameIconData.hammer,
+        label: 'Taşı',
+        tint: AppUi.info,
+        onTap: onMove,
       ));
     }
 
@@ -1074,7 +1163,7 @@ class _PolicyEditorState extends State<_PolicyEditor> {
           width: 12, height: 12,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: on ? const Color(0xFF1A0E04) : AppUi.textLo,
+            color: on ? AppUi.ink : AppUi.textLo,
           ),
         ),
       ),
@@ -1118,7 +1207,7 @@ class _PolicyEditorState extends State<_PolicyEditor> {
                   curve: Curves.easeOutBack,
                   scale: selected ? 1.0 : 0.0,
                   child: const Center(
-                    child: Icon(Icons.circle, size: 5, color: Color(0xFF1A0E04)),
+                    child: Icon(Icons.circle, size: 5, color: AppUi.ink),
                   ),
                 ),
               ),

@@ -3,17 +3,22 @@ part of '../main.dart';
 /// Dilekçe / Meclis sistemi — köy periyodik olarak senden bir şey ister,
 /// sen karar verirsin. Yönetişimin omurgası: pasif toggle yerine akan karar.
 ///
-/// Ambient: dilekçe gelince HUD'da mühürlü tomar belirir (oyun durmaz). Tıkla
-/// → parşömen modal. Çok uzun cevapsız kalırsa kendiliğinden reddolur + ufak
-/// moral dip (köy duyulmadığını hisseder).
+/// Mühlet ritmi: dilekçe gelince DOĞRUDAN ekrana gelir (modal hemen açılır) —
+/// köy yüz yüze konuşur, kopuk bir bildirim ikonu değil. Oyun DURMAZ (ambient):
+/// boşluğa dokununca modal kapanır, dilekçe HUD mührüne iner + tükenen mühlet
+/// halkası sakin sakin işler (sonra mühre tıklayıp tekrar açarsın). Mühlet
+/// dolarsa modal ZORLA tam-ekran açılır + sim duraklar — görmezden gelinemez.
+/// Bekletmenin bedeli var (zümre küser + moral dip), ama karar yine oyuncunundur.
 ///
 /// Bağımlı sistemler: PetitionSystem (üretim), pushPolicyMorale (geçici moral),
 /// _applyPolicySideChannels + _policies (yasa yürürlüğe), _attachFxTargets (fx).
 extension _ScenePetitions on _VillageSceneState {
   /// İki dilekçe arası bekleme (sn) — ~1.5 oyun günü.
   static const double _kPetitionInterval = 1.5 * kGameDaySeconds;
-  /// Cevapsız dilekçe ömrü (sn) — ~2 oyun günü, sonra otomatik reddolur.
-  static const double _kPetitionDeadline = 2.0 * kGameDaySeconds;
+  /// Mühlet (sn) — ~2 oyun günü sakin yanıt penceresi; dolunca zorunlu huzur.
+  static const double _kPetitionGrace = 2.0 * kGameDaySeconds;
+  /// Mühletin son bu oranı = "sıkışma" — mühür kızarır, nabız hızlanır.
+  static const double _kPetitionUrgentFrac = 0.30;
   /// Çözülen dilekçenin tekrar random çıkmaması için hafıza cooldown'u.
   static const double _kPetitionRepeatCooldown = 4.0 * kGameDaySeconds;
 
@@ -22,8 +27,10 @@ extension _ScenePetitions on _VillageSceneState {
     if (!_hasFire || _villagers.length < 2) return;
 
     if (_pendingPetition != null) {
+      // Zorunlu huzura geçtiyse mühlet işlemez (modal zaten açık, sim duraklı).
+      if (_petitionForced) return;
       _petitionDeadline -= dt;
-      if (_petitionDeadline <= 0) _expirePetition();
+      if (_petitionDeadline <= 0) _forceAudience();
       return;
     }
 
@@ -55,11 +62,20 @@ extension _ScenePetitions on _VillageSceneState {
     _presentPetition(p);
   }
 
-  /// Bir dilekçeyi sunar (HUD mührü + bildirim).
+  /// Bir dilekçeyi sunar — DOĞRUDAN ekrana getirir (modal hemen açılır). Küçük
+  /// bir mühür-bildirimi ikonu değil; köy kapına gelmiştir, yüz yüzedir. Yine de
+  /// oyunu DURDURMAZ (ambient): boşluğa dokununca modal kapanır, dilekçe HUD
+  /// mührüne iner ve mühlet sakin sakin işlemeye devam eder (sonra tekrar açarsın
+  /// ya da mühlet dolunca zorunlu huzur gelir).
   void _presentPetition(Petition p) {
-    _pendingPetition  = p;
-    _petitionDeadline = _kPetitionDeadline;
-    _summonSpokesperson(p); // diegetik: zümre sözcüsü merkeze döner
+    AudioManager.instance.playSfx(Sfx.bellChime);
+    _summonSpokesperson(p); // diegetik: zümre sözcüsü merkeze döner (+_petitionAuthor)
+    setStateHere(() {
+      _pendingPetition   = p;
+      _petitionForced    = false;
+      _petitionDeadline  = _kPetitionGrace;
+      _petitionModalOpen = true; // gelir gelmez ekranda — kopuk bildirim değil
+    });
     _showNotification('📜 ${p.petitioner} bir dilekçe sundu');
   }
 
@@ -67,11 +83,12 @@ extension _ScenePetitions on _VillageSceneState {
   /// o zümre ısrarla dilekçe gönderir + dilekçe sıklığı artar.
   static const double _kSullenMood = 0.40;
 
-  /// Şu an gerçekten küskün (sullen eşiği altı) zümre — yoksa null.
+  /// Şu an küskün (sullen eşiği altı) HANENİN baskın meslek-zümresi — estate-
+  /// etiketli grievance dilekçelerini "hangi hane küskün"e göre besler. Yoksa null.
   Estate? _sullenEstate() {
-    final e = _estates.mostAggrieved;
-    if (e == null) return null;
-    return _estates.moodOf(e) < _kSullenMood ? e : null;
+    final s = _houses.mostAggrieved;
+    if (s == null || _houses.moodOf(s) >= _kSullenMood) return null;
+    return _dominantEstateOfHouse(s);
   }
 
   /// Dilekçeler arası dinamik bekleme: bir zümre küskünse köy daha sık dilekçe
@@ -107,10 +124,94 @@ extension _ScenePetitions on _VillageSceneState {
       hasChurch: _churchBuilding != null,
       memory: _villageMemory,
       aggrievedEstate: _sullenEstate(),
-      ascendant: _estates.ascendant,
+      ascendant: _houses.ascendant == null
+          ? null
+          : _dominantEstateOfHouse(_houses.ascendant!),
       herdSize: herd,
       herdHungry: herdHungry,
+      season: _season,
+      hasCrops: _farmTiles.any((t) => t.isGrowing || t.readyToHarvest),
+      hasResentful: _resentfulVillager() != null,
+      hasFeud: _feudMember() != null,
+      // Politika↔dilekçe köprüsü: yürürlükteki yasalar sosyal karşılık doğurur.
+      cropRotation: _policies.cropRotation,
+      hospitality: _policies.hospitality,
+      hasHousing: _buildings.any((b) =>
+          b.fn?.role == BuildingRole.housing &&
+          _villagers.where((v) => v.homeBuilding == b).length <
+              b.fn!.housingCapacity),
     );
+  }
+
+  /// Bir kan davasının yaşayan taraflarından biri (sulh dilekçesinin öznesi) —
+  /// yoksa null. En mutsuz olanı önceler (yükü en ağır taşıyan konuşur).
+  VillagerEntity? _feudMember() {
+    final cands =
+        _villagers.where((v) => !v.isDying && v.inFeud).toList();
+    if (cands.isEmpty) return null;
+    cands.sort((a, b) => a.morale.compareTo(b.morale));
+    return cands.first;
+  }
+
+  /// Sulh kabul edilince (PetitionFx.feudPeace) — dilekçe sahibinin ailesi ile
+  /// bir düşman ailesi arasındaki TÜM husumet silinir; kan davası sona erer.
+  void _reconcileFeud(VillagerEntity? author) {
+    final v = author;
+    if (v == null || v.bloodEnemies.isEmpty) return;
+    final enemy = v.bloodEnemies.first;
+    _pacifyFeudOf(v); // v'nin ailesi ↔ tüm düşman aileleri: husumet silinir
+    _feelVillage(NpcEmotion.content, 10, 0.10); // köy nefes alır
+    v.feel(NpcEmotion.content, 4.0, moodDelta: 0.15);
+    enemy.feel(NpcEmotion.content, 4.0, moodDelta: 0.15);
+    _chronicle('Kan davası sona erdi — ${v.name} ile ${enemy.name} aileleri barıştı.',
+        icon: '🕊️', milestone: true);
+    _showNotification(
+        '🕊️ Sulh sağlandı — ${v.name} ile ${enemy.name} aileleri arasındaki kan davası bitti.');
+  }
+
+  /// Sulh dilekçesinde "Suçluyu sürgün et" seçilince — kan davasının en çok kan
+  /// dökeni (suçlu) köyden sürülür, husumet uzaklaştırmayla kapanır.
+  void _exileFeudCulprit() {
+    final c = _feudCulprit();
+    if (c != null) _exileVillager(c);
+  }
+
+  /// Sulh dilekçesinde "Suçluyu idam et" seçilince — en çok kan döken suçlu 2B
+  /// sahnede halkın önünde idam edilir, kan davası kanla kapanır.
+  void _executeFeudCulprit() {
+    final c = _feudCulprit();
+    if (c != null) _executeVillager(c);
+  }
+
+  /// Mesleği içindeki çağrıya uymayan (kırgın) köylüler arasından en mutsuz
+  /// birkaçından biri — meslek değiştirme dilekçesinin yazarı/öznesi. Yoksa null.
+  VillagerEntity? _resentfulVillager() {
+    final cands = _villagers
+        .where((v) => !v.isDying && v.callingFound && v.type != v.calling)
+        .toList();
+    if (cands.isEmpty) return null;
+    cands.sort((a, b) => a.morale.compareTo(b.morale));
+    final n = cands.length < 3 ? cands.length : 3;
+    return cands[_rng.nextInt(n)];
+  }
+
+  /// Meslek değiştirme dilekçesi onaylanınca (PetitionFx.callingGranted) —
+  /// dilekçe sahibi mesleğini çağrısına çevirir; kırgınlık diner, içi açılır.
+  /// [author] = kararın öznesi (dilekçe sahibi); _applyDecisionEffects geçirir.
+  void _grantCalling(VillagerEntity? author) {
+    final v = author;
+    if (v == null || v.isDying || v.type == v.calling) return;
+    final from = v.type.displayName.toLowerCase();
+    final to = v.calling;
+    final toName = to.displayName.toLowerCase();
+    v.switchProfession(to);
+    v.feel(NpcEmotion.joy, 5.0, moodDelta: 0.25); // mismatch kalkar + anlık sevinç
+    v.chatBubbleIcon = '🌟';
+    v.chatBubbleTime = 5.0;
+    _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.5, moodDelta: 0.03);
+    _chronicle('${v.name} sonunda çağrısının peşinden gitti: $from → $toName.',
+        icon: '🌟', milestone: true);
+    _showNotification('🌟 ${v.name} çağrısının peşinden gitti — artık $toName.');
   }
 
   /// DEBUG (DevPanel): anında bir dilekçe getir + modal'ı aç. Koşullar uygunsa
@@ -121,7 +222,8 @@ extension _ScenePetitions on _VillageSceneState {
       _pendingPetition =
           PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
       _petitionAuthor = _pickPetitionAuthor(_pendingPetition!);
-      _petitionDeadline = _kPetitionDeadline;
+      _petitionForced = false;
+      _petitionDeadline = _kPetitionGrace;
       _petitionModalOpen = true; // hemen göster
     });
   }
@@ -131,86 +233,265 @@ extension _ScenePetitions on _VillageSceneState {
     final p = PetitionSystem.byId(id);
     if (p == null) return;
     setStateHere(() {
+      // Düğün gerçek bir çifte bağlıdır — dev zorlamada da bir çift bağla ki
+      // tam deneyim (isimli çift + sinematik + sahne) görünsün.
+      if (id == 'villageWedding') {
+        _weddingCouple = _findCourtship();
+        _petitionAuthor = _weddingCouple?.$1 ?? _pickPetitionAuthor(p);
+      } else {
+        _petitionAuthor = _pickPetitionAuthor(p);
+      }
       _pendingPetition = p;
-      _petitionAuthor = _pickPetitionAuthor(p);
-      _petitionDeadline = _kPetitionDeadline;
+      _petitionForced = false;
+      _petitionDeadline = _kPetitionGrace;
       _petitionModalOpen = true;
     });
+  }
+
+  /// DEBUG (DevPanel): bir dilekçeyi AMBIENT getir (modal AÇMA) + mühleti ~12s'e
+  /// kıs — mühür geri sayımını, sıkışmayı (kızarma/AZ KALDI) ve mühlet dolunca
+  /// zorunlu açılışı tek tıkla, beklemeden izle.
+  void _forcePetitionShortFuse() {
+    setStateHere(() {
+      final ctx = _buildPetitionContext();
+      _pendingPetition =
+          PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
+      _summonSpokesperson(_pendingPetition!); // _petitionAuthor atar
+      _petitionForced = false;
+      _petitionModalOpen = false; // mühür HUD'da — geri sayımı izle
+      _petitionDeadline = 12.0; // kısa fitil: ~12 gerçek sn sonra zorla açılır
+    });
+  }
+
+  /// DEBUG (DevPanel): zorunlu huzuru ANINDA tetikle. Bekleyen dilekçe varsa onu
+  /// zorla aç; yoksa önce bir dilekçe getirip hemen zorunlu huzura geçir.
+  void _forcePetitionAudienceNow() {
+    if (_pendingPetition == null) {
+      setStateHere(() {
+        final ctx = _buildPetitionContext();
+        _pendingPetition =
+            PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
+        _summonSpokesperson(_pendingPetition!);
+        _petitionForced = false;
+        _petitionModalOpen = false;
+        _petitionDeadline = _kPetitionGrace;
+      });
+    }
+    _forceAudience();
   }
 
   /// HUD mührüne tıklayınca — modal aç.
   void _openPetition() => setStateHere(() => _petitionModalOpen = true);
 
   /// Modal'ı kapat ama dilekçeyi bekleyen bırak (ambient — karar zorunlu değil).
-  void _dismissPetition() => setStateHere(() => _petitionModalOpen = false);
+  /// Zorunlu huzurda (mühlet doldu) kapatılamaz — köy yanıt bekliyor.
+  void _dismissPetition() {
+    if (_petitionForced) return;
+    setStateHere(() => _petitionModalOpen = false);
+  }
 
   /// Oyuncu bir seçeneği seçti: deltaları + morali + yasayı + fx'i uygula.
   void _resolvePetition(Petition p, PetitionOption o) {
     setStateHere(() {
-      if (o.foodDelta != 0) {
-        _stockpile.food = (_stockpile.food + o.foodDelta).clamp(0, 1 << 30);
-      }
-      if (o.woodDelta != 0) {
-        _stockpile.wood = (_stockpile.wood + o.woodDelta).clamp(0, 1 << 30);
-      }
-      if (o.stoneDelta != 0) {
-        _stockpile.stone = (_stockpile.stone + o.stoneDelta).clamp(0, 1 << 30);
-      }
-      if (o.ironDelta != 0) {
-        _stockpile.iron = (_stockpile.iron + o.ironDelta).clamp(0, 1 << 30);
-      }
-      if (o.goldDelta != 0) {
-        _stockpile.gold = (_stockpile.gold + o.goldDelta).clamp(0, 1 << 30);
-      }
-      if (o.moraleAmount != 0 && o.moraleDays > 0) {
-        pushPolicyMorale(o.moraleAmount, o.moraleDays);
-      }
-      _applyPetitionFx(o.fx);
-      // Zümre dengesi: kararın morali oynatması + nüfuz kayması (köy kimliği).
-      _applyEstatePetition(p, o);
-
-      // Köy hafızası: kararın bıraktığı kalıcı bayraklar (zincir/dallanma okur).
-      _villageMemory.addAll(o.setsFlags);
-      _villageMemory.removeAll(o.clearsFlags);
+      // Bildirimsel etkiler (dilekçe + meclis ortak) — fx/tepki dilekçeyi
+      // getiren köylüye bağlanır.
+      _applyDecisionEffects(p, o, _petitionAuthor);
 
       // Hafıza: bu dilekçe bir süre tekrar random çıkmasın.
       _petitionCooldowns[p.id] = _time + _kPetitionRepeatCooldown;
-      // Zincir: seçenek bir takip dilekçesi tetikliyorsa kuyruğa al.
-      if (o.followUpId != null) {
-        _petitionFollowUps.add((
-          id: o.followUpId!,
-          fireAtSim: _time + o.followUpDelayDays * kGameDaySeconds,
-        ));
-      }
 
       _pendingPetition   = null;
       _petitionAuthor    = null;
       _petitionModalOpen = false;
+      _petitionForced    = false;
       _petitionTimer     = _petitionInterval();
     });
     // Boş resolution → mesaj reaksiyonun kendisinden gelir (ör. kayıp ismi).
     if (o.resolution.isNotEmpty) _showNotification(o.resolution);
   }
 
-  /// Süresi dolan dilekçe — yumuşak otomatik ret + ufak moral dip.
-  void _expirePetition() {
-    final p = _pendingPetition;
-    setStateHere(() {
-      if (p != null) {
-        _petitionCooldowns[p.id] = _time + _kPetitionRepeatCooldown;
-      }
-      _pendingPetition   = null;
-      _petitionAuthor    = null;
-      _petitionModalOpen = false;
-      _petitionTimer     = _petitionInterval();
-      pushPolicyMorale(-0.03, 2.0);
-    });
-    _showNotification(
-        '📜 ${p?.petitioner ?? 'Köy'} cevap alamadı — hafif bir kırgınlık kaldı');
+  /// Bir kararın (dilekçe YA DA meclis oturumu) bildirimsel etkilerini uygular:
+  /// kaynak/moral/fx/zümre/hafıza/zincir + sahnede yaşanan tepki. Tek doğruluk —
+  /// hem [_resolvePetition] hem [_resolveCouncil] buraya akar. [author] fx ve
+  /// tepki için ilgili köylü (dilekçe sahibi ya da meclise çağrılan sözcü); bu
+  /// yüzden global `_petitionAuthor`'a değil, açıkça geçilen değere bağlıdır
+  /// (meclis ile bekleyen dilekçenin yazarı birbirine karışmasın).
+  void _applyDecisionEffects(Petition p, PetitionOption o, VillagerEntity? author) {
+    if (o.foodDelta != 0) {
+      _stockpile.food = (_stockpile.food + o.foodDelta).clamp(0, 1 << 30);
+    }
+    if (o.woodDelta != 0) {
+      _stockpile.wood = (_stockpile.wood + o.woodDelta).clamp(0, 1 << 30);
+    }
+    if (o.stoneDelta != 0) {
+      _stockpile.stone = (_stockpile.stone + o.stoneDelta).clamp(0, 1 << 30);
+    }
+    if (o.ironDelta != 0) {
+      _stockpile.iron = (_stockpile.iron + o.ironDelta).clamp(0, 1 << 30);
+    }
+    if (o.goldDelta != 0) {
+      _stockpile.gold = (_stockpile.gold + o.goldDelta).clamp(0, 1 << 30);
+    }
+    if (o.moraleAmount != 0 && o.moraleDays > 0) {
+      pushPolicyMorale(o.moraleAmount, o.moraleDays);
+    }
+    _applyPetitionFx(o.fx, author);
+    // Zümre dengesi: kararın morali oynatması + nüfuz kayması (köy kimliği).
+    _applyEstatePetition(p, o);
+    // Yazarın hanesi, talebine ilgi gösterilmesinden ("dinlendik") ufak bir
+    // memnuniyet duyar. Kararın YÖNÜ zaten _applyEstatePetition ile hane-
+    // yaslanmasına göre dağıtıldı; burası sadece "gündeme geldik" jesti.
+    if (author != null && author.surname.isNotEmpty) {
+      _houses.nudge(author.surname, moodDelta: 0.04, swayGain: 0.03);
+    }
+
+    // KALICI SONUÇ (Faz 3): büyük kararlar geçici nudge'la kalmaz — köy ruhunda
+    // sönmeyen bir iz (governanceLegacy) + köyün kalbinde fiziksel bir iz bırakır.
+    final legacy = _legacyOf(o.fx);
+    if (legacy != 0) {
+      _governanceLegacy = (_governanceLegacy + legacy).clamp(-0.12, 0.12);
+    }
+    _plantDecisionTrace(o.fx);
+
+    // Köy hafızası: kararın bıraktığı kalıcı bayraklar (zincir/dallanma okur).
+    _villageMemory.addAll(o.setsFlags);
+    _villageMemory.removeAll(o.clearsFlags);
+
+    // Zincir: seçenek bir takip dilekçesi tetikliyorsa kuyruğa al.
+    if (o.followUpId != null) {
+      _petitionFollowUps.add((
+        id: o.followUpId!,
+        fireAtSim: _time + o.followUpDelayDays * kGameDaySeconds,
+      ));
+    }
+
+    // Karar sahnede yaşansın: ilgili köylü tepkisini gösterir (zümresini
+    // sevindirdiysen şükran, küstürdüysen yüz çevirme).
+    _reactDecisionOutcome(author, o);
   }
 
-  /// Dilekçe efektini sahneye uygular — somut animasyon (sadece istatistik değil).
-  void _applyPetitionFx(PetitionFx fx) {
+  /// Bir kararın fx'inin köy ruhunda bıraktığı KALICI moral izi (Faz 3) —
+  /// milestone anlar sönmeyen bir tortu bırakır (geçici nudge'dan farkı bu).
+  /// Cozy: küçük değerler; toplam ±0.12 sınırı _applyDecisionEffects'te.
+  double _legacyOf(PetitionFx fx) => switch (fx) {
+        PetitionFx.feudPeace => 0.03,
+        PetitionFx.feudExile => -0.02,
+        PetitionFx.feudExecute => -0.04,
+        PetitionFx.weddingGrand => 0.02,
+        PetitionFx.wedding => 0.01,
+        PetitionFx.harvestBounty => 0.015,
+        PetitionFx.festival => 0.015,
+        PetitionFx.cult => 0.015,
+        PetitionFx.remembrance => 0.015,
+        PetitionFx.callingGranted => 0.01,
+        PetitionFx.vigil => -0.01,
+        PetitionFx.mourn => -0.03,
+        PetitionFx.cropBlight => -0.02,
+        PetitionFx.none => 0.0,
+      };
+
+  /// Ağır kararlar köyün kalbine kalıcı bir tematik iz diker (Faz 3) — "anı
+  /// bahçesi": köyün gidişatı fiziksel olarak birikir, ertesi gün köy AYNI
+  /// görünmez. Yalnız ağır anlar iz bırakır (sık şenlik/sade düğün değil).
+  /// Mevcut prosedürel dekoru tema-eşli, sıkı bir küme olarak kullanır.
+  void _plantDecisionTrace(PetitionFx fx) {
+    final kinds = _traceDecor(fx);
+    if (kinds == null) return;
+    final (cc, cr) = _villageCenter();
+    _scatterRewardDecor(cc, cr, 2, 2, kinds: kinds);
+  }
+
+  /// Karara göre fiziksel iz teması — null ise iz bırakmaz.
+  List<DecorKind>? _traceDecor(PetitionFx fx) => switch (fx) {
+        // Sulh → yaşamın dönüşü (yonca/papatya) + bir barış taşı.
+        PetitionFx.feudPeace =>
+          const [DecorKind.clover, DecorKind.daisy, DecorKind.pebble],
+        // Sürgün/idam → çıplak taş + kütük (soğuk, ağır iz).
+        PetitionFx.feudExile ||
+        PetitionFx.feudExecute =>
+          const [DecorKind.pebble, DecorKind.stump],
+        // İnanç ayini → lavanta + mantar (okült/kutsal).
+        PetitionFx.cult => const [DecorKind.lavender, DecorKind.mushroomRed],
+        // Bereket → altın çayır çiçekleri.
+        PetitionFx.harvestBounty =>
+          const [DecorKind.buttercup, DecorKind.poppy],
+        // Coşkulu düğün → çiçek demeti.
+        PetitionFx.weddingGrand =>
+          const [DecorKind.poppy, DecorKind.daisy, DecorKind.buttercup],
+        // Anma/matem → sessiz bir taş + lavanta (hatıra köşesi).
+        PetitionFx.remembrance ||
+        PetitionFx.vigil =>
+          const [DecorKind.pebble, DecorKind.lavender],
+        // Diğerleri fiziksel iz bırakmaz (çok sık ya da küçük anlar).
+        _ => null,
+      };
+
+  /// Mühlet doldu → ZORUNLU HUZUR: modal kendiliğinden tam-ekran açılır, sim
+  /// duraklar. Köy artık yanıt bekliyor; görmezden gelmek imkânsız. Bekletmenin
+  /// bedeli var (ilgili zümre küser + hafif moral dip + getiren köylü sabırsız),
+  /// ama otomatik ret YOK — karar yine oyuncunundur.
+  void _forceAudience() {
+    final p = _pendingPetition;
+    if (p == null) return;
+    AudioManager.instance.playSfx(Sfx.bellChime);
+    setStateHere(() {
+      _petitionForced    = true;
+      _petitionDeadline  = 0;
+      _petitionModalOpen = true;
+      // Bekletmenin bedeli: dilekçenin zümresi köşeye sıkıştırıldığını hisseder.
+      final e = p.estate;
+      // Bekletmenin bedeli: dilekçenin (zümresine yaslanan) haneleri köşeye
+      // sıkıştırıldığını hisseder — hane hâli düşer.
+      if (e != null) _nudgeHousesByEstate(e, moodDelta: -0.05);
+      pushPolicyMorale(-0.04, 2.0);
+      // Getiren köylü: sabrı taştı — sahnede sabırsız/buruk gövde dili.
+      final a = _petitionAuthor;
+      if (a != null && !a.isDying) {
+        a.feel(NpcEmotion.anger, 2.6, moodDelta: -0.04);
+        a.chatBubbleIcon = '⏳';
+        a.chatBubbleTime = 4.0;
+      }
+    });
+    _showNotification(
+        '📜 ${p.petitioner} daha fazla bekleyemez — köy yanıtını istiyor.');
+  }
+
+  /// Karar verilince ilgili köylünün (ve çevresinin) görünür tepkisi.
+  /// İşaret: kararın o köylünün zümresine net etkisi; yoksa köy moralinin yönü.
+  /// "Sonuç istatistik değil, sahnede yaşanan bir an" dersi. [author] dilekçe
+  /// sahibi ya da meclis sözcüsü (global state'e bağlı değil).
+  void _reactDecisionOutcome(VillagerEntity? author, PetitionOption o) {
+    final a = author;
+    if (a == null || a.isDying) return;
+    // Köylünün zümresine bu seçeneğin dokunuşu (estateMood listesinden).
+    final est = estateOfVillager(a.type, a.lifeStage);
+    double sentiment = 0;
+    for (final (e, d) in o.estateMood) {
+      if (e == est) sentiment += d;
+    }
+    // Zümre sinyali yoksa köy moralinin yönüne düş.
+    if (sentiment == 0) sentiment = o.moraleAmount;
+    if (sentiment > 0.01) {
+      a.feel(NpcEmotion.joy, 3.2, moodDelta: 0.12);
+      a.chatBubbleIcon = '🙏';
+      a.chatBubbleTime = 4.0;
+      _reactNearby(a.gridX, a.gridY, 3.5, NpcEmotion.joy, 2.4, moodDelta: 0.02);
+    } else if (sentiment < -0.01) {
+      a.feel(NpcEmotion.grief, 3.2, moodDelta: -0.10);
+      a.chatBubbleIcon = '💔';
+      a.chatBubbleTime = 4.0;
+      _reactNearby(a.gridX, a.gridY, 3.5, NpcEmotion.grief, 2.4, moodDelta: -0.02);
+    } else {
+      // Nötr karar — yine de duyulduğunu hisseder (hafif teselli).
+      a.feel(NpcEmotion.content, 2.4, moodDelta: 0.04);
+    }
+    final (cc, cr) = _villageCenter();
+    a.lookToward(cc.toDouble(), cr.toDouble());
+  }
+
+  /// Dilekçe/meclis efektini sahneye uygular — somut animasyon (sadece
+  /// istatistik değil). [author] sahibe bağlı fx'ler (çağrı/sulh) için gerekir.
+  void _applyPetitionFx(PetitionFx fx, VillagerEntity? author) {
     switch (fx) {
       case PetitionFx.none:
         break;
@@ -227,9 +508,19 @@ extension _ScenePetitions on _VillageSceneState {
       case PetitionFx.remembrance:
         _reactRemembrance();
       case PetitionFx.wedding:
-        _reactWedding();
+        _reactWedding(grand: false);
+      case PetitionFx.weddingGrand:
+        _reactWedding(grand: true);
       case PetitionFx.harvestBounty:
         _reactHarvestBounty();
+      case PetitionFx.callingGranted:
+        _grantCalling(author);
+      case PetitionFx.feudPeace:
+        _reconcileFeud(author);
+      case PetitionFx.feudExile:
+        _exileFeudCulprit();
+      case PetitionFx.feudExecute:
+        _executeFeudCulprit();
     }
   }
 
@@ -377,6 +668,7 @@ extension _ScenePetitions on _VillageSceneState {
   /// BESPOKE şenlik tepkisi: köy çapında flama/konfeti/fener fx'i + köylüleri
   /// ateş başına topla, birkaç çift dans ettir. Gerçek, görünür bir bayram.
   void _reactFestival() {
+    AudioManager.instance.playSfx(Sfx.crowdFair);
     final dur = kGameDaySeconds * 0.6; // şenlik neredeyse bir gün sürer
     final e = EventEffect(fx: EventFx.festival, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
@@ -418,57 +710,33 @@ extension _ScenePetitions on _VillageSceneState {
     }
   }
 
-  /// BESPOKE düğün: ateş başı dans + kalp/yaprak yağmuru fx. Birkaç çift dans
-  /// eder, gerisi ateşe toplanır (şenliğin sıcak, küçük kardeşi). Etki = SOSYAL
-  /// + moral (option'dan).
-  void _reactWedding() {
-    final dur = kGameDaySeconds * 0.5;
-    final e = EventEffect(fx: EventFx.wedding, duration: dur);
-    _activeFx.add(ActiveFx(e, dur));
-    _feelVillage(NpcEmotion.love, 14, 0.16);
-
-    final fire = _firepitBuilding;
-    if (fire == null) return;
-
-    final idle = _villagers
-        .where((v) =>
-            !v.isInsideBuilding &&
-            !v.isSleeping &&
-            v.hasProfession &&
-            !v.isCarrying &&
-            !v.sitClaimed &&
-            !v.isDying &&
-            v.activity == VillagerActivity.none)
-        .toList()
-      ..shuffle(_rng);
-
-    int danced = 0;
-    for (final v in idle) {
-      if (danced < 3 && _tryStartDanceFor(v)) {
-        v.socialCooldown = dur;
-        danced++;
-        continue;
-      }
-      final claim = _anchorSystem.claimNearestFirepitSit(
-          v.gridX, v.gridY, v,
-          maxDist: 999);
-      if (claim == null) continue;
-      final (point, slot) = claim;
-      final cx = point.building.col + point.building.cols / 2.0;
-      final cy = point.building.row + point.building.rows / 2.0;
-      v.assignSit(slot.col, slot.row, cx, cy, dur, () => point.release(slot, v));
-    }
-  }
+  // Düğün tepkisi (`_reactWedding`) + tüm kur/sahneleme yaşam döngüsü
+  // scene_wedding.dart'ta — gerçek çift bazlı, sinematikli sahnelenmiş olay.
 
   // ── UI build (main.dart Stack'inden çağrılır) ──────────────────────────────
 
-  /// Bekleyen dilekçe mührü — üst-orta, nabız atan tomar. Tıkla → modal.
+  /// Bekleyen dilekçe mührü — üst-orta, tükenen mühlet halkalı tomar. _frame'e
+  /// bağlı: kalan mühlet her karede akar, son %30'da "sıkışma" (kızarma+hız).
   Widget buildPetitionSeal() {
     return Positioned(
       top: 16,
       left: 0,
       right: 0,
-      child: Center(child: PetitionSeal(onTap: _openPetition)),
+      child: Center(
+        child: ListenableBuilder(
+          listenable: _frame,
+          builder: (context, _) {
+            final remain =
+                (_petitionDeadline / _kPetitionGrace).clamp(0.0, 1.0);
+            return PetitionSeal(
+              onTap: _openPetition,
+              progress: remain,
+              urgent: remain <= _kPetitionUrgentFrac,
+              tone: _pendingPetition?.tone ?? PetitionTone.neutral,
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -478,6 +746,8 @@ extension _ScenePetitions on _VillageSceneState {
       child: PetitionModal(
         petition: _pendingPetition!,
         author: _petitionAuthor,
+        // Mühlet doldu → zorunlu huzur: kapatılamaz, köy yanıt bekliyor.
+        forced: _petitionForced,
         state: (
           morale: _stats.morale,
           population: _villagers.length,

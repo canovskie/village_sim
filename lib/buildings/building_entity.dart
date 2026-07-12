@@ -50,6 +50,11 @@ class BuildingEntity {
   /// gider, köy çapı huzursuzluk). scene_fire yönetir.
   double fireFuel = 1.0;
 
+  /// Değirmen öğütme sayacı (saniye, yalnız mill). Balya teslim edilince
+  /// [kMillGrindSeconds] olur, scene_tick her tick azaltır; >0 iken değirmen
+  /// çalışıyor (isActive=duman + panel "Çalışıyor"). Geçici — kaydedilmez.
+  double grindPulse = 0.0;
+
   BuildingEntity({required this.type, required this.col, required this.row});
 
   int get cols => kBuildingMeta[type]!.cols;

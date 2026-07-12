@@ -357,6 +357,43 @@ class EventSystem {
         ),
       ],
     ),
+
+    // ─── POZİTİF / SÜRPRİZ (köye gelen iyilik — hepsi sahnelenir) ──────────────
+    // "Hepsi negatif" hissini kırar: köye bazen iyi şeyler de uğrar. Hepsi omen
+    // (sevinçli bekleyiş) + dünya-içi sahne (toplanma/müzik/dans/şölen) yaşar.
+    EventOutcome(
+      title: 'Gezgin Ozan', icon: '🎵',
+      message: 'Bir gezgin ozan köye uğradı — ezgileri herkesi neşelendirdi.',
+      category: EventCategory.positive,
+      moraleModifier: 0.12, duration: 40,
+      weight: 0.9,
+    ),
+    EventOutcome(
+      title: 'Gezgin Tüccar', icon: '🛒',
+      message: 'Bir kervan pazara uğradı — bereketli bir alışveriş oldu.',
+      category: EventCategory.positive,
+      goldDelta: 10, foodDelta: 4, moraleModifier: 0.05, duration: 30,
+      weight: 0.8,
+    ),
+    EventOutcome(
+      title: 'Bereketli Hasat', icon: '🌾',
+      message: 'Başaklar beklenmedik bir bollukla doldu — ambarlar şenlendi.',
+      category: EventCategory.positive,
+      foodDelta: 18, moraleModifier: 0.08, duration: 30,
+      weight: 0.7,
+      effect: EventEffect(
+        fx: EventFx.harvestBounty,
+        farmGrowthMul: 1.5,
+        duration: 30,
+      ),
+    ),
+    EventOutcome(
+      title: 'Zümre Barışı', icon: '🤝',
+      message: 'Zümreler arasındaki gerginlik yumuşadı — köy bir nefes aldı.',
+      category: EventCategory.positive,
+      moraleModifier: 0.10, duration: 40,
+      weight: 0.6,
+    ),
   ];
 
   /// Verilen bağlamda uygun olan olaylar arasından ağırlıklı rastgele seçim.
@@ -390,6 +427,13 @@ class EventSystem {
       case 'Hırsız':
         return ctx.stockpile.gold >= 22 ||
                ctx.hasBuilding(BuildingType.market);
+      // Pozitif olaylar — küçük köyde anlamsız olmasın diye nüfus kapısı.
+      case 'Gezgin Ozan':
+        return ctx.population >= 4;
+      case 'Gezgin Tüccar':
+        return ctx.population >= 5;
+      case 'Zümre Barışı':
+        return ctx.population >= 6;
       default:
         return true;
     }

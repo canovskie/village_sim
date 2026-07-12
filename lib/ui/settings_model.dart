@@ -8,12 +8,19 @@ class SettingsModel extends ChangeNotifier {
 
   double _musicVolume = 0.7;
   double _sfxVolume   = 0.8;
+  bool   _muted       = false;
   bool   _showFps     = false;
   bool   _shakeOnEvents = true;
   AppLanguage _language = AppLanguage.tr;
 
   double get musicVolume   => _musicVolume;
   double get sfxVolume     => _sfxVolume;
+  /// Sessiz modu — oyun içi hızlı kıs/aç. Slider değerlerini korur (aç =
+  /// eski seviyelere döner). Ses üreten her yer "effective" getter'ları okur.
+  bool   get muted         => _muted;
+  /// AudioManager bunları okur: sessizken 0, değilse slider değeri.
+  double get effectiveMusicVolume => _muted ? 0.0 : _musicVolume;
+  double get effectiveSfxVolume   => _muted ? 0.0 : _sfxVolume;
   bool   get showFps       => _showFps;
   bool   get shakeOnEvents => _shakeOnEvents;
   AppLanguage get language => _language;
@@ -31,6 +38,14 @@ class SettingsModel extends ChangeNotifier {
     _sfxVolume = c;
     notifyListeners();
   }
+
+  set muted(bool v) {
+    if (v == _muted) return;
+    _muted = v;
+    notifyListeners();
+  }
+
+  void toggleMute() => muted = !_muted;
 
   set showFps(bool v) {
     if (v == _showFps) return;
@@ -53,6 +68,7 @@ class SettingsModel extends ChangeNotifier {
   void resetToDefaults() {
     _musicVolume   = 0.7;
     _sfxVolume     = 0.8;
+    _muted         = false;
     _showFps       = false;
     _shakeOnEvents = true;
     _language      = AppLanguage.tr;

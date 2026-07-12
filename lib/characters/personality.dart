@@ -86,6 +86,94 @@ class Personality {
   }
 }
 
+/// Bir kişilikten doğan **çağrı** — köylünün içindeki meslek eğilimi. Sevdiği
+/// şey en güçlü tek ses, mizaç renklendirir; en yüksek skorlu meslek seçilir,
+/// beraberlik [seed] ile deterministik çözülür (aynı kişilik+seed → aynı çağrı).
+///
+/// Yalnızca **sivil** meslekleri döner (çiftçi/tüccar/demirci/muhafız/büyücü);
+/// madenci & balıkçı kendi bina-NPC'leridir, doğumla edinilmez. Bu, köyde
+/// doğan/göçen köylülerin meslek havuzuyla birebir uyumludur.
+VillagerType callingFor(Personality p, int seed) {
+  final score = <VillagerType, double>{
+    VillagerType.farmer: 0,
+    VillagerType.merchant: 0,
+    VillagerType.blacksmith: 0,
+    VillagerType.guard: 0,
+    VillagerType.mage: 0,
+  };
+  void add(VillagerType t, double w) => score[t] = score[t]! + w;
+
+  // Sevdiği şey — en güçlü tek işaret.
+  switch (p.likes) {
+    case Likes.harvest:
+      add(VillagerType.farmer, 3);
+    case Likes.animals:
+      add(VillagerType.farmer, 3);
+    case Likes.flowers:
+      add(VillagerType.farmer, 2);
+      add(VillagerType.mage, 0.5);
+    case Likes.fishing:
+      add(VillagerType.farmer, 1);
+      add(VillagerType.mage, 1);
+    case Likes.market:
+      add(VillagerType.merchant, 3);
+    case Likes.company:
+      add(VillagerType.merchant, 2);
+    case Likes.fire:
+      add(VillagerType.blacksmith, 3);
+    case Likes.stories:
+      add(VillagerType.mage, 2);
+      add(VillagerType.merchant, 1);
+    case Likes.solitude:
+      add(VillagerType.mage, 2);
+      add(VillagerType.blacksmith, 1);
+    case Likes.stars:
+      add(VillagerType.mage, 3);
+  }
+
+  // Mizaç — baskın olan 1.5×, ikincil 1.0× ağırlık.
+  for (int i = 0; i < p.traits.length; i++) {
+    final w = i == 0 ? 1.5 : 1.0;
+    switch (p.traits[i]) {
+      case Trait.brave:
+        add(VillagerType.guard, 3 * w);
+      case Trait.proud:
+        add(VillagerType.guard, 2 * w);
+        add(VillagerType.merchant, 1 * w);
+      case Trait.diligent:
+        add(VillagerType.blacksmith, 2 * w);
+        add(VillagerType.farmer, 1 * w);
+      case Trait.grumpy:
+        add(VillagerType.blacksmith, 2 * w);
+      case Trait.restless:
+        add(VillagerType.guard, 1 * w);
+        add(VillagerType.merchant, 1 * w);
+      case Trait.curious:
+        add(VillagerType.mage, 2 * w);
+      case Trait.dreamer:
+        add(VillagerType.mage, 2 * w);
+      case Trait.shy:
+        add(VillagerType.mage, 1 * w);
+        add(VillagerType.farmer, 1 * w);
+      case Trait.gentle:
+        add(VillagerType.farmer, 2 * w);
+      case Trait.cheerful:
+        add(VillagerType.merchant, 2 * w);
+    }
+  }
+
+  // En yüksek skor; beraberlikte seed ile deterministik seçim.
+  double best = -1;
+  for (final s in score.values) {
+    if (s > best) best = s;
+  }
+  final tied = [
+    for (final e in score.entries)
+      if (e.value >= best - 1e-9) e.key
+  ];
+  return tied[seed.abs() % tied.length];
+}
+
 /// Sevdiği şeye göre künye havuzu — sıcak, tek cümlelik. Seed havuzdan seçer.
 const Map<Likes, List<String>> _backstories = {
   Likes.fire: [

@@ -4,6 +4,28 @@ import '../characters/life_stage.dart' show kGameDaySeconds;
 
 enum AnimalKind { cow, sheep, chicken }
 
+/// Hayvan satın alma maliyeti (altın) — ahır/kümes BOŞ kurulur, oyuncu buradan
+/// hayvan edinir (bina ile gelmez). Tür değeri kabaca: tavuk ucuz, inek pahalı.
+const Map<AnimalKind, int> kAnimalGoldCost = {
+  AnimalKind.cow: 10,
+  AnimalKind.sheep: 6,
+  AnimalKind.chicken: 3,
+};
+
+/// Bina başına tür kapasitesi — satın alma + üreme bu tavanı aşamaz.
+const Map<AnimalKind, int> kAnimalBarnCap = {
+  AnimalKind.cow: 5,
+  AnimalKind.sheep: 5,
+  AnimalKind.chicken: 6,
+};
+
+/// Türün Türkçe adı (UI butonları).
+String animalKindLabel(AnimalKind k) => switch (k) {
+      AnimalKind.cow => 'İnek',
+      AnimalKind.sheep => 'Koyun',
+      AnimalKind.chicken => 'Tavuk',
+    };
+
 /// 4 yönlü facing — sprite-based hayvanlarda hangi sprite seti kullanılacak.
 /// Hareket yönüne göre güncellenir.
 enum AnimalFacing { n, e, s, w }
@@ -120,8 +142,10 @@ class AnimalEntity {
 
   // ── Yaşam evresi eşikleri (oyun günü) ────────────────────────────────────
   // Hayvanlar köylüden biraz daha kısa ömürlü → sürü yenilenmesi gözle görülür.
-  static const double kAnimalAdultDay = 1.5;   // yavru → yetişkin
-  static const double kAnimalElderDay = 9.0;   // yetişkin → yaşlı
+  static const double kAnimalAdultDay = 1.5;    // yavru → yetişkin
+  // Yaşlı eşiği geniş tutuldu: doğurganlık penceresi (yetişkin→yaşlı) sayaçtan
+  // belirgin uzun olsun ki hayvanlar yaşlanmadan rahatça yavrulasın.
+  static const double kAnimalElderDay = 16.0;   // yetişkin → yaşlı
 
   AnimalLifeStage get lifeStage => ageDays < kAnimalAdultDay
       ? AnimalLifeStage.juvenile
@@ -163,7 +187,8 @@ class AnimalEntity {
     // Üreme sayacı: yetişkin dişiler için aktif (yaşlıda dondurulur).
     if (!isMale && lifeStage == AnimalLifeStage.adult) {
       if (fertilityDays.isNaN) {
-        fertilityDays = 6.0 + rng.nextDouble() * 5.0;
+        // İlk gebelik sayacı — yetişkin penceresinden (1.5→16 gün) kısa olsun.
+        fertilityDays = 3.0 + rng.nextDouble() * 3.0;
       } else if (fertilityDays > 0) {
         fertilityDays -= dt / kGameDaySeconds;
       }

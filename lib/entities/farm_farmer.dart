@@ -71,7 +71,8 @@ class FarmFarmer extends WorkerEntity {
   void update(double dt, List<FarmTile> tiles, Random rng,
       {Set<(int, int)> waterTiles    = const {},
        Set<(int, int)> softObstacles = const {},
-       AnchorSystem? anchorSystem}) {
+       AnchorSystem? anchorSystem,
+       bool farmingActive            = true}) {
     harvestReady  = false;
     harvestHayPos = null;
 
@@ -80,6 +81,10 @@ class FarmFarmer extends WorkerEntity {
     switch (state) {
       case FarmerState.idle:
         _idleWander(dt, rng, waterTiles, softObstacles);
+
+        // Kış: tarla donmuş — çiftçi ne sular ne biçer, ateş başı dinlenir.
+        // (Hem diegetik kış molası hem de boş O(N) taramalardan kaçınma.)
+        if (!farmingActive) break;
 
         // Sulama turu: cooldown bitti, erişilebilir kuyu slot'u var ve
         // sulanacak (büyüyen) ekin var. Anchor sistemi en yakın BOŞ slot'u

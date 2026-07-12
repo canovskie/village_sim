@@ -50,7 +50,14 @@ class AssetStyle {
   ///
   /// Maliyet: yalnız uygulama açılırken bir kez (asset başına ~1-5 ms).
   /// `softness == 0` ise orijinal görüntü olduğu gibi döner.
-  static Future<ui.Image> softenAtLoad(ui.Image src) async {
+  /// [tileMode]: blur'un görüntü sınırı dışını nasıl örnekleyeceği.
+  /// - `decal` (varsayılan): dışarısı saydam → sprite kenarları yumuşakça
+  ///   saydama solar (silüetli karakter/bina için doğru).
+  /// - `clamp`: dışarısı kenar pikseliyle doldurulur → görüntü kenara kadar
+  ///   OPAK kalır.  Kenar kenara DÖŞENEN tile'lar (çim) için zorunlu; yoksa
+  ///   solan saydam kenarlar bitişik karelerde açık dikiş çizgisi yapar.
+  static Future<ui.Image> softenAtLoad(ui.Image src,
+      {TileMode tileMode = TileMode.decal}) async {
     if (softness <= 0) return src;
     final w = src.width;
     final h = src.height;
@@ -65,7 +72,7 @@ class AssetStyle {
       ..imageFilter = ui.ImageFilter.blur(
         sigmaX: softness,
         sigmaY: softness,
-        tileMode: TileMode.decal,
+        tileMode: tileMode,
       );
     canvas.saveLayer(rect, blurPaint);
     canvas.drawImage(src, Offset.zero, Paint());

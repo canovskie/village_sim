@@ -52,6 +52,8 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onPlayMusic;
   final VoidCallback onStartDance;
   final VoidCallback onStartChat;
+  final VoidCallback onStartConflict;
+  final VoidCallback onIgniteFeud;
   final VoidCallback onClearActivities;
   final VoidCallback onMeteorShower;
 
@@ -66,7 +68,15 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onClearPolicies;
   final VoidCallback onMakeSage;
   final VoidCallback onSpawnMigrant;
+  /// Test: İmparatorluk vergi heyetini anında sahneye çağır (refah/sayaç geçitlerini
+  /// atlar) — yaklaşan kolon + sinematik + pazarlığı beklemeden izle.
+  final VoidCallback onSummonImperial;
   final VoidCallback onForcePetition;
+  /// Test: dilekçeyi ambient getir + mühleti ~12s'e kıs (geri sayım/sıkışma/zorla
+  /// açılışı beklemeden izle).
+  final VoidCallback onForcePetitionShortFuse;
+  /// Test: zorunlu huzuru anında tetikle (mühlet doldu → modal açılır, sim durur).
+  final VoidCallback onForcePetitionAudience;
   /// Seçilebilir dilekçeler: (id, '🎉 Başlık') — DevPanel her biri için buton.
   final List<(String, String)> petitions;
   final void Function(String id) onForcePetitionId;
@@ -107,6 +117,8 @@ class DevPanel extends StatelessWidget {
     required this.onPlayMusic,
     required this.onStartDance,
     required this.onStartChat,
+    required this.onStartConflict,
+    required this.onIgniteFeud,
     required this.onClearActivities,
     required this.onMeteorShower,
     required this.onSeedShowcase,
@@ -119,7 +131,10 @@ class DevPanel extends StatelessWidget {
     required this.onClearPolicies,
     required this.onMakeSage,
     required this.onSpawnMigrant,
+    required this.onSummonImperial,
     required this.onForcePetition,
+    required this.onForcePetitionShortFuse,
+    required this.onForcePetitionAudience,
     required this.petitions,
     required this.onForcePetitionId,
     required this.perfMode,
@@ -160,7 +175,8 @@ class DevPanel extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const AppSectionLabel('GÖRSEL TEST (FULL GODMODE)'),
+                        // Hızlı kurulum — en sık kullanılan iki aksiyon her
+                        // zaman üstte, tek tık uzaklıkta.
                         _bigPrimaryBtn(
                           'Showcase Köyü',
                           'GodMode + tüm bina tipleri + tarla + ahır + 12 NPC + yaşlılar',
@@ -168,179 +184,151 @@ class DevPanel extends StatelessWidget {
                           onSeedShowcase,
                         ),
                         const SizedBox(height: 7),
-                        _wrapButtons([
-                          AppButton(
-                              label: godMode ? 'GodMode AÇIK' : 'GodMode',
-                              icon: GameIconData.bolt,
-                              kind: godMode
-                                  ? AppButtonKind.filled
-                                  : AppButtonKind.tonal,
-                              onTap: onToggleGod),
-                          AppButton(
-                              label: 'Şafak',
-                              icon: GameIconData.dawn,
-                              onTap: onSetDawn),
-                          AppButton(
-                              label: 'Öğle',
-                              icon: GameIconData.sun,
-                              onTap: onSetNoon),
-                          AppButton(
-                              label: 'Akşam',
-                              icon: GameIconData.dawn,
-                              onTap: onSetDusk),
-                          AppButton(
-                              label: 'Gece',
-                              icon: GameIconData.moon,
-                              onTap: onSetNight),
-                          AppButton(
-                              label: rainIntensity > 0.05
-                                  ? 'Yağmur KAPAT'
-                                  : 'Yağmur AÇ',
-                              icon: GameIconData.rain,
-                              kind: rainIntensity > 0.05
-                                  ? AppButtonKind.filled
-                                  : AppButtonKind.tonal,
-                              tint: AppUi.info,
-                              onTap: onToggleRain),
-                        ]),
-                        const SizedBox(height: 7),
-                        _wrapButtons([
-                          AppButton(
-                              label: 'Tüm Yasaları Aç',
-                              icon: GameIconData.scroll,
-                              onTap: onAllPolicies),
-                          AppButton(
-                              label: 'Yasaları Sıfırla',
-                              icon: GameIconData.scroll,
-                              onTap: onClearPolicies),
-                          AppButton(
-                              label: 'Bilge Yap',
-                              icon: GameIconData.star,
-                              onTap: onMakeSage),
-                          AppButton(
-                              label: 'Göçmen Çağır',
-                              icon: GameIconData.people,
-                              onTap: onSpawnMigrant),
-                          AppButton(
-                              label: 'Dilekçe Getir',
-                              icon: GameIconData.scroll,
-                              onTap: onForcePetition),
-                          AppButton(
-                              label: perfMode
-                                  ? 'Perf Modu AÇIK'
-                                  : 'Perf Modu',
-                              icon: GameIconData.speed,
-                              kind: perfMode
-                                  ? AppButtonKind.filled
-                                  : AppButtonKind.tonal,
-                              tint: AppUi.sage,
-                              onTap: onTogglePerf),
-                        ]),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('DİLEKÇE SEÇ (ANINDA GETİR)'),
-                        _wrapButtons([
-                          for (final p in petitions)
-                            AppButton(
-                                label: p.$2,
-                                kind: AppButtonKind.ghost,
-                                onTap: () => onForcePetitionId(p.$1)),
-                        ]),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('HIZLI KURULUM'),
                         _bigPrimaryBtn(
                           'Yaşayan Köy Kur',
                           'Yeni harita + binalar + tarla + 5 köylü + bol kaynak',
                           GameIconData.home,
                           onSeedLivingVillage,
                         ),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('OLAYLAR'),
-                        _eventsGrid(),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('KAYNAKLAR'),
-                        _resourcesGrid(),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('ZAMAN & HAVA'),
-                        _slider('Saat',
-                            '${(timeOfDay * 24).toStringAsFixed(1)} / 24',
-                            timeOfDay, onSetTimeOfDay),
-                        _slider('Yağmur',
-                            '${(rainIntensity * 100).round()}%',
-                            rainIntensity, onSetRain),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('KÖY'),
-                        _wrapButtons([
-                          AppButton(
-                              label: '+Köylü',
-                              icon: GameIconData.people,
-                              onTap: onSpawnVillager),
-                          AppButton(
-                              label: 'Rastgele Öldür',
-                              icon: GameIconData.flame,
-                              kind: AppButtonKind.danger,
-                              onTap: onKillRandomVillager),
-                          AppButton(
-                              label: 'Herkesi Uyandır',
-                              icon: GameIconData.sun,
-                              onTap: onWakeAll),
-                          AppButton(
-                              label: 'Yeni Harita',
-                              icon: GameIconData.map,
-                              onTap: onNewMap),
-                        ]),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('SOSYAL AKTİVİTELER'),
-                        _wrapButtons([
-                          AppButton(
-                              label: 'Müzik',
-                              icon: GameIconData.festival,
-                              onTap: onPlayMusic),
-                          AppButton(
-                              label: 'Dans',
-                              icon: GameIconData.festival,
-                              onTap: onStartDance),
-                          AppButton(
-                              label: 'Sohbet',
-                              icon: GameIconData.people,
-                              onTap: onStartChat),
-                          AppButton(
-                              label: 'Göktaşı Yağmuru',
-                              icon: GameIconData.star,
-                              tint: AppUi.info,
-                              onTap: onMeteorShower),
-                          AppButton(
-                              label: 'Temizle',
-                              icon: GameIconData.demolish,
-                              kind: AppButtonKind.ghost,
-                              onTap: onClearActivities),
-                        ]),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('OTOMATİK SENARYOLAR'),
-                        _scenarioControls(),
-                        if (lastReport != null) ...[
-                          const SizedBox(height: 9),
-                          _reportCard(lastReport!),
-                        ],
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('DENGE TESTİ (SİMÜLASYON)'),
-                        _simSpeedSlider(),
-                        const SizedBox(height: 9),
-                        _simHistoryChart(),
-                        const SizedBox(height: 7),
-                        AppButton(
-                            label: 'Geçmişi Temizle',
-                            icon: GameIconData.demolish,
-                            kind: AppButtonKind.ghost,
-                            onTap: onClearSimHistory),
-                        const SizedBox(height: 16),
-                        const AppSectionLabel('DİĞER'),
-                        _wrapButtons([
-                          AppButton(
-                              label: 'Efektleri Temizle',
-                              icon: GameIconData.demolish,
-                              kind: AppButtonKind.ghost,
-                              onTap: onClearEffects),
-                        ]),
+                        const SizedBox(height: 4),
+                        // Kalan her şey katlanabilir bölümlerde — panel uzun bir
+                        // liste değil, ihtiyaç oldukça açılan başlıklar.
+                        _CollapsibleSection(
+                          title: 'GODMODE & GÖRSEL',
+                          initiallyOpen: true,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _wrapButtons([
+                                AppButton(
+                                    label: godMode ? 'GodMode AÇIK' : 'GodMode',
+                                    icon: GameIconData.bolt,
+                                    kind: godMode
+                                        ? AppButtonKind.filled
+                                        : AppButtonKind.tonal,
+                                    onTap: onToggleGod),
+                                AppButton(label: 'Şafak', icon: GameIconData.dawn, onTap: onSetDawn),
+                                AppButton(label: 'Öğle', icon: GameIconData.sun, onTap: onSetNoon),
+                                AppButton(label: 'Akşam', icon: GameIconData.dawn, onTap: onSetDusk),
+                                AppButton(label: 'Gece', icon: GameIconData.moon, onTap: onSetNight),
+                                AppButton(
+                                    label: rainIntensity > 0.05
+                                        ? 'Yağmur KAPAT'
+                                        : 'Yağmur AÇ',
+                                    icon: GameIconData.rain,
+                                    kind: rainIntensity > 0.05
+                                        ? AppButtonKind.filled
+                                        : AppButtonKind.tonal,
+                                    tint: AppUi.info,
+                                    onTap: onToggleRain),
+                              ]),
+                              const SizedBox(height: 7),
+                              _wrapButtons([
+                                AppButton(label: 'Tüm Yasaları Aç', icon: GameIconData.scroll, onTap: onAllPolicies),
+                                AppButton(label: 'Yasaları Sıfırla', icon: GameIconData.scroll, onTap: onClearPolicies),
+                                AppButton(label: 'Bilge Yap', icon: GameIconData.star, onTap: onMakeSage),
+                                AppButton(label: 'Göçmen Çağır', icon: GameIconData.people, onTap: onSpawnMigrant),
+                                AppButton(label: '⚔️ İmparatorluk Çağır', icon: GameIconData.flame, kind: AppButtonKind.tonal, tint: AppUi.rust, onTap: onSummonImperial),
+                                AppButton(label: 'Dilekçe Getir', icon: GameIconData.scroll, onTap: onForcePetition),
+                                AppButton(label: 'Dilekçe: Kısa Mühlet', icon: GameIconData.scroll, kind: AppButtonKind.tonal, tint: AppUi.accent, onTap: onForcePetitionShortFuse),
+                                AppButton(label: 'Dilekçe: Mühlet Bitir', icon: GameIconData.scroll, kind: AppButtonKind.tonal, tint: AppUi.rust, onTap: onForcePetitionAudience),
+                                AppButton(
+                                    label: perfMode ? 'Perf Modu AÇIK' : 'Perf Modu',
+                                    icon: GameIconData.speed,
+                                    kind: perfMode
+                                        ? AppButtonKind.filled
+                                        : AppButtonKind.tonal,
+                                    tint: AppUi.sage,
+                                    onTap: onTogglePerf),
+                              ]),
+                            ],
+                          ),
+                        ),
+                        _CollapsibleSection(
+                          title: 'DİLEKÇE SEÇ (ANINDA GETİR)',
+                          child: _wrapButtons([
+                            for (final p in petitions)
+                              AppButton(
+                                  label: p.$2,
+                                  kind: AppButtonKind.ghost,
+                                  onTap: () => onForcePetitionId(p.$1)),
+                          ]),
+                        ),
+                        _CollapsibleSection(
+                          title: 'OLAYLAR',
+                          child: _eventsGrid(),
+                        ),
+                        _CollapsibleSection(
+                          title: 'KAYNAKLAR',
+                          child: _resourcesGrid(),
+                        ),
+                        _CollapsibleSection(
+                          title: 'ZAMAN & HAVA',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _slider('Saat',
+                                  '${(timeOfDay * 24).toStringAsFixed(1)} / 24',
+                                  timeOfDay, onSetTimeOfDay),
+                              _slider('Yağmur',
+                                  '${(rainIntensity * 100).round()}%',
+                                  rainIntensity, onSetRain),
+                            ],
+                          ),
+                        ),
+                        _CollapsibleSection(
+                          title: 'KÖY',
+                          child: _wrapButtons([
+                            AppButton(label: '+Köylü', icon: GameIconData.people, onTap: onSpawnVillager),
+                            AppButton(label: 'Rastgele Öldür', icon: GameIconData.flame, kind: AppButtonKind.danger, onTap: onKillRandomVillager),
+                            AppButton(label: 'Herkesi Uyandır', icon: GameIconData.sun, onTap: onWakeAll),
+                            AppButton(label: 'Yeni Harita', icon: GameIconData.map, onTap: onNewMap),
+                          ]),
+                        ),
+                        _CollapsibleSection(
+                          title: 'SOSYAL AKTİVİTELER',
+                          child: _wrapButtons([
+                            AppButton(label: 'Müzik', icon: GameIconData.festival, onTap: onPlayMusic),
+                            AppButton(label: 'Dans', icon: GameIconData.festival, onTap: onStartDance),
+                            AppButton(label: 'Sohbet', icon: GameIconData.people, onTap: onStartChat),
+                            AppButton(label: 'Kavga', icon: GameIconData.people, tint: AppUi.rust, onTap: onStartConflict),
+                            AppButton(label: 'Kan Davası', icon: GameIconData.people, tint: AppUi.rust, onTap: onIgniteFeud),
+                            AppButton(label: 'Göktaşı Yağmuru', icon: GameIconData.star, tint: AppUi.info, onTap: onMeteorShower),
+                            AppButton(label: 'Temizle', icon: GameIconData.demolish, kind: AppButtonKind.ghost, onTap: onClearActivities),
+                          ]),
+                        ),
+                        _CollapsibleSection(
+                          title: 'OTOMATİK SENARYOLAR',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _scenarioControls(),
+                              if (lastReport != null) ...[
+                                const SizedBox(height: 9),
+                                _reportCard(lastReport!),
+                              ],
+                            ],
+                          ),
+                        ),
+                        _CollapsibleSection(
+                          title: 'DENGE TESTİ (SİMÜLASYON)',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _simSpeedSlider(),
+                              const SizedBox(height: 9),
+                              _simHistoryChart(),
+                              const SizedBox(height: 7),
+                              AppButton(label: 'Geçmişi Temizle', icon: GameIconData.demolish, kind: AppButtonKind.ghost, onTap: onClearSimHistory),
+                            ],
+                          ),
+                        ),
+                        _CollapsibleSection(
+                          title: 'DİĞER',
+                          child: _wrapButtons([
+                            AppButton(label: 'Efektleri Temizle', icon: GameIconData.demolish, kind: AppButtonKind.ghost, onTap: onClearEffects),
+                          ]),
+                        ),
                       ],
                     ),
                   ),
@@ -858,6 +846,67 @@ class _BigBtnState extends State<_BigBtn> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Katlanabilir bölüm — başlığa dokununca içeriği açar/kapatır. Dev panel'i
+/// uzun bir kaydırma yerine ihtiyaç oldukça açılan başlık listesine çevirir.
+/// Kendi açık/kapalı state'ini tutar; panel her açıldığında [initiallyOpen]'a
+/// döner (öngörülebilir varsayılan).
+class _CollapsibleSection extends StatefulWidget {
+  final String title;
+  final Widget child;
+  final bool initiallyOpen;
+  const _CollapsibleSection({
+    required this.title,
+    required this.child,
+    this.initiallyOpen = false,
+  });
+  @override
+  State<_CollapsibleSection> createState() => _CollapsibleSectionState();
+}
+
+class _CollapsibleSectionState extends State<_CollapsibleSection> {
+  late bool _open = widget.initiallyOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            child: Row(
+              children: [
+                Text(widget.title, style: AppUi.label),
+                const SizedBox(width: 8),
+                Expanded(child: Container(height: 1, color: AppUi.line)),
+                const SizedBox(width: 6),
+                Icon(
+                  _open ? Icons.expand_less : Icons.expand_more,
+                  size: 18,
+                  color: AppUi.textLo,
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          firstChild: const SizedBox(width: double.infinity, height: 0),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: SizedBox(width: double.infinity, child: widget.child),
+          ),
+          crossFadeState:
+              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          duration: const Duration(milliseconds: 160),
+          sizeCurve: Curves.easeOut,
+        ),
+      ],
     );
   }
 }

@@ -1,3 +1,5 @@
+import '../world/season.dart';
+
 class FarmTile {
   final int col, row;
 
@@ -6,21 +8,28 @@ class FarmTile {
 
   bool beingHarvested = false;
 
-  /// Aşama başına büyüme süresi (saniye). 4 aşama × 10 sn = 40 sn/hasat.
-  /// Huzurlu tempo — ekin yavaş yeşerir, çiftçi koşturmaz. Saman yığınları
-  /// harmanda 6'lı dönüşür: 6 hasat = 1 balya = 6 yiyecek (hay_processor).
-  static const double growthTimePerStage = 10.0;
+  /// Aşama başına büyüme süresi (saniye). 4 aşama × 25 sn = 100 sn/hasat.
+  /// Bilinçli YAVAŞ tempo — eski 40 sn fazla hızlı yiyecek seli yapıyordu;
+  /// cozy hasat için 2.5× yavaşlatıldı (sulu 50 sn, yaz ~74 sn). Saman
+  /// yığınları harmanda 6'lı dönüşür: 6 hasat = 1 balya = 6 yiyecek
+  /// (hay_processor).
+  static const double growthTimePerStage = 25.0;
 
   FarmTile(this.col, this.row);
 
   bool get readyToHarvest => stage >= 4;
   bool get isGrowing      => stage < 4 && !beingHarvested;
 
-  void update(double dt) {
+  void update(double dt, Season season) {
     if (_waterBoostRemaining > 0) _waterBoostRemaining -= dt;
     if (!isGrowing) return;
-    final rate = _waterBoostRemaining > 0 ? 2.0 : 1.0;
-    growthProgress += dt * rate / growthTimePerStage;
+    // Kış: tarla donar, ekin uykuda — büyüme yok (sulama da boost vermez).
+    final seasonMult = season.growthMultiplier;
+    if (seasonMult <= 0) return;
+    final watered = _waterBoostRemaining > 0;
+    // Sulama 2x; susuz ekin yazın kuraklık cezası yer.
+    double rate = watered ? 2.0 : season.unwateredPenalty;
+    growthProgress += dt * rate * seasonMult / growthTimePerStage;
     if (growthProgress >= 1.0) {
       growthProgress = 0.0;
       stage = (stage + 1).clamp(0, 4);

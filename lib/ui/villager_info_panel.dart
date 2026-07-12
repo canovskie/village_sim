@@ -4,6 +4,7 @@ import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
 import '../rendering/portrait_renderer.dart';
+import '../systems/chronicle.dart';
 import 'app_ui.dart';
 
 /// Köylü kartı — modern koyu app_ui dilinde. Üstte portre + isim + meslek
@@ -20,6 +21,9 @@ class VillagerInfoPanel extends StatefulWidget {
   final VoidCallback? onToggleFollow;
   final VoidCallback? onToggleFavorite;
   final void Function(String)? onRename;
+  /// Kan davası otoritesi — yalnız feud üyesinde gösterilir (sürgün / idam).
+  final VoidCallback? onExile;
+  final VoidCallback? onExecute;
 
   const VillagerInfoPanel({
     super.key,
@@ -31,6 +35,8 @@ class VillagerInfoPanel extends StatefulWidget {
     this.onToggleFollow,
     this.onToggleFavorite,
     this.onRename,
+    this.onExile,
+    this.onExecute,
   });
 
   @override
@@ -116,6 +122,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                         icon: GameIconData.home),
                     ..._personalitySection(v),
                     ..._familyTree(v),
+                    ..._lifeStory(v),
                     const SizedBox(height: 14),
                     _actionRow(v),
                   ],
@@ -221,17 +228,33 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return GestureDetector(
       onTap: widget.onRename == null ? null : _startRename,
       behavior: HitTestBehavior.opaque,
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Flexible(
-            child: Text(v.name,
-                style: AppUi.title.copyWith(fontSize: 15),
-                overflow: TextOverflow.ellipsis),
+          Row(
+            children: [
+              Flexible(
+                child: Text(v.name,
+                    style: AppUi.title.copyWith(fontSize: 15),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              if (widget.onRename != null)
+                const Padding(
+                  padding: EdgeInsets.only(left: 6),
+                  child:
+                      GameIcon(GameIconData.gear, size: 10, color: AppUi.textLo),
+                ),
+            ],
           ),
-          if (widget.onRename != null)
-            const Padding(
-              padding: EdgeInsets.only(left: 6),
-              child: GameIcon(GameIconData.gear, size: 10, color: AppUi.textLo),
+          if (v.houseLabel.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text('⌂ ${v.houseLabel}',
+                  style: AppUi.title.copyWith(
+                      fontSize: 10,
+                      color: AppUi.textLo,
+                      fontWeight: FontWeight.w400),
+                  overflow: TextOverflow.ellipsis),
             ),
         ],
       ),
@@ -360,6 +383,10 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         return _emojiChip('Hikaye', AppUi.accentSoft, '📖');
       case VillagerActivity.listening:
         return _emojiChip('Dinliyor', AppUi.sage, '👂');
+      case VillagerActivity.arguing:
+        return _emojiChip('Tartışıyor', AppUi.rust, '💢');
+      case VillagerActivity.brawling:
+        return _emojiChip('Kavgada', AppUi.rust, '👊');
       case VillagerActivity.none:
         return null;
     }
@@ -534,6 +561,42 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           _likeChip('${p.likes.icon} sever: ${p.likes.label}'),
         ],
       ),
+      // Çağrı ipucu — henüz büyümekte olan köylüde mesleği belli değil ama
+      // içindeki eğilim kişiliğinden sezilir (yetişkinlikte gerçekleşir).
+      if (!v.callingFound) ...[
+        const SizedBox(height: 7),
+        Text(
+          '✨ içinde bir ${v.calling.displayName.toLowerCase()} eğilimi seziliyor',
+          style: AppUi.body.copyWith(
+            color: AppUi.accentSoft,
+            fontSize: 11,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ] else if (v.type != v.calling) ...[
+        // Çağrı kırgınlığı — mesleği içindeki çağrıya uymuyor (kalıcı huzursuzluk).
+        const SizedBox(height: 7),
+        Text(
+          '🌫️ gönlü bir ${v.calling.displayName.toLowerCase()} işinde',
+          style: AppUi.body.copyWith(
+            color: AppUi.rust,
+            fontSize: 11,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
+      // Kan davası — bu köylü bir vendetta'nın tarafı (kaç kan düşmanı var).
+      if (v.inFeud) ...[
+        const SizedBox(height: 7),
+        Text(
+          '🩸 kan davalı — ${v.bloodEnemies.length} kan düşmanı',
+          style: AppUi.bodyHi.copyWith(
+            color: AppUi.rust,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
       const SizedBox(height: 7),
       // Tek cümlelik künye — anlatısal renk.
       Text(
@@ -635,16 +698,110 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return GestureDetector(onTap: () => widget.onSelect!(v), child: chip);
   }
 
+  // ─── Yaşam öyküsü — kişisel zaman çizelgesi (bireye bağlanma) ──────────────
+
+  /// Köylünün kendi yaşam olayları: doğum/reşit oluş/evlilik/çocuk/kayıp…
+  /// Kronolojik (en eski üstte) — bir hayatın akışını okutur. Boşsa gizli.
+  List<Widget> _lifeStory(VillagerEntity v) {
+    if (v.life.isEmpty) return const [];
+    return [
+      const AppDivider(),
+      AppSectionLabel('YAŞAM ÖYKÜSÜ'),
+      const SizedBox(height: 6),
+      ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 132),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final e in v.life) _lifeRow(e),
+            ],
+          ),
+        ),
+      ),
+    ];
+  }
+
+  Widget _lifeRow(ChronicleEntry e) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(e.icon, style: const TextStyle(fontSize: 12)),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 30,
+            child: Text(e.day > 0 ? '${e.day}.g' : '',
+                style: AppUi.label.copyWith(color: AppUi.textLo, fontSize: 9.5)),
+          ),
+          Expanded(
+            child: Text(e.text,
+                style: e.milestone
+                    ? AppUi.body.copyWith(
+                        fontSize: 11,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
+                        color: AppUi.accentSoft)
+                    : AppUi.body.copyWith(
+                        fontSize: 11, height: 1.3, color: AppUi.textMid)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Aksiyon butonları — cozy etkileşim ────────────────────────────────────
 
   Widget _actionRow(VillagerEntity v) {
-    return AppButton(
+    final follow = AppButton(
       label: widget.isFollowed ? 'Takibi bırak' : 'Takip et',
       icon: GameIconData.people,
       tint: widget.isFollowed ? AppUi.rust : AppUi.info,
       kind: widget.isFollowed ? AppButtonKind.filled : AppButtonKind.tonal,
       expand: true,
       onTap: widget.onToggleFollow,
+    );
+    // Kan davası otoritesi — yalnız feud üyesinde: sürgün + idam (oyuna karışma).
+    if (!v.inFeud || (widget.onExile == null && widget.onExecute == null)) {
+      return follow;
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        follow,
+        const SizedBox(height: 10),
+        const AppDivider(),
+        AppSectionLabel('KAN DAVASI — YARGI'),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            if (widget.onExile != null)
+              Expanded(
+                child: AppButton(
+                  label: 'Sürgün',
+                  icon: GameIconData.people,
+                  tint: AppUi.accent,
+                  kind: AppButtonKind.tonal,
+                  onTap: widget.onExile,
+                ),
+              ),
+            if (widget.onExile != null && widget.onExecute != null)
+              const SizedBox(width: 10),
+            if (widget.onExecute != null)
+              Expanded(
+                child: AppButton(
+                  label: 'İdam',
+                  icon: GameIconData.demolish,
+                  tint: AppUi.rust,
+                  kind: AppButtonKind.filled,
+                  onTap: widget.onExecute,
+                ),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

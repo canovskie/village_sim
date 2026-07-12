@@ -9,6 +9,22 @@ class TreeEntity {
   bool isBeingChopped     = false;
   bool isFelled           = false;
 
+  /// isFelled olduktan sonra geçen süre — devrilme animasyonu (tabandan yana
+  /// dönerek yatar). scene_tick ilerletir; [kFallDuration] dolunca ağaç kalkar
+  /// (wild ise tile açılır). Renderer [fellProgress]'i okur.
+  double fellAge = 0.0;
+  static const double kFallDuration = 0.75;
+  /// −1 = ayakta; 0..1 = devriliyor.
+  double get fellProgress =>
+      isFelled ? (fellAge / kFallDuration).clamp(0.0, 1.0) : -1.0;
+
+  /// Vahşi sınır ağacı mı? Harita başta yoğun ormanla kaplıdır; köy küçük bir
+  /// açıklıkta başlar. Sınır halkasındaki ağaçlar [isWild]=true — kesilince o
+  /// tile "açılır" (yerleşilebilir kara olur) ve orman içeri doğru çekilir.
+  /// İç orman entity'siz kanopi olarak çizilir; yalnız sınır gerçek ağaç tutar.
+  /// Oduncu kulübesinin diktiği fidanlar [isWild]=false (sürdürülebilir koru).
+  bool isWild;
+
   double chopPhase = -1.0;
 
   // ── Fidan büyümesi ────────────────────────────────────────────────────────
@@ -23,6 +39,7 @@ class TreeEntity {
     required this.row,
     required this.type,
     bool isGrowing = false,
+    this.isWild = false,
   }) : _growthTimer = isGrowing ? 0.0 : kGrowDuration;
 
   bool   get isGrowing    => _growthTimer < kGrowDuration;

@@ -4,24 +4,90 @@ part of '../main.dart';
 /// uyku hedefi atama + spawn pozisyon temizleme + tek-tıkla canlı köy.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneBuildingSpawn on _VillageSceneState {
-  /// Başlangıç hayvanı — yetişkin ama yaşları çeşitli (hep birlikte
-  /// yaşlanıp aynı anda ölmesinler), ömrü randomize.
-  AnimalEntity _spawnAnimal(
-      AnimalKind kind, BuildOrder o, double col, double row, bool male) {
-    final age = AnimalEntity.kAnimalAdultDay +
-        _rng.nextDouble() *
-            (AnimalEntity.kAnimalElderDay - AnimalEntity.kAnimalAdultDay);
-    final lifespan = AnimalEntity.kAnimalElderDay + 5.0 + _rng.nextDouble() * 9.0;
-    return AnimalEntity(
-      kind: kind,
-      barnCol: o.col,
-      barnRow: o.row,
-      startCol: col,
-      startRow: row,
-      isMale: male,
-      ageDays: age,
-      lifespanDays: lifespan,
-    );
+  /// Ahır/kümes panelinden hayvan satın al — bina BOŞ kurulur, sürü buradan
+  /// kurulur. Altın harcar; kapasiteyi aşamaz. Cinsiyet akıllı: o binada erkek
+  /// yoksa erkek gelir (çift kurulup üreyebilsin), varsa dişi. Genç yetişkin
+  /// doğar (uzun üreme/ömür penceresi).
+  void _buyAnimal(BuildingEntity b, AnimalKind kind) {
+    final cap = kAnimalBarnCap[kind] ?? 5;
+    final living = _cows
+        .where((c) =>
+            !c.isDying &&
+            c.kind == kind &&
+            c.barnCol == b.col &&
+            c.barnRow == b.row)
+        .toList();
+    if (living.length >= cap) {
+      _showNotification('${animalKindLabel(kind)} için yer yok (dolu)');
+      return;
+    }
+    final cost = kAnimalGoldCost[kind] ?? 5;
+    if (_stockpile.gold < cost) {
+      _showNotification('Yetersiz altın — $cost★ gerek');
+      return;
+    }
+    final male = !living.any((c) => c.isMale); // erkek yoksa erkek getir
+    final (sx, sy) =
+        _nearestLand(b.col + b.cols / 2.0, b.row + b.rows.toDouble());
+    setStateHere(() {
+      _stockpile.gold -= cost;
+      _cows.add(AnimalEntity(
+        kind: kind,
+        barnCol: b.col,
+        barnRow: b.row,
+        startCol: sx + (_rng.nextDouble() - 0.5) * 0.6,
+        startRow: sy + (_rng.nextDouble() - 0.5) * 0.6,
+        isMale: male,
+        ageDays: AnimalEntity.kAnimalAdultDay + _rng.nextDouble() * 2.0,
+        lifespanDays:
+            AnimalEntity.kAnimalElderDay + 8.0 + _rng.nextDouble() * 12.0,
+      ));
+    });
+    if (kind == AnimalKind.cow) {
+      AudioManager.instance.playSfx(Sfx.cowMoo);
+    } else if (kind == AnimalKind.chicken) {
+      AudioManager.instance.playSfx(Sfx.chickenCluck);
+    }
+    _showNotification('${animalKindLabel(kind)} ağıla katıldı  (-$cost★)');
+  }
+
+  /// Bir kişilik tohumunun çağrısı (içindeki meslek eğilimi). Doğan/göçen
+  /// köylülerin mesleği bununla belirlenir — rastgele değil, kişilikten doğar.
+  VillagerType _callingForSeed(int seed) =>
+      callingFor(Personality.fromSeed(seed, VillagerType.farmer), seed);
+
+  /// İstenen mesleğe çağrısı olan bir kişilik tohumu bul — kurucuların
+  /// kişiliği mesleğiyle uyumlu olsun diye (demirci ateş sever, muhafız cesur…).
+  /// Bulamazsa rastgele tohum döner (deterministik kalır).
+  int _seedForCalling(VillagerType want) {
+    for (int i = 0; i < 240; i++) {
+      final s = _rng.nextInt(0x7FFFFFFF);
+      if (_callingForSeed(s) == want) return s;
+    }
+    return _rng.nextInt(0x7FFFFFFF);
+  }
+
+  /// Köyün en eksik sivil mesleği (yetişkinler arasında en az temsil edilen) —
+  /// "zanaat yönlendirmesi" politikası gencin yönünü buraya çeker. Belirgin bir
+  /// eksiklik yoksa (hepsi dengeli) null döner → çağrı/çıraklık devreye girer.
+  VillagerType? _scarcestTrade() {
+    const civilian = [
+      VillagerType.farmer,
+      VillagerType.merchant,
+      VillagerType.blacksmith,
+      VillagerType.guard,
+      VillagerType.mage,
+    ];
+    final count = {for (final t in civilian) t: 0};
+    for (final v in _villagers) {
+      if (v.isDying || !v.hasProfession) continue;
+      if (count.containsKey(v.type)) count[v.type] = count[v.type]! + 1;
+    }
+    final lo = count.values.reduce(min);
+    final hi = count.values.reduce(max);
+    if (lo == hi) return null; // denge var — yönlendirilecek belirgin eksik yok
+    final scarce = [for (final e in count.entries) if (e.value == lo) e.key];
+    return scarce[_rng.nextInt(scarce.length)];
   }
 
   void _spawnStartingNPCs(BuildingEntity firepit) {
@@ -35,6 +101,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       VillagerType.guard,
       VillagerType.mage,
     ];
+    // Kurucu haneler FARKLI olsun — aynı soyad iki bağımsız kurucuya düşmesin.
+    final founderSurnames = pickDistinctSurnames(_rng, types.length);
     for (int i = 0; i < types.length; i++) {
       final angle = i * (2 * pi / types.length);
       final dist = 1.2 + _rng.nextDouble() * 0.6;
@@ -42,17 +110,23 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       final founderAge =
           kAdultStartDay + _rng.nextDouble() * (kElderStartDay - kAdultStartDay + 5);
       final male = _rng.nextBool();
-      _villagers.add(
-        VillagerEntity(
-          type: types[i],
-          name: randomVillagerName(_rng, male: male),
-          male: male,
-          startCol: cx + cos(angle) * dist,
-          startRow: cy + sin(angle) * dist,
-          ageDays: founderAge,
-          lifespanDays: _rollLifespan(),
-        ),
+      final founder = VillagerEntity(
+        type: types[i],
+        name: randomVillagerName(_rng, male: male),
+        surname: founderSurnames[i],
+        male: male,
+        // Kurucu kişiliği mesleğiyle uyumlu — çağrı sistemiyle tutarlı köy.
+        personalitySeed: _seedForCalling(types[i]),
+        startCol: cx + cos(angle) * dist,
+        startRow: cy + sin(angle) * dist,
+        ageDays: founderAge,
+        lifespanDays: _rollLifespan(),
       );
+      _villagers.add(founder);
+      // Yaşam öyküsü — köyün kuruluş kuşağı (evre geçiş taramasına da kalibre).
+      _lifeEvent(founder, 'Köyün kurucularından oldu', icon: '🔥',
+          milestone: true);
+      founder.lastStageSeen = founder.lifeStage;
     }
 
     // 2 inşaatçı
@@ -110,14 +184,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       }
     }
 
-    const civilianTypes = [
-      VillagerType.farmer,
-      VillagerType.merchant,
-      VillagerType.blacksmith,
-      VillagerType.guard,
-      VillagerType.mage,
-    ];
-    final type = civilianTypes[_rng.nextInt(civilianTypes.length)];
+    // Meslek = içindeki çağrı; ama zanaat yönlendirmesi açıksa köyün eksik
+    // mesleğine yöneltilebilir (çağrısı tutmazsa kırgınlık).
+    final pseed = _rng.nextInt(0x7FFFFFFF);
+    final scarce = _policies.tradeGuidance ? _scarcestTrade() : null;
+    final type = (scarce != null && _rng.nextInt(3) != 0)
+        ? scarce
+        : _callingForSeed(pseed);
     final (sx, sy) = _nearestLand(
       townhall.col + townhall.cols / 2.0,
       townhall.row + townhall.rows.toDouble(),
@@ -126,7 +199,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final v = VillagerEntity(
       type: type,
       name: randomVillagerName(_rng, male: male),
+      surname: randomVillagerSurname(_rng),
       male: male,
+      personalitySeed: pseed,
       startCol: sx,
       startRow: sy,
       lifespanDays: _rollLifespan(),
@@ -149,6 +224,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         ? '👶 ${v.name} doğdu!'
         : '👶 ${v.parents.map((p) => p.name).join(' & ')} ailesine ${v.name} katıldı';
     _showNotification(msg);
+    _lifeEvent(v, 'Köye katıldı', icon: '🚶');
+    v.lastStageSeen = v.lifeStage;
   }
 
   /// Doğal doğum — anne+baba'dan bebek üretir, parents ref'leri kurulur,
@@ -158,19 +235,22 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final home = mother.homeBuilding as BuildingEntity?;
     if (home == null) return;
 
-    const civilianTypes = [
-      VillagerType.farmer,
-      VillagerType.merchant,
-      VillagerType.blacksmith,
-      VillagerType.guard,
-      VillagerType.mage,
-    ];
-    // Çıraklık politikası: bebek 2/3 ihtimal anne/baba mesleğini öğrenir,
-    // 1/3 ihtimal soy kırılır (rastgele meslek). Tam mirasilik soy zinciri
-    // çeşitliliğini öldürür — bedel hafif tutuldu.
-    final type = (_policies.apprenticeship && _rng.nextInt(3) != 0)
-        ? (_rng.nextBool() ? mother.type : father.type)
-        : civilianTypes[_rng.nextInt(civilianTypes.length)];
+    // Kişilik tohumu önce: bebeğin içindeki çağrı (meslek eğilimi) bundan doğar.
+    final pseed = _rng.nextInt(0x7FFFFFFF);
+    final calling = _callingForSeed(pseed);
+    // Meslek önceliği: (1) Zanaat yönlendirmesi köyün eksik mesleğine çeker,
+    // (2) Çıraklık ana-baba zanaatına çeker, (3) yoksa kendi çağrısı. İlk ikisi
+    // çağrıyla çatışırsa kırgınlık doğurur (Faz 2). Her biri 2/3 olasılıkla
+    // baskın — soy/yönlendirme tam tekel kurmasın, çağrıya hep bir pencere kalsın.
+    final scarce = _policies.tradeGuidance ? _scarcestTrade() : null;
+    final VillagerType type;
+    if (scarce != null && _rng.nextInt(3) != 0) {
+      type = scarce;
+    } else if (_policies.apprenticeship && _rng.nextInt(3) != 0) {
+      type = _rng.nextBool() ? mother.type : father.type;
+    } else {
+      type = calling;
+    }
     final male = _rng.nextBool();
     final (sx, sy) = _nearestLand(
       home.col + home.cols / 2.0,
@@ -179,7 +259,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final baby = VillagerEntity(
       type: type,
       name: randomVillagerName(_rng, male: male),
+      // Hane mirası: baba tarafının hanesi (yoksa anne) → "her soy bir hane".
+      surname: father.surname.isNotEmpty ? father.surname : mother.surname,
       male: male,
+      personalitySeed: pseed,
       startCol: sx,
       startRow: sy,
       lifespanDays: _rollLifespan(),
@@ -191,6 +274,14 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     father.children.add(baby);
     mother.birthCount++;
     father.birthCount++;
+    // KAN DAVASI mirası: bebek ebeveynlerinin kan düşmanlarını devralır;
+    // düşmanlar da yeni doğanı düşman belleğine ekler → vendetta nesil atlar.
+    final inherited = {...mother.bloodEnemies, ...father.bloodEnemies};
+    for (final e in inherited) {
+      if (e.isDying) continue;
+      baby.bloodEnemies.add(e);
+      e.bloodEnemies.add(baby);
+    }
     _villagers.add(baby);
 
     // Doğum sevinci — gövde dili: anne/baba kutlar, komşular dönüp bakar.
@@ -208,6 +299,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
 
     _showNotification(
         '👶 ${mother.name} & ${father.name} ailesine ${baby.name} doğdu!');
+    _award('first_birth', 'Köyün ilk bebeği dünyaya geldi', '👶');
+    // Yaşam öyküsü — bebeğin doğumu + ebeveynlerin yeni çocuğu.
+    _lifeEvent(baby, 'Dünyaya geldi', icon: '👶', milestone: true);
+    _lifeEvent(mother, '${baby.name} adında bir çocuğu oldu', icon: '👶');
+    _lifeEvent(father, '${baby.name} adında bir çocuğu oldu', icon: '👶');
+    baby.lastStageSeen = baby.lifeStage; // child — spurious geçiş olayını önle
   }
 
   /// Misafirperverlik politikasıyla periyodik tetiklenir: bir gezgin
@@ -246,21 +343,18 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     }
     final (lx, ly) = _nearestLand(sx, sy);
 
-    const civilianTypes = [
-      VillagerType.farmer,
-      VillagerType.merchant,
-      VillagerType.blacksmith,
-      VillagerType.guard,
-      VillagerType.mage,
-    ];
-    final type = civilianTypes[_rng.nextInt(civilianTypes.length)];
+    // Meslek = içindeki çağrı (kişilik tohumundan).
+    final pseed = _rng.nextInt(0x7FFFFFFF);
+    final type = _callingForSeed(pseed);
     final male = _rng.nextBool();
     // Yetişkin başlasın — bebek değil, hayatta tecrübeli (göç anlamlı olsun).
     final ageDays = 20.0 + _rng.nextDouble() * 30.0;
     final migrant = VillagerEntity(
       type: type,
       name: randomVillagerName(_rng, male: male),
+      surname: randomVillagerSurname(_rng),
       male: male,
+      personalitySeed: pseed,
       startCol: lx,
       startRow: ly,
       lifespanDays: _rollLifespan(),
@@ -315,19 +409,33 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         _hasFire = true;
         _firepitBuilding = building;
         _spawnStartingNPCs(building);
-        _showNotification('Ateş yakıldı! Köy kurulmaya başlıyor...');
+        // Açılış akışı: ateş yeri seçildi → kısa "ateş yakma" sinematiği.
+        if (_firstFirePending) {
+          _firstFirePending = false;
+          _playCutscene(kFireLightingCutscene);
+        } else {
+          _showNotification('Ateş yakıldı! Köy kurulmaya başlıyor...');
+        }
 
+      case BuildingType.tent:
       case BuildingType.woodenHouse:
+      case BuildingType.stoneHouseBlue:
+      case BuildingType.stoneHouseGreen:
+      case BuildingType.manor:
+        // Yeni barınak — evsizleri kapasitesi kadar içine al. Çadır 1, ev 2,
+        // taş konut 3, konak 4 (housingCapacity).
+        final cap = building.fn?.housingCapacity ?? 0;
         int assigned = 0;
         for (final v in _villagers) {
-          if (assigned >= 2) break;
+          if (assigned >= cap) break;
           if (v.homeBuilding == null) {
             v.homeBuilding = building;
             assigned++;
           }
         }
         if (assigned > 0) {
-          _showNotification('$assigned köylü eve taşındı.');
+          final where = o.type == BuildingType.tent ? 'çadıra' : 'eve';
+          _showNotification('$assigned köylü $where yerleşti.');
         }
 
       case BuildingType.lumberCamp:
@@ -360,37 +468,11 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         );
 
       case BuildingType.barn:
-        // Ağıl tamamlanınca bir çoban + 3 inek + 2 koyun spawn et.
-        // Footprint dışı slotlara — yığılma yok, bina blok'unda spawn yok.
+        // Ağıl BOŞ kurulur — yalnızca çoban gelir; inek/koyun bina ile gelmez.
+        // Oyuncu hayvanları bina panelinden satın alır ([_buyAnimal]).
         _shepherds.add(
           ShepherdEntity(barnCol: o.col, barnRow: o.row),
         );
-        // Cinsiyet: çift bazlı üreme için başlangıçta hem dişi hem erkek olsun.
-        const cowOffsets = [
-          (-0.6, 2.4),
-          ( 1.5, 2.9),
-          ( 3.6, 1.6),
-        ];
-        const cowMales = [false, true, false]; // 2 dişi + 1 boğa
-        for (var i = 0; i < cowOffsets.length; i++) {
-          final (dc, dr) = cowOffsets[i];
-          final jx = (_rng.nextDouble() - 0.5) * 0.4;
-          final jy = (_rng.nextDouble() - 0.5) * 0.4;
-          _cows.add(_spawnAnimal(AnimalKind.cow, o,
-              o.col + dc + jx, o.row + dr + jy, cowMales[i]));
-        }
-        const sheepOffsets = [
-          ( 0.4, 3.2),
-          ( 2.6, 2.6),
-        ];
-        const sheepMales = [false, true]; // 1 koyun + 1 koç
-        for (var i = 0; i < sheepOffsets.length; i++) {
-          final (dc, dr) = sheepOffsets[i];
-          final jx = (_rng.nextDouble() - 0.5) * 0.4;
-          final jy = (_rng.nextDouble() - 0.5) * 0.4;
-          _cows.add(_spawnAnimal(AnimalKind.sheep, o,
-              o.col + dc + jx, o.row + dr + jy, sheepMales[i]));
-        }
 
       case BuildingType.floristCottage:
         _spawnFlowerGardenDecor(o);
@@ -405,22 +487,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         ));
 
       case BuildingType.chickenCoop:
-        // Tavuk kümesi: 3-4 tavuk spawn et, footprint güney/yan kenarına.
-        // Yumurta üretimi main update loop'unda timer'la — kümes pasif food.
-        const chickenOffsets = [
-          (0.4, 2.3),
-          (1.6, 2.5),
-          (2.5, 1.4),
-          (-0.4, 1.5),
-        ];
-        const chickenMales = [false, true, false, false]; // 1 horoz
-        for (var i = 0; i < chickenOffsets.length; i++) {
-          final (dc, dr) = chickenOffsets[i];
-          final jx = (_rng.nextDouble() - 0.5) * 0.3;
-          final jy = (_rng.nextDouble() - 0.5) * 0.3;
-          _cows.add(_spawnAnimal(AnimalKind.chicken, o,
-              o.col + dc + jx, o.row + dr + jy, chickenMales[i]));
-        }
+        // Kümes BOŞ kurulur — tavuklar bina ile gelmez; oyuncu panelden satın
+        // alır ([_buyAnimal]). Yumurta görünür entity + çatlama (scene_tick).
+        break;
 
       default:
         break;

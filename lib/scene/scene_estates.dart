@@ -15,22 +15,86 @@ extension _SceneEstates on _VillageSceneState {
   /// köyde o oranda ağırlık kazanır (köy o yöne kayar). Küstürmek nüfuz almaz.
   static const double _kSwayFromMood = 1.0;
 
+  // ── Kimlik mekanik bonusu ──────────────────────────────────────────────────
+  // Baskın zümre (köy kimliği) yalnızca dekor değil, SOMUT bir avantaj getirir.
+  // Cozy: hepsi pozitif, küçük ama hissedilir; köyü bir yöne adamanın ödülü.
+  //   🌾 Bereketli Köy  → tarlalar daha gürbüz büyür      (_fxFarmMul'a katılır)
+  //   🔨 Zanaat Kasabası → her balyadan daha çok ürün çıkar (bale verimi)
+  //   🏡 Köklü Yuva      → tutumlu sofra, daha az tüketim   (mouths çarpanı)
+  //   🕯️ Kutsal Köy     → köye sinen huzur, moral tabanı yükselir
+
+  /// Tarla büyüme bonusu — Bereketli Köy ise tarlalar %15 hızlı olgunlaşır.
+  double get _identityFarmMul =>
+      _identityEstate == Estate.laborers ? 1.15 : 1.0;
+
+  /// Balya→ürün verim bonusu — Zanaat Kasabası ise her balya %15 fazla verir.
+  double get _identityYieldMul =>
+      _identityEstate == Estate.artisans ? 1.15 : 1.0;
+
+  /// Yiyecek tüketim çarpanı — Köklü Yuva ise köy %15 daha tutumlu (0.85).
+  double get _identityFoodMul =>
+      _identityEstate == Estate.hearth ? 0.85 : 1.0;
+
+  /// Bireysel moral hedefine eklenen kutsama — Kutsal Köy ise herkese huzur.
+  double get _identityMoraleBonus =>
+      _identityEstate == Estate.faithful ? 0.06 : 0.0;
+
+
+  /// Mevsim dönümü — köyde diegetik bir an + Emekçi zümre tepkisi. Tarım
+  /// Emekçilerin sesi olduğundan mevsim onların moralini/nüfuzunu oynatır:
+  /// sonbahar bereketi yükseltir, kış kıtlığı huzursuz eder.
+  void _onSeasonTurn(Season to) {
+    switch (to) {
+      case Season.spring:
+        _showNotification('🌱 İlkbahar geldi — tarlalar uyanıyor, ekim vakti.');
+        _chronicle('İlkbahar: tarlalar yeniden yeşeriyor.', icon: '🌱');
+        _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.04, swayGain: 0.02);
+
+      case Season.summer:
+        _showNotification('☀️ Yaz bastırdı — ekinler susadı, kuyular hayati.');
+        _chronicle('Yaz: güneş yükseldi, sulama olmadan ekin kavrulur.',
+            icon: '☀️');
+
+      case Season.autumn:
+        _showNotification('🍂 Sonbahar — hasat bereketi başladı, ambarlar dolacak!');
+        _chronicle('Sonbahar: bereketli hasat mevsimi.', icon: '🍂');
+        // Emekçilerin mevsimi — moral + nüfuz yükselir, köy kısa süre sevinir.
+        _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.06, swayGain: 0.06);
+        pushPolicyMorale(0.04, 2.0);
+
+      case Season.winter:
+        // Kış kıtlık sınavı — ambar zayıfsa Emekçiler huzursuz, doluysa huzurlu.
+        final mouths = _villagers.length + _farmers.length;
+        final lean = _stockpile.food < mouths * 3;
+        if (lean) {
+          _showNotification('❄️ Kış bastırdı — tarlalar dondu, ambar dar.');
+          _chronicle('Kış: tarlalar dondu, kışlık erzak kaygısı.', icon: '❄️');
+          _nudgeHousesByEstate(Estate.laborers, moodDelta: -0.05);
+        } else {
+          _showNotification('❄️ Kış bastırdı — tarlalar dondu ama ambar dolu.');
+          _chronicle('Kış: tarlalar uykuda, ambar dolu, köy huzurlu.',
+              icon: '❄️');
+          _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.02);
+        }
+    }
+  }
+
   void _tickEstates(double dt) {
     // Önce bireysel moralleri güncelle → zümrelere üye-morali beslensin.
     _tickVillagerMorale(dt);
-    // Moral tabana (artık üye moraline) süzülür — kararlar günlerce yankılanır.
-    _estates.tick(dt, kGameDaySeconds);
+    // Hane moralleri üye moraline süzülür — kararlar günlerce yankılanır.
+    _houses.tick(dt, kGameDaySeconds);
 
     // ── Sürü sağlığı → Emekçi zümre morali ──────────────────────────────────
     // Doğum sevinç verir, ölüm hüzünlendirir (chill: küçük dokunuşlar). Ayrıca
     // sürü açsa moral yavaşça düşer — bakımsız ahır Emekçileri huzursuz eder.
     if (_animalBirthsPending > 0) {
-      _estates.nudge(Estate.laborers,
+      _nudgeHousesByEstate(Estate.laborers,
           moodDelta: 0.02 * _animalBirthsPending);
       _animalBirthsPending = 0;
     }
     if (_animalDeathsPending > 0) {
-      _estates.nudge(Estate.laborers,
+      _nudgeHousesByEstate(Estate.laborers,
           moodDelta: -0.015 * _animalDeathsPending);
       _animalDeathsPending = 0;
     }
@@ -42,83 +106,99 @@ extension _SceneEstates on _VillageSceneState {
       final avgHunger = hungrySum / _cows.length;
       // avgHunger 0..1; tok sürü hafif +, aç sürü hafif − (günlük tempoda).
       final delta = (0.25 - avgHunger) * 0.04 * (dt / kGameDaySeconds);
-      _estates.nudge(Estate.laborers, moodDelta: delta);
+      _nudgeHousesByEstate(Estate.laborers, moodDelta: delta);
     }
 
-    // Kimlik kayması — baskın zümre değiştiyse köy görünür biçimde dönüşür.
-    final asc = _estates.ascendant;
-    if (asc != _identityEstate) {
-      final prev = _identityEstate;
-      _identityEstate = asc;
-      if (asc != null) _transformVillageIdentity(asc, prev);
+    // Kimlik kayması — baskın HANE değişince köy görünür bir ana kayar (köy
+    // artık bir hanenin gölgesinde). Kimlik = prestij + köyün kısa sevinci +
+    // artık SOMUT mekanik bonus (baskın hanenin baskın hizbinden türer).
+    final asc = _houses.pollAscendantChange();
+    if (asc.changed) {
+      _updateVillageIdentity(); // bonus anında yeni kimliğe geçsin
+      if (asc.current != null) {
+        _showNotification('👑 Köy bir haneye kayıyor: ${asc.current} Hanesi.');
+        _chronicle('Köy ${asc.current} Hanesi\'nin gölgesine kaydı.',
+            icon: '👑');
+        pushPolicyMorale(0.05, 2.0); // köyün kısa sevinci
+      } else {
+        _showNotification('⚖️ Köyün baskın hanesi çözüldü — denge geri döndü.');
+        _chronicle('Köy dengeye döndü — baskın hane çözüldü.', icon: '⚖️');
+      }
     }
 
     // Diegetik: en küskün zümrenin bir üyesi ara sıra somurtsun (gövde dili).
     _estateMoodScan += dt;
     if (_estateMoodScan < _kAggrievedScan) return;
     _estateMoodScan = 0;
+    _updateVillageIdentity(); // hane bileşimi zamanla kayabilir → tazele
     _showAggrievedPosture();
   }
 
-  /// Köy yeni bir kimliğe kaydı — görünür dönüşüm: kutlama + köy sevinci +
-  /// kimliğe özel kalıcı dekor + köy hafızasına bayrak (ileride kimliğe özel
-  /// dilekçeler/fermanlar bunu okuyabilir). Cozy: yalnızca pozitif, geri
-  /// dönüşte ceza yok. [prev] önceki kimlik (ilk kez kayıyorsa null).
-  void _transformVillageIdentity(Estate e, Estate? prev) {
-    // Hafıza: tek aktif kimlik bayrağı tut (eskiyi sil, yeniyi yaz).
-    _villageMemory.removeWhere((f) => f.startsWith('identity.'));
-    _villageMemory.add('identity.${e.name}');
-
-    // Kimliğe özel kalıcı dekor — köy gözle görülür bir karaktere bürünür.
-    final (cc, cr) = _villageCenter();
-    _scatterRewardDecor(cc, cr, 6, 10, kinds: _identityDecor(e));
-
-    // Görünür kutlama + köy çapında sevinç (gövde dili).
-    _activeFx.add(ActiveFx(
-        const EventEffect(fx: EventFx.festival, duration: 16), 16));
-    _feelVillage(NpcEmotion.joy, 10, 0.12);
-
-    _showNotification(prev == null
-        ? '${e.icon} Köyün bir ruhu oldu — artık bir "${e.identity}".'
-        : '${e.icon} Köy yön değiştirdi — şimdi bir "${e.identity}".');
+  /// Köy kimliğini ([_identityEstate]) baskın hanenin baskın hizbinden türetir →
+  /// kimlik mekanik bonusları (_identityFarmMul / _identityYieldMul /
+  /// _identityFoodMul / _identityMoraleBonus) bu hizbe göre devreye girer. Baskın
+  /// hane yoksa null (nötr — "Dengeli Köy"). Zümre→Hane geçişinde kopan "son tel":
+  /// önceden hiç atanmadığından bonuslar kalıcı nötrdü; artık canlı.
+  void _updateVillageIdentity() {
+    final asc = _houses.ascendant;
+    _identityEstate = asc == null ? null : _dominantEstateOfHouse(asc);
   }
 
-  /// Kimliğe özgü dekor paleti — köyün karakterini görselleştirir.
-  List<DecorKind> _identityDecor(Estate e) => switch (e) {
-        // Bereketli Köy — altın kır çiçekleri, yonca: bolluk hissi.
-        Estate.laborers => const [
-            DecorKind.buttercup, DecorKind.daisy, DecorKind.clover,
-          ],
-        // Zanaat Kasabası — taş, kütük, çalı: işlenmiş/yapısal doku.
-        Estate.artisans => const [
-            DecorKind.pebble, DecorKind.stump, DecorKind.bushSmall,
-          ],
-        // Kutsal Köy — lavanta, kızıl mantar, gelincik: gizemli/ayinsel.
-        Estate.faithful => const [
-            DecorKind.lavender, DecorKind.mushroomRed, DecorKind.poppy,
-          ],
-        // Köklü Yuva — çalı, papatya, yonca, devrik kütük: sıcak/evcil.
-        Estate.hearth => const [
-            DecorKind.bushSmall, DecorKind.daisy, DecorKind.clover,
-            DecorKind.fallenLog,
-          ],
-      };
 
-  /// Bir dilekçe kararının zümre etkilerini uygular — moral oynar, sevindirilen
-  /// zümre kalıcı nüfuz kazanır. `_resolvePetition`'ın setStateHere'i içinden
-  /// çağrılır (doğrudan mutate).
+  /// Zümre-etiketli bir olay/karar etkisini HANELERE dağıtır: her hane,
+  /// üyelerinin o mesleğe (zümreye) yaslandığı oranda etkilenir. `Estate` artık
+  /// yalnız meslek-sınıflandırması; politik birim HANE. Nadir çağrılır (olaylar)
+  /// → her villager taraması ucuz.
+  void _nudgeHousesByEstate(Estate e,
+      {double moodDelta = 0, double swayGain = 0}) {
+    if (moodDelta == 0 && swayGain == 0) return;
+    final lean = <String, int>{};
+    final total = <String, int>{};
+    for (final v in _villagers) {
+      if (v.isDying || v.surname.isEmpty) continue;
+      total[v.surname] = (total[v.surname] ?? 0) + 1;
+      if (estateOfVillager(v.type, v.lifeStage) == e) {
+        lean[v.surname] = (lean[v.surname] ?? 0) + 1;
+      }
+    }
+    for (final entry in total.entries) {
+      final frac = (lean[entry.key] ?? 0) / entry.value;
+      if (frac <= 0) continue;
+      _houses.nudge(entry.key,
+          moodDelta: moodDelta * frac, swayGain: swayGain * frac);
+    }
+  }
+
+  /// Bir hanenin baskın meslek-zümresi (üye çoğunluğu) — estate-etiketli
+  /// grievance dilekçelerini "hangi hane küskün"e göre ateşlemek için köprü.
+  Estate? _dominantEstateOfHouse(String surname) {
+    final tally = <Estate, int>{};
+    for (final v in _villagers) {
+      if (v.isDying || v.surname != surname) continue;
+      final e = estateOfVillager(v.type, v.lifeStage);
+      tally[e] = (tally[e] ?? 0) + 1;
+    }
+    Estate? best;
+    var bestN = 0;
+    for (final entry in tally.entries) {
+      if (entry.value > bestN) {
+        bestN = entry.value;
+        best = entry.key;
+      }
+    }
+    return best;
+  }
+
+  /// Bir dilekçe kararının POLİTİK etkisi — option'ın authored zümre etkileri
+  /// artık HANELERE (üye-yaslanma oranıyla) dağıtılır. Gündeme gelmek de ilgili
+  /// hanelere ufak nüfuz kazandırır.
   void _applyEstatePetition(Petition p, PetitionOption o) {
     for (final (e, delta) in o.estateMood) {
-      _estates.nudge(
-        e,
-        moodDelta: delta,
-        swayGain: delta > 0 ? delta * _kSwayFromMood : 0,
-      );
+      _nudgeHousesByEstate(e,
+          moodDelta: delta, swayGain: delta > 0 ? delta * _kSwayFromMood : 0);
     }
-    // Etiketli zümre, talebine ilgi gösterilmesinden ufak bir nüfuz da kazanır
-    // (kararın yönünden bağımsız: köyün gündemine girmek nüfuzdur).
     final pe = p.estate;
-    if (pe != null) _estates.nudge(pe, swayGain: 0.05);
+    if (pe != null) _nudgeHousesByEstate(pe, swayGain: 0.05);
   }
 
   // ── Bireysel moral döngüsü ─────────────────────────────────────────────────
@@ -140,40 +220,105 @@ extension _SceneEstates on _VillageSceneState {
     final coldNight = _cycle.dayLight < 0.28 && !_hasFire;
     final elderPolicy = _policies.eldersExemptFromFood || _policies.peacefulEnd;
 
+    // Kültür mahallesi amenitesi: köyde kaç FARKLI kültür binası var
+    // (kütüphane/hamam/okul/anıt/şadırvan) — çeşitlilik morali besler.
+    const cultureTypes = {
+      BuildingType.library,
+      BuildingType.bathhouse,
+      BuildingType.monument,
+      BuildingType.fountain,
+      BuildingType.shrine,
+      BuildingType.belltower,
+    };
+    final cultureAmenities = cultureTypes
+        .where((t) => _buildings.any((b) => b.type == t))
+        .length;
+
     // Hedefe süzme (tau ~0.5 oyun günü) — moral kalıcı, ani zıplamaz.
     final lerp = (dt / (0.5 * kGameDaySeconds)).clamp(0.0, 0.25);
 
-    final estSum = <Estate, double>{};
-    final estCnt = <Estate, int>{};
+    // Haneler: soyad → moral toplamı + üye sayısı (hane mood'unu besler).
+    final houseSum = <String, double>{};
+    final houseCnt = <String, int>{};
     double sum = 0;
+
+    // Servet birikimi bu tick'te kaç günlük ilerledi (frame-bağımsız).
+    final dayFrac = dt / kGameDaySeconds;
 
     for (final v in _villagers) {
       if (v.isDying) {
         sum += v.morale;
         continue;
       }
-      final est = estateOfVillager(v.type, v.lifeStage);
+      final homeType = v.homeBuilding == null
+          ? null
+          : (v.homeBuilding as BuildingEntity).type;
+      final homeless = homeType == null;
+      // Çadırda yaşıyor: evi var ama derme çatma → hafif hoşnutsuzluk.
+      final poorHousing = homeType == BuildingType.tent;
+      // Taş konut: Köy Evi'nden konforlu → hafif moral bonusu.
+      final comfortHousing = homeType == BuildingType.stoneHouseBlue ||
+          homeType == BuildingType.stoneHouseGreen;
+      // Konak: en lüks yuva → güçlü moral bonusu.
+      final luxuryHousing = homeType == BuildingType.manor;
+
+      // ── Servet: çalışan yetişkinler mesleklerine göre kazanır ──────────────
+      // Moral üretkenliği, ev kademesi refahı çarpar; küçük yaşam gideri servete
+      // bir asimptot koyar (sınırsız büyümez). Mesleksiz/çocuk kazanmaz; gider
+      // yine de işlediğinden servetleri zamanla erir.
+      if (dayFrac > 0) {
+        if (v.hasProfession) {
+          final moraleFactor = 0.6 + v.morale * 0.8; // 0.6..1.4
+          final houseMul = luxuryHousing
+              ? 1.5
+              : comfortHousing
+                  ? 1.2
+                  : poorHousing
+                      ? 0.85
+                      : homeless
+                          ? 0.7
+                          : 1.0;
+          v.wealth += v.type.wealthDailyIncome * moraleFactor * houseMul * dayFrac;
+        }
+        // Yaşam gideri — servetin %5'i/gün geri erir (asimptot + mesleksiz düşüş).
+        v.wealth -= v.wealth * 0.05 * dayFrac;
+        if (v.wealth < 0) v.wealth = 0;
+      }
+
       final ev = evaluateVillagerMorale(
-        homeless: v.homeBuilding == null,
+        homeless: homeless,
+        poorHousing: poorHousing,
+        comfortHousing: comfortHousing,
+        luxuryHousing: luxuryHousing,
         starving: starving,
         lowWater: lowWater,
         cold: coldNight && !v.isSleeping,
-        estateMood: _estates.moodOf(est),
+        houseMood: _houses.moodOf(v.surname),
         elderRespected: elderPolicy && v.lifeStage == LifeStage.elder,
+        // Çağrısını bulmuş ama mesleği ona uymuyor → kalıcı kırgınlık.
+        callingMismatch: v.callingFound && v.type != v.calling,
+        // Bir kan davasının tarafı → sürekli gerilim.
+        feudMember: v.inFeud,
+        // Kavgada akut yaralı → ağrı/iş göremezlik.
+        injured: v.injuryDays > 0,
+        // Meydan/kültür mahallesi binaları → "yaşanası köy" morali.
+        cultureAmenities: cultureAmenities,
       );
-      v.morale = (v.morale + (ev.target - v.morale) * lerp).clamp(0.0, 1.0);
+      // Kimlik bonusu: Kutsal Köy ise herkesin moral hedefi biraz yükselir.
+      final target = (ev.target + _identityMoraleBonus).clamp(0.0, 1.0);
+      v.morale = (v.morale + (target - v.morale) * lerp).clamp(0.0, 1.0);
       v.moraleReason = ev.reason;
       sum += v.morale;
-      estSum[est] = (estSum[est] ?? 0) + v.morale;
-      estCnt[est] = (estCnt[est] ?? 0) + 1;
+      if (v.surname.isNotEmpty) {
+        houseSum[v.surname] = (houseSum[v.surname] ?? 0) + v.morale;
+        houseCnt[v.surname] = (houseCnt[v.surname] ?? 0) + 1;
+      }
     }
     _avgIndividualMorale = sum / _villagers.length;
 
-    // Zümrelere üye morali bildir → zümre mood'u oraya gravite eder.
-    for (final e in Estate.values) {
-      final c = estCnt[e] ?? 0;
-      if (c > 0) _estates.setMemberMorale(e, estSum[e]! / c);
-    }
+    // Haneleri besle: soyadlardan üye sayısı + ortalama moral (tick'te
+    // hane mood'u buna gravite eder). Tükenmiş haneleri budar.
+    _houses.rebuild(houseCnt, houseSum);
 
     // Göç: uzun süre perişan kalan köylü köyü terk eder. Son birkaç köylü
     // korunur; godMode/showcase'te kapalı. Tek seferde bir kişi.
@@ -187,10 +332,10 @@ extension _SceneEstates on _VillageSceneState {
     }
   }
 
-  /// Kronik mutsuz köylü köyü terk eder — diegetik kayıp (bildirim + zümre yası).
+  /// Kronik mutsuz köylü köyü terk eder — diegetik kayıp (bildirim + hane yası).
   void _emigrateVillager(VillagerEntity v) {
     _showNotification('${v.name} köyü terk etti — uzun süre mutsuzdu');
-    _estates.nudge(estateOfVillager(v.type, v.lifeStage), moodDelta: -0.06);
+    if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.06);
     _removeVillager(v);
   }
 
@@ -199,6 +344,16 @@ extension _SceneEstates on _VillageSceneState {
   /// köyün en mutsuzu. Tam determinist olmasın diye en düşük moralli birkaç
   /// aday arasından seçilir. Yazar asla boş kalmaz.
   VillagerEntity? _pickPetitionAuthor(Petition p) {
+    // Meslek değiştirme dilekçesi belirli bir köylüye aittir: kırgın olan.
+    if (p.id == 'professionCalling') {
+      final r = _resentfulVillager();
+      if (r != null) return r;
+    }
+    // Sulh dilekçesi: kan davasının yaşayan bir tarafı konuşur.
+    if (p.id == 'feudReconcile') {
+      final f = _feudMember();
+      if (f != null) return f;
+    }
     final alive = _villagers.where((v) => !v.isDying).toList();
     if (alive.isEmpty) return null;
     var pool = alive;
@@ -233,11 +388,11 @@ extension _SceneEstates on _VillageSceneState {
     v.feel(emo, 2.4);
   }
 
-  /// En küskün zümrenin bir üyesini somurtmaya başlatır (gövde dili). Cozy:
-  /// moral'i düşürmez (moodDelta 0), sadece köyde GÖRÜNÜR bir hoşnutsuzluk.
+  /// En küskün HANENİN bir üyesini somurtmaya başlatır (gövde dili). Cozy:
+  /// moral'i düşürmez, sadece köyde GÖRÜNÜR bir hoşnutsuzluk.
   void _showAggrievedPosture() {
-    final e = _estates.mostAggrieved;
-    if (e == null) return;
+    final s = _houses.mostAggrieved;
+    if (s == null) return;
     final cands = _villagers
         .where((v) =>
             !v.isSleeping &&
@@ -247,12 +402,12 @@ extension _SceneEstates on _VillageSceneState {
             v.hasProfession &&
             v.activity == VillagerActivity.none &&
             v.emotion == NpcEmotion.none &&
-            estateOfVillager(v.type, v.lifeStage) == e)
+            v.surname == s)
         .toList();
     if (cands.isEmpty) return;
     final v = cands[_rng.nextInt(cands.length)];
     // Küskünlük derecesi morale bağlı — çok düşükse öfke, değilse buruk hüzün.
-    final emo = _estates.moodOf(e) < 0.22 ? NpcEmotion.anger : NpcEmotion.grief;
+    final emo = _houses.moodOf(s) < 0.22 ? NpcEmotion.anger : NpcEmotion.grief;
     v.feel(emo, 2.0 + _rng.nextDouble() * 1.5);
   }
 
@@ -264,10 +419,10 @@ extension _SceneEstates on _VillageSceneState {
       {required bool enacting}) {
     for (final (e, delta) in effects) {
       if (enacting) {
-        _estates.nudge(e,
+        _nudgeHousesByEstate(e,
             moodDelta: delta, swayGain: delta > 0 ? delta * _kSwayFromMood : 0);
       } else {
-        _estates.nudge(e, moodDelta: -delta);
+        _nudgeHousesByEstate(e, moodDelta: -delta);
       }
     }
   }
@@ -280,6 +435,12 @@ extension _SceneEstates on _VillageSceneState {
     return const [];
   }
 
-  /// Belediye paneli için zümre özeti (salt-okunur snapshot).
-  List<EstateSnapshot> _estateSnapshot() => _estates.snapshot();
+  /// Bir zümrenin doğal rakibi (#9 zümreler arası baskı). Emek↔Zanaat ekonomi
+  /// ekseninde, İnanç↔Ocak ruh/gelenek ekseninde çekişir.
+  Estate _estateRival(Estate e) => switch (e) {
+        Estate.laborers => Estate.artisans,
+        Estate.artisans => Estate.laborers,
+        Estate.faithful => Estate.hearth,
+        Estate.hearth => Estate.faithful,
+      };
 }

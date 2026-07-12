@@ -14,15 +14,23 @@ class MoraleEval {
   const MoraleEval(this.target, this.reason);
 }
 
-/// [estateMood] köylünün zümresinin morali (0..1, ~0.55 nötr).
+/// [houseMood] köylünün HANESİNİN morali (0..1, ~0.55 nötr) — hanesine nasıl
+/// davrandığın üyelerinin moraline geri döner.
 /// [elderRespected] yaşlı + "huzur/saygı" politikası aktif.
 MoraleEval evaluateVillagerMorale({
   required bool homeless,
   required bool starving,
   required bool lowWater,
   required bool cold, // gece + ateş/ısı yok
-  required double estateMood,
+  required double houseMood,
   required bool elderRespected,
+  bool callingMismatch = false, // mesleği içindeki çağrıya uymuyor (kırgınlık)
+  bool feudMember = false, // bir kan davasının içinde (sürekli tehdit/gerilim)
+  bool injured = false, // kavgada yaralı (akut ağrı/iş göremezlik)
+  bool poorHousing = false, // evi var ama çadır gibi derme çatma (düşük konfor)
+  bool comfortHousing = false, // taş konut: Köy Evi'nden konforlu (hafif moral+)
+  bool luxuryHousing = false, // konak: en lüks yuva (güçlü moral+)
+  int cultureAmenities = 0, // köydeki farklı kültür binası sayısı (kütüphane/hamam/okul/anıt/şadırvan)
 }) {
   const base = 0.62;
   double t = base;
@@ -32,6 +40,17 @@ MoraleEval evaluateVillagerMorale({
   if (homeless) {
     t -= 0.30;
     neg.add((0.30, 'evsiz'));
+  } else if (poorHousing) {
+    // Çadır vb. derme çatma barınak: evsizlik kadar ağır değil ama gerçek
+    // bir evin huzurunu da vermez. Köylü "bir çatı altında" ama hoşnutsuz.
+    t -= 0.10;
+    neg.add((0.10, 'çadırda'));
+  } else if (luxuryHousing) {
+    // Konak: lüks bir yuvada yaşamanın huzuru — belirgin moral bonusu.
+    t += 0.12;
+  } else if (comfortHousing) {
+    // Taş konut: Köy Evi'nden konforlu — ölçülü moral bonusu.
+    t += 0.06;
   }
   if (starving) {
     t -= 0.26;
@@ -45,13 +64,36 @@ MoraleEval evaluateVillagerMorale({
     t -= 0.14;
     neg.add((0.14, 'susuz'));
   }
+  // Çağrı kırgınlığı: çağrısına rağmen başka mesleğe çekilen köylü, temel
+  // ihtiyaçları karşılansa bile sürekli hafif huzursuzdur (gönlü başka işte).
+  if (callingMismatch) {
+    t -= 0.10;
+    neg.add((0.10, 'gönlü başka işte'));
+  }
+  // Kan davası: sürekli husumet/tehdit altında yaşamak ağır basar.
+  if (feudMember) {
+    t -= 0.16;
+    neg.add((0.16, 'kan davası'));
+  }
+  // Yaralı: ağrı + iş göremezlik morali düşürür (iyileşince geçer).
+  if (injured) {
+    t -= 0.14;
+    neg.add((0.14, 'yaralı'));
+  }
 
-  // Zümre durumu: memnun zümre üyesini kaldırır, küskün zümre çeker (±~0.18).
-  final estateShift = (estateMood - 0.55) * 0.42;
-  t += estateShift;
+  // Hane durumu: memnun hane üyesini kaldırır, küskün hane çeker (±~0.18).
+  final houseShift = (houseMood - 0.55) * 0.42;
+  t += houseShift;
 
   // Yaşlıya saygı politikası.
   if (elderRespected) t += 0.08;
+
+  // Kültür amenitesi: meydan/kültür mahallesi binaları (kütüphane/hamam/okul/
+  // anıt/şadırvan) köylüyü hafifçe mutlu eder — her farklı bina +0.02, tavan
+  // +0.08. Köy "yaşanası" hissi; tek bina küçük, çeşitlilik ödüllü.
+  if (cultureAmenities > 0) {
+    t += (cultureAmenities * 0.02).clamp(0.0, 0.08);
+  }
 
   t = t.clamp(0.0, 1.0);
 
@@ -60,8 +102,10 @@ MoraleEval evaluateVillagerMorale({
   if (neg.isNotEmpty) {
     neg.sort((a, b) => b.$1.compareTo(a.$1));
     reason = neg.first.$2;
-  } else if (estateShift < -0.05) {
-    reason = 'zümresi küskün';
+  } else if (houseShift < -0.05) {
+    reason = 'hanesi küskün';
+  } else if (luxuryHousing && t >= 0.7) {
+    reason = 'konağında huzurlu';
   } else if (t >= 0.75) {
     reason = 'huzurlu';
   } else if (t >= 0.5) {
