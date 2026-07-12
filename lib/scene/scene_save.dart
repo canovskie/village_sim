@@ -267,8 +267,6 @@ extension _SceneSave on _VillageSceneState {
       'farmTiles': [for (final t in _farmTiles) _farmTileToJson(t)],
       'farmers': [for (final f in _farmers) _workerBaseToJson(f)],
       'trees': [for (final t in _trees) _treeToJson(t)],
-      // Açılmış kara — vahşi orman/sınır türetildiği tek kaynak (scene_land).
-      'cleared': [for (final (c, r) in _cleared) [c, r]],
       'woodcutters': [for (final w in _woodcutters) _workerBaseToJson(w)],
       'lumberCamps': [for (final c in _lumberCamps) _lumberCampToJson(c)],
       'mineNodes': [for (final n in _mineNodes) _mineNodeToJson(n)],
@@ -801,14 +799,8 @@ extension _SceneSave on _VillageSceneState {
     for (final raw in (w['mineNodes'] as List? ?? const [])) {
       _mineNodes.add(_mineNodeFromJson(Map<String, dynamic>.from(raw as Map)));
     }
-    // Açılmış kara → vahşi orman/sınır türet (trees + mineNodes yüklendikten
-    // SONRA). Eski kayıtta 'cleared' yoksa boş kalır; _initLand çağrılmaz, bu
-    // yüzden eski kayıtlar tüm haritayı açık (wilderness boş) görür — sorunsuz.
-    for (final raw in (w['cleared'] as List? ?? const [])) {
-      final p = raw as List;
-      _cleared.add((_i(p[0]), _i(p[1])));
-    }
-    if (_cleared.isNotEmpty) _rebuildLandDerived();
+    // Reveal artık KAMERA KISITI (zoom) — arazi örtüsü yok. Eski kayıtlardaki
+    // 'cleared' alanı yok sayılır; land setleri boş kalır (scene_land).
     for (final raw in (w['lotuses'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
       _lotuses.add(LotusEntity(

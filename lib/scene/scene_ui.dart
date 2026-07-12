@@ -118,8 +118,6 @@ extension _SceneUi on _VillageSceneState {
                       cleared: _cleared,
                       wilderness: _wilderness,
                       wildTreeTiles: _wildTreeTiles,
-                      forestDepth: _forestDepth,
-                      revealAnim: _revealAnim,
                       forestVersion: _forestVersion,
                       leafBursts: _leafBursts,
                       woodcutters: _woodcutters,

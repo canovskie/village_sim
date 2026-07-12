@@ -445,24 +445,14 @@ class _VillageSceneState extends State<VillageScene>
   // tek engel. Açıklığa komşu "ön hat" halkasında gerçek kesilebilir ağaçlar
   // (TreeEntity.isWild) durur; derin orman entity'siz kanopidir. Oduncular ön
   // hattı yer → devrilen ağacın tile'ı açılır, orman içeri bir halka çekilir.
-  final Set<(int, int)> _cleared       = {}; // açılmış yerleşilebilir kara
-  final Set<(int, int)> _wilderness    = {}; // tüm orman: engel + placement gate
-  final Set<(int, int)> _wildTreeTiles = {}; // ön hat: gerçek kesilebilir ağaç tile'ları
-  // Otonom açılım: köy açık karayı doldurdukça ön-hat ağaçları kendiliğinden
-  // işaretlenir (oduncular keser) → orman geri çekilir. Emek & zaman, no-fail.
-  double _landExpandTimer = 0.0;             // değerlendirme throttle'ı
-  int _forestVersion = 0;                    // sis (reveal) versiyon tokeni
-  // Sis derinliği: açık (revealed) kenardan her açılmamış tile'a BFS mesafesi
-  // (1 = kenar). Sabah-sisi render'ı kenarı buradan feather'lar (kenar seyrek →
-  // iç dolu). _rebuildForestDepth ile reveal değişince tazelenir.
-  final Map<(int, int), int> _forestDepth = {};
-  // Reveal dissolve animasyonu: yeni açılan tile'ların sisi anında kaybolmaz;
-  // burada tile→kalan-süre tutulur, sis ~_kRevealDissolve sn içinde eriyip
-  // yukarı savrulur. scene_land._updateLandExpansion her frame yaşlandırır.
-  final Map<(int, int), double> _revealAnim = {};
-  // Hikâye beat'leri bittikten sonra köy büyüdükçe sis kendiliğinden çekilsin mi
-  // (organik reveal). Açılışta kapalı; hikâye pasifleşince true olur.
-  bool _revealOrganic = false;
+  // Eski "vahşi orman / sis" reveal'ından kalıntı setler — zoom-reveal modelinde
+  // HEP BOŞ (reveal = kamera kısıtı, örtü yok). Placement gate / obstacle /
+  // painter guard'ları boş-guard'la kendiliğinden devre dışı. Tam alan temizliği
+  // ayrı refactor: [scene_land].
+  final Set<(int, int)> _cleared       = {};
+  final Set<(int, int)> _wilderness    = {};
+  final Set<(int, int)> _wildTreeTiles = {};
+  final int _forestVersion = 0;              // painter repaint tokeni (sabit)
   final List<LeafBurst> _leafBursts = [];    // devrilen ağaç yaprak patlaması (fx)
   // Otonom açılım yön nudge'ı: null → köy kütlesine doğru (varsayılan); set ise
   // o yöne bias'lı açılır. Pusula UI (expand_compass) set eder.
@@ -911,10 +901,9 @@ class _VillageSceneState extends State<VillageScene>
         _introPlaceFire = true;
         _chronicle('Köyün kuruluşu', icon: '🔥', milestone: true);
       } else {
-        _zoom = kCaptureZoom; // uzaklaş → sis kenarı + açık çekirdek birlikte
-        // Reveal demo: hikâye beat'i gibi başlangıç çevresini biraz daha aç →
-        // açık çekirdek + sis feather'ı + derin sabah sisi tek karede görünsün.
-        _revealRadius(9.0, 7.0, 5.5 + kCaptureCarve.toDouble());
+        // Zoom-reveal: kamera clamp'i (_clampCamera) zaten reach'e göre
+        // ortalayıp zoom'u sınırlar; capture ekstra bir şey yapmaz.
+        _zoom = kCaptureZoom;
       }
     }
     _ticker = createTicker(_onTick);

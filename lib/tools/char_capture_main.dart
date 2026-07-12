@@ -11,11 +11,13 @@ import 'package:flutter/rendering.dart';
 import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
 import '../rendering/character_renderer.dart';
+import '../rendering/tool_renderer.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await ToolRenderer.loadAll(); // çekiç/kazma PNG'leri — yoksa araçlar çizilmez
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
     home: RepaintBoundary(
@@ -49,13 +51,14 @@ class _CharPainter extends CustomPainter {
       NpcVisual.fromSeed(3, forceMale: true),
       NpcVisual.fromSeed(21, forceMale: true),
     ];
-    final labels = ['İNŞAATÇI', 'DEMİRCİ', 'MADENCİ', 'MUHAFIZ'];
+    final labels = ['İNŞAATÇI', 'İNŞAATÇI(iş)', 'DEMİRCİ', 'MADENCİ'];
     // Diğerleri gerçek oyun yolunu (draw dispatch → _xNpc shaded varyant) kullanır.
     final draws = <void Function(Canvas, NpcVisual)>[
       (c, v) => CharacterRenderer.drawBuilder(c, visual: v, working: false),
+      (c, v) => CharacterRenderer.drawBuilder(c,
+          visual: v, working: true, walkPhase: 1.2),
       (c, v) => CharacterRenderer.draw(c, VillagerType.blacksmith, visual: v),
       (c, v) => CharacterRenderer.draw(c, VillagerType.miner, visual: v),
-      (c, v) => CharacterRenderer.draw(c, VillagerType.guard, visual: v),
     ];
     const scale = 2.2;
     for (int i = 0; i < draws.length; i++) {

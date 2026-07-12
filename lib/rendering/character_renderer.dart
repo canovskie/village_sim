@@ -1814,39 +1814,59 @@ class CharacterRenderer {
   }
 
   // ─── 11. İNŞAATÇI ──────────────────────────────────────────────────────────
+  /// İnşaatçı — usta marangoz/duvarcı. Diğer meslekler gibi SHADED sistemde
+  /// (_shadedRect/_shadedArm/_shadedLeg): hacimli kumaş, görünür eller, adım
+  /// kaldırma. Silüet imzası: siperlikli bez kasket + çapraz askılı deri iş
+  /// önlüğü + alet kemeri (asılı keski) + elde çekiç.
   static void _builder(Canvas c, _Anim anim,
       {bool working = false, NpcVisual? v, double time = 0}) {
-    final hose = v != null ? tintCloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
-    final tulum = v != null
-        ? tintCloth(const Color(0xFF9A7840), v.clothingShift) : const Color(0xFF9A7840);
-    final bere = v != null
-        ? tintCloth(const Color(0xFFBEA870), v.clothingShift * 0.6) : const Color(0xFFBEA870);
+    final tunicBase = v != null
+        ? tintCloth(const Color(0xFF9A7840), v.clothingShift)
+        : const Color(0xFF9A7840);
+    final hoseBase = v != null
+        ? tintCloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
+    // Terracotta kasket — bej tunikte kaybolan eski bereden farklı, siluet imzası.
+    final capBase = v != null
+        ? tintCloth(const Color(0xFF9A4A30), v.clothingShift * 0.5)
+        : const Color(0xFF9A4A30);
     final skin = v?.skin ?? _skin1;
+
     _shadow(c);
-    _leg(c, -6, anim.legL, hose, _leatherDk);
-    _leg(c,  6, anim.legR, hose, _leatherDk);
+    _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
+
     c.save();
     _applyTorsoTransform(c, anim);
-    // Çalışma tulumu
-    c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(tulum));
-    c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _s(_outline));
-    // Önlük
-    c.drawRect(const Rect.fromLTWH(-8, -66, 16, 28), _f(_leather));
-    c.drawRect(const Rect.fromLTWH(-8, -66, 16, 28), _s(_leatherDk));
-    // Omuz askısı
-    c.drawRect(const Rect.fromLTWH(-13, -50, 26, 4), _f(_leatherDk));
-    _arm(c, -15, anim.armL, tulum);
-    // Sağ kol + çekiç (PNG)
-    _arm(c, 15, anim.armR, tulum,
+
+    // Çalışma tuniği
+    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), tunicBase);
+    // Deri iş önlüğü (göğüsten aşağı)
+    _shadedRect(c, const Rect.fromLTWH(-9, -64, 18, 28), _leather);
+    // Çapraz askılar — önlüğü omuza bağlar (demircinin V'sinden ayrışır)
+    c.drawLine(const Offset(-7, -64), const Offset( 2, -76), _s(_leatherDk, 2.2));
+    c.drawLine(const Offset( 7, -64), const Offset(-2, -76), _s(_leatherDk, 2.2));
+    // Alet kemeri + demir toka
+    _shadedRect(c, const Rect.fromLTWH(-13, -46, 26, 5), _leatherDk);
+    c.drawRect(const Rect.fromLTWH(-2, -46, 4, 5), _f(_ironGrey));
+    // Kemerde asılı keski (sap + ağız) — "alet taşıyan usta" detayı
+    c.drawRect(const Rect.fromLTWH(8, -44, 3, 6), _f(_woodBrown));
+    c.drawRect(const Rect.fromLTWH(8, -38, 3, 4), _f(_ironGrey));
+
+    _shadedArm(c, -16, anim.armL, tunicBase, skin);
+    // Sağ kol + çekiç (PNG) — artık el de görünür
+    _shadedArm(c, 16, anim.armR, tunicBase, skin,
         (arm) => ToolRenderer.drawHammer(arm));
+
     if (v != null) {
       _shadedHead(c, v, time);
     } else {
       _head(c, skin);
     }
-    // Bere
-    c.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _f(bere));
-    c.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _s(const Color(0xFF8A7040)));
+
+    // Bez kasket — kısa deri siperlik + yumuşak kubbe. Eski hata: 18px'lik düz
+    // kutu −98..−80 arası kafayı yutup gözleri kapatıyordu; artık kaş üstünde.
+    _shadedRect(c, const Rect.fromLTWH(-13, -96, 26, 5), _leatherDk); // siperlik
+    _shadedRect(c, const Rect.fromLTWH(-10, -106, 20, 11), capBase);  // kubbe
     c.restore();
   }
 }

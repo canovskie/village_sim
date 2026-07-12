@@ -167,6 +167,7 @@ class DivanPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    debugPrint('DBG DivanPanel.build agenda=${agenda.length} houses=${houses.length} identity=$identity');
     return Stack(
       children: [
         // Hafif karartma — Divan bir gösterge, oyun durmaz; boşluğa dokun = kapat.
@@ -246,6 +247,7 @@ class DivanPanel extends StatelessWidget {
   // ── Hero — sinematik toplanma sahnesi + kimlik + kapat ─────────────────────
 
   Widget _hero() {
+    debugPrint('DBG _hero building');
     return SizedBox(
       height: 150,
       child: Stack(
@@ -553,20 +555,21 @@ class DivanPanel extends StatelessWidget {
     return GestureDetector(
       onTap: pending ? onOpenPetition : null,
       behavior: HitTestBehavior.opaque,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        child: Stack(
+          children: [
+            Container(
+        padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
         decoration: BoxDecoration(
           color: pending
               ? Color.alphaBlend(c.withValues(alpha: 0.10), AppUi.surface1)
               : AppUi.surface0,
           borderRadius: BorderRadius.circular(AppUi.radiusSm),
-          border: Border(
-            left: BorderSide(
-                color: c.withValues(alpha: pending ? 0.95 : 0.5), width: 3),
-            top: BorderSide(color: AppUi.line),
-            right: BorderSide(color: AppUi.line),
-            bottom: BorderSide(color: AppUi.line),
-          ),
+          // UNIFORM kenar ŞART: non-uniform renkli Border + borderRadius Flutter'da
+          // paint assert'i atar ("borderRadius … uniform colors") → panel çizilmez.
+          // Ton rengi bu yüzden ayrı bir sol şerit katmanı olarak çizilir (aşağıda).
+          border: Border.all(color: AppUi.line),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -615,6 +618,20 @@ class DivanPanel extends StatelessWidget {
               const SizedBox(width: 8),
               _conveneButton(m.conveneId!),
             ],
+          ],
+        ),
+            ),
+            // Sol ton şeridi — meselenin duygusal rengi (uniform-border kısıtı
+            // yüzünden Border yerine ayrı katman; satırın boyuna uzar).
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: Container(
+                width: 3,
+                color: c.withValues(alpha: pending ? 0.95 : 0.5),
+              ),
+            ),
           ],
         ),
       ),

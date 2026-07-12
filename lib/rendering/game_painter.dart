@@ -1574,12 +1574,6 @@ class VillageGamePainter extends CustomPainter {
   /// Sınır halkasındaki gerçek ağaç tile'ları — kanopi bunların üstüne çizmesin
   /// (orada zaten _TreeDrawable var; çift çizim engeli).
   final Set<(int, int)>        wildTreeTiles;
-  /// Açık (revealed) kenardan her açılmamış tile'ın BFS derinliği (1 = kenar).
-  /// Sabah-sisi feather'ını sürer: kenar seyrek/şeffaf → iç dolu (gizler).
-  final Map<(int, int), int>   forestDepth;
-  /// Yeni açılan tile'ların dissolve animasyonu (tile → kalan süre). Sisi
-  /// aniden değil, eriyip yukarı savrularak kaldırır.
-  final Map<(int, int), double> revealAnim;
   /// Devrilen ön-hat ağacı yaprak patlamaları (kısa ömürlü fx).
   final List<LeafBurst>        leafBursts;
   final List<WoodcutterEntity> woodcutters;
@@ -1674,8 +1668,6 @@ class VillageGamePainter extends CustomPainter {
     this.wilderness    = const {},
     this.leafBursts    = const [],
     this.wildTreeTiles = const {},
-    this.forestDepth   = const {},
-    this.revealAnim    = const {},
     this.woodcutters   = const [],
     this.lumberCamps   = const [],
     this.lumberSelection,
@@ -1754,7 +1746,6 @@ class VillageGamePainter extends CustomPainter {
     }
 
     _drawGround(canvas, size);
-    _drawReveal(canvas, size);
     _drawFarmTiles(canvas, size);
     _drawWaterFoam(canvas, size);
     // Bina gölgeleri — sahne sprite'larından ÖNCE, zemin üstüne. Bu sayede
@@ -2177,109 +2168,6 @@ class VillageGamePainter extends CustomPainter {
     final rowMax = max(max(tl.$2, tr.$2), max(bl.$2, br.$2))
         .ceil().clamp(0, kRows - 1);
     return (colMin, colMax, rowMin, rowMax);
-  }
-
-  // ── SABAH SİSİ reveal (scene_land) ──────────────────────────────────────────
-  // Açılmamış dünya = köyü çevreleyen AYDINLIK, yumuşak, sürüklenen sabah sisi
-  // (koyu orman duvarı DEĞİL — tam tersi: hafif, parlak, düşük görsel yük).
-  // Altındaki gen içeriği (ağaç/dekor/maden) _drawScene'de zaten sisli tile'da
-  // atlanır → sis boş zemini örter. forestDepth kenarı feather'lar (kenar seyrek
-  // → iç dolu, gizler). Yeni açılan tile'lar (revealAnim) sisini eriterek bırakır.
-  // Görsel: üst üste binen yumuşak bulut püskülleri (sert diamond DEĞİL) → bulut
-  // bankası hissi. Viewport-cull'lı, cache yok.
-  static final Paint _pFogFloor = Paint()..isAntiAlias = true;
-  static final Paint _pFogHaze  = Paint()..isAntiAlias = true;
-
-  static double _ss(double x) {
-    x = x.clamp(0.0, 1.0);
-    return x * x * (3 - 2 * x);
-  }
-
-  /// Sis derinliğinden (1=kenar) opaklık: kenar seyrek/feather → iç dolu (gizler).
-  static double _mistStrength(int depth) => 0.28 + 0.62 * _ss((depth - 1) / 3.0);
-
-  void _drawReveal(Canvas canvas, Size size) {
-    if (wilderness.isEmpty && revealAnim.isEmpty) return;
-    final (colMin, colMax, rowMin, rowMax) = _visibleTileBounds(size);
-
-    // Aydınlık inci-sis tonu; şafak/alacakaranlıkta hafif SICAK (daha az mavi),
-    // gündüz daha nötr-parlak. Asla koyu değil.
-    final warm = (1.0 - dayLight).clamp(0.0, 1.0);
-    final baseR = (0xE8 + 0x12 * warm).round().clamp(0, 255);
-    final baseG = (0xEA + 0x06 * warm).round().clamp(0, 255);
-    final baseB = (0xE9 - 0x14 * warm).round().clamp(0, 255);
-    // Gece hafif kısılsın ki fener/ay ile uyumlu kalsın (yine de açık).
-    final lum = (0.82 + 0.18 * dayLight).clamp(0.72, 1.0);
-
-    const hw = kTileW / 2;
-    const hh = kTileH / 2;
-    final floor = Path();
-
-    // Bir tile'a yumuşak sis çiz: alçak base diamond (zemini kesin örter) + üstüne
-    // sürüklenen elips bulut püskülü (yumuşak radial). [s] = opaklık 0..1,
-    // [lift] = dissolve'da yukarı savrulma (px).
-    void mist(int col, int row, double s, double lift) {
-      if (s <= 0.02) return;
-      final center = gridToScreen(col + 0.5, row + 0.5, size, camera);
-      final cx = center.dx, cy = center.dy - lift;
-      final h = (col * 73856093) ^ (row * 19349663);
-      final drift = sin(time * 0.16 + (h & 255) * 0.041) * 5.0;
-      final wob   = cos(time * 0.13 + (h >> 5 & 255) * 0.037) * 3.0;
-      final shim  = 0.90 + 0.10 * sin(time * 0.11 + (h >> 9 & 255) * 0.029);
-      final a = (s * lum * shim).clamp(0.0, 1.0);
-
-      // Base diamond — zemin sızmasın (bulut püskülleri arası boşluğu kapatır).
-      floor
-        ..reset()
-        ..moveTo(cx, cy - hh)
-        ..lineTo(cx + hw, cy)
-        ..lineTo(cx, cy + hh)
-        ..lineTo(cx - hw, cy)
-        ..close();
-      _pFogFloor.color =
-          Color.fromRGBO(baseR, baseG, baseB, (a * 0.85).clamp(0.0, 1.0));
-      canvas.drawPath(floor, _pFogFloor);
-
-      // Bulut püskülü — yumuşak elips radial (çekirdek parlak → kenar eriyik).
-      const rad = kTileW * 0.95;
-      _pFogHaze.shader = ui.Gradient.radial(Offset.zero, rad, [
-        Color.fromRGBO(baseR, baseG, baseB, a),
-        Color.fromRGBO(baseR, baseG, baseB, (a * 0.55).clamp(0.0, 1.0)),
-        Color.fromRGBO(baseR, baseG, baseB, 0.0),
-      ], const [0.0, 0.55, 1.0]);
-      canvas.save();
-      canvas.translate(cx + drift, cy - hh * 0.25 + wob);
-      canvas.scale(1.08, 0.66);
-      canvas.drawCircle(Offset.zero, rad, _pFogHaze);
-      canvas.restore();
-    }
-
-    // Açılmamış tile → derinlik feather'lı sis. Açık tile ama sise KOMŞU →
-    // üstüne hafif tül (sert diamond seam'i kır, geçiş yumuşak olsun).
-    for (int row = rowMin; row <= rowMax; row++) {
-      for (int col = colMin; col <= colMax; col++) {
-        if (wilderness.contains((col, row))) {
-          final depth = forestDepth[(col, row)] ?? 4;
-          mist(col, row, _mistStrength(depth), 0.0);
-        } else if (wilderness.contains((col, row - 1)) ||
-            wilderness.contains((col, row + 1)) ||
-            wilderness.contains((col - 1, row)) ||
-            wilderness.contains((col + 1, row))) {
-          mist(col, row, 0.16, 0.0);
-        }
-      }
-    }
-
-    // Dissolve — yeni açılmış tile'lar (artık cleared) sisini eriterek yukarı
-    // savurur (~_kRevealDissolve sn). Görünürlerse çiz.
-    if (revealAnim.isNotEmpty) {
-      revealAnim.forEach((key, remain) {
-        final (col, row) = key;
-        if (col < colMin || col > colMax || row < rowMin || row > rowMax) return;
-        final t = (remain / 1.6).clamp(0.0, 1.0); // 1=taze, 0=bitti
-        mist(col, row, 0.90 * t * t, (1.0 - t) * 18.0);
-      });
-    }
   }
 
   // Devrilen ön-hat ağacı yaprak patlaması — kısa ömürlü prosedürel partiküller
