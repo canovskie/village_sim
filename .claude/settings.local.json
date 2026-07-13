@@ -192,7 +192,12 @@
       "Bash(perl -0pi -e 's/      VillagerType\\\\.blacksmith, \\\\/\\\\/ kıyas\\\\n      VillagerType\\\\.farmer,     \\\\/\\\\/ kıyas\\\\n//; s/, .demirci\\\\*., .çiftçi\\\\*.//' lib/tools/char_capture_main.dart)",
       "Bash(perl -0pi -e 's/const Size\\\\\\(1180, 340\\\\\\)/const Size\\(1600, 400\\)/' lib/tools/char_capture_main.dart)",
       "Bash(rm -f /tmp/divan_tab*.png)",
-      "Bash(DIVAN_TAB=1 flutter run -d macos -t lib/tools/divan_capture_main.dart)"
+      "Bash(DIVAN_TAB=1 flutter run -d macos -t lib/tools/divan_capture_main.dart)",
+      "Bash(perl -0pi -e \"s|part 'scene/scene_reed.dart';|part 'scene/scene_reed.dart';\\\\npart 'scene/scene_work.dart';|\" lib/main.dart)",
+      "Bash(perl -0pi -e \"s|  double _reedScan = 0; // _tickReed throttle sayacı|  double _reedScan = 0; // _tickReed throttle sayacı\\\\n  double _workScan = 0; // _tickWork throttle sayacı \\(meslek iş döngüleri\\)|\" lib/main.dart)",
+      "Bash(perl -0pi -e \"s|    _tickReed\\\\\\(dt\\\\\\);|    _tickReed\\(dt\\);\\\\n    _tickWork\\(dt\\);   // meslek iş döngüleri \\(çoban/avcı/değirmenci/hancı/rahip\\)|\" lib/scene/scene_tick.dart)",
+      "Bash(VTAB=1 flutter run -d macos -t lib/tools/villager_capture_main.dart)",
+      "Bash(VTAB=2 flutter run -d macos -t lib/tools/villager_capture_main.dart)"
     ]
   }
 }

@@ -34,9 +34,10 @@ extension _SceneLand on _VillageSceneState {
 
   // ── Reach büyümesi (dünyanın açılması) ──────────────────────────────────────
 
-  /// Her frame (scene_tick). Kamera "reach"i büyüdükçe izin verilen zoom-out +
-  /// pan artar → dünya açılır; gerçek kenar yine hiç görünmez (reach kenarda
-  /// ~8 tile tampon bırakır: [_kReachMax]).
+  /// Her frame (scene_tick). Reach span'i (hu+hv) büyüdükçe izin verilen zoom-out
+  /// + pan artar → dünya açılır; gerçek kenar yine hiç görünmez. Üst sınır
+  /// `_maxSpan` = min(kCols,kRows)-1-[_VillageSceneState._kEdgeBuffer] (elmasa
+  /// içten sığan en büyük ekran-hizalı dikdörtgen; bkz. scene_input._clampCamera).
   ///
   /// **Karma ilerleme (faz anahtarı YOK):** hedef = max(hikâye, organik).
   ///  • Hikâye: tamamlanan görev başına (scene_flow beat'leri) — erken oyunda
@@ -44,13 +45,13 @@ extension _SceneLand on _VillageSceneState {
   ///  • Organik: bina sayısıyla — köy büyüyünce bu baskın gelir, yani hikâye
   ///    kendiliğinden PASİFLEŞİR ve dünya sessizce açılmaya devam eder.
   void _updateLandExpansion(double dt) {
-    const start = _VillageSceneState._kReachStart;
+    const start = _VillageSceneState._kSpanStart;
     final story   = start + _completedQuests.length * 1.5; // hikâye beat'leri
     final organic = start + _buildings.length * 0.5;        // köyün büyümesi
-    final target = (story > organic ? story : organic)
-        .clamp(start, _VillageSceneState._kReachMax);
-    if (_reachRadius < target) {
-      _reachRadius = (_reachRadius + dt * 1.2).clamp(0.0, target); // ~1.2 tile/sn
+    final target =
+        (story > organic ? story : organic).clamp(start, _maxSpan);
+    if (_reachSpan < target) {
+      _reachSpan = (_reachSpan + dt * 1.2).clamp(0.0, target); // ~1.2 span/sn
     }
 
     // "Dünya açılıyor" anı — reach genişledikçe, oyuncu ZATEN tam zoom-out'taysa

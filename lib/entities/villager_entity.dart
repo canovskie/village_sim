@@ -287,6 +287,11 @@ class VillagerEntity extends WorkerEntity {
   /// aktivite doğal artar. 60-180 sn.
   double socialCooldown = 0;
 
+  /// Meslek iş döngüsü bekleme sayacı (sn) — avcının av arası, çobanın bakım
+  /// arası vb. (bkz. scene_work.dart). Transient: kayda YAZILMAZ, yüklemede
+  /// sıfırlanır (en kötü ihtimalle bir iş bir kez erken tetiklenir).
+  double workCooldown = 0;
+
   // ── Sohbet konuşması — karşılıklı + konuya bağlı baloncuk ───────────────────
   /// Sohbette karşıdaki kişi (yüz dönme + sıra için). null = solo/yok.
   VillagerEntity? convoPartner;

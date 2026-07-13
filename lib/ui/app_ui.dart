@@ -542,63 +542,142 @@ class AppSectionLabel extends StatelessWidget {
       );
 }
 
-// ─── Giriş animasyonu sarmalayıcı ────────────────────────────────────────────
+// ─── Sekmeler ────────────────────────────────────────────────────────────────
 
-/// Panel açılışında scale + fade + yukarı kayma — reaktif his.
-class AppReveal extends StatefulWidget {
-  final Widget child;
-  final Duration delay;
-  const AppReveal({super.key, required this.child, this.delay = Duration.zero});
+/// Sekme çubuğu + animasyonlu içerik geçişi. Yoğun panelleri tek kaydırma
+/// duvarına yığmak yerine nefes alan görünümlere böler (kullanıcı: "bu kalabalık
+/// panellere giresim gelmiyor"). Tek sekme kalırsa çubuk çizilmez.
+class AppTabs extends StatefulWidget {
+  /// (etiket, içerik) — boş içerikli sekmeyi çağıran taraf zaten elemeli.
+  final List<(String, Widget)> tabs;
+  final int initial;
+  const AppTabs({super.key, required this.tabs, this.initial = 0});
+
   @override
-  State<AppReveal> createState() => _AppRevealState();
+  State<AppTabs> createState() => _AppTabsState();
 }
 
-class _AppRevealState extends State<AppReveal>
-    with SingleTickerProviderStateMixin {
-  // Gecikmeyi controller süresine katıp Interval ile geciktiriyoruz — böylece
-  // ayrı bir Timer (Future.delayed) açılmaz; test ortamında "timersPending"
-  // assert'i tetiklenmez ve animasyon bitince ticker durur.
-  static const int _revealMs = 260;
-  late final int _delayMs = widget.delay.inMilliseconds;
-  late final AnimationController _c = AnimationController(
-      vsync: this, duration: Duration(milliseconds: _revealMs + _delayMs));
-  late final Animation<double> _a = CurvedAnimation(
-    parent: _c,
-    curve: Interval(
-      _delayMs / (_revealMs + _delayMs),
-      1.0,
-      curve: Curves.easeOutCubic,
-    ),
-  );
+class _AppTabsState extends State<AppTabs> {
+  late int _i = widget.initial.clamp(0, widget.tabs.length - 1);
 
   @override
-  void initState() {
-    super.initState();
-    _c.forward();
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
+  void didUpdateWidget(AppTabs old) {
+    super.didUpdateWidget(old);
+    // Sekme sayısı değişirse (ör. öykü doldu) seçim taşmasın.
+    if (_i >= widget.tabs.length) _i = widget.tabs.length - 1;
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _a,
-      builder: (_, child) => Opacity(
-        opacity: _a.value,
+    if (widget.tabs.isEmpty) return const SizedBox.shrink();
+    if (widget.tabs.length == 1) return widget.tabs.first.$2;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          for (int i = 0; i < widget.tabs.length; i++) ...[
+            if (i != 0) const SizedBox(width: 6),
+            Expanded(child: _pill(widget.tabs[i].$1, i)),
+          ],
+        ]),
+        const SizedBox(height: 12),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          alignment: Alignment.topCenter,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 190),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, anim) => FadeTransition(
+              opacity: anim,
+              child: SlideTransition(
+                position:
+                    Tween<Offset>(begin: const Offset(0.05, 0), end: Offset.zero)
+                        .animate(anim),
+                child: child,
+              ),
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(_i),
+              child: widget.tabs[_i].$2,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _pill(String label, int i) {
+    final on = _i == i;
+    return GestureDetector(
+      onTap: () => setState(() => _i = i),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 170),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: on ? AppUi.accent.withValues(alpha: 0.16) : AppUi.surface0,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: on ? AppUi.accent.withValues(alpha: 0.65) : AppUi.line,
+              width: on ? 1.3 : 1),
+        ),
+        child: Center(
+          child: Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppUi.label.copyWith(
+                fontSize: 9,
+                letterSpacing: 0.9,
+                color: on ? AppUi.textHi : AppUi.textLo,
+              )),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Giriş animasyonu sarmalayıcı ────────────────────────────────────────────
+
+/// Panel açılışında scale + fade + yukarı kayma — reaktif his.
+///
+/// ⚠️ 2026-07-13 — BUG FIX: eski hâli elle kurulmuş `AnimationController` +
+/// `CurvedAnimation` + `AnimatedBuilder` idi ve çocuğu SINIRSIZ YÜKSEKLİKTE
+/// olduğunda (scroll view içinde, ya da yüksekliği verilmemiş SizedBox'ta)
+/// opacity 0'da takılıp PANELİ TAMAMEN GÖRÜNMEZ bırakıyordu — Divan, köylü ve
+/// bina panelleri bu yüzden çizilmiyordu. Aynı görsel efekt `TweenAnimationBuilder`
+/// (örtük animasyon) ile kurulunca her ağaçta güvenle çalışıyor. Gecikme yine
+/// ayrı Timer açmadan Interval ile verilir. Bkz. [[feedback_ui_render_traps]].
+class AppReveal extends StatelessWidget {
+  final Widget child;
+  final Duration delay;
+  const AppReveal({super.key, required this.child, this.delay = Duration.zero});
+
+  static const int _revealMs = 260;
+
+  @override
+  Widget build(BuildContext context) {
+    final delayMs = delay.inMilliseconds;
+    final total = _revealMs + delayMs;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: Duration(milliseconds: total),
+      curve: Interval(delayMs / total, 1.0, curve: Curves.easeOutCubic),
+      builder: (_, t, child) => Opacity(
+        opacity: t,
         child: Transform.translate(
-          offset: Offset(0, (1 - _a.value) * 10),
+          offset: Offset(0, (1 - t) * 10),
           child: Transform.scale(
-            scale: 0.97 + _a.value * 0.03,
+            scale: 0.97 + t * 0.03,
             alignment: Alignment.topCenter,
             child: child,
           ),
         ),
       ),
-      child: widget.child,
+      child: child,
     );
   }
 }

@@ -766,6 +766,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         // Diğer
         (BuildingType.mill,            19, 8),
         (BuildingType.floristCottage,  19, 12),
+        // Kilise — rahibin işyeri (iş döngüsü testi için şart)
+        (BuildingType.church,          11, 14),
         // Arı kovanı çiçekçinin yanına — bal sinerjisi (etki alanı çiçekleri).
         (BuildingType.beehive,         17, 13),
         // Ekstra fenerler
@@ -822,6 +824,43 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       for (int i = 0; i < 2; i++) {
         _spawnGrownVillager(townhall);
         _villagers.last.ageDays = kElderStartDay + 1.0;
+      }
+
+      // Meslek çeşitliliğini GARANTİLE — normalde meslek çağrıdan doğar, yani
+      // showcase'te rastgele dağılır ve yeni meslekler hiç çıkmayabilir. Test
+      // yatağı olduğu için her yeni mesleği en az bir köylüye elle ver.
+      const showcaseTrades = [
+        VillagerType.shepherd,
+        VillagerType.hunter,
+        VillagerType.miller,
+        VillagerType.innkeeper,
+        VillagerType.priest,
+      ];
+      final grown = _villagers
+          .where((v) => v.hasProfession && !v.isDying)
+          .toList();
+      for (int i = 0; i < showcaseTrades.length && i < grown.length; i++) {
+        grown[i].switchProfession(showcaseTrades[i]);
+      }
+
+      // Ağıla sürü koy — çobanın bakacak hayvanı olsun (ağıl normalde BOŞ kurulur).
+      final barn = _buildings.where((b) => b.type == BuildingType.barn).firstOrNull;
+      if (barn != null) {
+        for (int i = 0; i < 5; i++) {
+          final (sx, sy) = _nearestLand(
+              barn.col + barn.cols / 2.0, barn.row + barn.rows.toDouble());
+          _cows.add(AnimalEntity(
+            kind: i < 2 ? AnimalKind.cow : AnimalKind.sheep,
+            barnCol: barn.col,
+            barnRow: barn.row,
+            startCol: sx + (_rng.nextDouble() - 0.5) * 1.6,
+            startRow: sy + (_rng.nextDouble() - 0.5) * 1.6,
+            isMale: i.isEven,
+            ageDays: AnimalEntity.kAnimalAdultDay + _rng.nextDouble() * 2.0,
+            lifespanDays: AnimalEntity.kAnimalElderDay + 8.0 +
+                _rng.nextDouble() * 12.0,
+          ));
+        }
       }
     });
     _showNotification('🎭 Showcase köyü kuruldu — her tip görsel test için hazır');

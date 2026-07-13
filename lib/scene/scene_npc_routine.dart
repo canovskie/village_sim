@@ -26,6 +26,13 @@ extension _SceneNpcRoutine on _VillageSceneState {
         v.needsErrand = false;
         continue;
       }
+      // Mesleğinin işi başındaysa (çoban/avcı/değirmenci/hancı/rahip) onu iş
+      // döngüsü sürer — rutin errand sinyalini tüketip işine karışmasın.
+      // İşi YOKSA rutin devralır → işyerinde boş boş çakılı kalmaz.
+      if (_hasJobLoop(v) && _workTaskAvailable(v)) {
+        v.needsErrand = false;
+        continue;
+      }
       // Meşgul/uygun değilse sinyali temizle (errand yürütemez).
       if (!v.canRunErrands ||
           v.isInsideBuilding ||

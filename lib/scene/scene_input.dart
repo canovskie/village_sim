@@ -18,46 +18,88 @@ extension _SceneInput on _VillageSceneState {
     _frame.value = _frame.value + 1;
   }
 
-  // ── Kamera "reach" clamp'i ─────────────────────────────────────────────────
-  // Kamera hiçbir zaman "reach" tile-kutusunun dışını göstermez → gerçek harita
-  // kenarı kadraja girmez (yüzen ada yok). İki kısıt: (1) zoom-out'u reach'i
-  // sığdıracak kadarla sınırla; (2) ekran-merkezi dünya noktasını reach kutusuna
-  // sıkıştır. Her input sonrası + her frame (_onTick) çağrılır.
+  // ── Kamera "reach" clamp'i — EKRAN EKSENLERİNDE (u, v) ─────────────────────
+  //
+  // GEOMETRİ: tile ızgarası bir dikdörtgen → izometride ekranda bir ELMAS. Ama
+  // viewport bir DİKDÖRTGEN. Dikdörtgeni elmasın sivri uç(lar)ına sokamazsın —
+  // soktuğun an elmasın dışındaki void kadraja girer. Bu yüzden clamp'i tile
+  // eksenlerinde değil, EKRAN eksenlerinde yaparız:
+  //     u = c - r  (ekran X'i belirler),   v = c + r  (ekran Y'sini belirler)
+  // Bu uzayda hem viewport hem de ulaşılabilir bölge EKSEN-HİZALI dikdörtgendir
+  // → clamp TAM (exact) olur.
+  //
+  // Ulaşılabilir bölge = harita elmasına İÇTEN çizilmiş, ekran-hizalı dikdörtgen
+  // (viewport en-boy oranında). Her noktası kadraja tam oturur → ÖLÜ BÖLGE YOK.
+  // Elmasın sivri uçları israf değil, TAMPON'dur: void'i ekran dışında tutar.
+  //
+  // Kısıt: (c,r) haritada ⇔ 0 ≤ v+u ≤ 2(kCols-1) ve 0 ≤ v-u ≤ 2(kRows-1).
+  // Merkezde duran bir dikdörtgen için bağlayıcı koşul: hu + hv ≤ min(kCols,kRows)-1.
 
-  /// Reach'i sığdıran EN AÇIK (en küçük) zoom — bundan daha fazla uzaklaşmak
-  /// reach dışını (ve kenarı) gösterir. Reach büyüdükçe düşer (daha çok zoom-out).
-  double _minZoomForReach(Size size) {
-    if (size.width <= 0 || size.height <= 0) return 0.2;
-    final reachW = 2 * _reachRadius * kTileW;
-    final reachH = 2 * _reachRadius * kTileH;
-    final z = max(size.width / reachW, size.height / reachH);
-    return z.clamp(0.2, _VillageSceneState._kMaxZoom);
+  /// hu+hv'nin üst sınırı (harita elmasına sığması için) — tampon düşülmüş.
+  double get _maxSpan =>
+      (kCols < kRows ? kCols : kRows) - 1.0 - _VillageSceneState._kEdgeBuffer;
+
+  /// Harita merkezinin ekran-ekseni koordinatları.
+  double get _centerU => (kCols - 1) / 2 - (kRows - 1) / 2;
+  double get _centerV => (kCols - 1) / 2 + (kRows - 1) / 2;
+
+  /// Kamerayı, verilen (u,v) ekran-ekseni noktası ekran merkezine gelecek şekilde
+  /// ayarlar (zoom merkez sabit noktası → zoom'dan bağımsız).
+  void _centerCameraOnUV(double u, double v, Size size) {
+    _camera = Offset(
+      -u * kTileW / 2,
+      size.height * 0.22 - v * kTileH / 2,
+    );
   }
 
-  /// Kamerayı, verilen dünya (grid) noktası ekran merkezine gelecek şekilde ayarlar
-  /// (zoom merkez sabit noktasıdır → zoom'dan bağımsız).
-  void _centerCameraOn(double gx, double gy, Size size) {
-    _camera = Offset(
-      -(gx - gy) * kTileW / 2,
-      size.height * 0.22 - (gx + gy) * kTileH / 2,
-    );
+  /// Kameranın şu anki ekran-merkezi (u,v) noktası (yukarıdakinin tersi).
+  (double, double) _cameraUV(Size size) => (
+        -2 * _camera.dx / kTileW,
+        2 * (size.height * 0.22 - _camera.dy) / kTileH,
+      );
+
+  /// Reach span'ini viewport en-boy oranına göre (hu, hv)'ye böler.
+  /// hu/hv = w/(2h) → reach dikdörtgeni ekranla aynı orana sahip olur, yani tam
+  /// zoom-out'ta viewport reach'e birebir oturur (boşluk/taşma yok).
+  (double, double) _reachHalfExtents(Size size) {
+    final k = size.width / (2 * size.height); // hu/hv
+    final hv = _reachSpan / (1 + k);
+    return (_reachSpan - hv, hv);
+  }
+
+  /// Reach'i sığdıran EN AÇIK (en küçük) zoom — daha fazla uzaklaşmak reach
+  /// dışını (ve void'i) gösterir. Reach büyüdükçe düşer → daha çok zoom-out.
+  double _minZoomForReach(Size size) {
+    if (size.width <= 0 || size.height <= 0) return 0.2;
+    final (hu, hv) = _reachHalfExtents(size);
+    if (hu <= 0 || hv <= 0) return 0.2;
+    final z = max(size.width / (kTileW * hu), size.height / (kTileH * hv));
+    return z.clamp(0.2, _VillageSceneState._kMaxZoom);
   }
 
   void _clampCamera(Size size) {
     if (size.width <= 0 || size.height <= 0) return;
-    // İlk geçerli frame: kamerayı reach merkezine (spawn) ortala.
+    final uc = _centerU, vc = _centerV;
+    // İlk geçerli frame: kamerayı harita merkezine (spawn) ortala.
     if (!_cameraCentered) {
-      _centerCameraOn(_reachCx, _reachCy, size);
+      _centerCameraOnUV(uc, vc, size);
       _cameraCentered = true;
     }
-    // Zoom clamp — reach'ten fazla uzaklaşma (kenarı gösterme).
+    // Zoom clamp — reach'ten fazla uzaklaşma.
     _zoom = _zoom.clamp(_minZoomForReach(size), _VillageSceneState._kMaxZoom);
-    // Ekran-merkezi dünya noktasını reach kutusuna sıkıştır.
-    final (gx, gy) = screenToGrid(
-        Offset(size.width / 2, size.height / 2), size, _camera);
-    final cgx = gx.clamp(_reachCx - _reachRadius, _reachCx + _reachRadius);
-    final cgy = gy.clamp(_reachCy - _reachRadius, _reachCy + _reachRadius);
-    if (cgx != gx || cgy != gy) _centerCameraOn(cgx, cgy, size);
+
+    // Merkez clamp — VIEWPORT'un yarı-uzanımını da hesaba katarak (eski clamp
+    // yalnız merkezi sıkıştırıyordu → kenarda viewport reach'i taşıp void'i
+    // gösterebiliyordu; bu onu da düzeltir).
+    final (hu, hv) = _reachHalfExtents(size);
+    final halfU = size.width / (_zoom * kTileW);   // viewport yarı-uzanımı (u)
+    final halfV = size.height / (_zoom * kTileH);  // viewport yarı-uzanımı (v)
+    var (u, v) = _cameraUV(size);
+    final uLo = uc - hu + halfU, uHi = uc + hu - halfU;
+    final vLo = vc - hv + halfV, vHi = vc + hv - halfV;
+    u = uLo <= uHi ? u.clamp(uLo, uHi) : uc; // viewport reach'ten genişse ortala
+    v = vLo <= vHi ? v.clamp(vLo, vHi) : vc;
+    _centerCameraOnUV(u, v, size);
   }
 
   // ── Scale (pinch + pan) ────────────────────────────────────────────────────

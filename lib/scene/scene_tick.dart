@@ -26,6 +26,15 @@ extension _SceneTick on _VillageSceneState {
         dayLight: _cycle.dayLight,
         rain: _cycle.rainIntensity,
         hasFire: _hasFire);
+    // CAPTURE: sim'i durduran modalları bastır — harness'te onları kapatacak
+    // oyuncu yok, açılan ilk sinematik/olay simülasyonu sonsuza dek dondurur
+    // (iş döngüsü telemetrisi bu yüzden bir kez tamamen "donuk" okundu).
+    if (kCaptureShowcase) {
+      _activeCutscene = null;
+      _pendingChoice = null;
+      _imperialDemand = null;
+      _petitionForced = false;
+    }
     // Karar bekleyen olay açıkken sim durur (sahne kalır, modal odakta).
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
     // arası DevPanel slider'ından gelir; normal oyunda 1.0.
@@ -671,7 +680,8 @@ extension _SceneTick on _VillageSceneState {
         anchorSystem: _anchorSystem,
         baleYieldMultiplier: _season.yieldMultiplier *
             (_policies.cropRotation ? 1.2 : 1.0) *
-            _identityYieldMul, // kimlik bonusu: Zanaat Kasabası +%15
+            _identityYieldMul * // kimlik bonusu: Zanaat Kasabası +%15
+            _millerYieldMul(), // değirmenin başında değirmenci varsa +%25
       );
     }
   }
@@ -914,6 +924,7 @@ extension _SceneTick on _VillageSceneState {
     // Saz yatağı döngüsü — evsizler sazlık biçip ateş etrafına yatak kurar.
     // Rutinden ÖNCE: yatak peşindeki evsizi sahiplenip rutinden korur.
     _tickReed(dt);
+    _tickWork(dt);   // meslek iş döngüleri (çoban/avcı/değirmenci/hancı/rahip)
     // Kilometre taşları — nüfus eşikleri (bir kez tatlı bildirim).
     _tickAchievements();
     // Bireysel yaşam öyküsü — evre geçişlerini (reşit oluş/yaşlanma) yakala.

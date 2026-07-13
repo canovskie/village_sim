@@ -25,6 +25,9 @@ class VillagerInfoPanel extends StatefulWidget {
   final VoidCallback? onExile;
   final VoidCallback? onExecute;
 
+  /// Açılışta seçili sekme: 0 = GENEL, 1 = KİŞİLİK, 2 = ÖYKÜ.
+  final int initialTab;
+
   const VillagerInfoPanel({
     super.key,
     required this.villager,
@@ -37,6 +40,7 @@ class VillagerInfoPanel extends StatefulWidget {
     this.onRename,
     this.onExile,
     this.onExecute,
+    this.initialTab = 0,
   });
 
   @override
@@ -111,6 +115,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    // ÜST — her zaman görünen "bir bakışta" hayati bilgi.
                     _statusStrip(v),
                     const SizedBox(height: 14),
                     _ageBar(v, stage),
@@ -118,12 +123,11 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                     _moraleBar(v),
                     const SizedBox(height: 4),
                     _moodRow(v),
-                    _row('Ev', widget.homeLabel ?? 'Evsiz',
-                        icon: GameIconData.home),
-                    ..._personalitySection(v),
-                    ..._familyTree(v),
-                    ..._lifeStory(v),
                     const SizedBox(height: 14),
+                    // SEKMELER — gerisi tek kaydırma duvarı yerine üç görünüm.
+                    AppTabs(tabs: _tabs(v), initial: widget.initialTab),
+                    const SizedBox(height: 14),
+                    // AKSİYONLAR — sekmenin arkasına saklanmaz (panelin işi bu).
                     _actionRow(v),
                   ],
                 ),
@@ -133,6 +137,48 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         ),
       ),
     );
+  }
+
+  // ─── Sekmeler ───────────────────────────────────────────────────────────────
+
+  /// GENEL (ev + aile) · KİŞİLİK (mizaç/künye) · ÖYKÜ (yaşam çizelgesi).
+  /// Boş kalan sekme hiç gösterilmez (öyküsü olmayan bebekte ÖYKÜ yok).
+  List<(String, Widget)> _tabs(VillagerEntity v) {
+    final family = _familyTree(v);
+    final story = _lifeStory(v);
+    return [
+      (
+        'GENEL',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _row('Ev', widget.homeLabel ?? 'Evsiz', icon: GameIconData.home),
+            if (family.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              ...family,
+            ],
+          ],
+        ),
+      ),
+      (
+        'KİŞİLİK',
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: _personalitySection(v),
+        ),
+      ),
+      if (story.isNotEmpty)
+        (
+          'ÖYKÜ',
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: story,
+          ),
+        ),
+    ];
   }
 
   // ─── Header ─────────────────────────────────────────────────────────────────
@@ -546,12 +592,10 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   // ─── Kişilik — mizaç + sevdiği şey + tek cümlelik künye ────────────────────
 
+  /// KİŞİLİK sekmesinin gövdesi — başlık/divider YOK (sekme adı üstleniyor).
   List<Widget> _personalitySection(VillagerEntity v) {
     final p = v.personality;
     return [
-      const AppDivider(),
-      AppSectionLabel('KİŞİLİK'),
-      const SizedBox(height: 5),
       // Mizaç çipleri + sevdiği şey çipi.
       Wrap(
         spacing: 5,
@@ -660,8 +704,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     ].where((g) => g.$2.isNotEmpty).toList();
     if (groups.isEmpty) return const [];
 
+    // Başlık/divider YOK — GENEL sekmesinin içinde, ev satırının altında akar.
     return [
-      const AppDivider(),
       for (int i = 0; i < groups.length; i++) ...[
         if (i != 0) const SizedBox(height: 9),
         _familyGroup(groups[i].$1, groups[i].$2),
@@ -702,14 +746,13 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   /// Köylünün kendi yaşam olayları: doğum/reşit oluş/evlilik/çocuk/kayıp…
   /// Kronolojik (en eski üstte) — bir hayatın akışını okutur. Boşsa gizli.
+  /// ÖYKÜ sekmesinin gövdesi — başlık/divider YOK (sekme adı üstleniyor).
+  /// Kendi sekmesi olduğu için eskisinden daha çok nefes alır (132 → 240).
   List<Widget> _lifeStory(VillagerEntity v) {
     if (v.life.isEmpty) return const [];
     return [
-      const AppDivider(),
-      AppSectionLabel('YAŞAM ÖYKÜSÜ'),
-      const SizedBox(height: 6),
       ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 132),
+        constraints: const BoxConstraints(maxHeight: 240),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

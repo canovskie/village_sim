@@ -108,6 +108,7 @@ part 'scene/scene_scenarios.dart';
 part 'scene/scene_npc_activity.dart';
 part 'scene/scene_npc_routine.dart';
 part 'scene/scene_reed.dart';
+part 'scene/scene_work.dart';
 part 'scene/scene_events.dart';
 part 'scene/scene_placement.dart';
 part 'scene/scene_building_spawn.dart';
@@ -218,6 +219,9 @@ bool kCaptureMode = false;
 double kCaptureZoom = 1.0;
 int kCaptureCarve = 0; // capture: başlangıçta bu kadar halka ön-hattı "oy" (kütük/recede demo)
 bool kCaptureSceneReady = false; // asset yüklenip sahne hazır olunca true (harness bekler)
+bool kCaptureShowcase = false; // capture: showcase köyünü kur (meslek iş döngüsü testi)
+/// capture: iş döngüsü telemetrisi — harness bunu okuyup davranışı doğrular.
+String kCaptureWorkReport = '';
 
 class VillageScene extends StatefulWidget {
   final VoidCallback? onExitToMenu;
@@ -392,17 +396,20 @@ class _VillageSceneState extends State<VillageScene>
   double _scaleStart = 1.0;
 
   // ── Kamera "reach" (ulaşılabilir bölge) ──────────────────────────────────────
-  // Reveal = ZOOM KISITLAMASI: kamera bu tile-kutusunun dışını gösteremez →
-  // gerçek harita kenarı asla kadraja girmez ("havada yüzen ada" yok). Radius
-  // zamanla büyür (hikâye beat'leri → organik); merkez = harita ortası (köy orada
-  // doğar). scene_input._clampCamera uygular; _minZoomForReach zoom-out'u sınırlar.
+  // Reveal = ZOOM KISITLAMASI: kamera reach dışını gösteremez → gerçek harita
+  // kenarı asla kadraja girmez ("havada yüzen ada" yok). Reach zamanla büyür
+  // (hikâye beat'leri → organik). Clamp EKRAN eksenlerinde (u=c-r, v=c+r) yapılır;
+  // ulaşılabilir bölge = harita elmasına içten çizilmiş ekran-hizalı dikdörtgen
+  // → ÖLÜ KÖŞE YOK. Detay: scene_input._clampCamera.
   static const double _kMaxZoom = 4.0;
-  static const double _kReachStart = 14.0;  // başlangıç zoom uzaklığı (büyük=uzak)
-  static const double _kReachMax   = 32.0;  // kenarda hep ~8 tile tampon kalır
-  final double _reachCx = kCols / 2;   // reach merkezi (spawn = harita ortası)
-  final double _reachCy = kRows / 2;
-  double _reachRadius = _kReachStart;  // hikâye beat'leri + organik ile büyür
-  bool _cameraCentered = false;        // ilk geçerli frame'de spawn'a ortala
+  /// Elmasın ucunda hep kalan tampon (hu+hv cinsinden) — void asla görünmez.
+  /// Bu tampon "israf" değil, no-edge yanılsamasını sağlayan çerçevedir.
+  static const double _kEdgeBuffer = 10.0;
+  /// Başlangıç reach span'i (hu+hv) — kullanıcı onaylı açılış uzaklığı.
+  static const double _kSpanStart = 50.0;
+  /// Reach span'i (hu+hv). Üst sınır `_maxSpan` = min(kCols,kRows)-1-tampon.
+  double _reachSpan = _kSpanStart;     // hikâye beat'leri + organik ile büyür
+  bool _cameraCentered = false;        // ilk geçerli frame'de merkeze ortala
   // "Dünya açılıyor" anı: reach genişlerken oyuncu TAM zoom-out'a yapışıksa
   // kamerayı yumuşakça geriye bırakırız (scene_land._updateLandExpansion).
   double _lastMinZoom = 0.0;
@@ -477,6 +484,7 @@ class _VillageSceneState extends State<VillageScene>
   // Ateş etrafı saz yatakları — evsizler biçtiği sazla kurar, geceleri uyur.
   final List<ReedBed> _reedBeds = [];
   double _reedScan = 0; // _tickReed throttle sayacı
+  double _workScan = 0; // _tickWork throttle sayacı (meslek iş döngüleri)
 
   // Kilometre taşı bildirimleri — bir kez tetiklenir.
   int _lastPopMilestone = 0;
@@ -926,6 +934,7 @@ class _VillageSceneState extends State<VillageScene>
     _assetsReady.then((_) {
       if (!mounted) return;
       setState(() => _assetsLoaded = true);
+      if (kCaptureShowcase) _buildShowcaseVillage();
       _ticker.start();
       kCaptureSceneReady = true; // capture harness bunu bekler
     });

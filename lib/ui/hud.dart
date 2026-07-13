@@ -332,7 +332,10 @@ class GameHUD extends StatelessWidget {
       ('Oduncu',   woodcutterCount, _woodC),
       ('Madenci',  minerCount,      _minerC),
       ('Balıkçı',  fisherCount,     _fisherC),
-      ('Çoban',    shepherdCount,   _shepC),
+      // Ağıl işçisi = SÜTÇÜ (inek sağar). "Çoban" değil — çoban artık gerçek bir
+      // meslek (VillagerType.shepherd): sürüyü otlatır, sağmaz. Aynı ada sahip
+      // iki farklı iş olmasın diye ayrıldı.
+      ('Sütçü',    shepherdCount,   _shepC),
       ('Çiçekçi',  floristCount,    _floriC),
       ('İnşaatçı', builderCount,    _buildC),
     ].where((r) => r.$2 > 0).toList();
