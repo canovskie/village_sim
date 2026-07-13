@@ -85,25 +85,29 @@ class Cutscene {
   const Cutscene(this.shots);
 }
 
-/// Köyün kuruluş hikâyesi — açılış sinematiği (yeni oyun). Sakin tempolu,
-/// kamera nazikçe oturur; kafile ekranda yürüyüp DURUR (amaçsız kayma yok).
+/// Köyün kuruluş hikâyesi — açılış sinematiği (yeni oyun).
+///
+/// Ton: **imparatorluğun vergi elinden kaçış**. Bu, oyunun sonraki İmparatorluk
+/// tehdidine (scene_imperial) tohum bırakır: gölge bir gün geri gelecek.
+/// Hikâye YALNIZ açılışta yüklüdür; sonra pasifleşir (dünya sessizce açılır).
+/// Sakin tempolu; kafile ekranda yürüyüp DURUR (amaçsız kayma yok).
 const Cutscene kOpeningCutscene = Cutscene([
-  // 1) Geniş vadi, şafak — bağlamı kuran açılış (aktörsüz, nazik zoom).
+  // 1) NEDEN yola düştüler — vergi eli. Bağlamı kuran açılış (aktörsüz).
   CutsceneShot(
-    bg: CutsceneBg.valleyDawn,
+    bg: CutsceneBg.valleyDusk,
     panFrom: 0.0,
     panTo: 0.03,
     zoomFrom: 1.0,
     zoomTo: 1.06,
     lines: [
       CutsceneLine(
-          'Eski yurtları artık bir anıydı — kıtlık ve yorgunluk onları yollara düşürmüştü.'),
+          'Vergiciler her hasatta gelirdi. Önce tahılın üçte biri… sonra yarısı.'),
       CutsceneLine(
-          'Günlerce yürüdüler: çocuklar, yaşlılar, birkaç hayvan… ve sönmeyen bir umut.'),
+          'Sonunda geriye ekmek değil, yalnız imparatorluğun defterinde bir ad kaldı.'),
     ],
   ),
 
-  // 2) Kafile vadiye varır — soldan girer, ekranda gruplanıp DURUR.
+  // 2) Kaçış / yol — kafile soldan girer, ekranda gruplanıp DURUR.
   CutsceneShot(
     bg: CutsceneBg.road,
     panFrom: 0.0,
@@ -116,11 +120,28 @@ const Cutscene kOpeningCutscene = Cutscene([
     ],
     lines: [
       CutsceneLine(
-          'Sonunda bir vadiye vardılar. Su sesi, çayır kokusu… içleri ilk kez ısındı.'),
+          'Bir gece, ambarları boşaltılmış birkaç hane sessizce yola düştü.'),
+      CutsceneLine(
+          'Günlerce yürüdüler. Çocuklar, yaşlılar, birkaç hayvan… ve tek bir düş: kendilerine ait bir ocak.'),
     ],
   ),
 
-  // 3) MAPLE TANIŞMA — rehber söz alır, oyuncuya kendini tanıtır (yüz yüze).
+  // 3) Varış — şafakta vadi görünür. İlk kez nefes.
+  CutsceneShot(
+    bg: CutsceneBg.valleyDawn,
+    panFrom: 0.0,
+    panTo: 0.04,
+    zoomFrom: 1.06,
+    zoomTo: 1.0,
+    lines: [
+      CutsceneLine(
+          'Bir şafak vakti, sisin arasından vadi göründü. Su sesi, çayır kokusu.'),
+      CutsceneLine(
+          'Ne sınır taşı vardı, ne vergi defteri. Yalnız toprak — ve sessizlik.'),
+    ],
+  ),
+
+  // 4) MAPLE TANIŞMA — rehber söz alır; imparatorluğun gölgesini anar (yay tohumu).
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
     zoomFrom: 1.0,
@@ -129,14 +150,14 @@ const Cutscene kOpeningCutscene = Cutscene([
       CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.42, y: 0.80, scale: 1.6),
     ],
     lines: [
-      CutsceneLine('Merhaba, yolcu. Ben Maple — bu kafileye yıllardır yol gösteririm.',
+      CutsceneLine('Ben Maple. Bu kafileye yıllardır yol gösteririm — ama bu toprağı ilk kez görüyorum.',
           speaker: 'Maple'),
-      CutsceneLine('İşte burası. Bu toprak bizi bekliyormuş gibi… yeni yuvamız olacak.',
+      CutsceneLine('İmparatorluk buraya uzak. Şimdilik. Burada yakacağın ateş, senin olacak.',
           speaker: 'Maple'),
     ],
   ),
 
-  // 4) ADLANDIRMA — ETKİLEŞİM: Maple sorar, oyuncu köye ad verir (kimlik/günce).
+  // 5) ADLANDIRMA — ETKİLEŞİM: Maple sorar, oyuncu köye ad verir (kimlik/günce).
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
     zoomFrom: 1.0,
@@ -146,11 +167,13 @@ const Cutscene kOpeningCutscene = Cutscene([
       CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
     ],
     lines: [
-      CutsceneLine('Söyle bakalım — bu yuvaya ne ad verelim?', speaker: 'Maple'),
+      CutsceneLine('Bir yurt, adıyla var olur. Söyle — bu yuvaya ne ad verelim?',
+          speaker: 'Maple'),
     ],
   ),
 
-  // 5) Kapanış — Maple oyuncuyu ateş yerini SEÇMEYE yönlendirir (haritaya geçiş).
+  // 6) Kapanış — ateş yerini SEÇMEYE yönlendirir. Son satır, dünyanın ateşin
+  // ışığından büyüyeceğini söyler → zoom-reveal'ın (kamera reach'i) anlatısı.
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
     zoomFrom: 1.0,
@@ -160,7 +183,8 @@ const Cutscene kOpeningCutscene = Cutscene([
     ],
     lines: [
       CutsceneLine('Güzel isim. Bir köy, tek bir kıvılcımla başlar.', speaker: 'Maple'),
-      CutsceneLine('Şimdi ilk ateşimizi nereye kuracağımızı sen seç.', speaker: 'Maple'),
+      CutsceneLine('İlk ateşi nereye kuracağımızı sen seç. Işığı nereye düşerse, dünya oradan açılır.',
+          speaker: 'Maple'),
     ],
   ),
 ]);
@@ -180,7 +204,8 @@ const Cutscene kFireLightingCutscene = Cutscene([
       CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.66, y: 0.80, scale: 1.45),
     ],
     lines: [
-      CutsceneLine('İlk ateş tutuştu — karanlık vadi bir anda bir yuvaya dönüştü.'),
+      CutsceneLine(
+          'İlk ateş tutuştu. Karanlık vadi bir yuvaya döndü — imparatorluğun defterinde olmayan bir yuvaya.'),
       CutsceneLine('Hoş geldin, kurucu. Gerisi senin elinde.', speaker: 'Maple'),
     ],
   ),
