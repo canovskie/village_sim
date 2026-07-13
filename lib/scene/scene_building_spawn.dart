@@ -774,8 +774,16 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         (BuildingType.lamppost,         8, 8),
         (BuildingType.lamppost,        14, 8),
       ];
+      // Arazi (ağaç/su) bazı slotları geçersiz kılabilir → o bina SESSİZCE
+      // atlanıyordu ve showcase "her tip hazır" sözünü tutmuyordu (değirmen/
+      // taverna/kilise böyle kaybolup iş döngüsü testini yanılttı). Artık
+      // atlananlar sayılıp bildirimde açıkça söyleniyor.
+      _showcaseSkipped.clear();
       for (final (type, col, row) in layout) {
-        if (!_isValidPlacement(col, row, type)) continue;
+        if (!_isValidPlacement(col, row, type)) {
+          _showcaseSkipped.add(type.name);
+          continue;
+        }
         final b = BuildingEntity(type: type, col: col, row: row);
         _buildings.add(b);
         _onBuildingCompleted(
@@ -836,6 +844,14 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         VillagerType.innkeeper,
         VillagerType.priest,
       ];
+      // Yetişkin köylü sayısı yetmezse ek doğur — 5 mesleğin HEPSİ temsil edilsin
+      // (aksi halde showcase rastgele biçimde bazı meslekleri hiç göstermez).
+      while (_villagers.where((v) => v.hasProfession && !v.isDying).length <
+          showcaseTrades.length) {
+        final before = _villagers.length;
+        _spawnGrownVillager(townhall);
+        if (_villagers.length == before) break; // doğuramıyor → sonsuz döngü olmasın
+      }
       final grown = _villagers
           .where((v) => v.hasProfession && !v.isDying)
           .toList();
@@ -863,6 +879,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         }
       }
     });
-    _showNotification('🎭 Showcase köyü kuruldu — her tip görsel test için hazır');
+    _showNotification(_showcaseSkipped.isEmpty
+        ? '🎭 Showcase köyü kuruldu — her tip görsel test için hazır'
+        : '🎭 Showcase kuruldu — ARAZİ YÜZÜNDEN KURULAMADI: '
+            '${_showcaseSkipped.join(", ")}');
   }
 }

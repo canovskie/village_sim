@@ -85,6 +85,19 @@ extension _SceneWork on _VillageSceneState {
     return b != null && _standSpotFor(b, v) != null;
   }
 
+  /// Köylü ZATEN bu hedefe mi yürüyor?
+  ///
+  /// Kritik: "state == moving ise dokunma" demek YETMEZ — köylünün kendi
+  /// başına gezinme (wander) davranışı onu neredeyse sürekli `moving` tutar,
+  /// o yüzden iş emri hiç verilemez ve köylü ömrü boyunca voltasında döner
+  /// (telemetride hancı tam olarak böyle takıldı: st=moving, d hep 8-9).
+  /// Doğru soru: "benim hedefime mi gidiyor?" — gitmiyorsa emri VER (wander'ı
+  /// ez); gidiyorsa rahat bırak, varmasını bekle.
+  bool _enRouteTo(VillagerEntity v, double x, double y) =>
+      v.state == VillagerState.moving &&
+      (v.targetCol - x).abs() < 0.6 &&
+      (v.targetRow - y).abs() < 0.6;
+
   void _tickWork(double dt) {
     // Cooldown'lar gerçek zamanda akar (tarama throttle'ından bağımsız).
     for (final v in _villagers) {
@@ -106,9 +119,6 @@ extension _SceneWork on _VillageSceneState {
           v.activity != VillagerActivity.none) {
         continue;
       }
-      // Yolda — hedefe varmasını bekle (her taramada yeni emir verme).
-      if (v.state == VillagerState.moving) continue;
-
       switch (v.type) {
         case VillagerType.shepherd:
           _workShepherd(v);
@@ -180,9 +190,8 @@ extension _SceneWork on _VillageSceneState {
         v.glanceAround(duration: 1.6);
         v.lookToward(hungry.gridX, hungry.gridY);
         v.workCooldown = _kTendCooldown;
-      } else {
-        final spot = _freeSpotNear(hungry.gridX, hungry.gridY, 1.4);
-        v.goTo(spot?.$1 ?? hungry.gridX, spot?.$2 ?? hungry.gridY, 1.0);
+      } else if (!_enRouteTo(v, hungry.gridX, hungry.gridY)) {
+        v.goTo(hungry.gridX, hungry.gridY, 1.0);
       }
       return;
     }
@@ -191,8 +200,9 @@ extension _SceneWork on _VillageSceneState {
     final near = _nearestAnimal(v);
     if (near == null) return;
     if (_wdist(v.gridX, v.gridY, near.gridX, near.gridY) > _kFlockRange) {
-      final spot = _freeSpotNear(near.gridX, near.gridY, 1.8);
-      v.goTo(spot?.$1 ?? near.gridX, spot?.$2 ?? near.gridY, 2.5);
+      if (!_enRouteTo(v, near.gridX, near.gridY)) {
+        v.goTo(near.gridX, near.gridY, 2.5);
+      }
     } else {
       v.glanceAround(duration: 1.5);
       v.lookToward(near.gridX, near.gridY);
@@ -235,6 +245,7 @@ extension _SceneWork on _VillageSceneState {
 
     final spot = _ringSpot(t.col, t.row, 1, 1, v);
     if (spot == null) return; // yanına varılamıyor → başka ağaç (sonraki tarama)
+    if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten ava yürüyor
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       // Pusu → av. Kaynak yaratır (et), ağaca DOKUNMAZ (o oduncunun işi).
       _stockpile.food += _kHuntFood;
@@ -278,6 +289,7 @@ extension _SceneWork on _VillageSceneState {
     final spot = _standSpotFor(b, v);
     if (spot == null) return; // binaya yanaşılamıyor → rutin devralsın
 
+    if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten yolda
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       // İşinin başında — oyalanır (bonus _millerYieldMul'dan okunur).
       if (v.workCooldown <= 0) {
@@ -317,6 +329,7 @@ extension _SceneWork on _VillageSceneState {
     final spot = _standSpotFor(b, v);
     if (spot == null) return; // binaya yanaşılamıyor → rutin devralsın
 
+    if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten yolda
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       if (v.workCooldown <= 0) {
         // Ağırlar / dua eder — yakındakiler bunu hisseder.

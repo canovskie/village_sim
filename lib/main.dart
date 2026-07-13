@@ -485,6 +485,8 @@ class _VillageSceneState extends State<VillageScene>
   final List<ReedBed> _reedBeds = [];
   double _reedScan = 0; // _tickReed throttle sayacı
   double _workScan = 0; // _tickWork throttle sayacı (meslek iş döngüleri)
+  /// Showcase köyünde arazi yüzünden kurulamayan binalar (sessiz atlama olmasın).
+  final List<String> _showcaseSkipped = [];
 
   // Kilometre taşı bildirimleri — bir kez tetiklenir.
   int _lastPopMilestone = 0;

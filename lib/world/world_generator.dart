@@ -48,12 +48,16 @@ class WorldGenerator {
   /// min 1.0 — küçük haritada bile orijinal yoğunluk korunur.
   double get _areaScale {
     const baseArea = 48.0 * 36.0;
-    // PERF: entity sayısı harita alanıyla lineer şişmesin — cap'le. Büyük harita
-    // (reveal alanı) ucuz zemin/cull ile bedava; ama ağaç/maden/dekor tick
-    // döngüleri ve spatial rebuild entity sayısıyla ölçekleniyor. Cap → per-frame
-    // maliyet sabit. Merkez yine dolu, uzak kenar seyrek (reveal'a uygun).
+    // Cap: entity sayısı çok büyük haritada sınırsız şişmesin (ağaç/maden/dekor
+    // tick döngüleri + spatial rebuild entity sayısıyla ölçekleniyor).
+    //
+    // AMA cap'i FAZLA kısarsan yoğunluk (entity/tile) düşer ve harita boşalır —
+    // 128×128'e geçince cap 4.0 yoğunluğu yarıya indirip çayırı çölleştirdi.
+    // 7.5 = kullanıcının onayladığı lush yoğunluğu birebir korur.
+    // Perf: bu kalemler STATİK ve item başına ucuz (t.update(dt)); asıl per-frame
+    // yük villager AI'sı ve o NÜFUSLA ölçekleniyor, harita/entity ile değil.
     final s = (kCols * kRows) / baseArea;
-    return s.clamp(1.0, 4.0);
+    return s.clamp(1.0, 7.5);
   }
 
   /// [lo..hi] aralığında int çek, sonra alan oranıyla ölçekle (min 1).

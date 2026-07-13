@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 
 // ─── Harita & izometri ───────────────────────────────────────────────────────
-// Harita büyük: kamera "reach" hep içeride tuttuğu için gerçek kenar asla
-// kadraja girmez; reveal (zoom kısıtı) haritayı yavaş yavaş açar. Entity
-// yoğunluğu _areaScale cap'i ile sınırlı (perf: tick maliyeti sabit).
-const int kCols = 108;
-const int kRows = 81;
+// Harita KARE ve büyük. Kare olması şart: ulaşılabilir bölgenin üst sınırı
+// `hu + hv ≤ min(kCols,kRows) - 1 - tampon` (bkz. scene_input._clampCamera), yani
+// KISA kenar her şeyi bağlar — dikdörtgen haritada uzun kenarın fazlası ölü kalır.
+// Kare 128 → reach span 50 → 117 büyür (2.3× doğrusal, ~5.5× alan): dünyanın
+// açılması için gerçek bir yay. Kamera reach hep içeride tuttuğundan gerçek kenar
+// asla kadraja girmez. Entity yoğunluğu _areaScale cap'i ile sınırlı (perf).
+const int kCols = 128;
+const int kRows = 128;
 const double kTileW = 64.0;   // piksel sanatı için 2:1 standart (64x32)
 const double kTileH = 32.0;
 const double kCharScale = 0.34;
