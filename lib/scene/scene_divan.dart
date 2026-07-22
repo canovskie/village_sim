@@ -25,6 +25,9 @@ extension _SceneDivan on _VillageSceneState {
       child: ListenableBuilder(
         listenable: _frame,
         builder: (_, _) => DivanPanel(
+          // Metin havuzlarının tohumu: gün. Pano gün içinde aynı okunur,
+          // ertesi gün başka kelimelerle konuşur (rebuild'de zıplamaz).
+          seed: _dayCount,
           identity: _houses.identityName,
           morale: _stats.morale,
           population: _villagers.length,
@@ -34,6 +37,7 @@ extension _SceneDivan on _VillageSceneState {
           houses: _houses.snapshot(),
           laws: _divanLaws(),
           marks: _divanMarks(),
+          crafts: _divanCrafts(),
           legacy: _governanceLegacy,
           onOpenPetition: _pendingPetition == null
               ? null
@@ -41,16 +45,31 @@ extension _SceneDivan on _VillageSceneState {
                     _divanOpen = false;
                     _petitionModalOpen = true;
                   }),
-          onConvene: _convene,
-          councilReady: _councilReady,
-          // KARAR DEFTERİ — eskiden belediye binası panelindeydi; yönetişim tek
-          // merkezde toplansın diye Divan'ın ikinci sekmesine taşındı.
-          policies: _policies,
-          onTogglePolicy: _togglePolicy,
-          onSetFamilyPolicy: _setFamilyPolicy,
-          policyCooldownSec: _policyCooldownRemaining(),
+          // KANUNNAME — Divan'ın ikinci sekmesi. Fermana dokun → meclis toplanır.
+          sealed: _policies.sealed,
+          lawContext: _lawContext,
+          lawSpotlightId: _lawSpotlightId,
+          inkDrySec: _inkDryRemaining(),
+          inkDryTotalSec: _inkDryTotal,
+          onOpenLaw: _openLawRitual,
           onClose: _closeDivan,
         ),
+      ),
+    );
+  }
+
+  /// MÜHÜR RİTÜELİ — meclisin toplandığı yer. Eski "MECLİS'İ TOPLA" kartı bir
+  /// düğmeydi ve düğmeye basmak bir yönetişim eylemi gibi hissettirmiyordu.
+  /// Şimdi meclis, bir fermanı defterin önüne koyduğun an zaten oradadır.
+  Widget buildLawRitual() {
+    final l = _lawRitual!;
+    return Positioned.fill(
+      child: LawSealRitual(
+        law: l,
+        sealed: _policies.sealed,
+        seed: _stableSeed('seal.${l.id}', _dayCount),
+        onSeal: () => _sealLaw(l),
+        onDismiss: _closeLawRitual,
       ),
     );
   }
@@ -74,7 +93,7 @@ extension _SceneDivan on _VillageSceneState {
             onTap: _openDivan,
             agendaCount: _divanAgendaCount(),
             pendingPetition: _pendingPetition != null,
-            councilReady: _councilReady,
+            bookOpen: _inkDryRemaining() <= 0,
           ),
         ),
       ),
@@ -82,6 +101,12 @@ extension _SceneDivan on _VillageSceneState {
   }
 
   // ── Gündem türetme ──────────────────────────────────────────────────────────
+
+  /// Gündem satırının ağzı: havuzdan GÜNE göre bir varyant seçer. Divan bir
+  /// pano değil, kulağına eğilip tek nefeste durumu söyleyen bir kâhya olsun —
+  /// ama aynı gün içinde her rebuild'de kelime değiştirmesin (tohum = gün+anahtar).
+  String _agendaLine(String key, List<String> pool) =>
+      Voice.pick(pool, _stableSeed(key, _dayCount));
 
   /// Bekleyen dilekçe (varsa) gündemin tepesinde + mayalanan baskılar (baskıya
   /// göre azalan). Dilekçeleri kapılayan aynı sinyallerden okunur.
@@ -96,7 +121,7 @@ extension _SceneDivan on _VillageSceneState {
       out.add(DivanMatter(
         icon: p.icon,
         title: p.title,
-        sub: p.stakes ?? '${p.petitioner} bir dilekçe sundu.',
+        sub: p.stakes ?? '${p.petitioner} kapıda bekliyor, dilekçe elinde.',
         pressure: 1.0 - grace,
         tone: p.tone,
         pending: true,
@@ -118,8 +143,19 @@ extension _SceneDivan on _VillageSceneState {
         icon: '⌂',
         title: '${h.label} ${sullen ? 'küskün' : 'huzursuz'}',
         sub: sullen
-            ? 'Gönülleri alınmazsa ısrarla gündeme gelecekler.'
-            : 'Hava soğuyor — bir jest beklentisi var.',
+            ? _agendaLine('house.sullen.${h.surname}', const [
+                'Selamı kesmişler. Gönülleri alınmazsa bunu bir dilekçeyle '
+                    'önüne koyacaklar.',
+                'Kapıları erken kapanıyor, meydana inmiyorlar. Bu suskunluk '
+                    'ucuza kapanmaz.',
+                'Aralarında konuştukları şey belli: sıra sende, ve bunu '
+                    'biliyorlar.',
+              ])
+            : _agendaLine('house.uneasy.${h.surname}', const [
+                'Bir jest bekliyorlar; adını koymuyorlar ama bekliyorlar.',
+                'Hava soğudu. Henüz kırılmadı, kırılmadan tut.',
+                'Sofrada laf az. Küskünlüğe daha var ama yol o yola çıkıyor.',
+              ]),
         pressure: ((_kDivanUneasy - mood) / _kDivanUneasy).clamp(0.1, 1.0),
         tone: sullen ? PetitionTone.ominous : PetitionTone.solemn,
       ));
@@ -127,22 +163,33 @@ extension _SceneDivan on _VillageSceneState {
 
     // Kan davası — köyü zehirler, sulh meclisi an meselesi.
     if (_feudMember() != null) {
-      brewing.add(const DivanMatter(
+      brewing.add(DivanMatter(
         icon: '🩸',
-        title: 'Kan davası köyü zehirliyor',
-        sub: 'İki aile arasında kan dökülüyor — sulh kararı yaklaşıyor.',
+        title: 'Kan davası',
+        sub: _agendaLine('feud', const [
+          'İki hane aynı kuyudan içiyor ama birbirine bakmıyor. Bir mezar '
+              'daha kazılmadan otur bu masaya.',
+          'Bıçaklar kuşakta, husumet defterde. Sulh her geçen gün pahalanıyor.',
+          'Kan davası köyün suyuna karıştı. Sen kapatmazsan onlar kapatacak.',
+        ]),
         pressure: 0.9,
         tone: PetitionTone.ominous,
-        conveneId: 'feud',
       ));
     }
 
     // Çağrısına küs köylü — meslek değiştirme dilekçesi mayalanıyor.
     if (_resentfulVillager() != null) {
-      brewing.add(const DivanMatter(
+      brewing.add(DivanMatter(
         icon: '🌫️',
-        title: 'Biri gönlündeki işi özlüyor',
-        sub: 'Mesleğine küs bir köylü çağrısının peşinden gitmek istiyor.',
+        title: 'Biri yanlış tezgâhta',
+        sub: _agendaLine('calling', const [
+          'Eli işte, aklı başka yerde. Er geç çağrısının peşinden gitmek '
+              'için izin isteyecek.',
+          'Mesleğine küs bir köylü var; her sabah aynı kapıdan isteksiz '
+              'çıkıyor.',
+          'Gönlü başka bir işte kalmış biri, sana söylemeye cesaret '
+              'topluyor.',
+        ]),
         pressure: 0.4,
         tone: PetitionTone.solemn,
       ));
@@ -158,7 +205,11 @@ extension _SceneDivan on _VillageSceneState {
       brewing.add(DivanMatter(
         icon: fp.icon,
         title: fp.title,
-        sub: 'Geçmiş bir kararın yankısı — yakında gündeme gelecek.',
+        sub: _agendaLine('followup.${f.id}', const [
+          'Verdiğin karar geri döndü. Köy hatırlıyor, hesabını soracak.',
+          'Eski bir hükmün yankısı: birkaç güne kapına dayanır.',
+          'Bunu bir kez konuşmuştunuz. Konu kapanmamış, sadece beklemiş.',
+        ]),
         pressure: pressure,
         tone: fp.tone,
       ));
@@ -170,7 +221,12 @@ extension _SceneDivan on _VillageSceneState {
       brewing.add(DivanMatter(
         icon: '🥖',
         title: 'Ambar inceliyor',
-        sub: 'Erzak azalıyor — köy bölüşüm kararı istemeden tedbir al.',
+        sub: _agendaLine('food', const [
+          'Kileyi ölçtüler, yüzleri düştü. Bölüşüm dilekçesi gelmeden tedbir al.',
+          'Ambarın dibi görünmeye başladı; kadınlar ekmeği ince kesiyor.',
+          'Sayım yapıldı: bu erzakla kaç sofra döner, ambarcı söylemeye '
+              'çekiniyor.',
+        ]),
         pressure: (1.0 - _stockpile.food / (mouths * 2.0)).clamp(0.2, 0.95),
         tone: PetitionTone.ominous,
       ));
@@ -179,10 +235,16 @@ extension _SceneDivan on _VillageSceneState {
     // Yaz kuraklığı zemini — işlenen tarla varken güneş ekini tehdit eder.
     final hasCrops = _farmTiles.any((t) => t.isGrowing || t.readyToHarvest);
     if (_season == Season.summer && hasCrops) {
-      brewing.add(const DivanMatter(
+      brewing.add(DivanMatter(
         icon: '☀️',
-        title: 'Yaz güneşi ekini kavurabilir',
-        sub: 'Kuyu suyu hayati — çiftçiler yakında su isteyebilir.',
+        title: 'Güneş ekini yakıyor',
+        sub: _agendaLine('drought', const [
+          'Toprak çatladı. Kuyudan su çeken sıraya girdi; çiftçiler yakında '
+              'senden su isteyecek.',
+          'Başaklar öğlen vakti başını eğiyor. Bu sıcak bir hafta daha '
+              'sürerse hasat yarıya iner.',
+          'Tarlalar susuz. Kuyunun ipi kısaldı, çiftçilerin sabrı da.',
+        ]),
         pressure: 0.35,
         tone: PetitionTone.ominous,
       ));
@@ -197,10 +259,17 @@ extension _SceneDivan on _VillageSceneState {
       hungerSum += c.hunger;
     }
     if (herd > 0 && hungerSum / herd > 0.5) {
-      brewing.add(const DivanMatter(
+      brewing.add(DivanMatter(
         icon: '🐄',
         title: 'Sürü aç kalıyor',
-        sub: 'Ahır bakımsız — yem sıkıntısı gündeme gelmek üzere.',
+        sub: _agendaLine('herd', const [
+          'Ahırdan gece boyu ses geliyor. Yemlikler boş, çoban bunu senin '
+              'kapına getirecek.',
+          'İnekler süt vermez oldu, kaburgaları sayılıyor. Yem meselesi '
+              'gündeme düşmek üzere.',
+          'Ağıl bakımsız, saman bitmiş. Aç hayvan önce zayıflar, sonra '
+              'hastalanır.',
+        ]),
         pressure: 0.45,
         tone: PetitionTone.solemn,
       ));
@@ -214,20 +283,40 @@ extension _SceneDivan on _VillageSceneState {
 
   // ── Köyün hâli ──────────────────────────────────────────────────────────────
 
-  /// Yürürlükteki yasalar — kararlarının köyde kalıcı izi (proaktif fermanlar).
+  /// Deftere girmiş fermanlar — kararlarının köyde kurumuş mumu.
   List<DivanFact> _divanLaws() {
     final out = <DivanFact>[];
-    if (_policies.family != FamilyPolicy.open) {
-      out.add(DivanFact('👨‍👩‍👧', _policies.family.label, AppUi.info));
-    }
-    for (final d in kPolicyDefs) {
-      if (_policies.isOn(d.id)) out.add(DivanFact(d.icon, d.label, AppUi.info));
+    for (final l in kLawBook) {
+      if (!_policies.sealed.contains(l.id)) continue;
+      out.add(DivanFact(l.icon, l.title, branchColor(l.branch)));
     }
     return out;
   }
 
   /// Kararların kalıcı izleri — köy hafızası bayraklarının okunur karşılığı.
   /// identity.* atlanır (kimlik zaten başlıkta). Bilinmeyen bayrak gösterilmez.
+  /// Köyün bildiği zanaatlar → Divan çipleri (kademeli gelişmenin görünür
+  /// yüzü). Kilit menüde binaları gizlerken, köyün NE öğrendiğini burası söyler.
+  List<DivanFact> _divanCrafts() {
+    const sage = AppUi.sage;
+    const icons = <String, String>{
+      Craft.carpentry: '🪵',
+      Craft.masonry: '🧱',
+      Craft.farming: '🌾',
+      Craft.husbandry: '🐑',
+      Craft.milling: '🌀',
+      Craft.mining: '⛏',
+      Craft.fishing: '🎣',
+      Craft.trade: '🪙',
+      Craft.faith: '⛪',
+    };
+    return [
+      for (final c in Craft.all)
+        if (_knownCrafts.contains(c))
+          DivanFact(icons[c] ?? '⚒', Craft.displayName(c), sage),
+    ];
+  }
+
   List<DivanFact> _divanMarks() {
     const sage = AppUi.sage;
     const rust = AppUi.rust;
@@ -236,17 +325,26 @@ extension _SceneDivan on _VillageSceneState {
       'cult.active': DivanFact('⛪', 'İnanç kök saldı', accent),
       'cult.temple': DivanFact('⛪', 'Tapınak dikildi', accent),
       'cult.suppressed': DivanFact('⛪', 'İnanç bastırıldı', rust),
-      'cult.united': DivanFact('🕊️', 'İnanç uzlaştı', sage),
-      'fields.tended': DivanFact('🌾', 'Tarlalara iyi bakıldı', sage),
-      'fields.neglected': DivanFact('🍂', 'Tarlalar ihmal edildi', rust),
-      'pact.neighbor': DivanFact('🤝', 'Komşuyla anlaşma', sage),
-      'migrants.welcomed': DivanFact('🧳', 'Göçmenler kabul edildi', sage),
-      'holyDay.active': DivanFact('🕯️', 'Kutsal gün yürürlükte', accent),
-      'council.elders': DivanFact('🏛️', 'Yaşlılar meclisi', accent),
-      'council.youth': DivanFact('🌱', 'Gençler meclisi', accent),
-      'road.open': DivanFact('🛤️', 'Ticaret yolu açık', sage),
-      'road.closed': DivanFact('⛔', 'Yol kapatıldı', rust),
-      'festival.tradition': DivanFact('🎉', 'Şenlik geleneği', sage),
+      'cult.united': DivanFact('🕊️', 'İki inanç bir sofrada', sage),
+      'fields.tended': DivanFact('🌾', 'Toprağın hakkı verildi', sage),
+      'fields.neglected': DivanFact('🍂', 'Tarlalar öksüz kaldı', rust),
+      'pact.neighbor': DivanFact('🤝', 'Komşuyla el sıkışıldı', sage),
+      'migrants.welcomed': DivanFact('🧳', 'Yabancıya kapı açıldı', sage),
+      'holyDay.active': DivanFact('🕯️', 'Kutsal gün tutuluyor', accent),
+      'council.elders': DivanFact('🏛️', 'Söz yaşlılarda', accent),
+      'council.youth': DivanFact('🌱', 'Söz gençlerde', accent),
+      'road.open': DivanFact('🛤️', 'Yol tüccara açık', sage),
+      'road.closed': DivanFact('⛔', 'Yol kapalı, kervan yok', rust),
+      'festival.tradition': DivanFact('🎉', 'Şenlik gelenek oldu', sage),
+      // Dava kolunun bıraktığı izler — köyün ne olduğunu bunlar söyler.
+      'nizam.watch': DivanFact('🔥', 'Meydanda ateş sönmez', rust),
+      'nizam.registry': DivanFact('📖', 'Her hane deftere yazıldı', rust),
+      'nizam.labor': DivanFact('⛓', 'Suçlu taş kırıyor', rust),
+      'nizam.exile': DivanFact('🚪', 'Sürgün yolu açıldı', rust),
+      'nizam.sole': DivanFact('⚑', 'Tek söz sende', rust),
+      'dergah.tithe': DivanFact('🍞', 'Öşür toplanıyor', accent),
+      'dergah.penance': DivanFact('🙏', 'Günah meydanda söyleniyor', accent),
+      'dergah.oneFaith': DivanFact('⚑', 'Köy bir dergâh oldu', accent),
     };
     final out = <DivanFact>[];
     for (final flag in _villageMemory) {
