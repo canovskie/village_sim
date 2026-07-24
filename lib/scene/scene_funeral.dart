@@ -16,6 +16,36 @@ extension _SceneFuneral on _VillageSceneState {
   /// dikilmez (kilise etrafı sonsuza dek mezarla dolmasın).
   static const int _kMaxGraves = 18;
 
+  // ── Ölümün sesi ([[lib/text/voice.dart]]) ─────────────────────────────────
+  // Ölüm sessizdir: kısa cümle, somut ayrıntı, açıklama yok. Yaşam öyküsü
+  // satırları (annal) daha da kuru.
+
+  static const _kLostLifePool = ['{ad-i} kaybetti', '{ad-in} ardında kaldı'];
+  static const _kWidowLifePool = [
+    'Eşi {ad-i} toprağa verdi',
+    'Eşi {ad-i} kaybetti',
+  ];
+  static const _kChurchFuneralPool = [
+    '⛪ {ad-i} kilisenin yanına gömdüler. Çan bir kez çaldı.',
+    '⛪ {ad} için mum yakıldı. Mezarı kilisenin gölgesinde.',
+    '⛪ Köy {ad-i} uğurladı. Toprak kapandı, kimse acele etmedi.',
+  ];
+  static const _kPeacefulEndPool = [
+    '🕯️ {ad} uykusunda gitti.',
+    '🕯️ {ad-in} eli soğudu. Yüzü sakindi.',
+    '🕯️ {ad} sessizce göçtü.',
+  ];
+  static const _kOrphanDeathPool = [
+    '🕯️ {ad} öldü. Ardında {sayı} çocuk kaldı.',
+    '🕯️ {ad-i} kaybettik. {sayı} çocuğunun sofrasında bir sandalye boş.',
+    '🕯️ {ad} gitti. {sayı} çocuğu bu geceyi komşularda geçirecek.',
+  ];
+  static const _kDeathPool = [
+    '🕯️ {ad} bu sabah uyanmadı.',
+    '🕯️ {ad-in} kapısı bugün açılmadı. İçeri girdiklerinde geç kalmışlardı.',
+    '🕯️ {ad} öldü. Ocağı söndü.',
+  ];
+
   /// İlk (tamamlanmış) kiliseyi döner; yoksa null.
   BuildingEntity? get _churchBuilding {
     for (final b in _buildings) {
@@ -30,13 +60,20 @@ extension _SceneFuneral on _VillageSceneState {
     _award('first_death', 'Köy ilk kez yas tuttu', '🕯️');
     // Yaşam öyküsü — geride kalanların kaybı (dul eş + yetim çocuklar). v'nin
     // çocuk/ebeveyn listeleri tören anında hâlâ dolu (karşı taraf koparılmıştı).
+    final ctx = _voice(v,
+        seed: _stableSeed('ölüm${v.name}', _dayCount),
+        extra: {'sayı': '$orphans'});
     final partners = <VillagerEntity>{};
     for (final c in v.children) {
-      if (!c.isDying) _lifeEvent(c, '${v.name}\'i kaybetti', icon: '🕯️');
+      if (!c.isDying) {
+        _lifeEvent(c, Voice.say(_kLostLifePool, ctx), icon: '🕯️');
+      }
       partners.addAll(c.parents);
     }
     for (final p in partners) {
-      if (!p.isDying) _lifeEvent(p, 'Eşi ${v.name}\'i kaybetti', icon: '🕯️');
+      if (!p.isDying) {
+        _lifeEvent(p, Voice.say(_kWidowLifePool, ctx), icon: '🕯️');
+      }
     }
     final church = _churchBuilding;
 
@@ -50,18 +87,18 @@ extension _SceneFuneral on _VillageSceneState {
       _gatherAtFire(dur, max: 7);
       _feelVillage(NpcEmotion.grief, 10, -0.12);
       // Cozy: moral cezası yok — kilise teselli eder, köy onurla uğurlar.
-      _showNotification(
-          '⛪ ${v.name} kilisede uğurlandı — köy onu andı, mezarı huzurla kazıldı. 🕯️');
+      _showNotification(Voice.say(_kChurchFuneralPool, ctx));
       return;
     }
 
-    // Kilise yok — eski sade uğurlama (peacefulEnd / yetim varyantı).
-    final msg = _policies.peacefulEnd
-        ? '🕯️ ${v.name} huzura kavuştu.'
-        : orphans > 0
-            ? '🕯️ ${v.name} hayata veda etti. $orphans çocuk yetim kaldı.'
-            : '🕯️ ${v.name} hayata veda etti.';
-    _showNotification(msg);
+    // Kilise yok — sade uğurlama (peacefulEnd / yetim varyantı).
+    _showNotification(Voice.say(
+        _policies.peacefulEnd
+            ? _kPeacefulEndPool
+            : orphans > 0
+                ? _kOrphanDeathPool
+                : _kDeathPool,
+        ctx));
   }
 
   /// Kilise yakınında boş bir tile'a mezar yerleştirir — iç halkadan dışa

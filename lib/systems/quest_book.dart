@@ -93,10 +93,10 @@ class QuestBook {
   /// Kimlik kademeleri — ilerleme AĞIRLIKLA politikaya bağlı (mid+ kademeler
   /// berat ister), kuruluş (0→1) görev-sayısı ile.
   static const List<CharterTier> tiers = [
-    CharterTier('Yeni Ocak',        '🔥', 0, 0),
-    CharterTier('Konuksever Köy',   '🏡', 0, 4),
-    CharterTier('Şenlikli Kasaba',  '🎏', 2, 9),
-    CharterTier('Bereketli Kasaba', '🌟', 4, 15),
+    CharterTier('Yeni Yakılan Ocak', '🔥', 0, 0),
+    CharterTier('Kapısı Açık Köy',   '🏡', 0, 4),
+    CharterTier('Davulu Duyulan Kasaba', '🎏', 2, 9),
+    CharterTier('Harmanı Taşan Kasaba', '🌟', 4, 15),
   ];
 
   static int get maxTier => tiers.length - 1;
@@ -140,114 +140,128 @@ class QuestBook {
   static const List<Quest> all = [
     // ── Tier 0 — Yeni Ocak (kuruluş) ─────────────────────────────────────
     Quest(
-      id: 'firepit', icon: '🔥', label: 'Ateş Yeri kur',
-      hint: 'Köy meydanına ateş yak (ücretsiz). NPC\'ler buradan doğar.',
+      id: 'firepit', icon: '🔥', label: 'Ocağı yak',
+      hint: 'Meydana bir Ateş Yeri koy; bedava. Köyün ilk canı bu ateşin '
+          'başında görünecek.',
       category: QuestCategory.founding, tier: 0,
       reward: VisualReward.sparkle, check: _firepit),
     Quest(
-      id: 'lumber', icon: '🪓', label: 'Oduncu kulübesi kur',
-      hint: 'Ağaçların yakınına Oduncu Kulübesi (12 odun) — odun akışı başlar.',
+      id: 'lumber', icon: '🪓', label: 'Baltayı ormana sok',
+      hint: 'Ağaçların dibine Oduncu Kulübesi kur (12 odun). Oduncu kendi gelir, '
+          'kesmeye kendi başlar.',
       category: QuestCategory.production, tier: 0,
       reward: VisualReward.sparkle, check: _lumber),
     Quest(
-      id: 'house', icon: '🏠', label: 'İlk evi kur',
-      hint: 'Köylülerin gece uyuması için bir Köy Evi (18 odun + 4 taş).',
+      id: 'house', icon: '🏠', label: 'İlk damı çat',
+      hint: 'Bir Köy Evi dik (18 odun + 4 taş). O geceden sonra biri yıldızların '
+          'altında uyumaz.',
       category: QuestCategory.founding, tier: 0,
       reward: VisualReward.bloom, check: _house),
     Quest(
-      id: 'farm', icon: '🌾', label: 'Tarla aç',
-      hint: 'Yiyecek üretmek için Tarla modunda bir alan seç.',
+      id: 'farm', icon: '🌾', label: 'Toprağı sür',
+      hint: 'Tarla modunu aç, düz bir alan seç. Ekilen yer sonbaharda karnını '
+          'doyurur.',
       category: QuestCategory.production, tier: 0,
       reward: VisualReward.sparkle, check: _farm),
     Quest(
-      id: 'well', icon: '💧', label: 'Kuyu kur',
-      hint: 'Kuyu evlere su sağlar. Tarlanın yanına yararlı.',
+      id: 'well', icon: '💧', label: 'Suyu köye getir',
+      hint: 'Bir Kuyu kaz. Evler doldurur, çiftçi ekinini sular; tarlaya yakın '
+          'olsun.',
       category: QuestCategory.founding, tier: 0,
       reward: VisualReward.bloom, check: _well),
 
-    // ── Tier 1 — Konuksever Köy ──────────────────────────────────────────
+    // ── Tier 1 — Kapısı Açık Köy ─────────────────────────────────────────
     Quest(
-      id: 'townhall', icon: '🏛', label: 'Belediye kur',
-      hint: 'Belediye yönetişimin merkezi — beratlar buradan çıkar.',
+      id: 'townhall', icon: '🏛', label: 'Belediyeyi kur',
+      hint: 'Belediye binasını dik. Köyün mührü orada durur; berat oradan çıkar.',
       category: QuestCategory.governance, tier: 1,
       reward: VisualReward.bloom, check: _townhall),
     Quest(
-      id: 'firstPolicy', icon: '📜', label: 'İlk beratını çıkar',
-      hint: 'Belediye panelinden bir politika yürürlüğe koy — köyün tüzüğü doğsun.',
+      id: 'firstPolicy', icon: '📜', label: 'İlk beratı yaz',
+      hint: 'Belediye panelini aç, bir politikayı yürürlüğe koy. Köyün tüzüğü '
+          'o satırla başlar.',
       category: QuestCategory.governance, tier: 1,
       reward: VisualReward.festival, check: _firstPolicy),
     Quest(
-      id: 'tavern', icon: '🍺', label: 'Taverna kur',
-      hint: 'Taverna köyün sosyal kalbi — akşam buluşmaları canlanır.',
+      id: 'tavern', icon: '🍺', label: 'Tavernayı aç',
+      hint: 'Bir Taverna kur. Akşam işten çıkanın gideceği bir yer olsun.',
       category: QuestCategory.social, tier: 1,
       reward: VisualReward.bloom, check: _tavern),
     Quest(
-      id: 'pop10', icon: '👪', label: 'Nüfusu 10\'a çıkar',
-      hint: 'Belediye + bol yiyecek + ev kapasitesi → köy büyür.',
+      id: 'pop10', icon: '👪', label: 'On cana ulaş',
+      hint: 'Belediye ayakta, ambar dolu, ev boş olsun: nüfus kendi büyür. '
+          'Onuncu köylüyü bekle.',
       category: QuestCategory.population, tier: 1,
       reward: VisualReward.festival, check: _pop10),
     Quest(
-      id: 'church', icon: '⛪', label: 'Kilise kur',
-      hint: 'Kilise huzur ve tören mekânı; yanına mezarlık doğar.',
+      id: 'church', icon: '⛪', label: 'Kiliseyi dik',
+      hint: 'Bir Kilise kur. Köy hem duasını hem uğurlamasını orada yapar; '
+          'yanı başında mezarlık büyür.',
       category: QuestCategory.social, tier: 1,
       reward: VisualReward.bloom, check: _church),
 
-    // ── Tier 2 — Şenlikli Kasaba ─────────────────────────────────────────
+    // ── Tier 2 — Davulu Duyulan Kasaba ───────────────────────────────────
     Quest(
-      id: 'market', icon: '🛒', label: 'Pazar kur',
-      hint: 'Pazar köyün ticaret meydanı — alışveriş telaşı başlar.',
+      id: 'market', icon: '🛒', label: 'Pazarı kur',
+      hint: 'Bir Pazar aç. Fazlan altına döner, meydan sesle dolar.',
       category: QuestCategory.production, tier: 2,
       reward: VisualReward.bloom, check: _market),
     Quest(
-      id: 'beehive', icon: '🐝', label: 'Arı kovanı kur',
-      hint: 'Çiçeklerin yakınına kovan koy — bal ve vızıltı gelir.',
+      id: 'beehive', icon: '🐝', label: 'Kovanı yerleştir',
+      hint: 'Kovanı çiçeklerin arasına koy. Menzilinde ne kadar çiçek varsa o '
+          'kadar hızlı bal gelir.',
       category: QuestCategory.production, tier: 2,
       reward: VisualReward.bloom, check: _beehive),
     Quest(
-      id: 'florist', icon: '🌷', label: 'Çiçekçi kulübesi kur',
-      hint: 'Çiçekçi köyü baştan başa renklendirir.',
+      id: 'florist', icon: '🌷', label: 'Çiçekçiyi çağır',
+      hint: 'Çiçekçi Kulübesi kur. Kadın etrafındaki her şeyi sular, köy renk '
+          'değiştirir.',
       category: QuestCategory.beauty, tier: 2,
       reward: VisualReward.bloom, check: _florist),
     Quest(
-      id: 'threePolicies', icon: '⚖️', label: 'Üç beratı yürürlüğe koy',
-      hint: 'Köyün tüzüğü zenginleşsin — üç politika aktif olsun.',
+      id: 'threePolicies', icon: '⚖️', label: 'Tüzüğü kalınlaştır',
+      hint: 'Belediyeden üç beratı birden yürürlükte tut. Yazılı köyün sözü geçer.',
       category: QuestCategory.governance, tier: 2,
       reward: VisualReward.festival, check: _threePolicies),
     Quest(
-      id: 'neighborly', icon: '🤝', label: 'Komşuluk beratı çıkar',
-      hint: 'Komşuluk politikası açılınca köylüler birbirine selam verir.',
+      id: 'neighborly', icon: '🤝', label: 'Komşuluk beratı',
+      hint: 'Komşuluk politikasını aç. Karşılaşan iki köylü artık başını çevirip '
+          'geçmez, selam verir.',
       category: QuestCategory.governance, tier: 2,
       reward: VisualReward.bloom, check: _neighborly),
     Quest(
-      id: 'pop20', icon: '🧑‍🤝‍🧑', label: 'Nüfusu 20\'ye çıkar',
-      hint: 'Köy kasabaya dönüşüyor.',
+      id: 'pop20', icon: '🧑‍🤝‍🧑', label: 'Yirmi cana ulaş',
+      hint: 'Ev yetiştir, ambarı boş bırakma. Yirminci köylüde artık buraya köy '
+          'demek zor.',
       category: QuestCategory.population, tier: 2,
       reward: VisualReward.festival, check: _pop20),
     Quest(
-      id: 'bloomVillage', icon: '🌸', label: 'Köyü çiçeklendir',
-      hint: 'Görevler tamamlandıkça köy güzelleşir — 40 süs objesine ulaş.',
+      id: 'bloomVillage', icon: '🌸', label: 'Köyü güzelleştir',
+      hint: 'Görev bitirdikçe köye süs düşer. Kırk süs objesine ulaş.',
       category: QuestCategory.beauty, tier: 2,
       reward: VisualReward.bloom, check: _bloom40),
 
-    // ── Tier 3 — Bereketli Kasaba ────────────────────────────────────────
+    // ── Tier 3 — Harmanı Taşan Kasaba ────────────────────────────────────
     Quest(
       id: 'fivePolicies', icon: '👑', label: 'Beş beratlık tüzük',
-      hint: 'Olgun bir yönetişim — beş politika aktif.',
+      hint: 'Beş politikayı aynı anda yürürlükte tut. Bu artık bir usul, bir '
+          'heves değil.',
       category: QuestCategory.governance, tier: 3,
       reward: VisualReward.landmark, check: _fivePolicies),
     Quest(
       id: 'hospitality', icon: '🚪', label: 'Misafirperverlik beratı',
-      hint: 'Misafirperver köye gezginler katılır.',
+      hint: 'Misafirperverlik politikasını aç. Yoldan geçen gezgin köyde kalır.',
       category: QuestCategory.governance, tier: 3,
       reward: VisualReward.bloom, check: _hospitality),
     Quest(
-      id: 'warehouse', icon: '📦', label: 'Ambar kur',
-      hint: 'Ambar stok kapasitesini büyütür.',
+      id: 'warehouse', icon: '📦', label: 'Ambarı büyüt',
+      hint: 'Bir Ambar kur. Harman yerde çürümesin, stok tavanı yükselsin.',
       category: QuestCategory.production, tier: 3,
       reward: VisualReward.bloom, check: _warehouse),
     Quest(
-      id: 'pop30', icon: '🌟', label: 'Nüfusu 30\'a çıkar',
-      hint: 'Bereketli, kalabalık bir kasaba.',
+      id: 'pop30', icon: '🌟', label: 'Otuz cana ulaş',
+      hint: 'Otuz köylü. Bu kadar ağız doyuyorsa toprak da yönetim de yerinde '
+          'demektir.',
       category: QuestCategory.population, tier: 3,
       reward: VisualReward.festival, check: _pop30),
   ];

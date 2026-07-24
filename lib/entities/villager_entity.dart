@@ -5,6 +5,7 @@ import '../characters/personality.dart';
 import '../characters/life_stage.dart';
 import '../core/constants.dart';
 import '../systems/chronicle.dart';
+import 'villager_job.dart';
 import 'worker_entity.dart';
 
 enum VillagerState { moving, idle, sleeping, walkingToSleep, walkingToPickup, carrying }
@@ -29,7 +30,28 @@ enum WanderBehavior { patrol, ponder, stroll, homebody, waterside, playful }
 /// [listening] dinleyici — storyteller çevresinde oturan, kıpırdamayan NPC.
 /// [arguing] iki kişi yüz yüze ağız dalaşı (öfke postürü + bağırış baloncuğu),
 /// [brawling] yumruklaşma (öfke + ileri-geri itiş hareketi + kamera sarsıntısı).
-enum VillagerActivity { none, chat, music, dance, warm, storytelling, listening, arguing, brawling }
+///
+/// SUÇ evreleri (bkz. scene_crime.dart) — hepsi gövde diliyle okunur, baş üstü
+/// "suçlu" ikonu yoktur: [prowling] hedefe sinsice sokulma (çömelmiş, tetikte),
+/// [committing] eylemin kendisi (kısa, telaşlı kıpırtı + aksan baloncuğu),
+/// [fleeing] olay yerinden kaçış (korku postürü + hızlanma), [chasing] muhafızın
+/// kovalaması (öne yüklenmiş koşu), [abducted] kaçırılan kurbanın sürüklenmesi.
+enum VillagerActivity {
+  none,
+  chat,
+  music,
+  dance,
+  warm,
+  storytelling,
+  listening,
+  arguing,
+  brawling,
+  prowling,
+  committing,
+  fleeing,
+  chasing,
+  abducted,
+}
 
 /// NPC'nin anlık duygusu — "canlılık" altyapısı. Geçici tepki olarak tetiklenir
 /// ([VillagerEntity.feel]); baş üstü ikon + görsel tepki (yürüyüş/irkilme) +
@@ -117,6 +139,21 @@ class VillagerEntity extends WorkerEntity {
   double targetCol;
   double targetRow;
 
+  /// ÜSTLENİLEN İŞ — anonim işçi avatarlarının yerini alır (bkz. [VillagerJob]).
+  /// null = boş/serbest. Aktifken sahne iş döngüsü ([_SceneWork]) köylüye
+  /// `goTo` hedefleri verir; köylü kendi başına gezinmez ([update] idle dalı
+  /// bunu görünce wander fallback'ini atlar). Kayıtta yalnız `job.role` tutulur;
+  /// atama `_syncJobWorkforce` ile her açılışta yeniden kurulur.
+  VillagerJob? job;
+
+  /// Aktif (none olmayan) bir işi üstlenmiş mi — iş döngüsü/rutin kapısı.
+  bool get hasActiveJob => job != null && job!.role != JobRole.none;
+
+  /// İş bırakıldıktan sonra kısa süre tekrar işe atanmama süresi (sn) — ör.
+  /// erişilemez hedefte takılıp iş bırakınca aynı köylü hemen yeniden aynı işe
+  /// atanıp yeniden takılmasın. 0 = serbest. Geçici (kaydedilmez).
+  double jobReassignCd = 0.0;
+
   /// Özel kostüm — meslekten bağımsız görsel override (bkz. [NpcCostume]).
   /// Normal köylüler `none`; imparatorluk askerleri spawn'da `imperial` set eder.
   /// Geçici varlık özelliği — kaydedilmez (askerler kayda yazılmaz).
@@ -166,9 +203,14 @@ class VillagerEntity extends WorkerEntity {
   }
 
   /// Ana hız — meslekten türer (getter; meslek değişince güncellenir).
-  /// Yaralı/sakatsa [injuryFactor] ile yavaşlar (görünür aksama).
+  /// Yaralı/sakatsa [injuryFactor] ile yavaşlar (görünür aksama); kaçarken /
+  /// kovalarken [hasteFactor] ile hızlanır (telaş gözle görülür).
   @override
-  double get speed => _speedFor(type) * injuryFactor;
+  double get speed => _speedFor(type) * injuryFactor * hasteFactor;
+
+  /// Telaş çarpanı — kaçan suçlu / kovalayan muhafız kısa süreliğine hızlanır.
+  /// scene_crime yazar, iş bitince 1.0'a döner. Transient (kaydedilmez).
+  double hasteFactor = 1.0;
 
   /// Bu NPC'nin boş zaman hareket kişiliği — meslekten türer (getter; meslek
   /// değişince yeni personaya geçer).
@@ -272,6 +314,17 @@ class VillagerEntity extends WorkerEntity {
   /// hedefi) belirlemede en çok kan dökeni öne çıkarır. Kaydedilir.
   int feudKills = 0;
 
+  // ── SUÇ SİCİLİ (scene_crime) ───────────────────────────────────────────────
+  /// Bu köylünün SUÇÜSTÜ YAKALANDIĞI suç sayısı. Yalnız yakalananlar sayılır —
+  /// meçhul kalan suç kimsenin siciline yazılmaz (köy failini bilmiyor).
+  /// Sicilli köylü panelde görünür, yargı dilekçesinde "sabıkalı" diye anılır.
+  /// Kaydedilir.
+  int crimeCount = 0;
+
+  /// Bir suçtan (ya da affedilmeden) sonra tekrar suça yeltenmeden önceki
+  /// bekleme (sn). Spam'ı önler. Transient — kayda yazılmaz.
+  double crimeCooldown = 0.0;
+
   /// Bilge yaşlı — random event "Bilge Yaşlı Belirdi" ile yalnız bir köylüye
   /// atanır (yaşam boyu kalır). Köyde bilge varken ufak moral bonusu doğar.
   bool isSage = false;
@@ -356,6 +409,14 @@ class VillagerEntity extends WorkerEntity {
   /// (Köy Nüfus Defteri'nde "zenginlik" sütunu); şimdilik hiçbir mantık harcamaz.
   /// [_tickVillagerMorale] besler, kayıtta saklanır. Bkz. [wealthDailyIncome].
   double wealth = 0;
+  /// Zanaat ustalığı — bu köylünün her zanaatta biriktirdiği deneyim (birikim
+  /// kanalı, bkz. buildings/craft.dart). Yalnız YAPI zanaatları (marangozluk/taş
+  /// ustalığı) buradan doğar: odun/taş taşıdıkça artar, eşiği geçen köylü o
+  /// zanaatı köye kazandırır. Meslek zanaatları çağrıdan gelir, buraya yazılmaz.
+  /// Kayıtta saklanır.
+  final Map<String, double> mastery = {};
+  void gainMastery(String craft, double amount) =>
+      mastery[craft] = (mastery[craft] ?? 0) + amount;
   /// Anlık duygu (geçici tepki). [emotionTime] > 0 iken aktif → renderer bunu
   /// GÖVDE DİLİNE çevirir (emoji DEĞİL): yas çöküşü, sevinç zıplaması, korku
   /// geri çekilmesi vb. Solunca [NpcEmotion.none]'a döner.
@@ -498,6 +559,11 @@ class VillagerEntity extends WorkerEntity {
     chatBubbleIcon = '';
     chatBubbleTime = 0;
   }
+
+  /// Oturmayı DIŞARIDAN iptal et — slot'u usulüne uygun bırakır (rezervasyon
+  /// sızdırmaz). Acil bir iş köylüyü ateş başından kaldırdığında kullanılır
+  /// (ör. muhafız suça koşarken — bkz. scene_crime `_guardResponse`).
+  void cancelSit() => _cancelSit();
 
   /// Oturmayı iptal et — slot'u serbest bırak, alanları temizle. Uyku/karar
   /// dışı durumlar için savunmacı.
@@ -847,11 +913,17 @@ class VillagerEntity extends WorkerEntity {
         // Bir sosyal aktivitedeyken (sohbet/müzik/dans) yerinde kal — hedef
         // seçip konuşmanın ortasında kayıp gitme.
         if (idleTimer <= 0 && activity == VillagerActivity.none) {
+          // Aktif işi varsa kendi başına gezinme — sahne iş döngüsü
+          // (`_workBuilder/_workFarmer/…`) bir sonraki `goTo` hedefini verecek.
+          // Köylü işyerinde/site'ta sabit bekler; iş loop'u onu sürer.
+          if (hasActiveJob) {
+            // Kısa bekleme — iş loop'u (~0.6 sn) devralana dek yerinde dur.
+            idleTimer = 0.5;
+          } else if (canRunErrands) {
           // Oyalanma bitti → amaçlı hedef akışı. Sahne rutin sistemi
           // (needsErrand) zamana/ihtiyaca göre bir POI atar; o gelene kadar
           // köylü "ne yapsam" diye kısa bekler. Atanamazsa (POI yok / çocuk)
           // eski kişisel dolaşmaya düşer — donuk kalmaz.
-          if (canRunErrands) {
             needsErrand = true;
             _errandWait += dt;
             if (_errandWait > 4.0) {

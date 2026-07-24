@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../systems/estate_system.dart';
 import '../systems/law_book.dart';
+import '../systems/law_compass.dart';
+import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
 import 'law_compass_view.dart';
@@ -42,6 +44,16 @@ class LawBookView extends StatefulWidget {
   final int seed;
   final void Function(LawDef law) onOpenLaw;
 
+  /// REJİM — defterin başındaki kadran bunları okur. null = rejim sistemi
+  /// bağlanmamış yüzey (preview/harness); kart eski hâliyle çizilir.
+  final RegimeRule? rule;
+  final double unrest;
+  final VillageRegime? sworn;
+  final VoidCallback? onSwearOath;
+
+  /// Mühürlü bir hükmü BEDELLE feshet. null = fesih kapalı (harness).
+  final void Function(LawDef law)? onRepeal;
+
   const LawBookView({
     super.key,
     required this.sealed,
@@ -51,6 +63,11 @@ class LawBookView extends StatefulWidget {
     this.inkDrySec = 0,
     this.inkDryTotalSec = 0,
     this.seed = 0,
+    this.rule,
+    this.unrest = 0,
+    this.sworn,
+    this.onSwearOath,
+    this.onRepeal,
   });
 
   @override
@@ -89,9 +106,12 @@ class _LawBookViewState extends State<LawBookView>
 
   // ── Hüküm hâli ─────────────────────────────────────────────────────────────
 
+  /// Hükmün defterdeki hâli. Kapısı kapalı SIRADAN hüküm defterde hiç yoktur
+  /// (köyün derdi doğunca belirir); kapısı kapalı AĞIR hüküm gerekçesiyle
+  /// kilitli durur — bkz. [LawBook.visible].
   _LawState _stOf(LawDef l) {
     if (widget.sealed.contains(l.id)) return _LawState.enacted;
-    if (LawBook.groupTaken(l, widget.sealed)) return _LawState.hidden;
+    if (!LawBook.visible(l, widget.sealed, widget.ctx)) return _LawState.hidden;
     if (LawBook.gateLocked(l, widget.ctx)) return _LawState.graveLocked;
     return _LawState.available;
   }
@@ -122,7 +142,14 @@ class _LawBookViewState extends State<LawBookView>
         // POLİTİK PUSULA — defterin başında, hükümlerden ÖNCE: "bu defter
         // köyü ne yaptı?". Eski künye şeridi (kol sayan bir cümle + sayaç)
         // buna gömüldü; kimlik artık tahmin değil, ölçülen konum.
-        LawCompassCard(sealed: widget.sealed, totalLaws: kLawBook.length),
+        LawCompassCard(
+          sealed: widget.sealed,
+          totalLaws: kLawBook.length,
+          rule: widget.rule,
+          unrest: widget.unrest,
+          sworn: widget.sworn,
+          onSwearOath: widget.onSwearOath,
+        ),
         const SizedBox(height: 12),
         _searchBar(),
         const SizedBox(height: 12),
@@ -384,7 +411,64 @@ class _LawBookViewState extends State<LawBookView>
           _lawTile(laws[i], entrance: i),
           if (i < laws.length - 1) const SizedBox(height: 8),
         ],
+        _dormantNote(t, color, laws.isEmpty),
       ],
+    );
+  }
+
+  /// Bu temada köyün HÂLİ elvermediği için henüz deftere düşmemiş hükümler.
+  /// Liste doluysa yalnız sayısını fısıldar (defter büyüyor hissi); tema
+  /// bomboşsa neden boş olduğunu köyün ağzından söyler — oyuncu "bug mu?"
+  /// demesin, "köyüm daha oraya gelmedi" desin.
+  Widget _dormantNote(LawTheme t, Color color, bool themeEmpty) {
+    final dormant = [
+      for (final l in LawBook.ofTheme(t))
+        if (!widget.sealed.contains(l.id) &&
+            !LawBook.groupTaken(l, widget.sealed) &&
+            LawBook.gateLocked(l, widget.ctx) &&
+            !l.grave)
+          l
+    ];
+    if (dormant.isEmpty) return const SizedBox.shrink();
+
+    final reasons = <String>{
+      for (final l in dormant)
+        if (l.gateReason.isNotEmpty) l.gateReason
+    }.take(themeEmpty ? 2 : 0).toList();
+
+    return Padding(
+      padding: EdgeInsets.only(top: themeEmpty ? 4 : 14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
+        decoration: BoxDecoration(
+          color: AppUi.surface2.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.16)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              themeEmpty
+                  ? '🔒 Bu sayfa henüz yazılmadı — ${dormant.length} hüküm köyün hâlini bekliyor.'
+                  : '🔒 ${dormant.length} hüküm daha var; köyün hâli değişince deftere düşer.',
+              style: AppUi.body.copyWith(
+                  fontSize: 11, color: AppUi.textLo, height: 1.35),
+            ),
+            for (final r in reasons) ...[
+              const SizedBox(height: 7),
+              Text('“$r”',
+                  style: AppUi.body.copyWith(
+                      fontSize: 10.5,
+                      color: AppUi.textLo.withValues(alpha: 0.85),
+                      fontStyle: FontStyle.italic,
+                      height: 1.35)),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -512,11 +596,21 @@ class _LawBookViewState extends State<LawBookView>
                               ? AppUi.textLo.withValues(alpha: 0.7)
                               : AppUi.textMid)),
                   const SizedBox(height: 4),
-                  Text(tag,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppUi.label.copyWith(
-                          fontSize: 7.5, color: tagColor, letterSpacing: 0.5)),
+                  Row(children: [
+                    Expanded(
+                      child: Text(tag,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.label.copyWith(
+                              fontSize: 7.5,
+                              color: tagColor,
+                              letterSpacing: 0.5)),
+                    ),
+                    if (st == _LawState.enacted &&
+                        widget.onRepeal != null &&
+                        LawBook.repealable(l))
+                      _repealChip(l),
+                  ]),
                 ],
               ),
             ),
@@ -525,6 +619,29 @@ class _LawBookViewState extends State<LawBookView>
       ),
     );
   }
+
+  /// FESİH — "mühür ebediyen geri alınmaz" tezi gevşetildi: günlük geçim
+  /// hükümleri bozulabilir. Bedava değil (mürekkep uzun kurur, moral iz
+  /// bırakır) ve kimliği yazan hükümlerde hiç görünmez.
+  Widget _repealChip(LawDef l) => GestureDetector(
+        onTap: _inkWet ? null : () => widget.onRepeal!(l),
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+                color: AppUi.rust.withValues(alpha: _inkWet ? 0.18 : 0.45)),
+          ),
+          child: Text('feshet',
+              style: AppUi.label.copyWith(
+                  fontSize: 7.5,
+                  letterSpacing: 0.8,
+                  color: _inkWet
+                      ? AppUi.textLo.withValues(alpha: 0.5)
+                      : AppUi.rust)),
+        ),
+      );
 
   (String, Color) _tagFor(_LawState st, Color color, bool spotlight) =>
       switch (st) {

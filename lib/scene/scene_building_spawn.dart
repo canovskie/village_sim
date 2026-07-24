@@ -4,6 +4,44 @@ part of '../main.dart';
 /// uyku hedefi atama + spawn pozisyon temizleme + tek-tıkla canlı köy.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneBuildingSpawn on _VillageSceneState {
+  /// Dev köyleri için ekili tarla: gerçek oyunda çiftçi önce tohum atar
+  /// (needsSowing), ama showcase/yaşayan köy ilk karede olgun görünmeli —
+  /// tile'lar rastgele büyüme aşamasında ekili doğar.
+  FarmTile _devSownTile(int c, int r) {
+    final t = FarmTile(c, r)..sow();
+    t.stage = _rng.nextInt(4);
+    t.growthProgress = _rng.nextDouble();
+    return t;
+  }
+
+  // ── Doğumun / gelenin sesi ([[lib/text/voice.dart]]) ──────────────────────
+  // Doğum küçük ve fizikseldir: bir ses, bir kucak, ocağa atılan fazladan odun.
+
+  static const _kJoinFamilyPool = [
+    '👶 {aile} hanesinde bir çocuk daha: {ad}.',
+    '👶 {aile} sofrasına {ad} oturdu. Kapıları bugün kalabalık.',
+    '👶 {ad} artık {aile} çatısı altında.',
+  ];
+  static const _kJoinPool = [
+    '👶 {ad} dünyaya geldi.',
+    '👶 Köyün yeni sakini: {ad}.',
+    '👶 {ad} bugün köye katıldı.',
+  ];
+  static const _kBirthPool = [
+    '👶 {bebek} doğdu. {ad} sabaha kadar uyumadı, {öteki} kapının önünde bekledi.',
+    '👶 {ad} ile {öteki-in} çocuğu oldu. Adını {bebek} koydular.',
+    '👶 Evde bir ses daha var: {bebek}. {öteki} ocağa fazladan odun attı.',
+  ];
+  static const _kBirthLifePool = [
+    'Çocuğu oldu: {bebek}',
+    '{bebek} doğdu',
+  ];
+  static const _kMigrantPool = [
+    '🚶 {ad} yolun tozuyla geldi, boş yatağa yerleşti. Köyün ona alışması sürer.',
+    '🚶 {ad} kapıyı çaldı ve kaldı. Yabancıya ısınmak zaman ister.',
+    '🚶 {ad} köye yerleşti. İlk günler herkes birbirini süzüyor.',
+  ];
+
   /// Ahır/kümes panelinden hayvan satın al — bina BOŞ kurulur, sürü buradan
   /// kurulur. Altın harcar; kapasiteyi aşamaz. Cinsiyet akıllı: o binada erkek
   /// yoksa erkek gelir (çift kurulup üreyebilsin), varsa dişi. Genç yetişkin
@@ -96,6 +134,34 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     return scarce[_rng.nextInt(scarce.length)];
   }
 
+  /// Soy ERKEK üzerinden taşınır (kullanıcı kararı). Bir çocuğun soyadı:
+  /// babasının → (yoksa) diğer ebeveynin → (yoksa) köyün baskın soyunun.
+  /// Köy boşsa yeni bir soyad üretir (ilk kuruluş).
+  String _patrilinealSurname(List<VillagerEntity> parents) {
+    for (final p in parents) {
+      if (p.isMale && p.surname.isNotEmpty) return p.surname;
+    }
+    for (final p in parents) {
+      if (p.surname.isNotEmpty) return p.surname;
+    }
+    return _villageLineage();
+  }
+
+  /// Köyün baskın soyu = yaşayanlar arasında en kalabalık soyad. Yoksa yeni soy.
+  String _villageLineage() {
+    final count = <String, int>{};
+    for (final v in _villagers) {
+      if (v.isDying || v.surname.isEmpty) continue;
+      count[v.surname] = (count[v.surname] ?? 0) + 1;
+    }
+    if (count.isEmpty) return randomVillagerSurname(_rng);
+    var best = count.keys.first;
+    for (final e in count.entries) {
+      if (e.value > count[best]!) best = e.key;
+    }
+    return best;
+  }
+
   void _spawnStartingNPCs(BuildingEntity firepit) {
     final cx = firepit.col + 0.5;
     final cy = firepit.row + 0.5;
@@ -107,19 +173,25 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       VillagerType.guard,
       VillagerType.priest,
     ];
-    // Kurucu haneler FARKLI olsun — aynı soyad iki bağımsız kurucuya düşmesin.
-    final founderSurnames = pickDistinctSurnames(_rng, types.length);
+    // KÖY TEK AİLEYLE KURULUR (kullanıcı kararı): beş kurucu da aynı soyadı
+    // taşır → tek hane. Eskiden beş AYRI soyad vardı ve oyun daha ilk günden
+    // "aileler arası denge" oyununa zorluyordu. Kurucular birbirinin kan bağı
+    // DEĞİL (parents boş) → aralarında çift kurulabilir; kur/üreme sistemleri
+    // zaten ebeveyn/çocuk/kardeş engelini soyada değil KAN BAĞINA bakarak koyar.
+    final lineage = randomVillagerSurname(_rng);
     for (int i = 0; i < types.length; i++) {
       final angle = i * (2 * pi / types.length);
       final dist = 1.2 + _rng.nextDouble() * 0.6;
       // Kurucular yetişkin/yaşlı yaşıyla doğar — köy ilk günden işlevsel.
       final founderAge =
           kAdultStartDay + _rng.nextDouble() * (kElderStartDay - kAdultStartDay + 5);
-      final male = _rng.nextBool();
+      // Cinsiyet GARANTİLİ karışık (3 erkek / 2 kadın) — rastgele bırakılsaydı
+      // kurucu aile tek cinsiyete düşüp soyu hiç devam ettiremeyebilirdi.
+      final male = i.isEven;
       final founder = VillagerEntity(
         type: types[i],
         name: randomVillagerName(_rng, male: male),
-        surname: founderSurnames[i],
+        surname: lineage,
         male: male,
         // Kurucu kişiliği mesleğiyle uyumlu — çağrı sistemiyle tutarlı köy.
         personalitySeed: _seedForCalling(types[i]),
@@ -135,16 +207,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       founder.lastStageSeen = founder.lifeStage;
     }
 
-    // 2 inşaatçı
-    for (int i = 0; i < 2; i++) {
-      final angle = pi / 4 + i * pi;
-      _builders.add(
-        BuilderEntity(
-          startCol: cx + cos(angle) * 1.8,
-          startRow: cy + sin(angle) * 1.8,
-        ),
-      );
-    }
+    // (İnşaatçı artık ayrı avatar değil — bekleyen sipariş çıkınca boş bir
+    // köylü _syncJobWorkforce ile inşaatçı olarak atanır; bkz. scene_jobs.)
 
     _fixNpcSpawns();
   }
@@ -205,7 +269,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final v = VillagerEntity(
       type: type,
       name: randomVillagerName(_rng, male: male),
-      surname: randomVillagerSurname(_rng),
+      // Soyad ebeveyn atandıktan SONRA belirlenir (baba soyu). Eskiden burada
+      // rastgele soyad veriliyordu → köyde doğan çocuk bile yepyeni bir hane
+      // kurardı, köy durmadan yeni ailelere bölünürdü.
+      surname: '',
       male: male,
       personalitySeed: pseed,
       startCol: sx,
@@ -224,12 +291,18 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         p.children.add(v);
       }
     }
+    // Soy ERKEK üzerinden taşınır: baba varsa onun soyadı, yoksa hane büyüğünün,
+    // o da yoksa köyün soyu. Böylece köyde doğan herkes mevcut aileye katılır —
+    // yeni haneler yalnız DIŞARIDAN gelenlerle (tüccar/mülteci) kurulur.
+    v.surname = _patrilinealSurname(v.parents);
     _villagers.add(v);
 
-    final msg = v.parents.isEmpty
-        ? '👶 ${v.name} doğdu!'
-        : '👶 ${v.parents.map((p) => p.name).join(' & ')} ailesine ${v.name} katıldı';
-    _showNotification(msg);
+    final kin = v.parents.map((p) => p.name).join(' & ');
+    _showNotification(Voice.say(
+        v.parents.isEmpty ? _kJoinPool : _kJoinFamilyPool,
+        _voice(v,
+            seed: _stableSeed('katıl${v.name}', _dayCount + _villagers.length),
+            extra: {'aile': kin})));
     _lifeEvent(v, 'Köye katıldı', icon: '🚶');
     v.lastStageSeen = v.lifeStage;
   }
@@ -303,13 +376,17 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _reactNearby(sx, sy, 5.0, NpcEmotion.joy, 4.0, moodDelta: 0.05);
     nudgeMorale(0.05); // görünür mutlu olay → moral göstergesini hafif iter
 
-    _showNotification(
-        '👶 ${mother.name} & ${father.name} ailesine ${baby.name} doğdu!');
+    final ctx = _voice(mother,
+        other: father,
+        seed: _stableSeed('doğum${baby.name}', _dayCount),
+        extra: {'bebek': baby.name});
+    _showNotification(Voice.say(_kBirthPool, ctx));
     _award('first_birth', 'Köyün ilk bebeği dünyaya geldi', '👶');
-    // Yaşam öyküsü — bebeğin doğumu + ebeveynlerin yeni çocuğu.
+    // Yaşam öyküsü — bebeğin doğumu + ebeveynlerin yeni çocuğu (kuru, kısa).
     _lifeEvent(baby, 'Dünyaya geldi', icon: '👶', milestone: true);
-    _lifeEvent(mother, '${baby.name} adında bir çocuğu oldu', icon: '👶');
-    _lifeEvent(father, '${baby.name} adında bir çocuğu oldu', icon: '👶');
+    final line = Voice.say(_kBirthLifePool, ctx);
+    _lifeEvent(mother, line, icon: '👶');
+    _lifeEvent(father, line, icon: '👶');
     baby.lastStageSeen = baby.lifeStage; // child — spurious geçiş olayını önle
   }
 
@@ -370,8 +447,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _villagers.add(migrant);
     // Uyum süreci bedeli — köy 2 gün boyunca −%3 moral.
     pushPolicyMorale(-0.03, 2.0);
-    _showNotification(
-        '🚶 ${migrant.name} köye katıldı (köy alışırken hafif gerilim).');
+    _showNotification(Voice.say(
+        _kMigrantPool,
+        _voice(migrant,
+            seed: _stableSeed('göç${migrant.name}', _dayCount))));
+    // Dışarıdan kanalı — gelen kişi köyün bilmediği bir zanaat taşıyorsa, onu
+    // köye kazandırır (keşif bildirimi göç bildiriminin üstüne yazar).
+    _discoverCallingCraft(migrant, _CraftSource.migrant);
   }
 
   /// Doğa dostu politikası: kesilen ağacın yakınına bir fidan dik.
@@ -445,9 +527,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         }
 
       case BuildingType.lumberCamp:
-        _lumberCamps.add(
-          LumberCampEntity(buildingCol: o.col, buildingRow: o.row),
-        );
+        // (Oduncu artık atanmış köylü — _syncJobWorkforce kampa en yakın boş
+        // köylüyü oduncu yapar; bölge yönetimi _tickLumberCampManage'de.)
+        break;
 
       case BuildingType.mineBuilding:
         final meta = kBuildingMeta[o.type]!;
@@ -459,38 +541,22 @@ extension _SceneBuildingSpawn on _VillageSceneState {
             n.isMarkedForMining = true;
           }
         }
-        // Bina engel sayıldığı için spawn footprint güney kenarı dışında.
-        _miners.add(
-          MinerEntity(
-            startCol: o.col + meta.cols / 2.0,
-            startRow: o.row + meta.rows + 0.3,
-          ),
-        );
+        // (Madenci artık ayrı avatar değil — _syncJobWorkforce boş bir köylüyü
+        // madenci olarak atar; bkz. scene_jobs _runMiner.)
 
       case BuildingType.fisherCabin:
-        // Balıkçı kulübesi (2x2): spawn footprint güneyi dışında.
-        _fishers.add(
-          FisherEntity(startCol: o.col + 1.0, startRow: o.row + 2.3),
-        );
+        // (Balıkçı artık atanmış köylü — _runFisher.)
+        break;
 
       case BuildingType.barn:
-        // Ağıl BOŞ kurulur — yalnızca çoban gelir; inek/koyun bina ile gelmez.
-        // Oyuncu hayvanları bina panelinden satın alır ([_buyAnimal]).
-        _shepherds.add(
-          ShepherdEntity(barnCol: o.col, barnRow: o.row),
-        );
+        // Ağıl BOŞ kurulur — inek/koyun bina ile gelmez (oyuncu panelden satın
+        // alır). Çoban artık atanmış köylü — _syncJobWorkforce ağıla en yakın
+        // boş köylüyü çoban yapar (scene_jobs _runShepherd sağar).
+        break;
 
       case BuildingType.floristCottage:
         _spawnFlowerGardenDecor(o);
-        // Çiçekçi NPC kulübeden çıkar. Spawn pozisyonu footprint güney kenarı.
-        final meta = kBuildingMeta[BuildingType.floristCottage]!;
-        _florists.add(FloristEntity(
-          startCol: o.col + meta.cols / 2.0,
-          startRow: o.row + meta.rows + 0.3,
-          cottageCol: o.col,
-          cottageRow: o.row,
-          effectRadius: meta.effectRadius,
-        ));
+        // (Çiçekçi artık atanmış köylü — _runFlorist bahçeyi sular.)
 
       case BuildingType.chickenCoop:
         // Kümes BOŞ kurulur — tavuklar bina ile gelmez; oyuncu panelden satın
@@ -660,6 +726,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   void _buildLivingVillage() {
     setStateHere(() {
       _generateWorld();
+      _knownCrafts.addAll(Craft.all); // test köyü tüm zanaatları bilir
       _stockpile.wood  = 200;
       _stockpile.stone = 150;
       _stockpile.iron  = 50;
@@ -706,17 +773,11 @@ extension _SceneBuildingSpawn on _VillageSceneState {
               overlap = true; break;
             }
           }
-          if (!overlap) _farmTiles.add(FarmTile(c, r));
+          if (!overlap) _farmTiles.add(_devSownTile(c, r));
         }
       }
-      final needed = (_farmTiles.length / 6).ceil().clamp(1, 4);
-      while (_farmers.length < needed) {
-        final angle = _rng.nextDouble() * 2 * pi;
-        _farmers.add(FarmFarmer(
-          startCol: 16 + cos(angle) * 1.5,
-          startRow: 3.5 + sin(angle) * 1.5,
-        ));
-      }
+      // Saha eli otomatik doğmaz — _syncFarmerWorkforce (tick) ilk karede
+      // köyün çiftçi kadrosuna göre kadroyu kurar.
       _fixNpcSpawns();
     });
     _showNotification('🏡 Yaşayan köy kuruldu!');
@@ -730,6 +791,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   void _buildShowcaseVillage() {
     setStateHere(() {
       _generateWorld();
+      _knownCrafts.addAll(Craft.all); // showcase tüm zanaatları bilir
       _stockpile.wood  = 9999;
       _stockpile.stone = 9999;
       _stockpile.iron  = 999;
@@ -795,7 +857,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       _anchorSystem.rebuild(_buildings);
       _rebuildBeeSwarms();
 
-      // Tarla + 2 çiftçi — pazarın üstü
+      // Tarla + çiftçiler — pazarın üstü
       const farmC1 = 14, farmR1 = 1, farmC2 = 20, farmR2 = 3;
       for (int c = farmC1; c <= farmC2; c++) {
         for (int r = farmR1; r <= farmR2; r++) {
@@ -807,15 +869,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
               overlap = true; break;
             }
           }
-          if (!overlap) _farmTiles.add(FarmTile(c, r));
+          if (!overlap) _farmTiles.add(_devSownTile(c, r));
         }
       }
-      while (_farmers.length < 2) {
-        _farmers.add(FarmFarmer(
-          startCol: 17 + _rng.nextDouble() * 2,
-          startRow: 5 + _rng.nextDouble() * 1,
-        ));
-      }
+      // Saha eli _syncFarmerWorkforce (tick) tarafından kurulur.
       _fixNpcSpawns();
 
       // Ekstra köylüler — yataklar dolsun, sokakta canlılık olsun.
@@ -843,6 +900,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         VillagerType.miller,
         VillagerType.innkeeper,
         VillagerType.priest,
+        VillagerType.guard, // devriye + suçüstü yakalama (scene_crime) test yatağı
       ];
       // Yetişkin köylü sayısı yetmezse ek doğur — 5 mesleğin HEPSİ temsil edilsin
       // (aksi halde showcase rastgele biçimde bazı meslekleri hiç göstermez).

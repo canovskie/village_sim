@@ -33,6 +33,165 @@ extension _SceneConflict on _VillageSceneState {
   /// (artık her yumruklaşma küçük bir ölüm riski taşır).
   static const double _kBrawlFatalBase = 0.03;
 
+  // ── Köyün sesi: çekişme metin havuzları ([[lib/text/voice.dart]]) ──────────
+  // Her satır bir HAVUZ; seed'e göre biri seçilir. Ekler ({ad-i}, {öteki-in})
+  // ünlü uyumuyla üretilir — elle yapıştırılmaz.
+
+  static const _kTensionCauses = ['Aç karınlar', 'Sönük yüzler', 'Soğuk geceler'];
+  static const _kTensionPool = [
+    '⚠️ {sebep} sabırları inceltti. Bugün laf lafı çabuk açıyor.',
+    '⚠️ Kuyu başında sesler yükseldi. {sebep} kimseyi rahat bırakmıyor.',
+    '⚠️ Selamlar kısaldı, bakışlar uzadı. {sebep} köyü diken üstünde tutuyor.',
+  ];
+
+  static const _kHealedLamePool = [
+    '💚 {ad} ayağa kalktı. Aksayarak da olsa yürüyor.',
+    '💚 {ad-in} yaraları kapandı, topallaması kaldı.',
+    '💚 {ad} işinin başına döndü. Adımı eskisi gibi değil.',
+  ];
+  static const _kHealedPool = [
+    '💚 {ad} sargısını bugün kendi çözdü.',
+    '💚 {ad-in} yarası kapandı. İlk kez dışarı çıktı.',
+    '💚 {ad} yeniden iş tutuyor.',
+  ];
+
+  static const _kPeacePool = [
+    '🕊️ {ad} ile {öteki} yaka paça olacaktı. {barışçı} ikisinin arasına girdi.',
+    '🕊️ {barışçı} elini {ad-in} omzuna koydu. Kavga orada kaldı.',
+    '🕊️ {ad} ile {öteki} atıştı. {barışçı} ikisini de bir kenara çekti.',
+  ];
+
+  static const _kArguePool = [
+    '💢 {ad} ile {öteki} laf yarıştırıyor, aralarında iki adım kalmadı. (ayırmak için dokun)',
+    '💢 {ad-in} sesi {öteki-e} yükseldi. Herkes durup baktı. (ayırmak için dokun)',
+    '💢 {ad} ile {öteki} çenesini tutamıyor. (ayırmak için dokun)',
+  ];
+  static const _kBrawlPool = [
+    '👊 {ad} ile {öteki} yumruklaştı. Ayırmak için üstlerine dokun.',
+    '👊 {ad-in} yumruğu {öteki-e} indi. Ayırmak sana kalmış: üstlerine dokun.',
+    '👊 {ad} ile {öteki} toza bulandı, kimse ayırmıyor. (dokun)',
+  ];
+  static const _kBrawlChroniclePool = [
+    '{ad} ile {öteki} yumruklaştı; köy gerildi.',
+    '{ad-in} kavgası {öteki-le} meydanda görüldü.',
+    'Meydanda kavga: {ad} ile {öteki}.',
+  ];
+
+  static const _kSeparatedFeudPool = [
+    '✋ Köy {sayı} kişilik kan kavgasının üstüne yürüdü, zorla ayırıyor.',
+    '✋ {sayı} kişi birbirine girdi. Köylüler kollarından tutup çekiyor.',
+    '✋ Kan davası kavgasına köy hep birlikte daldı: {sayı} kişi zorla ayrılıyor.',
+  ];
+  static const _kSeparatedPool = [
+    '✋ Köylüler koşup kavganın ortasına girdi.',
+    '✋ İki komşu kavgaya atıldı, kolları tuttular.',
+    '✋ Kimse seyretmedi, araya girip ayırdılar.',
+  ];
+  static const _kJoinedFeudPool = [
+    '🩸 Kan davası kabardı: {sayı} kişi daha kavgaya daldı.',
+    '🩸 {sayı} kişi daha koşup geldi. Artık iki soy birbirine girmiş durumda.',
+    '🩸 Eski hesap ortaya döküldü, {sayı} kişi daha yumruklara karıştı.',
+  ];
+  static const _kJoinedPool = [
+    '👊 Kavga büyüdü: {sayı} kişi daha karıştı.',
+    '👊 Seyredenler duramadı, {sayı} kişi daha araya daldı.',
+    '👊 Yumruklar çoğaldı, {sayı} kişi daha girdi işin içine.',
+  ];
+
+  static const _kCrippledPool = [
+    '🩼 {ad} bir daha eskisi gibi yürüyemeyecek. Dizi o kavgada gitti.',
+    '🩼 {ad-i} yerden kaldırdılar. Ayağını basamıyor, bir daha da basamayacak.',
+    '🩼 {ad} bastonsuz doğrulamadı. Bu aksaklık artık onun.',
+  ];
+  static const _kCrippledChroniclePool = [
+    '{ad} kavgada sakat kaldı; ömrü boyunca aksayacak.',
+    '{ad-in} bir bacağı o kavgada kaldı.',
+    'Kavga bitti, {ad} bir daha düz yürüyemedi.',
+  ];
+  static const _kHurtSeverePool = [
+    '🤕 {ad} kanlar içinde kaldı. Günlerce yatacak.',
+    '🤕 {ad-i} kollarında taşıdılar. Kaburgası tutmuyor.',
+    '🤕 {ad} ağır yedi, bir süre iş göremez.',
+  ];
+  static const _kHurtPool = [
+    '🤕 {ad-in} dudağı patladı.',
+    '🤕 {ad} eli yüzü şişmiş halde çekildi.',
+    '🤕 {ad} yara aldı ama ayakta durdu.',
+  ];
+
+  static const _kRevengePool = [
+    '🩸 Kan yerde kalmadı. {ad}, {öteki-i} öldürdü.',
+    '🩸 {ad} eski hesabı kapattı: {öteki} yerde.',
+    '🩸 {ad} vurdu, {öteki} bir daha kalkmadı. Dava sürüyor.',
+  ];
+  static const _kRevengeChroniclePool = [
+    'Kan davası kan aldı: {ad}, {öteki-i} öldürdü.',
+    '{ad}, düşmanı {öteki-i} kavgada öldürdü.',
+    '{öteki} kan davasında can verdi; vuran {ad}.',
+  ];
+  static const _kFeudStartPool = [
+    '🩸 {ad} kavgada {öteki-i} öldürdü. İki soy artık birbirine düşman.',
+    '🩸 {öteki} meydanda can verdi. Vuran {ad}. İki aile bugünden sonra birbirine bakmaz.',
+    '🩸 Yumruk ağır düştü, {öteki} kalkmadı. {ad-in} ailesiyle kan davası başladı.',
+  ];
+  static const _kFeudStartChroniclePool = [
+    'Kan davası başladı: {ad}, kavgada {öteki-i} öldürdü.',
+    '{öteki-in} ölümüyle iki aile kan davasına girdi.',
+    '{ad} kavgada {öteki-i} öldürdü; iki soy düşman oldu.',
+  ];
+  static const _kKillPool = [
+    '🩸 {ad-in} yumruğu {öteki-i} öldürdü. Kimse buna niyetli değildi.',
+    '🩸 Kavga ağır bitti. {öteki} bir daha kalkmadı.',
+    '🩸 {ad} elini indirdiğinde {öteki} yerdeydi.',
+  ];
+  static const _kKillChroniclePool = [
+    '{ad} bir kavgada {öteki-i} öldürdü.',
+    '{öteki} kavgada öldü; vuran {ad}.',
+    'Kavga {öteki-in} ölümüyle bitti.',
+  ];
+
+  static const _kIntervenePairPool = [
+    '✋ Aralarına girdin. {ad} ile {öteki} ayrıldı, köy nefes aldı.',
+    '✋ {ad-i} bir yana, {öteki-i} öbür yana çektin. Kavga bitti.',
+    '✋ Sen araya girince ikisi de elini indirdi.',
+  ];
+  static const _kInterveneSoloPool = [
+    '✋ {ad} yumruğunu açtı.',
+    '✋ {ad-i} kenara çektin, öfkesi yavaşça indi.',
+    '✋ {ad} derin bir nefes aldı. Meydan yatıştı.',
+  ];
+
+  static const _kExilePool = [
+    '🚷 {ad} yolun başına kadar yürütüldü. Arkasına bakmadı.',
+    '🚷 {ad-e} köyün kapısı kapandı.',
+    '🚷 {ad} bohçasını topladı, köyden çıkarıldı.',
+  ];
+  static const _kExileFeudChroniclePool = [
+    '{ad} köyden sürüldü; kan davası uzaklaşmayla dindi.',
+    '{ad-in} sürgünü kan borcunu kapattı.',
+    'Köy {ad-i} sürdü, husumet onunla birlikte gitti.',
+  ];
+  static const _kExileChroniclePool = [
+    '{ad} köyden sürüldü.',
+    '{ad-e} köy kapısı kapandı.',
+    'Köy {ad-i} artık istemiyordu; gitti.',
+  ];
+  static const _kExecutePool = [
+    '⚖️ {ad} meydanda idam edildi. Kalabalık dağılırken kimse konuşmadı.',
+    '⚖️ Hüküm okundu, {ad} diz çöktü. Köy bunu unutmayacak.',
+    '⚖️ {ad-in} cezası halkın önünde infaz edildi. Çocukları içeri aldılar.',
+  ];
+  static const _kExecuteFeudChroniclePool = [
+    '{ad} idam edildi; kan davası kanla bastırıldı.',
+    'Kan davasının hesabı {ad-in} idamıyla kapandı.',
+    'Köy {ad-i} idam etti, husumet orada kesildi.',
+  ];
+  static const _kExecuteChroniclePool = [
+    '{ad} idam edildi.',
+    'Meydanda {ad-in} idamı görüldü.',
+    'Köy {ad-i} idam etti.',
+  ];
+
   void _tickConflicts(double dt) {
     _recoverInjuries(dt); // yaralılar her tick iyileşir (poll'dan bağımsız)
     _conflictPollSec -= dt;
@@ -53,11 +212,14 @@ extension _SceneConflict on _VillageSceneState {
     if (glob >= 1.5 && _tensionHeraldSec <= 0) {
       _tensionHeraldSec = 1.5 * kGameDaySeconds; // günde ~bir kez hatırlat
       final cause = _wasStarving
-          ? 'açlık'
-          : (_stats.morale < 0.4 ? 'düşük moral' : 'soğuk, karanlık gece');
+          ? _kTensionCauses[0]
+          : (_stats.morale < 0.4 ? _kTensionCauses[1] : _kTensionCauses[2]);
       addCameraShake(2.0, dur: 0.3);
-      _showNotification(
-          '⚠️ Köyde gerginlik yükseliyor ($cause) — sinirler gergin, kavga çıkabilir.');
+      _showNotification(Voice.say(
+          _kTensionPool,
+          _voice(null,
+              seed: _stableSeed('tension$cause', _dayCount),
+              extra: {'sebep': cause})));
     }
 
     // Uygun (uyanık, dışarıda, boşta, yetişkin, cooldown'suz) köylüler + öfke yükü.
@@ -88,6 +250,8 @@ extension _SceneConflict on _VillageSceneState {
     }
     if (_rng.nextDouble() >= p.clamp(0.0, 0.9)) return;
 
+    logDev('Kavga tetiği: ${instigator.name} ↔ ${other.name}',
+        tag: '⚔', color: AppUi.rust);
     _startConflict(instigator, other, glob);
   }
 
@@ -126,9 +290,8 @@ extension _SceneConflict on _VillageSceneState {
       if (v.injuryDays <= 0) {
         v.injuryDays = 0;
         v.feel(NpcEmotion.content, 3.0, moodDelta: 0.06);
-        _showNotification(v.disabled
-            ? '💚 ${v.name} yaralarından kalktı (ama aksaklığı kalıcı).'
-            : '💚 ${v.name} yaralarından iyileşti.');
+        _showNotification(Voice.say(
+            v.disabled ? _kHealedLamePool : _kHealedPool, _voice(v)));
       }
     }
   }
@@ -276,8 +439,12 @@ extension _SceneConflict on _VillageSceneState {
       peace.feel(NpcEmotion.content, 2.5, moodDelta: 0.03);
       peace.chatBubbleIcon = '🕊️';
       peace.chatBubbleTime = 2.5;
-      _showNotification(
-          '🕊️ ${a.name} ile ${b.name} atıştı — ${peace.name} araya girip yatıştırdı.');
+      _showNotification(Voice.say(
+          _kPeacePool,
+          _voice(a,
+              other: b,
+              seed: _stableSeed('peace${a.name}${b.name}', _dayCount),
+              extra: {'barışçı': peace.name})));
       return; // yatıştırıldı: küslük/kronik yok
     }
 
@@ -302,17 +469,16 @@ extension _SceneConflict on _VillageSceneState {
       _formGrudge(a, b);
     }
 
+    final ctx = _voice(a,
+        other: b, seed: _stableSeed('fight${a.name}${b.name}', _dayCount));
     if (brawl) {
-      _chronicle('${a.name} ile ${b.name} kavgaya tutuştu — köy gerildi.',
-          icon: '💢');
+      _chronicle(Voice.say(_kBrawlChroniclePool, ctx), icon: '💢');
       // Escalation/yaralanma kendi bildirimini verdiyse base'i tekrarlama.
       if (!escalated && !injured) {
-        _showNotification(
-            '👊 ${a.name} ile ${b.name} yumruklaştı! (ayırmak için dokun)');
+        _showNotification(Voice.say(_kBrawlPool, ctx));
       }
     } else {
-      _showNotification(
-          '💢 ${a.name} ile ${b.name} ağız dalaşına tutuştu. (ayırmak için dokun)');
+      _showNotification(Voice.say(_kArguePool, ctx));
     }
   }
 
@@ -469,15 +635,21 @@ extension _SceneConflict on _VillageSceneState {
       for (final f in fighters) {
         if (f.chatBubbleTime > 3.0) f.chatBubbleTime = 3.0;
       }
-      _showNotification(feud
-          ? '✋ ${fighters.length} kişilik kan davası kavgasını köy zorla ayırıyor!'
-          : '✋ Köylüler kavgayı ayırmaya koştu.');
+      _showNotification(Voice.say(
+          feud ? _kSeparatedFeudPool : _kSeparatedPool,
+          _voice(a,
+              other: b,
+              seed: _stableSeed('sep${a.name}${fighters.length}', _dayCount),
+              extra: {'sayı': '${fighters.length}'})));
       return true;
     }
     if (joined > 0) {
-      _showNotification(feud
-          ? '🩸 Kan davası alevlendi — $joined kişi daha kavgaya katıldı!'
-          : '👊 Kavga büyüdü — $joined kişi daha karıştı!');
+      _showNotification(Voice.say(
+          feud ? _kJoinedFeudPool : _kJoinedPool,
+          _voice(a,
+              other: b,
+              seed: _stableSeed('join${a.name}$joined', _dayCount),
+              extra: {'sayı': '$joined'})));
       return true;
     }
     return false;
@@ -542,9 +714,11 @@ extension _SceneConflict on _VillageSceneState {
       _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.03, swayGain: 0.02);
     });
     addCameraShake(2.0, dur: 0.25); // hafif "araya girme" dokunuşu
-    _showNotification(other != null
-        ? '✋ Araya girdin — ${v.name} ile ${other.name} ayrıldı, köy huzur buldu.'
-        : '✋ ${v.name} sakinleştirildi — köy huzur buldu.');
+    _showNotification(Voice.say(
+        other != null ? _kIntervenePairPool : _kInterveneSoloPool,
+        _voice(v,
+            other: other,
+            seed: _stableSeed('sulh${v.name}', _dayCount + _villagers.length))));
   }
 
   /// İki köylü arasında karşılıklı küslük kurar (süresi rastgele).
@@ -602,21 +776,22 @@ extension _SceneConflict on _VillageSceneState {
       v.goTo(tx, ty, 8.0);
     }
 
+    final ctx =
+        _voice(v, seed: _stableSeed('hurt${v.name}', _dayCount + v.hashCode));
     if (permanent) {
       v.disabled = true;
       v.injuryDays = 1.5 + _rng.nextDouble() * 1.5; // başta ağrılı dönem de var
       v.feel(NpcEmotion.grief, 5.0, moodDelta: -0.18);
-      _chronicle('${v.name} kavgada sakat kaldı — ömür boyu aksayacak.',
+      _chronicle(Voice.say(_kCrippledChroniclePool, ctx),
           icon: '🩼', milestone: true);
-      _showNotification('🩼 ${v.name} kavgada SAKATLANDI — kalıcı bir aksaklık.');
+      _showNotification(Voice.say(_kCrippledPool, ctx));
     } else {
       final days =
           severe ? (2.0 + _rng.nextDouble() * 2.0) : (0.8 + _rng.nextDouble() * 1.2);
       if (days > v.injuryDays) v.injuryDays = days;
       v.feel(NpcEmotion.grief, 4.0, moodDelta: severe ? -0.12 : -0.07);
-      _showNotification(severe
-          ? '🤕 ${v.name} kavgada ağır yaralandı — günlerce iyileşecek.'
-          : '🤕 ${v.name} kavgada yaralandı.');
+      _showNotification(
+          Voice.say(severe ? _kHurtSeverePool : _kHurtPool, ctx));
     }
   }
 
@@ -686,21 +861,21 @@ extension _SceneConflict on _VillageSceneState {
       k.feel(NpcEmotion.grief, 6.0, moodDelta: -0.10); // ölen tarafı yasa boğulur
     }
 
+    final ctx = _voice(killer,
+        other: victim,
+        seed: _stableSeed('kill${killer.name}${victim.name}', _dayCount));
     if (feudPair) {
-      _chronicle("Kan davası kan aldı: ${killer.name}, ${victim.name} adlı düşmanını öldürdü.",
+      _chronicle(Voice.say(_kRevengeChroniclePool, ctx),
           icon: '🩸', milestone: true);
-      _showNotification(
-          "🩸 İntikam! ${killer.name}, ${victim.name}'i öldürdü — kan davası sürüyor.");
+      _showNotification(Voice.say(_kRevengePool, ctx));
     } else if (feudFormed) {
-      _chronicle(
-          "KAN DAVASI BAŞLADI: ${killer.name}, kavgada ${victim.name}'i öldürdü; iki aile düşman.",
+      _chronicle(Voice.say(_kFeudStartChroniclePool, ctx),
           icon: '🩸', milestone: true);
-      _showNotification(
-          "🩸 ${killer.name}, ${victim.name}'i öldürdü — iki aile arasında KAN DAVASI başladı!");
+      _showNotification(Voice.say(_kFeudStartPool, ctx));
     } else {
-      _chronicle("${killer.name} bir kavgada ${victim.name}'i öldürdü.",
+      _chronicle(Voice.say(_kKillChroniclePool, ctx),
           icon: '🩸', milestone: true);
-      _showNotification("🩸 ${killer.name} bir kavgada ${victim.name}'i öldürdü.");
+      _showNotification(Voice.say(_kKillPool, ctx));
     }
     return true;
   }
@@ -769,15 +944,19 @@ extension _SceneConflict on _VillageSceneState {
     if (wasFeud) _pacifyFeudOf(v);
     // Çevre tedirgin — uzaklaşan kişiye bakar (gövde dili).
     _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0, moodDelta: -0.03);
-    pushPolicyMorale(-0.05, 3.0);
+    // SÜRGÜN FERMANI (NİZAM) — yürürlükteyse köy sürgüne alışmıştır; yola
+    // vurmanın moral cezası yarıya iner (kapı çoktan aralanmış). Ferman sürgünü
+    // bir travma olmaktan çıkarıp bir prosedüre çevirir — kılıç yolunun bedeli.
+    final exileMorale = _policies.sealed.contains('nizam.exile') ? -0.025 : -0.05;
+    pushPolicyMorale(exileMorale, 3.0);
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.05);
+    final ctx = _voice(v, seed: _stableSeed('exile${v.name}', _dayCount));
     _removeVillager(v); // aile bağı kopar + sahneden çekilir (cenazesiz)
     _chronicle(
-        wasFeud
-            ? '${v.name} köyden sürüldü — kan davası uzaklaştırmayla dindi.'
-            : '${v.name} köyden sürüldü.',
+        Voice.say(
+            wasFeud ? _kExileFeudChroniclePool : _kExileChroniclePool, ctx),
         icon: '🚷', milestone: wasFeud);
-    _showNotification('🚷 ${v.name} köyden sürgün edildi.');
+    _showNotification(Voice.say(_kExilePool, ctx));
   }
 
   /// İDAM — oyuncunun en sert yetkisi. 2B sahnede halk toplanır, mahkûm yere
@@ -809,12 +988,12 @@ extension _SceneConflict on _VillageSceneState {
     // İnfaz otoritesi sevilmez — Köklü Yuva (aile) ürker.
     _nudgeHousesByEstate(Estate.hearth, moodDelta: -0.08);
 
+    final ctx = _voice(v, seed: _stableSeed('idam${v.name}', _dayCount));
     _chronicle(
-        wasFeud
-            ? '⚖️ ${v.name} idam edildi — kan davası kanla bastırıldı.'
-            : '⚖️ ${v.name} idam edildi.',
+        Voice.say(
+            wasFeud ? _kExecuteFeudChroniclePool : _kExecuteChroniclePool, ctx),
         icon: '⚖️', milestone: true);
-    _showNotification('⚖️ ${v.name} halkın önünde idam edildi.');
+    _showNotification(Voice.say(_kExecutePool, ctx));
   }
 
   /// DEBUG (DevPanel): iki ayrı aileden köylü seçip ölümcül bir kavga +

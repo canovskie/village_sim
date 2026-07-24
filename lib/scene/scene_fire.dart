@@ -23,6 +23,19 @@ extension _SceneFire on _VillageSceneState {
   /// (bir sonraki düşüşte yine uyarı çıkabilir).
   static const int _kWoodHealthy = 12;
 
+  // ── Ocağın sesi ([[lib/text/voice.dart]]) ─────────────────────────────────
+
+  static const _kFireDiedPool = [
+    '🔥 Son kor da karardı. Köy soğukta kaldı, ocağa odun gerek.',
+    '🔥 Ateş söndü. Küller soğumadan karanlık çöktü; odun lazım.',
+    '🔥 Ocak kendi kendine söndü. Kimse elini ısıtacak yer bulamıyor.',
+  ];
+  static const _kFireRelitPool = [
+    '🔥 Odun kütürdedi, alev yükseldi. Köy ısındı.',
+    '🔥 Ateş yeniden tutuştu. İlk kıvılcımda çocuklar bağırdı.',
+    '🔥 Ocak yeniden yanıyor.',
+  ];
+
   /// Ateş şu an yanıyor mu — kurulmuş + yakıtı var.
   bool get _fireBurning =>
       _hasFire && (_firepitBuilding?.fireFuel ?? 0) > 0.001;
@@ -152,7 +165,8 @@ extension _SceneFire on _VillageSceneState {
 
   /// Ateş söndü — köy karanlıkta/soğukta. Köy çapı huzursuzluk + dilekçe.
   void _onFireDied() {
-    _showNotification('🔥 Ateş söndü! Köy karanlıkta, soğukta kaldı — odun lazım.');
+    _showNotification(Voice.say(
+        _kFireDiedPool, _voice(null, seed: _stableSeed('ateşsöndü', _dayCount))));
     _feelVillage(NpcEmotion.fear, 8, -0.12);
     // Ocak (yuva) en çok yaralanır; inananlar (ayin ateşi) onu izler.
     _nudgeHousesByEstate(Estate.hearth, moodDelta: -0.12);
@@ -170,7 +184,8 @@ extension _SceneFire on _VillageSceneState {
 
   /// Ateş yeniden canlandı — köy ısındı.
   void _onFireRelit() {
-    _showNotification('🔥 Ateş yeniden canlandı — köy ısındı.');
+    _showNotification(Voice.say(
+        _kFireRelitPool, _voice(null, seed: _stableSeed('ateşyandı', _dayCount))));
     _feelVillage(NpcEmotion.joy, 6, 0.08);
     _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.06);
   }

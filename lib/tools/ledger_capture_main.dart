@@ -1,0 +1,336 @@
+// Köy Defteri önizleme harness'ı — defterin BEŞ bölümünü de (Divan / Kanunname
+// / Nüfus / Tüzük / Kronik) mock veriyle render edip tek koşuda PNG'ye çeker.
+// Tüm oyunu açmadan layout doğrulaması için.
+//
+// Çalıştır:  flutter run -d macos -t lib/tools/ledger_capture_main.dart
+// Çıktı:     /tmp/ledger_<bölüm>.png  (DIVAN_INK=0 → mürekkep ıslak hâli)
+//
+// NOT: macOS'ta pencere ÖN PLANDA olmalı — arkadayken motor kare pompalamaz ve
+// hiç yakalama olmaz. Render assert'leri (non-uniform border + borderRadius,
+// Positioned-only Stack çöküşü…) paneli sessizce boş bırakır; bu yüzden
+// FlutterError.onError yakalanıp RENDER_ERROR olarak basılır.
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
+
+import '../characters/villager_type.dart';
+import '../core/resources.dart';
+import '../entities/villager_entity.dart';
+import '../scene/scene_data.dart';
+import '../systems/chronicle.dart';
+import '../systems/estate_system.dart';
+import '../systems/house_system.dart';
+import '../systems/petition_system.dart';
+import '../systems/quest_book.dart';
+import '../ui/app_ui.dart';
+import '../ui/village_ledger.dart';
+import '../ui/villager_roster_view.dart';
+import 'law_demo_ctx.dart';
+
+final GlobalKey _key = GlobalKey();
+
+int _renderErrors = 0;
+
+VillagerEntity _mk(String name, String surname, VillagerType type,
+    {double wealth = 40, double morale = 0.6, double age = 4}) {
+  final v = VillagerEntity(
+    type: type,
+    name: name,
+    surname: surname,
+    male: name.hashCode.isEven,
+    startCol: 0,
+    startRow: 0,
+    ageDays: age,
+  );
+  v.wealth = wealth;
+  v.morale = morale;
+  return v;
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final base = FlutterError.onError;
+  FlutterError.onError = (details) {
+    final msg = details.exceptionAsString();
+    if (_isClockClash(msg)) return; // harness artefaktı, panelle ilgisi yok
+    _renderErrors++;
+    stdout.writeln('RENDER_ERROR: $msg');
+    base?.call(details);
+  };
+
+  // Mürekkep ıslak mı — defter kilitli hâlini de çekebilelim.
+  final inkWet = (Platform.environment['DIVAN_INK'] ?? '1') == '0';
+
+  const agenda = <DivanMatter>[
+    DivanMatter(
+      icon: '🥖',
+      title: 'Ambar inceliyor',
+      sub: 'Erzak azalıyor — köy bölüşüm kararı istemeden tedbir al.',
+      pressure: 0.72,
+      tone: PetitionTone.ominous,
+      pending: true,
+      graceProgress: 0.42,
+    ),
+    DivanMatter(
+      icon: '🩸',
+      title: 'Kan davası köyü zehirliyor',
+      sub: 'İki aile arasında kan dökülüyor — sulh kararı yaklaşıyor.',
+      pressure: 0.9,
+      tone: PetitionTone.ominous,
+    ),
+    DivanMatter(
+      icon: '⌂',
+      title: 'Aksoy Hanesi küskün',
+      sub: 'Gönülleri alınmazsa ısrarla gündeme gelecekler.',
+      pressure: 0.55,
+      tone: PetitionTone.solemn,
+    ),
+  ];
+
+  const houses = <HouseSnapshot>[
+    HouseSnapshot(
+        surname: 'Demirhan',
+        label: 'Demirhan Hanesi',
+        mood: 0.78,
+        swayShare: 0.44,
+        ascendant: true,
+        members: 6,
+        tier: EstateMoodTier.content),
+    HouseSnapshot(
+        surname: 'Aksoy',
+        label: 'Aksoy Hanesi',
+        mood: 0.34,
+        swayShare: 0.19,
+        ascendant: false,
+        members: 4,
+        tier: EstateMoodTier.sullen),
+    HouseSnapshot(
+        surname: 'Yıldız',
+        label: 'Yıldız Hanesi',
+        mood: 0.60,
+        swayShare: 0.22,
+        ascendant: false,
+        members: 3,
+        tier: EstateMoodTier.neutral),
+    HouseSnapshot(
+        surname: 'Karaca',
+        label: 'Karaca Hanesi',
+        mood: 0.48,
+        swayShare: 0.15,
+        ascendant: false,
+        members: 2,
+        tier: EstateMoodTier.uneasy),
+  ];
+
+  const laws = <DivanFact>[
+    DivanFact('👨‍👩‍👧', 'Aile teşviki', AppUi.info),
+    DivanFact('🕯️', 'Kutsal gün', AppUi.info),
+  ];
+  const marks = <DivanFact>[
+    DivanFact('🌾', 'Tarlalara iyi bakıldı', AppUi.sage),
+    DivanFact('🤝', 'Komşuyla anlaşma', AppUi.sage),
+  ];
+  const crafts = <DivanFact>[
+    DivanFact('🪵', 'Marangozluk', AppUi.accent),
+    DivanFact('🍞', 'Fırıncılık', AppUi.accent),
+  ];
+
+  // NÜFUS — 26 köylü; servet/moral/barınma dağılımı geniş olsun (satır taşması,
+  // sıralama ve portre layout'u gerçekçi yükte görünsün).
+  const surnames = ['Demirhan', 'Aksoy', 'Yıldız', 'Karaca'];
+  const names = [
+    'Ayşe', 'Kemal', 'Zeynep', 'Veli', 'Hatice', 'Murat', 'Elif', 'Osman',
+    'Leyla', 'Can', 'Deniz', 'Emre', 'Selin', 'Baran', 'Nur', 'Kaan',
+  ];
+  final types = VillagerType.values;
+  final rosterRows = [
+    for (int i = 0; i < 26; i++)
+      () {
+        final w = (i * 37 % 160).toDouble();
+        final tier = w > 120
+            ? 4
+            : w > 80
+                ? 3
+                : w > 45
+                    ? 2
+                    : w > 20
+                        ? 1
+                        : 0;
+        final label = switch (tier) {
+          4 => 'Konak',
+          3 => 'Taş Ev',
+          2 => 'Ahşap Ev',
+          1 => 'Çadır',
+          _ => 'Evsiz',
+        };
+        return VillagerStatRow(
+          _mk(names[i % names.length], surnames[i % surnames.length],
+              types[i % types.length],
+              wealth: w, morale: (i * 13 % 100) / 100.0),
+          label,
+          tier,
+        );
+      }(),
+  ];
+
+  // TÜZÜK — kademe 1'de, ilk dört görevi bitirmiş bir köy.
+  const completed = {'firepit', 'lumber', 'house', 'farm'};
+  final quests = QuestBook.activeQuests(
+    QuestContext(
+      buildings: const [],
+      farmTiles: const [],
+      population: 26,
+      stock: ResourceBundle(wood: 60, stone: 30, food: 41, gold: 18),
+      policies: VillagePolicies(),
+      decorCount: 12,
+      charterTier: 1,
+    ),
+    completed,
+  );
+
+  const chronicle = <ChronicleEntry>[
+    ChronicleEntry(day: 1, icon: '🔥', text: 'Ateş yakıldı, köy kuruldu.'),
+    ChronicleEntry(
+        day: 4,
+        icon: '🏡',
+        text: 'İlk hane çatısını kapattı; Demirhanlar artık üşümüyor.'),
+    ChronicleEntry(
+        day: 9,
+        icon: '💍',
+        text: 'Ayşe ile Kemal ateş başında evlendi.',
+        milestone: true),
+    ChronicleEntry(day: 15, icon: '📜', text: 'Komşuluk beratı mühürlendi.'),
+    ChronicleEntry(
+        day: 21,
+        icon: '⚔',
+        text: 'Aksoy ile Karaca arasında kan davası başladı.',
+        milestone: true),
+    ChronicleEntry(day: 26, icon: '🌾', text: 'İlk harman kaldırıldı.'),
+  ];
+
+  for (final section in LedgerSection.values) {
+    runApp(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: RepaintBoundary(
+        key: _key,
+        child: Scaffold(
+          backgroundColor: const Color(0xFF1A2A20), // sahne yerine sakin zemin
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Kalıcı mühür — oyundaki yeriyle aynı (sol üst).
+              Positioned(
+                left: 14,
+                top: 92,
+                child: LedgerSeal(
+                  onTap: () {},
+                  agendaCount: agenda.length,
+                  pendingPetition: true,
+                  bookOpen: !inkWet,
+                ),
+              ),
+              VillageLedger(
+                // Her bölüm TAZE bir ağaçtan çizilsin: aynı element yeniden
+                // kullanılırsa raf/gövde geçiş animasyonunun ortasında yakalanıp
+                // iki bölüm üst üste binmiş gibi görünür (yakalama artefaktı).
+                key: ValueKey(section),
+                initialSection: section,
+                badges: const {
+                  LedgerSection.divan: 3,
+                  LedgerSection.kanun: 5,
+                  LedgerSection.nufus: 2,
+                  LedgerSection.tuzuk: 4,
+                },
+                identity: 'Demirhan Hanesi',
+                identityBonus: '★ Bereketli Köy — tarlalar %15 gürbüz büyür',
+                morale: 0.63,
+                population: 26,
+                food: 41,
+                gold: 18,
+                agenda: agenda,
+                houses: houses,
+                laws: laws,
+                marks: marks,
+                crafts: crafts,
+                legacy: 0.09,
+                onOpenPetition: () {},
+                sealed: const {
+                  'neighborliness',
+                  'winterFodder',
+                  'familyReunion',
+                },
+                lawContext: kDemoLawContext,
+                lawSpotlightId: 'irrigation',
+                inkDrySec: inkWet ? 180 : 0,
+                inkDryTotalSec: 240,
+                onOpenLaw: (_) {},
+                rosterRows: rosterRows,
+                onSelectVillager: (_) {},
+                quests: quests,
+                completedQuests: completed,
+                charterTier: 1,
+                enactedPolicies: 2,
+                chronicle: chronicle,
+                milestoneCount: 2,
+                onClose: () {},
+              ),
+            ],
+          ),
+        ),
+      ),
+    ));
+    // Reveal + bar/portre animasyonları otursun. Sadece beklemek YETMEZ:
+    // pencere ön planda değilse motor kare üretmez, ticker donar ve panelin
+    // açılış Opacity'si 0'da kalır → kapkara kare. Kareyi elde pompala.
+    await _settle(1400);
+    await _capture('/tmp/ledger_${section.name}.png');
+  }
+
+  stdout.writeln(
+      _renderErrors == 0 ? 'RENDER_OK' : 'RENDER_ERRORS: $_renderErrors');
+  exit(0);
+}
+
+/// Elle pompalanan karenin zaman damgası — hep İLERİ gider.
+///
+/// macOS'ta pencere ön planda değilken motor kare üretmez: setState hiç
+/// boyanmaz, ticker'lar donar ve panelin açılış Opacity'si 0'da takılır (kapkara
+/// kare). Bu yüzden kareyi elde pompalıyoruz. Bedeli: motor da arada bir kendi
+/// (daha küçük) damgasıyla kare basarsa AnimationController'ın
+/// `elapsedInSeconds >= 0` assert'i öter — zararsız, yakalamayı bozmuyor;
+/// [_isClockClash] ile hata sayımından düşülür.
+Duration _stamp = Duration.zero;
+
+/// Kareyi ELDE zorlar (bkz. ui_gallery_capture_main._settle).
+Future<void> _settle(int ms) async {
+  final b = WidgetsBinding.instance;
+  final steps = (ms / 16).ceil();
+  for (int i = 0; i < steps; i++) {
+    // Gerçek zaman da geçmeli: async işler (asset/font) yalnız kare
+    // pompalayarak tamamlanmaz.
+    await Future<void>.delayed(const Duration(milliseconds: 16));
+    if (b.schedulerPhase != SchedulerPhase.idle) continue;
+    _stamp += const Duration(milliseconds: 16);
+    b.handleBeginFrame(_stamp);
+    b.handleDrawFrame();
+  }
+}
+
+/// Motor saati ↔ elle pompalama çakışması mı — gerçek layout hatası değil.
+bool _isClockClash(String s) => s.contains('elapsedInSeconds >= 0.0');
+
+Future<void> _capture(String path) async {
+  final ctx = _key.currentContext;
+  if (ctx == null) {
+    stdout.writeln('CAPTURE_FAIL: $path');
+    return;
+  }
+  final b = ctx.findRenderObject() as RenderRepaintBoundary;
+  final img = await b.toImage(pixelRatio: 2.0);
+  final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+  if (bytes == null) return;
+  await File(path).writeAsBytes(bytes.buffer.asUint8List());
+  stdout.writeln('CAPTURED: $path');
+}

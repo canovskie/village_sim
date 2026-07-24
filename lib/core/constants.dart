@@ -36,16 +36,46 @@ const double kEggInterval          = 32.0;
 /// hayatta kalma zorunluluğu değil → bilinçli yavaş.
 const double kHoneyInterval        = 50.0;
 const double kFarmHarvestDuration  = 4.0;
+const double kFarmSowDuration      = 2.5; // tohum atma — hasattan kısa, ama görünür
 const double kFarmWaterFetchTime   = 1.5;
 const double kFarmWaterTime        = 1.2;
 const double kFarmWaterCooldown    = 18.0;
 
+/// Nadas: Dönemli Ekim Beratı yürürlükteyken hasat edilmiş tarla bu kadar
+/// saniye çıplak dinlenir, sonra yeniden ekilebilir. Bir hasat döngüsü ~100 sn
+/// olduğundan bu ~%20 daha az döngü demek — karşılığı balyada +%20 verim
+/// (cropRotation yield çarpanı). Yani berat gerçek bir takas.
+const double kFarmFallowDuration = 20.0;
+
 // ─── Sulama mekaniği (kuyu → tarla hızlandırıcı) ──────────────────────────────
-// Kuyu varsa çiftçi oradan su taşır, ekin yamasını sular → sulanan ekin 2x
-// büyür (bkz. FarmTile.update / boostGrowth). Kuyu yoksa ekin baz hızda büyür.
-const double kFarmWaterBoostDuration = 9.0; // sulamanın 2x bonus süresi (sn)
+// Kuyu varsa çiftçi oradan su taşır, ekin yamasını sular. Sulama mevsim
+// kuraklık cezasını (unwateredPenalty) İPTAL eder ve yerine sabit bir hız
+// koyar → yazın susuz ekin sürünür (0.45), sulanan ekin fırlar.
+// 2.0 idi: yazın sulu/susuz farkı 6× oluyordu, kuyusuz köy cezalandırılmaktan
+// çok kırılıyordu. 1.5 ile fark ~3.3× — hâlâ kuyuyu şart gibi hissettiriyor
+// ama kuyusuz köy açlıktan ölmüyor.
+const double kFarmWaterGrowthRate    = 1.5; // sulanan ekinin büyüme hızı
+const double kFarmWaterBoostDuration = 9.0; // sulamanın bonus süresi (sn)
 const double kFarmWaterSplashRadius  = 1.8; // bir kovanın suladığı yarıçap (tile)
 const double kFarmWellMaxDistance    = 14.0; // bundan uzak kuyuya gidilmez (tile)
+
+// ─── Hasat → balya → yiyecek zinciri ─────────────────────────────────────────
+/// Harmanda kaç saman yığını (pile) bir balyaya dönüşür.
+const int kHayPilesPerBale = 6;
+/// Bir balyanın depoya tesliminde stoğa giren baz yiyecek (değirmen bonusu ve
+/// mevsim/politika verim çarpanları bunun üstüne biner — bkz. carrier_system).
+const int kBaleFoodBase = 6;
+/// Kaç tarla tile'ına bir çiftçi düşer (ve en fazla kaç saha eli).
+const int kTilesPerFarmer = 7;
+const int kMaxFarmers     = 8;
+/// Aynı anda en fazla kaç köylü inşaatçı olarak atanır (bekleyen sipariş varsa).
+/// İşçiler artık gerçek köylü olduğundan kadro nüfusla da sınırlı — bu yalnız
+/// üst sınır; küçük köy tüm boşları inşaata koymasın diye.
+const int kMaxBuilders = 3;
+/// "İşgücü Tahsisi" fermanı yürürlükteyken tarım işgücüne eklenen saha eli
+/// sayısı — köy boşta kalan emeğini tarlaya kaydırır (çiftçi çağrısı olmasa
+/// bile kadro kurulabilir). Yine de tarla ihtiyacıyla (kTilesPerFarmer) sınırlı.
+const int kFarmLaborPolicyBonus = 3;
 
 // ─── Ev su deposu (kuyu → ev) ─────────────────────────────────────────────────
 // Her evin 0..1 su deposu var. Sakinler tüketir, kuyular doldurur. Susuz evler

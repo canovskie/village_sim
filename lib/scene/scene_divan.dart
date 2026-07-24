@@ -1,30 +1,35 @@
 part of '../main.dart';
 
-/// Divan — köyün her zaman açık yönetişim merkezi (UI omurgası).
+/// KÖY DEFTERİ — köy içi işlerin TEK kapısı (UI omurgası).
 ///
-/// Dilekçe sistemi artık "kıyıda bekleyen bir mühür" değil: Divan, sim'de olan
-/// biteni tek yüzeyde toplar. GÜNDEM köyün senden ne istediğini (bekleyen
-/// dilekçe) + neyin mayalandığını (henüz patlamamış baskılar) gösterir →
-/// yönetişim "araya giren modal" olmaktan çıkıp köyün nabzına dönüşür.
+/// Eskiden köyün kendi hakkındaki bilgisi beş ayrı yüzeye dağılmıştı: Divan sol
+/// üstte bir mühür, Nüfus Defteri HUD'ın geliştirici ikonları arasında, Hikâye
+/// sol alttaki ⚙ kümesinde bir chip, Görevler sol kenarda ayrı bir pano,
+/// Kanunname ise Divan'ın içinde bir sekme. Hepsi tek çerçevede toplandı; kapı
+/// bir tane (defter mührü), içeride bölüm değiştirilir.
 ///
-/// Bu katman SALT-OKUNUR: yeni simülasyon yürütmez, mevcut state'i (zümreler,
-/// dilekçe, hafıza, yasalar) okuyup gösterir. Mayalanan meseleler dilekçeleri
-/// kapılayan AYNI sinyallerden (küskün zümre, kan davası, kıtlık, zincir
-/// kuyruğu) türetilir — yani gündem köyün gerçekten "birazdan ne soracağını"
-/// dürüstçe önizler.
+/// Bu katman SALT-OKUNUR: yeni simülasyon yürütmez, mevcut state'i (haneler,
+/// dilekçe, hafıza, yasalar, nüfus, görevler, kronik) okuyup gösterir.
+/// Mayalanan meseleler dilekçeleri kapılayan AYNI sinyallerden (küskün hane,
+/// kan davası, kıtlık, zincir kuyruğu) türetilir — yani gündem köyün gerçekten
+/// "birazdan ne soracağını" dürüstçe önizler.
 extension _SceneDivan on _VillageSceneState {
-  /// Zümre morali bu eşiğin altındaysa "huzursuz" sayılır (mayalanan dilekçe).
+  /// Hane morali bu eşiğin altındaysa "huzursuz" sayılır (mayalanan dilekçe).
   static const double _kDivanUneasy = 0.50;
 
-  void _openDivan() => setStateHere(() => _divanOpen = true);
-  void _closeDivan() => setStateHere(() => _divanOpen = false);
+  /// Defteri (istenen bölümden) açar. Açıkken başka bölüme geçmek de buradan.
+  void _openLedger([LedgerSection s = LedgerSection.divan]) =>
+      setStateHere(() => _ledgerSection = s);
+  void _closeLedger() => setStateHere(() => _ledgerSection = null);
 
-  /// Zümre nabzı tabelasındaki "⚖ DİVAN" pilinden açılan tam panel.
-  Widget buildDivanPanel() {
+  /// Defter mühründen (ve HUD/pano kısayollarından) açılan tam panel.
+  Widget buildVillageLedger() {
     return Positioned.fill(
       child: ListenableBuilder(
         listenable: _frame,
-        builder: (_, _) => DivanPanel(
+        builder: (_, _) => VillageLedger(
+          initialSection: _ledgerSection ?? LedgerSection.divan,
+          badges: _ledgerBadges(),
           // Metin havuzlarının tohumu: gün. Pano gün içinde aynı okunur,
           // ertesi gün başka kelimelerle konuşur (rebuild'de zıplamaz).
           seed: _dayCount,
@@ -33,6 +38,7 @@ extension _SceneDivan on _VillageSceneState {
           population: _villagers.length,
           food: _stockpile.food,
           gold: _stockpile.gold,
+          // ⚖ DİVAN
           agenda: _divanAgenda(),
           houses: _houses.snapshot(),
           laws: _divanLaws(),
@@ -42,20 +48,71 @@ extension _SceneDivan on _VillageSceneState {
           onOpenPetition: _pendingPetition == null
               ? null
               : () => setStateHere(() {
-                    _divanOpen = false;
+                    _ledgerSection = null;
                     _petitionModalOpen = true;
                   }),
-          // KANUNNAME — Divan'ın ikinci sekmesi. Fermana dokun → meclis toplanır.
+          // 📜 KANUNNAME — fermana dokun → meclis toplanır (mühür ritüeli).
           sealed: _policies.sealed,
           lawContext: _lawContext,
           lawSpotlightId: _lawSpotlightId,
           inkDrySec: _inkDryRemaining(),
           inkDryTotalSec: _inkDryTotal,
           onOpenLaw: _openLawRitual,
-          onClose: _closeDivan,
+          // ⚑ REJİM — kimliğin bedeli: yetki kuralı, köyün sabrı, yemin ve
+          // fesih. Kadran bunları defterin başında gösterir.
+          regimeRule: _regimeRule,
+          unrest: _unrest,
+          swornRegime: _oathRegime,
+          onSwearOath: _oathAvailable ? _swearOath : null,
+          onRepealLaw: _repealLaw,
+          // 👥 NÜFUS
+          rosterRows: _rosterRows(),
+          onSelectVillager: (v) => setStateHere(() {
+            _ledgerSection = null;
+            _selectedVillager = v;
+          }),
+          // 🎯 TÜZÜK
+          quests: QuestBook.activeQuests(_questContext(), _completedQuests),
+          completedQuests: _completedQuests,
+          charterTier: _charterTier,
+          enactedPolicies: _policies.enactedCount,
+          // 📖 KRONİK
+          chronicle: _storyLog,
+          milestoneCount: _achievedMilestones.length,
+          onClose: _closeLedger,
         ),
       ),
     );
+  }
+
+  /// Nüfus bölümünün satırları — barınma bilgisi burada türetilir (panel bina
+  /// katmanına bağımlı olmasın). Ölmekte olanlar deftere yazılmaz.
+  List<VillagerStatRow> _rosterRows() => [
+        for (final v in _villagers)
+          if (!v.isDying)
+            () {
+              final (label, tier) = _housingInfo(v);
+              return VillagerStatRow(v, label, tier);
+            }(),
+      ];
+
+  /// Raf rozetleri — YALNIZ eyleme çağıran sayılar. Her bölümde daimî bir sayı
+  /// yansa rozetler görünmez olurdu; bu yüzden ör. Kanunname rozeti sadece
+  /// mürekkep kuruyken (yeni mühür basılabilirken) çıkar.
+  Map<LedgerSection, int> _ledgerBadges() {
+    final agenda = _divanAgendaCount();
+    final homeless = _villagers.where((v) => v.homeBuilding == null).length;
+    final openLaws = _inkDryRemaining() <= 0
+        ? LawBook.openAgenda(_policies.sealed, _lawContext).length
+        : 0;
+    final openQuests =
+        QuestBook.activeQuests(_questContext(), _completedQuests).length;
+    return {
+      if (agenda > 0) LedgerSection.divan: agenda,
+      if (openLaws > 0) LedgerSection.kanun: openLaws,
+      if (homeless > 0) LedgerSection.nufus: homeless,
+      if (openQuests > 0) LedgerSection.tuzuk: openQuests,
+    };
   }
 
   /// MÜHÜR RİTÜELİ — meclisin toplandığı yer. Eski "MECLİS'İ TOPLA" kartı bir
@@ -74,23 +131,22 @@ extension _SceneDivan on _VillageSceneState {
     );
   }
 
-  /// Zümre nabzı rozetindeki sayaç: bekleyen + mayalanan mesele toplamı.
+  /// Hane nabzı rozetindeki sayaç: bekleyen + mayalanan mesele toplamı.
   int _divanAgendaCount() => _divanAgenda().length;
 
-  /// KALICI Divan mührü — yönetişimin her an görünür kapısı (sol üst, HUD
-  /// şeridinin altında). Meclis eskiden üç kat gömülüydü (yan pano → pil →
-  /// modal içi buton) ve bir köylü/bina seçilince o kapı ekrandan kayboluyordu;
-  /// bu mühür hep durur. PERF: gündem sayımı köylü/hane/tarla tarar → 60fps
-  /// `_frame` yerine ~10Hz `_hudFrame`'e bağlı.
-  Widget buildDivanSeal() {
+  /// KALICI defter mührü — köy içi işlerin her an görünür TEK kapısı (sol üst,
+  /// HUD şeridinin altında). Bir köylü/bina seçilince bile kaybolmaz.
+  /// PERF: gündem sayımı köylü/hane/tarla tarar → 60fps `_frame` yerine ~10Hz
+  /// `_hudFrame`'e bağlı.
+  Widget buildLedgerSeal() {
     return Positioned(
       left: 14,
       top: 92,
       child: RepaintBoundary(
         child: ListenableBuilder(
           listenable: _hudFrame,
-          builder: (_, _) => DivanSeal(
-            onTap: _openDivan,
+          builder: (_, _) => LedgerSeal(
+            onTap: _openLedger,
             agendaCount: _divanAgendaCount(),
             pendingPetition: _pendingPetition != null,
             bookOpen: _inkDryRemaining() <= 0,

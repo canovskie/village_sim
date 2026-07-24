@@ -5,6 +5,44 @@ part of '../main.dart';
 /// kutlama anı yaşar (bildirim + sevinç gövde dili). Cozy: spam yok, taramada
 /// en fazla bir kutlama; tamamen pozitif.
 extension _ScenePersonality on _VillageSceneState {
+  // ── Kişisel anların sesi ([[lib/text/voice.dart]]) ────────────────────────
+
+  static const _kAnnivPool = [
+    '🎂 {ad} köyde {yıl}. yılını doldurdu. Akşam kâsesine fazladan çorba kondu.',
+    '🎂 {yıl} yıldır burada. {sevdiği} deyince {ad-in} hâlâ gözü parlıyor.',
+    '🎂 {ad} için {yıl}. yıl. Komşuları kapısına bir demet bırakmış.',
+  ];
+  static const _kCallingPioneerPool = [
+    '🌟 {ad} büyüdü. Köyde bu işi ilk o yapıyor: {iş}.',
+    '🌟 {ad} yetişkinliğe adım attı ve {iş} olarak işe koyuldu. Aletlerini kendi yaptı.',
+    '🌟 Bugünden sonra köyün {iş} var: {ad}.',
+  ];
+  static const _kCallingPioneerChroniclePool = [
+    '{ad} köyün ilk {iş} oldu.',
+    'Köyde bu iş ilk kez tutuldu: {ad}, {iş}.',
+    '{ad} bu işi köye getiren ilk kişi oldu: {iş}.',
+  ];
+  static const _kCallingHeededPool = [
+    '🌟 {ad} büyüdü. İçinden geleni yaptı: {iş}.',
+    '🌟 {ad} artık {iş}. Kimse şaşırmadı.',
+    '🌟 {ad-in} eli işe yattı. {iş} oldu.',
+  ];
+  static const _kCallingHeededChroniclePool = [
+    '{ad} çağrısını buldu: {iş}.',
+    '{ad-in} eli işe yattı: {iş}.',
+    '{ad} kendi yolunu tuttu: {iş}.',
+  ];
+  static const _kCallingMissedPool = [
+    '{ad} büyüdü ve {iş} oldu. İstediği bu değildi.',
+    '{ad-in} eline {iş} aletleri tutuşturuldu. Geceleri hâlâ {özlem} olmayı düşünüyor.',
+    '{ad} artık {iş}. Gönlü {özlem} işinde kaldı.',
+  ];
+  static const _kCallingMissedChroniclePool = [
+    '{ad} {iş} oldu; gönlü {özlem} işinde.',
+    '{ad-in} yolu {iş} oldu, isteği {özlem}.',
+    '{ad} {iş} olarak işe başladı; içindeki özlem başka.',
+  ];
+
   /// Bir "yıl" kaç oyun günü — yıldönümü bu aralıkla gelir.
   static const double _kAnnivYearDays = 6.0;
 
@@ -38,8 +76,14 @@ extension _ScenePersonality on _VillageSceneState {
     v.chatBubbleIcon = '🎂';
     v.chatBubbleTime = 4.0;
     _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.03);
-    final like = v.personality.likes.label;
-    _showNotification('🎂 ${v.name} köyde $years. yılını kutluyor — $like sevdalısı.');
+    _showNotification(Voice.say(
+        _kAnnivPool,
+        _voice(v,
+            seed: _stableSeed('yıl${v.name}$years', _dayCount),
+            extra: {
+              'yıl': '$years',
+              'sevdiği': v.personality.likes.label,
+            })));
   }
 
   /// Çağrı tarama periyodu (sn) — yıldönümünden ayrı, daha sık (geçiş kaçmasın).
@@ -68,6 +112,12 @@ extension _ScenePersonality on _VillageSceneState {
   void _announceCalling(VillagerEntity v) {
     final prof = v.type.displayName.toLowerCase();
     final heeded = v.type == v.calling; // çağrısını dinledi mi
+    final ctx = _voice(v,
+        seed: _stableSeed('çağrı${v.name}', _dayCount),
+        extra: {
+          'iş': prof,
+          'özlem': v.calling.displayName.toLowerCase(),
+        });
     if (heeded) {
       // Köyde o mesleğin ilk/tek temsilcisi mi → çağrısının öncüsü.
       final pioneer = !_villagers.any((o) =>
@@ -77,25 +127,24 @@ extension _ScenePersonality on _VillageSceneState {
       v.chatBubbleTime = 4.5;
       _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.02);
       if (pioneer) {
-        _showNotification(
-            '🌟 ${v.name} büyüdü — köyün ilk $prof oldu, çağrısının öncüsü.');
-        _chronicle('${v.name} köyün ilk $prof oldu — çağrısının öncüsü.',
+        _showNotification(Voice.say(_kCallingPioneerPool, ctx));
+        _chronicle(Voice.say(_kCallingPioneerChroniclePool, ctx),
             icon: '🌟', milestone: true);
       } else {
-        _showNotification(
-            '🌟 ${v.name} büyüdü — içindeki çağrıyı dinledi, $prof oldu.');
-        _chronicle('${v.name} çağrısını buldu: $prof.', icon: '🌟');
+        _showNotification(Voice.say(_kCallingHeededPool, ctx));
+        _chronicle(Voice.say(_kCallingHeededChroniclePool, ctx), icon: '🌟');
       }
     } else {
       // Çağrısına rağmen ailesinin yoluna çekildi — buruk büyüme. Kalıcı
       // kırgınlık moral formülünden gelir ('gönlü başka işte').
-      final want = v.calling.displayName.toLowerCase();
       v.feel(NpcEmotion.content, 3.5, moodDelta: -0.05);
       v.chatBubbleIcon = '🌫️';
       v.chatBubbleTime = 4.0;
-      _showNotification(
-          '${v.name} büyüdü ve $prof oldu — ama içinde $want olma özlemi kaldı.');
-      _chronicle('${v.name} $prof oldu; gönlü ise $want işinde.', icon: '🌫️');
+      _showNotification(Voice.say(_kCallingMissedPool, ctx));
+      _chronicle(Voice.say(_kCallingMissedChroniclePool, ctx), icon: '🌫️');
     }
+    // Çağrı kanalı — bu köylünün mesleği bir zanaat taşıyorsa ve köy henüz
+    // bilmiyorsa, o zanaat şimdi köye doğar (kutlama bildirimi buradan gelir).
+    _discoverCallingCraft(v, _CraftSource.calling);
   }
 }

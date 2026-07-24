@@ -1,0 +1,335 @@
+[
+  {
+    "id": "main_menu",
+    "title": "Ana Menü — Şafak Sahnesi",
+    "group": "Ekranlar",
+    "note": "Akşamdan gün doğumuna geçen prosedürel sahne, fenerli karşılayıcı.",
+    "file": "main_menu.png",
+    "w": 1440.0,
+    "h": 900.0
+  },
+  {
+    "id": "save_slots",
+    "title": "Kayıtlı Köyler",
+    "group": "Ekranlar",
+    "note": "Menü sahnesi üstünde overlay pano; en son köye tek tıkla devam.",
+    "file": "save_slots.png",
+    "w": 1440.0,
+    "h": 900.0
+  },
+  {
+    "id": "save_slots_empty",
+    "title": "Kayıtlı Köyler — Boş Durum",
+    "group": "Ekranlar",
+    "note": "",
+    "file": "save_slots_empty.png",
+    "w": 1440.0,
+    "h": 900.0
+  },
+  {
+    "id": "settings",
+    "title": "Ayarlar",
+    "group": "Ekranlar",
+    "note": "",
+    "file": "settings.png",
+    "w": 1100.0,
+    "h": 800.0
+  },
+  {
+    "id": "about",
+    "title": "Hakkında",
+    "group": "Ekranlar",
+    "note": "",
+    "file": "about.png",
+    "w": 1000.0,
+    "h": 800.0
+  },
+  {
+    "id": "loading",
+    "title": "Yükleme Ekranı",
+    "group": "Ekranlar",
+    "note": "",
+    "file": "loading.png",
+    "w": 900.0,
+    "h": 520.0
+  },
+  {
+    "id": "cutscene_opening",
+    "title": "Açılış Sinematiği",
+    "group": "Ekranlar",
+    "note": "İmparatorluğun vergi elinden kaçış — 2B sinematik oynatıcı.",
+    "file": "cutscene_opening.png",
+    "w": 1440.0,
+    "h": 810.0
+  },
+  {
+    "id": "hud",
+    "title": "HUD — Kaynak / Zaman / Moral",
+    "group": "Oyun İçi HUD",
+    "note": "Üst kaynak şeridi, mevsim-gün göstergesi, hız ve dev kısayolları.",
+    "file": "hud.png",
+    "w": 1440.0,
+    "h": 520.0
+  },
+  {
+    "id": "build_panel",
+    "title": "İnşa Paleti — Kategoriler",
+    "group": "Oyun İçi HUD",
+    "note": "Alt çubuğun sekmeli hâli; kilitli zanaatlar soluk görünür.",
+    "file": "build_panel.png",
+    "w": 1400.0,
+    "h": 700.0
+  },
+  {
+    "id": "road_panel",
+    "title": "Yol Paleti",
+    "group": "Oyun İçi HUD",
+    "note": "",
+    "file": "road_panel.png",
+    "w": 720.0,
+    "h": 260.0
+  },
+  {
+    "id": "objective_panel",
+    "title": "Tüzük / Görev Panosu",
+    "group": "Oyun İçi HUD",
+    "note": "Kademe başlığı + açık görevler + sıradaki kademe.",
+    "file": "objective_panel.png",
+    "w": 520.0,
+    "h": 620.0
+  },
+  {
+    "id": "house_banner",
+    "title": "Hane Sancağı + İmparatorluk Madalyonu",
+    "group": "Oyun İçi HUD",
+    "note": "Hanelerin hâli, yükselen hane ve imparatorluk yakınlığı.",
+    "file": "house_banner.png",
+    "w": 620.0,
+    "h": 600.0
+  },
+  {
+    "id": "divan_seal",
+    "title": "Divan Mührü + Mod Düğmeleri",
+    "group": "Oyun İçi HUD",
+    "note": "Hep görünür yönetişim girişi ve dünya modu düğmeleri.",
+    "file": "divan_seal.png",
+    "w": 700.0,
+    "h": 300.0
+  },
+  {
+    "id": "villager_tab0",
+    "title": "Köylü Paneli — Genel",
+    "group": "Paneller",
+    "note": "",
+    "file": "villager_tab0.png",
+    "w": 560.0,
+    "h": 900.0
+  },
+  {
+    "id": "villager_tab1",
+    "title": "Köylü Paneli — Kişilik",
+    "group": "Paneller",
+    "note": "",
+    "file": "villager_tab1.png",
+    "w": 560.0,
+    "h": 900.0
+  },
+  {
+    "id": "villager_tab2",
+    "title": "Köylü Paneli — Öykü",
+    "group": "Paneller",
+    "note": "",
+    "file": "villager_tab2.png",
+    "w": 560.0,
+    "h": 900.0
+  },
+  {
+    "id": "roster_tab0",
+    "title": "Nüfus Defteri — Köylüler",
+    "group": "Paneller",
+    "note": "Tam ekran istatistik: sıralı köylü listesi ve hane grupları.",
+    "file": "roster_tab0.png",
+    "w": 1360.0,
+    "h": 900.0
+  },
+  {
+    "id": "roster_tab1",
+    "title": "Nüfus Defteri — Haneler",
+    "group": "Paneller",
+    "note": "Tam ekran istatistik: sıralı köylü listesi ve hane grupları.",
+    "file": "roster_tab1.png",
+    "w": 1360.0,
+    "h": 900.0
+  },
+  {
+    "id": "info_building_townhall",
+    "title": "Bina Paneli — Belediye",
+    "group": "Paneller",
+    "note": "",
+    "file": "info_building_townhall.png",
+    "w": 560.0,
+    "h": 900.0
+  },
+  {
+    "id": "info_building_market",
+    "title": "Bina Paneli — Pazar",
+    "group": "Paneller",
+    "note": "",
+    "file": "info_building_market.png",
+    "w": 560.0,
+    "h": 900.0
+  },
+  {
+    "id": "info_building_house",
+    "title": "Bina Paneli — Ahşap Ev",
+    "group": "Paneller",
+    "note": "",
+    "file": "info_building_house.png",
+    "w": 560.0,
+    "h": 900.0
+  },
+  {
+    "id": "divan_tab0",
+    "title": "Divan — Gündem",
+    "group": "Yönetişim",
+    "note": "Her an açık yönetişim panosu: bekleyen ve mayalanan meseleler.",
+    "file": "divan_tab0.png",
+    "w": 1360.0,
+    "h": 900.0
+  },
+  {
+    "id": "divan_tab1",
+    "title": "Divan — Kanunname",
+    "group": "Yönetişim",
+    "note": "Her an açık yönetişim panosu: bekleyen ve mayalanan meseleler.",
+    "file": "divan_tab1.png",
+    "w": 1360.0,
+    "h": 900.0
+  },
+  {
+    "id": "law_book",
+    "title": "Kanunname — Altıgen Petek",
+    "group": "Yönetişim",
+    "note": "Merkez göbek + 6 tema yaprağı; temaya dokununca hükümler açılır.",
+    "file": "law_book.png",
+    "w": 1000.0,
+    "h": 900.0
+  },
+  {
+    "id": "law_ritual",
+    "title": "Mühür Ritüeli",
+    "group": "Yönetişim",
+    "note": "Ferman mühürlenirken zümreler masada; pusula ibresinin kayışı.",
+    "file": "law_ritual.png",
+    "w": 920.0,
+    "h": 780.0
+  },
+  {
+    "id": "law_compass",
+    "title": "Politik Pusula",
+    "group": "Yönetişim",
+    "note": "İki eksen / dört rejim; mühür öncesi \"ibre nereye kayar\" önizlemesi.",
+    "file": "law_compass.png",
+    "w": 560.0,
+    "h": 940.0
+  },
+  {
+    "id": "petition_0",
+    "title": "Dilekçe Modalı 1",
+    "group": "Modallar",
+    "note": "Birinci ağızdan metin + sahne kartı + karar seçenekleri.",
+    "file": "petition_0.png",
+    "w": 640.0,
+    "h": 940.0
+  },
+  {
+    "id": "petition_1",
+    "title": "Dilekçe Modalı 2",
+    "group": "Modallar",
+    "note": "Birinci ağızdan metin + sahne kartı + karar seçenekleri.",
+    "file": "petition_1.png",
+    "w": 640.0,
+    "h": 940.0
+  },
+  {
+    "id": "petition_scenes",
+    "title": "Dilekçe Sahne Kartları",
+    "group": "Modallar",
+    "note": "Dilekçenin geçtiği yeri çizen prosedürel kart seti.",
+    "file": "petition_scenes.png",
+    "w": 1200.0,
+    "h": 700.0
+  },
+  {
+    "id": "option_scenes",
+    "title": "Karar-Eylem Sahneleri",
+    "group": "Modallar",
+    "note": "Her karar seçeneğinin altındaki motif kartı (bağışla/sür/idam…).",
+    "file": "option_scenes.png",
+    "w": 1300.0,
+    "h": 700.0
+  },
+  {
+    "id": "imperial_modal",
+    "title": "İmparatorluk Talebi",
+    "group": "Modallar",
+    "note": "Pazarlık mini-oyunu: öde / pazarlık et / fidye / direniş.",
+    "file": "imperial_modal.png",
+    "w": 820.0,
+    "h": 940.0
+  },
+  {
+    "id": "event_banner",
+    "title": "Olay Bandı",
+    "group": "Modallar",
+    "note": "",
+    "file": "event_banner.png",
+    "w": 1000.0,
+    "h": 240.0
+  },
+  {
+    "id": "event_choice",
+    "title": "Olay Kararı Modalı",
+    "group": "Modallar",
+    "note": "",
+    "file": "event_choice.png",
+    "w": 760.0,
+    "h": 640.0
+  },
+  {
+    "id": "dev_panel",
+    "title": "Geliştirici Paneli",
+    "group": "Geliştirici",
+    "note": "God mode, saat/hava, senaryolar, olay tetikleyiciler, sim hızı.",
+    "file": "dev_panel.png",
+    "w": 560.0,
+    "h": 980.0
+  },
+  {
+    "id": "dev_console",
+    "title": "Dev Konsolu (`)",
+    "group": "Geliştirici",
+    "note": "Quake-style komut arama + parametre formu + senaryo kayıt/oynat.",
+    "file": "dev_console.png",
+    "w": 900.0,
+    "h": 760.0
+  },
+  {
+    "id": "design_system",
+    "title": "Tasarım Sistemi — app_ui Bileşenleri",
+    "group": "Tasarım Sistemi",
+    "note": "Panel, buton türleri, çip, istatistik çubuğu, sekme, yaldızlı çerçeve.",
+    "file": "design_system.png",
+    "w": 1100.0,
+    "h": 940.0
+  },
+  {
+    "id": "icons",
+    "title": "İkon Seti — GameIconData",
+    "group": "Tasarım Sistemi",
+    "note": "Vektörel HUD ikonlarının tamamı.",
+    "file": "icons.png",
+    "w": 1100.0,
+    "h": 700.0
+  }
+]

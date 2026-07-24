@@ -18,6 +18,10 @@ class BuildingPanel extends StatelessWidget {
   /// kategori yok sayılır — sadece ateş yeri kartı çıkar.
   final BuildCategory? category;
 
+  /// Köyün zanaat kilidi — false dönen bina menüde HİÇ görünmez (açılınca
+  /// belirir). null = filtre yok (hepsi görünür).
+  final bool Function(BuildingType)? isUnlocked;
+
   const BuildingPanel({
     super.key,
     required this.stockpile,
@@ -25,6 +29,7 @@ class BuildingPanel extends StatelessWidget {
     required this.onSelect,
     this.hasFirepit = false,
     this.category,
+    this.isUnlocked,
   });
 
   @override
@@ -34,7 +39,8 @@ class BuildingPanel extends StatelessWidget {
         : BuildingType.values
             .where((t) =>
                 kBuildingMeta.containsKey(t) &&
-                (category == null || kBuildingCategory[t] == category))
+                (category == null || kBuildingCategory[t] == category) &&
+                (isUnlocked == null || isUnlocked!(t)))
             .toList();
     if (types.isEmpty) return const SizedBox.shrink();
 

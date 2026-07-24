@@ -8,7 +8,8 @@ part of '../main.dart';
 /// ilişki) pazarlık şansını + talebin sertliğini + ziyaret sıklığını belirler.
 ///
 /// Tam döngü: harita kenarından formasyonla YAKLAŞMA (sim akar, oyuncu kolonu
-/// görür) → eşikte PARLEY (geliş sinematiği + talep modalı, sim durur) → karara
+/// görür) → eşikte PARLEY (talep modalı, sim durur; geliş sinematiği yalnız
+/// ton değiştiren ziyaretlerde — bkz. _startImperialParley merdiveni) → karara
 /// göre RAIDING (merkeze dalış + görünür darbe) ya da doğrudan LEAVING. Fiziksel
 /// asker NPC'leri ([ImperialSoldier]) + geliş sinematiği + zümre nabzındaki
 /// dış-güç madalyonu bağlı. Dev panelden [_devSummonImperial] ile anında tetiklenir.
@@ -94,6 +95,51 @@ extension _SceneImperial on _VillageSceneState {
     }
   }
 
+  /// Kolonun köyün GÖRÜNÜR sınırından inmesi için giriş + pazarlık noktalarını
+  /// üretir. Reveal modelinde kamera reach dışını (harita köşeleri) HİÇ göstermez;
+  /// eski "harita köşesinden yürü" yolu kolonu sisde görünmez bırakıyordu. Kolon
+  /// artık merkeze göre seçili bir yönde, reach kenarına yakın bir eşiğe iner:
+  ///  - giriş (entry)  : görünür sınırın hemen dibinde (kolon buradan kadraja girer)
+  ///  - parley         : köyle sınır arasında, net görünür bir eşik
+  /// Yön seede bağlı (ziyaretler hep aynı köşeden gelmesin). Dönüş:
+  /// (entryCol, entryRow, parleyCol, parleyRow).
+  (double, double, double, double) _imperialFrontierPoints() {
+    final (cx, cy) = _villageCenter();
+    final cxd = cx.toDouble(), cyd = cy.toDouble();
+    // Tile-uzayı birim yönler — köyün üst yarısından (kuzey/kuzeybatı/kuzeydoğu/batı)
+    // iner (alt-sağdan gezgin tüccar geldiğinden çakışmasın).
+    const dirs = <(double, double)>[
+      (0.0, -1.0),   // kuzey (ekranda yukarı)
+      (-0.7, -0.7),  // kuzeybatı
+      (0.7, -0.7),   // kuzeydoğu
+      (-1.0, 0.0),   // batı
+    ];
+    var (dc, dr) = dirs[_impSeed(5) % dirs.length];
+    final dl = sqrt(dc * dc + dr * dr);
+    dc /= dl;
+    dr /= dl;
+    // Bu yönde reach kenarına kadarki tile mesafesi (görünür sınır). Reach ekran
+    // eksenlerinde (u=c-r, v=c+r) tanımlı → yönün (du,dv) izdüşümüyle sınır bulunur.
+    double tMax;
+    final sz = _viewSize;
+    if (sz.width > 0 && sz.height > 0) {
+      final (hu, hv) = _reachHalfExtents(sz);
+      final du = (dc - dr).abs();
+      final dv = (dc + dr).abs();
+      final tu = du > 1e-4 ? hu / du : 1e9;
+      final tv = dv > 1e-4 ? hv / dv : 1e9;
+      tMax = min(tu, tv);
+    } else {
+      tMax = 22.0; // görünüm henüz hazır değil — makul sabit
+    }
+    tMax = tMax.clamp(10.0, 34.0);
+    final (px, py) =
+        _nearestLand(cxd + dc * tMax * 0.45, cyd + dr * tMax * 0.45);
+    final (ex, ey) =
+        _nearestLand(cxd + dc * tMax * 0.92, cyd + dr * tMax * 0.92);
+    return (ex, ey, px, py);
+  }
+
   /// Heyet ziyaretini başlatır: askerleri harita kenarında formasyonda spawn
   /// edip köy eşiğine (pazarlık noktası) doğru yürütür. Sim DURMAZ — oyuncu
   /// yaklaşan kolonu görür; eşiğe varınca pazarlık (modal) açılır.
@@ -101,15 +147,13 @@ extension _SceneImperial on _VillageSceneState {
     _impProsperity = prosp;
     final groupSize = _imperialGroupSize();
 
-    // Giriş köşesi — sol-üst (tüccar sağ-alttan gelir, çakışmasın).
-    final (ex, ey) = _nearestLand(2.0, 2.0);
+    // Giriş + pazarlık noktaları köyün GÖRÜNÜR sınırından (reach kenarı) türer —
+    // harita köşesi (2,2) reveal modelinde kadraja hiç girmediğinden oradan
+    // yürütmek "hiçbir şey olmadı" hissi veriyordu (kolon ~40 tile boyunca sisde
+    // görünmez yürüyordu). Artık kolon görünür frontier'dan iner.
+    final (ex, ey, px, py) = _imperialFrontierPoints();
     _impExitCol = ex;
     _impExitRow = ey;
-
-    // Pazarlık noktası — merkez ile giriş köşesi arasının yarısı (köyün kıyısı).
-    final (cx, cy) = _villageCenter();
-    final (px, py) =
-        _nearestLand(cx + (ex - cx) * 0.5, cy + (ey - cy) * 0.5);
     _impParleyCol = px;
     _impParleyRow = py;
 
@@ -135,9 +179,21 @@ extension _SceneImperial on _VillageSceneState {
     }
 
     _imperialPhase = ImperialVisitPhase.approaching;
-    AudioManager.instance.playSfx(Sfx.thunderClap);
-    _showNotification('⚔️ İmparatorluk heyeti köye doğru ilerliyor…');
+    // Kalabalık ordu yürüyüşü + sert kamera sarsıntısı → gerginlik.
+    AudioManager.instance.playSfx(Sfx.imperialMarch);
+    addCameraShake(11.0, dur: 0.7);
+    // Küçük toast yerine tam-ekran gergin anons. Voice metni alt satır olur.
+    _imperialAlertSub = Voice.pick(const [
+      'Yolun ucunda mızrak parıltısı. Vergi kolonu köye iniyor.',
+      'Toz bulutu büyüyor: heyet köye doğru yürüyor.',
+      'Sancak göründü. Kolon köyün üstüne yürüyor.',
+    ], _impSeed(1));
+    _imperialAlertLeft = _VillageSceneState._kImperialAlertDur;
   }
+
+  /// İmparatorluk metinleri için kararlı tohum — gün + tuz. Aynı gün aynı
+  /// cümle çıkar (kayıt/yükleme ya da yeniden çizim metni değiştirmez).
+  int _impSeed(int salt) => _stableSeed('imperial$salt', _dayCount);
 
   /// Aktif heyet evre makinesi — her tick (approaching/leaving) çağrılır.
   void _tickImperialColumn(double dt) {
@@ -294,7 +350,10 @@ extension _SceneImperial on _VillageSceneState {
     final demand = _buildImperialDemand(_impProsperity);
     if (demand == null) {
       // Alacak uygun bir şey yok — heyet boş döner (nadir). Doğrudan ayrılışa geç.
-      _showNotification('İmparatorluk heyeti alacak bir şey bulamadan döndü.');
+      _showNotification(Voice.pick(const [
+        'Komutan ambara baktı, deftere baktı, atını çevirdi. Bu köyde alacak bir şey yok.',
+        'Heyet köyü şöyle bir süzdü. Kalem oynamadı; kolon geri döndü.',
+      ], _impSeed(2)));
       _imperialPhase = ImperialVisitPhase.leaving;
       _setMarchDir(_impExitCol - _impAnchorCol, _impExitRow - _impAnchorRow);
       return;
@@ -302,91 +361,43 @@ extension _SceneImperial on _VillageSceneState {
     _imperialPhase = ImperialVisitPhase.parley;
     AudioManager.instance.playSfx(Sfx.thunderClap); // gümbürtülü giriş
     addCameraShake(6.0, dur: 0.6);
-    // Talep modalı arkada hazır; önce GELİŞ sinematiği oynar (bitince modal
-    // görünür — ikisi de sim'i duraklatır, sinematik üstte). Sinematik TALEBE +
-    // İLİŞKİYE göre dinamik kurulur (#3): komutanın tonu itibara, sözü talebe göre.
     setStateHere(() => _imperialDemand = demand);
-    _playCutscene(_buildImperialCutscene(demand));
-    _showNotification('⚔️ İmparatorluk vergi heyeti köye geldi');
+
+    // ── Sinematik merdiveni ────────────────────────────────────────────────
+    // Tam ekran film NADİR bir ayrıcalıktır. Her ziyarette oynarsa iki bedeli
+    // birden ödetir: (1) kompozisyon hep aynı olduğu için 3. gelişte "Atla"
+    // tuşuna dönüşür, (2) hemen ardından talep modalı geldiğinden oyuncuyu üst
+    // üste İKİ kez duraklatır. Rutin ziyaret zaten dünyada anlatılıyor — kolon
+    // harita kenarından formasyonla yürüyor, tam ekran anons düşüyor, heyet
+    // eşikte diziliyor — ve komutanın sözü (d.bite + itibar tonu) modalda
+    // duruyor. O yüzden film yalnız TONU DEĞİŞTİREN anlara saklanır:
+    //   • ilk ziyaret (imparatorluğun oyuna girişi)
+    //   • devşirme (kan bedeli — mal değil, insan isteniyor)
+    //   • ret/direniş sonrası ilk dönüş (kinli gelirler)
+    //   • ilişkinin ilk kez düşmanlığa düşmesi (itibar toparlarsa yeniden kurulur)
+    final firstEver = _imperialVisits == 0;
+    final grimTurn = _imperialFavor < 0.3 && !_impGrimShown;
+    final cinematic =
+        firstEver || _impGrudge || demand.isConscript || grimTurn;
+    _imperialVisits++;
+    if (grimTurn) _impGrimShown = true;
+    if (_imperialFavor >= 0.5) _impGrimShown = false; // barış → an yeniden kurulur
+    _impGrudge = false;
+    if (cinematic) _playCutscene(_buildImperialCutscene(demand));
+
+    _showNotification('⚔️ ${Voice.pick(const [
+          'Heyet meydanda. Komutan defterini açtı.',
+          'Mızraklar köyün eşiğinde durdu. Vergi vakti.',
+          'Kolon durdu, atlar susturuldu. Sıra köyün cevabında.',
+        ], _impSeed(3))}');
   }
 
-  /// İmparatorluk geliş sinematiğini TALEBE + İTİBARA göre dinamik kurar (#3).
-  /// Süvariler ufuktan gelir; komutanın sözü talebin türünü, tonu da ilişkiyi
-  /// (düşman/tarafsız/dostane) yansıtır. Devşirmede ek bir tehdit çekimi.
-  /// Mevcut guard sprite'ları asker olarak kullanılır (yeni resim gerekmez).
-  Cutscene _buildImperialCutscene(ImperialDemand d) {
-    final f = _imperialFavor;
-    // İlişki tonuna göre giriş anlatımı.
-    final arrival = f < 0.3
-        ? 'Ufukta kara bir toz bulutu — bu sefer öfkeyle geliyorlar.'
-        : f >= 0.7
-            ? 'Ufukta tanıdık sancak — heyet yine kapıya dayandı.'
-            : 'Ufukta toz bulutu — toynak sesleri yaklaştı.';
-    // Komutanın talebe özel buyruğu.
-    final order = switch (d.kind) {
-      ImperialDemandKind.goldTax =>
-        '${d.amount} altın vergi — kese hemen dolacak.',
-      ImperialDemandKind.foodLevy =>
-        '${d.amount} ölçek tahıl — ambarınız İmparatorluğa borçlu.',
-      ImperialDemandKind.woodLevy =>
-        '${d.amount} kütük kereste — ordumuzun kalesi sizin ormanınızdan yükselecek.',
-      ImperialDemandKind.conscript =>
-        'Köyünüzün en gencini orduya vereceksiniz.',
-    };
-    // İtibara göre komutanın tehdit tonu.
-    final threat = f < 0.3
-        ? 'Sabrım kalmadı. Bu kez direnirseniz, geriye kül kalır.'
-        : f >= 0.7
-            ? 'Hep anlaştık, köylü. Bu seferki de kolay olsun.'
-            : 'Borçlar ödenir — şu ya da bu şekilde.';
-
-    return Cutscene([
-      CutsceneShot(
-        bg: CutsceneBg.valleyDusk,
-        panFrom: 0.04,
-        panTo: 0.0,
-        zoomFrom: 1.02,
-        zoomTo: 1.08,
-        actors: const [
-          CutsceneActor(type: VillagerType.guard, seed: 31, fromX: 1.25, toX: 0.66, y: 0.84, scale: 1.2, flip: true, walk: true),
-          CutsceneActor(type: VillagerType.guard, seed: 44, fromX: 1.5, toX: 0.50, y: 0.80, scale: 1.1, flip: true, walk: true),
-          CutsceneActor(type: VillagerType.guard, seed: 52, fromX: 1.75, toX: 0.36, y: 0.86, scale: 1.25, flip: true, walk: true),
-        ],
-        lines: [
-          CutsceneLine(arrival),
-          const CutsceneLine('İmparatorluğun süvarileri köyün kapısına dayandı.'),
-        ],
-      ),
-      CutsceneShot(
-        bg: CutsceneBg.valleyDusk,
-        zoomFrom: 1.1,
-        zoomTo: 1.0,
-        actors: const [
-          CutsceneActor(type: VillagerType.guard, seed: 31, fromX: 0.5, y: 0.80, scale: 1.6, flip: true),
-        ],
-        lines: [
-          const CutsceneLine('İmparatorluk vergisini toplamaya geldik.', speaker: 'Komutan'),
-          CutsceneLine(order, speaker: 'Komutan'),
-          CutsceneLine(threat, speaker: 'Komutan'),
-        ],
-      ),
-      // Devşirme — ek bir ürkütücü çekim: köy gencinin alınması ayrı bir an.
-      if (d.isConscript)
-        const CutsceneShot(
-          bg: CutsceneBg.valleyDusk,
-          zoomFrom: 1.0,
-          zoomTo: 1.06,
-          actors: [
-            CutsceneActor(type: VillagerType.guard, seed: 52, fromX: 0.30, y: 0.82, scale: 1.3, flip: true),
-            // Küçük ölçekli köylü → genç hissi (ayrı "genç" sprite'ı yok).
-            CutsceneActor(type: VillagerType.farmer, seed: 9, fromX: 0.62, y: 0.84, scale: 0.85),
-          ],
-          lines: [
-            CutsceneLine('Komutanın gözü köyün gençlerinde — biri bu ocaktan kopacak.'),
-          ],
-        ),
-    ]);
-  }
+  /// İmparatorluk geliş sinematiği — TALEBE + İTİBARA göre dinamik kurulur.
+  /// Gövde saf fonksiyona taşındı (systems/imperial.dart) ki animasyon odası da
+  /// birebir AYNI sahneyi oynatabilsin; odanın kendi kopyasını tutması sahne
+  /// düzeltmelerinin oraya yansımamasına yol açıyordu.
+  Cutscene _buildImperialCutscene(ImperialDemand d) =>
+      imperialArrivalCutscene(d, favor: _imperialFavor, seed: _impSeed(10));
 
   /// Talep üret — tür ağırlıklı (refah + itibar talebin sertliğini ölçekler).
   ImperialDemand? _buildImperialDemand(double prosp) {
@@ -465,8 +476,13 @@ extension _SceneImperial on _VillageSceneState {
     }
     _imperialFavor = (_imperialFavor + 0.05).clamp(0.0, 1.0);
     _feelVillage(NpcEmotion.grief, 4, -0.04);
-    _chronicle('İmparatorluğun talebi karşılandı: ${d.label}.', icon: '⚔️');
-    _showNotification('⚔️ Talep ödendi — köy bu sefer huzurlu kaldı');
+    _chronicle('Öşür ödendi: ${d.label}. Komutan satırın yanına bir çentik attı.',
+        icon: '⚔️');
+    _showNotification('⚔️ ${Voice.pick(const [
+          'Yük arabalara bindi. Köy bu akşam sağ, yalnız daha fakir.',
+          'Defter kapandı, kolon yola çıktı. Kimse arkalarından bakmadı.',
+          'Ödendi. Meydanda kalan tek şey tekerlek izleri.',
+        ], _impSeed(20))}');
     _endImperialVisit(_prosperity());
   }
 
@@ -477,9 +493,12 @@ extension _SceneImperial on _VillageSceneState {
     if (_stockpile.gold < cost) return;
     _stockpile.gold -= cost;
     _imperialFavor = (_imperialFavor + 0.03).clamp(0.0, 1.0);
-    _chronicle('Bir genç fidyeyle ($cost★) askere alınmaktan kurtarıldı.',
+    _chronicle('Bir gencin yerine kese verildi ($cost★); çocuk ocağında kaldı.',
         icon: '★');
-    _showNotification('★ Fidye ödendi — genç köyde kaldı (-$cost★)');
+    _showNotification('★ ${Voice.pick([
+          'Altın sayıldı, çocuğun kolu bırakıldı. Köyde kalıyor. (-$cost★)',
+          'Komutan keseyi tarttı, gence bir daha bakmadı. Kaldı. (-$cost★)',
+        ], _impSeed(21))}');
     _endImperialVisit(_prosperity());
   }
 
@@ -492,17 +511,24 @@ extension _SceneImperial on _VillageSceneState {
       final pay = (d.amount * frac).round();
       _spendResource(d.kind, pay);
       _imperialFavor = (_imperialFavor + 0.04).clamp(0.0, 1.0);
-      _chronicle('Pazarlık tuttu — ${d.icon} talebi $pay\'a indirildi.',
+      _chronicle('Komutan rakamı çizip $pay yazdı; köy o kadarını ödedi.',
           icon: '🤝');
-      _showNotification('🤝 Pazarlık tuttu — $pay${d.icon} ödendi');
+      _showNotification('🤝 ${Voice.pick([
+            'Komutan sayıyı çizdi, altına $pay${d.icon} yazdı. Fark köyde kaldı.',
+            'Kalem oynadı. $pay${d.icon} ile kapandı bu iş.',
+          ], _impSeed(22))}');
     } else {
       // Tutmadı → komutan öfkelendi: tam öder + itibar düşer.
       _spendResource(d.kind, d.amount);
       _imperialFavor = (_imperialFavor - 0.12).clamp(0.0, 1.0);
       _feelVillage(NpcEmotion.fear, 6, -0.06);
-      _chronicle('Pazarlık tutmadı — komutan öfkelendi, tam ödendi.',
+      _chronicle(
+          'Teklif komutanı güldürmedi. Rakam olduğu gibi tahsil edildi.',
           icon: '⚔️');
-      _showNotification('⚔️ Pazarlık tutmadı — tam ödemek zorunda kaldın');
+      _showNotification('⚔️ ${Voice.pick(const [
+            'Komutan defteri kapatmadı bile. Rakamın tamamı alındı.',
+            'Teklif havada kaldı. Askerler ambara kendileri girdi; tam ödendi.',
+          ], _impSeed(23))}');
     }
     _endImperialVisit(_prosperity());
   }
@@ -536,6 +562,9 @@ extension _SceneImperial on _VillageSceneState {
     final chance = _resistChance();
     AudioManager.instance.playSfx(Sfx.thunderClap);
     addCameraShake(9.0, dur: 0.8);
+    // Sonuç ne olursa olsun eşikte kan/gurur kaldı — bir daha geldiklerinde
+    // usul bozulmuş olur, o dönüş sahnelenir (bkz. _startImperialParley).
+    _impGrudge = true;
     if (_rng.nextDouble() < chance) {
       // BAŞARI — heyet kovuldu. Ölüm yok; köy gururla doğrulur. İtibar düşer
       // (imparatorluk aşağılandı) ama bir muhafız yara alabilir (bedelsiz değil).
@@ -555,9 +584,13 @@ extension _SceneImperial on _VillageSceneState {
       }
       _activeFx.add(ActiveFx(
           const EventEffect(fx: EventFx.festival, duration: 8), 8));
-      _chronicle('⚔️ Köy imparatorluk heyetini geri püskürttü — onur kazanıldı.',
+      _chronicle(
+          'Köy tırpanla, baltayla eşiğe dizildi. Heyet defteri kapatıp geri döndü.',
           icon: '🛡️', milestone: true);
-      _showNotification('🛡️ Direniş tuttu — heyet kovuldu, köy başını dik tuttu!');
+      _showNotification('🛡️ ${Voice.pick(const [
+            'Heyet geri çekildi. Köy bu akşam kimseyi gömmüyor.',
+            'Mızraklar geri döndü. Kimse bağırmadı; herkes yerinde durdu, yetti.',
+          ], _impSeed(24))}');
     } else {
       // BAŞARISIZ — direniş ezildi. Reddetmekten beter: savunucular (muhafızlar)
       // ön safta düşer. Kurbanlar SEÇİLİR ama ölüm, askerlerin merkeze dalışıyla
@@ -580,9 +613,12 @@ extension _SceneImperial on _VillageSceneState {
       _feelVillage(NpcEmotion.fear, 16, -0.22);
       pushPolicyMorale(-0.15, 6.0);
       _chronicle(
-          '⚔️ Direniş ezildi — $killed köylü kılıçtan geçti, köy yağmalandı.',
+          'Direniş eşikte kırıldı. $killed köylü yerde kaldı, ambar boşaltıldı.',
           icon: '⚔️', milestone: true);
-      _showNotification('⚔️ Direniş tutmadı — heyet köyü basıyor!');
+      _showNotification('⚔️ ${Voice.pick(const [
+            'Sıra bozuldu. Askerler meydana giriyor.',
+            'Baltalar yetmedi. Atlılar köyün içinde.',
+          ], _impSeed(25))}');
     }
     _endImperialVisit(_prosperity());
   }
@@ -600,6 +636,7 @@ extension _SceneImperial on _VillageSceneState {
       ..clear()
       ..addAll(pool.take(victimCount));
     _imperialRaid = true;
+    _impGrudge = true; // kinli dönüş sahnelenir
     final killed = _imperialRaidVictims.length;
     if (!d.isConscript) _spendResource(d.kind, (d.amount * 0.5).round());
     _imperialFavor = (_imperialFavor - 0.25).clamp(0.0, 1.0);
@@ -607,9 +644,12 @@ extension _SceneImperial on _VillageSceneState {
     pushPolicyMorale(-0.15, 6.0);
     AudioManager.instance.playSfx(Sfx.thunderClap); // reddetme gümbürtüsü
     _chronicle(
-        '⚔️ İmparatorluğa kafa tutuldu — $killed köylü kılıçtan geçirildi.',
+        'Köy ödemedi. Komutan defteri kapattı ve $killed kişiyi bedel olarak aldı.',
         icon: '⚔️', milestone: true);
-    _showNotification('⚔️ Reddettin — askerler köye saldırıyor!');
+    _showNotification('⚔️ ${Voice.pick(const [
+          'Komutan sessizce başını salladı. Mızraklar indi, atlar köye sürüldü.',
+          'Cevabı aldı. Şimdi bedelini kendi eliyle topluyor.',
+        ], _impSeed(26))}');
     _endImperialVisit(_prosperity());
   }
 
@@ -623,7 +663,13 @@ extension _SceneImperial on _VillageSceneState {
     }
     _villagers.remove(v);
     _feelVillage(NpcEmotion.grief, 8, -0.08);
-    _chronicle('${v.name} askere alındı — ardından gözyaşları kaldı.',
+    // Adın eki elle yapıştırılmaz: {ad-i}/{ad-in} ünlü uyumunu Voice çözer.
+    _chronicle(
+        Voice.say(const [
+          '{ad} kolona katıldı. Anası yolun ucuna kadar yürüdü, sonra durdu.',
+          'Askerler {ad-i} aldı. {hane} ocağında bir yastık boş kaldı.',
+          '{ad-in} adı deftere yazıldı. Köy kapısı ardından uzun süre kapanmadı.',
+        ], _voice(v, seed: _impSeed(27))),
         icon: '🧑');
   }
 

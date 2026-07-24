@@ -20,6 +20,34 @@ extension _SceneWedding on _VillageSceneState {
   /// Kur olgunlaşma süresi (oyun günü) — bu kadar görünür kur sonrası dilekçe.
   static const double _kCourtshipDays = 0.8;
 
+  // ── Sevdanın sesi ([[lib/text/voice.dart]]) ───────────────────────────────
+
+  static const _kCourtshipPool = [
+    '💞 {ad} bugün {öteki-e} iki kez fazladan baktı.',
+    '💞 {ad} ile {öteki} işini artık hep yan yana tutuyor.',
+    '💞 Akşam ateşinde {ad} kendine {öteki-in} yanında yer ayırdı.',
+  ];
+  static const _kCourtshipChroniclePool = [
+    '{ad} ile {öteki} birbirine gönül verdi',
+    '{ad-in} gönlü {öteki-e} düştü',
+    '{ad} ile {öteki} artık hep yan yana',
+  ];
+  static const _kBetrothalPool = [
+    '💍 {ad} ile {öteki} evlenmek istiyor. Köy bir düğün bekliyor.',
+    '💍 Söz kesildi: {ad} ile {öteki}. Gerisi köyün kararı.',
+    '💍 {ad} ile {öteki} el ele meclisin önünde duruyor, izin istiyorlar.',
+  ];
+  static const _kWedChroniclePool = [
+    '{ad} ile {öteki} evlendi',
+    '{ad} ile {öteki} bir ocak kurdu',
+    '{ad-in} nikâhı {öteki-le} kıyıldı',
+  ];
+  static const _kWedLifePool = [
+    '{öteki} ile evlendi',
+    '{öteki-le} nikâh kıydı',
+    '{öteki} ile bir ocak kurdu',
+  ];
+
   void _tickWedding(double dt) {
     if (!_hasFire || _villagers.length < 2) return;
     // Gündem doluysa (dilekçe bekliyor / sinematik oynuyor) kur ilerlemesin.
@@ -61,8 +89,10 @@ extension _SceneWedding on _VillageSceneState {
     _courtshipTimer = _kCourtshipDays * kGameDaySeconds;
     w.feel(NpcEmotion.love, 3.0, moodDelta: 0.04);
     m.feel(NpcEmotion.love, 3.0, moodDelta: 0.04);
-    _chronicle('${w.name} ile ${m.name} birbirine gönül verdi', icon: '💞');
-    _showNotification('💞 ${w.name} ile ${m.name}’nin arası ısınıyor…');
+    final ctx = _voice(w,
+        other: m, seed: _stableSeed('kur${w.name}${m.name}', _dayCount));
+    _chronicle(Voice.say(_kCourtshipChroniclePool, ctx), icon: '💞');
+    _showNotification(Voice.say(_kCourtshipPool, ctx));
   }
 
   /// Aynı evde yaşayan, karşı cins, kan bağı olmayan, henüz evlenmemiş iki
@@ -151,8 +181,11 @@ extension _SceneWedding on _VillageSceneState {
       v.lookToward(cc.toDouble(), cr.toDouble());
       v.feel(NpcEmotion.love, 3.0, moodDelta: 0.03);
     }
-    _showNotification(
-        '💍 ${bride.name} & ${groom.name} evlenmek istiyor — köy bir düğün bekliyor');
+    _showNotification(Voice.say(
+        _kBetrothalPool,
+        _voice(bride,
+            other: groom,
+            seed: _stableSeed('nişan${bride.name}${groom.name}', _dayCount))));
   }
 
   /// Dilekçe çözüldü → düğünü dünyada SAHNELE. [grand] coşkulu (sinematik + büyük
@@ -175,12 +208,15 @@ extension _SceneWedding on _VillageSceneState {
       groom = couple.$2;
       bride.wed = true;
       groom.wed = true;
-      _chronicle('${bride.name} & ${groom.name} evlendi', icon: '💍');
+      final seed = _stableSeed('düğün${bride.name}${groom.name}', _dayCount);
+      final ctx = _voice(bride, other: groom, seed: seed);
+      _chronicle(Voice.say(_kWedChroniclePool, ctx), icon: '💍');
       _award('first_wedding', 'Köyün ilk düğünü kutlandı', '💍');
-      _lifeEvent(bride, '${groom.name} ile evlendi', icon: '💍',
+      _lifeEvent(bride, Voice.say(_kWedLifePool, ctx), icon: '💍',
           milestone: true);
-      _lifeEvent(groom, '${bride.name} ile evlendi', icon: '💍',
-          milestone: true);
+      _lifeEvent(
+          groom, Voice.say(_kWedLifePool, _voice(groom, other: bride, seed: seed)),
+          icon: '💍', milestone: true);
     }
 
     // Coşkulu → gerçek çifte benzeyen tam ekran 2B sinematik (sim duraklar).

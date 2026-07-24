@@ -1,7 +1,9 @@
 import '../buildings/building_entity.dart';
 import '../buildings/building_function.dart';
 import '../buildings/building_type.dart';
+import '../buildings/craft.dart';
 import '../characters/villager_type.dart';
+import '../core/constants.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
 import '../world/hay_entity.dart';
@@ -75,8 +77,15 @@ void assignCarriers({
             box.isDelivered = true;
             resourceBoxes.remove(box);
             switch (box.type) {
-              case ResourceBoxType.woodChunk: stockpile.wood++;
-              case ResourceBoxType.stoneBox:  stockpile.stone++;
+              // Birikim kanalı: odun/taş taşıyan bu köylü marangozluk/taş
+              // ustalığında deneyim kazanır (eşiği geçen zanaatı köye kazandırır,
+              // bkz. _tickCraftDiscovery).
+              case ResourceBoxType.woodChunk:
+                stockpile.wood++;
+                v.gainMastery(Craft.carpentry, 1.0);
+              case ResourceBoxType.stoneBox:
+                stockpile.stone++;
+                v.gainMastery(Craft.masonry, 1.0);
               case ResourceBoxType.ironBox:   stockpile.iron++;
               case ResourceBoxType.coalBox:   stockpile.coal++;
             }
@@ -116,9 +125,9 @@ void assignCarriers({
             point.release(slot, v);
             bale.isDelivered = true;
             hayEntities.remove(bale);
-            // 1 balya = 6 hay pile (= 6 hasat). Değirmen başına +2 yem (2'ye
+            // 1 balya = kHayPilesPerBale hasat. Değirmen başına +2 yem (2'ye
             // kadar yığılır). Sonbahar bereketi balya verimini artırır.
-            final base = 6 + millBonus;
+            final base = kBaleFoodBase + millBonus;
             stockpile.food += (base * baleYieldMultiplier).round();
             // En yakın değirmeni öğütmeye geçir → görünür duman + panel doğruluğu.
             if (mills.isNotEmpty) {

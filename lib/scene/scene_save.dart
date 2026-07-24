@@ -97,9 +97,11 @@ extension _SceneSave on _VillageSceneState {
     }
   }
 
-  /// Sol-alttaki menü kümesi — tek "⚙" tutamağı altında menü/kaydet/📖 toplanır
-  /// (dağınık chip'ler yerine derli toplu). Açılınca öğeler gear'ın ÜSTÜNDE
-  /// belirir (alttaki inşa çubuğundan uzakta). Varsayılan kapalı (sade ekran).
+  /// Sol-alttaki menü kümesi — tek "⚙" tutamağı altında OYUN dışı işler:
+  /// menüye dön + kaydet. Köy içi hiçbir şey burada durmaz (hikâye güncesi
+  /// buradaydı, Köy Defteri'nin KRONİK bölümüne taşındı: köyün kendisiyle ilgili
+  /// her şey tek kapıda). Açılınca öğeler gear'ın ÜSTÜNDE belirir (alttaki inşa
+  /// çubuğundan uzakta). Varsayılan kapalı (sade ekran).
   Widget buildSaveButton() {
     return Positioned(
       left: 14,
@@ -116,12 +118,6 @@ extension _SceneSave on _VillageSceneState {
               ),
               const SizedBox(height: 10),
               SaveButton(onTap: () => _saveNow(manual: true)),
-              const SizedBox(height: 10),
-              // Hikâye güncesi — büyük anların kaydı (sinematik özetleri).
-              GestureDetector(
-                onTap: () => setStateHere(() => _storyPanelOpen = true),
-                child: AppChip(label: '📖 Hikâye', color: AppUi.accent),
-              ),
               const SizedBox(height: 10),
             ],
             // Gear tutamağı — her zaman görünür; kümeyi aç/kapa.
@@ -248,14 +244,21 @@ extension _SceneSave on _VillageSceneState {
       'houses': _houses.toJson(),
       'completedQuests': _completedQuests.toList(),
       'villageMemory': _villageMemory.toList(),
+      'knownCrafts': _knownCrafts.toList(),
       // Hikâye güncesi (yapısal) + başarımlar + sinematik durumu (anılar kalıcı).
       'storyLog': [for (final e in _storyLog) e.toJson()],
       'achievedMilestones': _achievedMilestones.toList(),
+      'oreDiscovered': _oreDiscovered.toList(),
       'villageName': _villageName,
       'famineShown': _famineShown,
       'tierCutscenesShown': _tierCutscenesShown.toList(),
       'imperialFavor': _imperialFavor,
       'imperialTimer': _imperialTimer,
+      // Sinematik merdiveni — yazılmazsa her yüklemede "ilk ziyaret" sanılır
+      // ve film baştan oynar (tam da kaçındığımız tekrar).
+      'imperialVisits': _imperialVisits,
+      'impGrudge': _impGrudge,
+      'impGrimShown': _impGrimShown,
 
       // ── Varlıklar ──
       'buildings': [for (final b in _buildings) _buildingToJson(b)],
@@ -286,6 +289,9 @@ extension _SceneSave on _VillageSceneState {
       // ── Dilekçe / meclis ──
       'pendingPetition': _pendingPetition?.id,
       'petitionAuthor': vRef(_petitionAuthor),
+      // Dilekçeye özel yer tutucular ({suçlu}, {suç}…) — metin yüklemede aynen
+      // yeniden dokunabilsin diye saklanır.
+      'petitionExtra': _petitionExtra,
       'petitionTimer': _petitionTimer,
       'petitionDeadline': _petitionDeadline,
       'petitionModalOpen': _petitionModalOpen,
@@ -293,6 +299,22 @@ extension _SceneSave on _VillageSceneState {
       'petitionFollowUps':
           [for (final f in _petitionFollowUps) {'id': f.id, 'fireAtSim': f.fireAtSim}],
       'petitionCooldowns': _petitionCooldowns,
+
+      // ── Suç (scene_crime) ──
+      // Yürüyen suç (_activeCrime) ve rehin (_ransomVictim) KAYDEDİLMEZ: ikisi
+      // de anlık sahne durumu. Kayıttan dönüldüğünde suç düşer, rehin kaybolmuş
+      // sayılır ve dayanaksız kalan yargı/fidye dilekçesi yüklemede atılır.
+      // ── Rejim (scene_regime) ──
+      // Yemin AYRI kaydedilmez: köy hafızası bayrağında durur (oath.<rejim>),
+      // o da _villageMemory ile zaten taşınır. Tek doğruluk kaynağı orası.
+      'unrest': _unrest,
+      'crisisCooldown': _crisisCooldown,
+      'unrestStirShown': _unrestStirShown,
+
+      'crimeSuspicion': _crimeSuspicion,
+      'crimePardons': _crimePardons,
+      'crimesSeen': _crimesSeen,
+      'accusedCriminal': vRef(_accusedCriminal),
 
       // ── Olay / politika moral / ambient timer ──
       'eventTimer': _eventTimer,
@@ -317,25 +339,14 @@ extension _SceneSave on _VillageSceneState {
         'gold': _stockpile.gold,
       };
 
+  /// KANUNNAME — mühür seti + girilen dava kolu + ıslak mürekkep. Tek doğruluk
+  /// kaynağı `sealed`; bool'lar yüklemede ondan türer (bkz. restoreSealed).
   Map<String, dynamic> _policiesToJson() => {
-        'family': _policies.family.name,
-        'familyEncouragement': _policies.familyEncouragement,
-        'peacefulEnd': _policies.peacefulEnd,
-        'eldersExemptFromFood': _policies.eldersExemptFromFood,
-        'hospitality': _policies.hospitality,
-        'apprenticeship': _policies.apprenticeship,
-        'tradeGuidance': _policies.tradeGuidance,
-        'slowMaturity': _policies.slowMaturity,
-        'neighborliness': _policies.neighborliness,
-        'familyReunion': _policies.familyReunion,
-        'treePlanting': _policies.treePlanting,
-        'sharedHarvest': _policies.sharedHarvest,
-        'cropRotation': _policies.cropRotation,
-        'greenVillage': _policies.greenVillage,
-        'freeRange': _policies.freeRange,
-        'herdGrowth': _policies.herdGrowth,
-        'winterFodder': _policies.winterFodder,
-        'cooldownUntilSim': _policies.cooldownUntilSim,
+        'sealed': _policies.sealed.toList(),
+        'inkDryUntilSim': _policies.inkDryUntilSim,
+        // Gündeme gelmiş hüküm id'leri — yüklemede bütün defter "yeni açıldı"
+        // diye bağırmasın diye taşınır (bkz. _tickLawGates).
+        'lawSeen': _lawSeen.toList(),
       };
 
   Map<String, dynamic> _buildingToJson(BuildingEntity b) => {
@@ -374,6 +385,9 @@ extension _SceneSave on _VillageSceneState {
       'targetRow': v.targetRow,
       'isFavorite': v.isFavorite,
       'wed': v.wed,
+      // Üstlenilmiş iş — yalnız rol adı; faz/sayaç/claim geçici (açılışta
+      // _syncJobWorkforce yeniden kurar, tıpkı workCooldown gibi).
+      if (v.hasActiveJob) 'jobRole': v.job!.role.name,
       if (v.surname.isNotEmpty) 'surname': v.surname,
       if (v.injuryDays > 0) 'injuryDays': v.injuryDays,
       if (v.disabled) 'disabled': true,
@@ -387,6 +401,7 @@ extension _SceneSave on _VillageSceneState {
       'lowMoraleTime': v.lowMoraleTime,
       'moraleReason': v.moraleReason,
       'wealth': v.wealth,
+      if (v.mastery.isNotEmpty) 'mastery': v.mastery,
       'home': bRef(v.homeBuilding),
       'parents': [for (final p in v.parents) vRef(p)],
       'children': [for (final c in v.children) vRef(c)],
@@ -396,6 +411,7 @@ extension _SceneSave on _VillageSceneState {
       ],
       'bloodEnemies': [for (final e in v.bloodEnemies) vRef(e)],
       'feudKills': v.feudKills,
+      if (v.crimeCount > 0) 'crimeCount': v.crimeCount,
     };
   }
 
@@ -478,6 +494,8 @@ extension _SceneSave on _VillageSceneState {
         'row': t.row,
         'stage': t.stage,
         'growthProgress': t.growthProgress,
+        'needsSowing': t.needsSowing,
+        'fallow': t.fallowRemaining,
       };
 
   Map<String, dynamic> _treeToJson(TreeEntity t) => {
@@ -538,6 +556,9 @@ extension _SceneSave on _VillageSceneState {
         'y': h.gridY,
         'slotIndex': h.slotIndex,
         'pileSize': h.pileSize,
+        // spawnTime kayıtlıysa harmanın FIFO sırası ve düşme animasyonu
+        // yüklemeden sonra da doğru kalır (_time de kaydediliyor).
+        'spawnTime': h.spawnTime,
       };
 
   // ── Restore (JSON → state) ──────────────────────────────────────────────────
@@ -581,11 +602,17 @@ extension _SceneSave on _VillageSceneState {
     _petitionFollowUps.clear();
     _petitionCooldowns.clear();
     _villageMemory.clear();
+    _knownCrafts.clear();
     _completedQuests.clear();
     _storyLog.clear();
     _achievedMilestones.clear();
     _tierCutscenesShown.clear();
     _activeCutscene = null; // yüklenen oyunda sinematik oynamaz
+    // İmparatorluk sinematik merdiveni — restore aşağıda okur; okunmazsa
+    // (yeni oyun) sıfırdan başlar: ilk ziyaret yine tam film.
+    _imperialVisits = 0;
+    _impGrudge = false;
+    _impGrimShown = false;
     _policyMoraleEffects.clear();
     // Düğün kur state'i geçici — önceki oyundan sızmasın (çift _villagers
     // yeniden kurulduğunda eski ref'ler geçersiz). _weddingCouple aşağıda
@@ -651,16 +678,33 @@ extension _SceneSave on _VillageSceneState {
     for (final m in (w['achievedMilestones'] as List? ?? const [])) {
       _achievedMilestones.add(m as String);
     }
+    _oreDiscovered.clear();
+    final ore = w['oreDiscovered'] as List?;
+    if (ore == null) {
+      // Eski kayıt: madenler bandsız (rastgele) üretilmişti → hepsi bilinir
+      // say, yükleme sonrası sahte "damar bulundu" yağmasını önle.
+      _oreDiscovered.addAll([for (final t in OreType.values) t.name]);
+    } else {
+      for (final t in ore) {
+        _oreDiscovered.add(t as String);
+      }
+    }
     _villageName = (w['villageName'] as String?) ?? 'Köy';
     _imperialFavor = _d(w['imperialFavor'], 0.5);
     _imperialTimer = _d(w['imperialTimer'], 6.0 * kGameDaySeconds);
     _imperialDemand = null; // yüklemede aktif ziyaret yok
+    _imperialVisits = _i(w['imperialVisits']);
+    _impGrudge = _b(w['impGrudge']);
+    _impGrimShown = _b(w['impGrimShown']);
     _famineShown = _b(w['famineShown']);
     for (final t in (w['tierCutscenesShown'] as List? ?? const [])) {
       _tierCutscenesShown.add(_i(t));
     }
     for (final f in (w['villageMemory'] as List? ?? const [])) {
       _villageMemory.add(f as String);
+    }
+    for (final c in (w['knownCrafts'] as List? ?? const [])) {
+      _knownCrafts.add(c as String);
     }
 
     // 4) Binalar (önce — referans hedefi).
@@ -714,63 +758,11 @@ extension _SceneSave on _VillageSceneState {
     _firekeeper =
         (fkIdx >= 0 && fkIdx < _villagers.length) ? _villagers[fkIdx] : null;
 
-    // 7) İşçiler + hayvanlar.
-    for (final raw in (w['builders'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _builders.add(_applyWorkerBase(
-          BuilderEntity(startCol: _d(j['spawnCol']), startRow: _d(j['spawnRow'])),
-          j));
-    }
-    for (final raw in (w['farmers'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _farmers.add(_applyWorkerBase(
-          FarmFarmer(startCol: _d(j['spawnCol']), startRow: _d(j['spawnRow'])),
-          j));
-    }
-    for (final raw in (w['woodcutters'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _woodcutters.add(_applyWorkerBase(
-          WoodcutterEntity(
-              startCol: _d(j['spawnCol']), startRow: _d(j['spawnRow'])),
-          j));
-    }
-    for (final raw in (w['miners'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _miners.add(_applyWorkerBase(
-          MinerEntity(startCol: _d(j['spawnCol']), startRow: _d(j['spawnRow'])),
-          j));
-    }
-    for (final raw in (w['fishers'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _fishers.add(_applyWorkerBase(
-          FisherEntity(startCol: _d(j['spawnCol']), startRow: _d(j['spawnRow'])),
-          j));
-    }
-    for (final raw in (w['lumberCamps'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _lumberCamps.add(_applyWorkerBase(
-          LumberCampEntity(
-              buildingCol: _i(j['buildingCol']),
-              buildingRow: _i(j['buildingRow'])),
-          j));
-    }
-    for (final raw in (w['shepherds'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _shepherds.add(_applyWorkerBase(
-          ShepherdEntity(barnCol: _i(j['barnCol']), barnRow: _i(j['barnRow'])),
-          j));
-    }
-    for (final raw in (w['florists'] as List? ?? const [])) {
-      final j = Map<String, dynamic>.from(raw as Map);
-      _florists.add(_applyWorkerBase(
-          FloristEntity(
-              startCol: _d(j['spawnCol']),
-              startRow: _d(j['spawnRow']),
-              cottageCol: _i(j['cottageCol']),
-              cottageRow: _i(j['cottageRow']),
-              effectRadius: _d(j['effectRadius'])),
-          j));
-    }
+    // 7) Hayvanlar. (Eski işçi dizileri — builders/farmers/miners/fishers/
+    // florists/shepherds/woodcutters/lumberCamps — artık YOK SAYILIR: işçiler
+    // gerçek köylü işine dönüştü [scene_jobs]. İş kaynakları [_orders/_farmTiles/
+    // _mineNodes...] bağımsız kalıcı; açılışta _syncJobWorkforce köylüleri atar.
+    // Eski kayıt hatasız yüklenir, yetim/donmuş avatar kalmaz.)
     for (final raw in (w['animals'] as List? ?? const [])) {
       _cows.add(_animalFromJson(Map<String, dynamic>.from(raw as Map)));
     }
@@ -844,7 +836,8 @@ extension _SceneSave on _VillageSceneState {
           gridX: _d(j['x']),
           gridY: _d(j['y']))
         ..slotIndex = _i(j['slotIndex'])
-        ..pileSize = _i(j['pileSize'], 1));
+        ..pileSize = _i(j['pileSize'], 1)
+        ..spawnTime = _d(j['spawnTime']));
     }
 
     // 9) Dilekçe / meclis.
@@ -853,6 +846,48 @@ extension _SceneSave on _VillageSceneState {
     final paIdx = _i(w['petitionAuthor'], -1);
     _petitionAuthor =
         (paIdx >= 0 && paIdx < _villagers.length) ? _villagers[paIdx] : null;
+
+    // 9b) Suç durumu. Yürüyen suç + rehin kaydedilmez (anlık sahne) → yalnız
+    // kalıcı olan geri gelir: şüphe defteri, af sayacı, hüküm bekleyen fail.
+    _activeCrime = null;
+    _ransomVictim = null;
+    _crimePollSec = 0;
+    _chaseRefresh = 0;
+    _unrest = _d(w['unrest']).clamp(0.0, 1.0);
+    _crisisCooldown = _d(w['crisisCooldown']);
+    _unrestStirShown = w['unrestStirShown'] == true;
+    _regimeScan = 0;
+    _regimeCrisisUnrest = const {};
+    _crimeSuspicion = _i(w['crimeSuspicion']);
+    _crimePardons = _i(w['crimePardons']);
+    // Eski kayıtta yok — o köyün suç geçmişi bilinmiyor. Affedilen/şüphe kadarı
+    // en azından bir şey olduğunu söylüyor; sıfırdan iyi bir alt sınır.
+    _crimesSeen = _i(w['crimesSeen'], _crimeSuspicion + _crimePardons);
+    final acIdx = _i(w['accusedCriminal'], -1);
+    _accusedCriminal =
+        (acIdx >= 0 && acIdx < _villagers.length) ? _villagers[acIdx] : null;
+    // Dayanağı kalmayan dilekçeyi at: rehin kaydedilmediği için fidye kararı
+    // anlamsız; sanığı bulunamayan yargı dilekçesi de öyle.
+    if (_pendingPetition?.id == 'ransom' ||
+        (_pendingPetition?.id == 'crimeVerdict' && _accusedCriminal == null)) {
+      _pendingPetition = null;
+      _accusedCriminal = null;
+    }
+    // Kayıttaki dilekçe HAM hâliyle döner (havuz + yer tutucu). Modal'a ham
+    // `{ad}` göstermemek için yeniden konuştur — tohum gün+id olduğundan
+    // kayıttan önce okunan cümlenin AYNISI çıkar.
+    _petitionExtra = {
+      for (final e in (w['petitionExtra'] as Map? ?? const {}).entries)
+        '${e.key}': '${e.value}',
+    };
+    final restored = _pendingPetition;
+    if (restored != null) {
+      _pendingPetition = restored.spoken(_voice(_petitionAuthor,
+          seed: _petitionSeed(restored), extra: _petitionExtra));
+    } else {
+      _petitionExtra = const {};
+    }
+
     _petitionTimer = _d(w['petitionTimer'], 1.0 * kGameDaySeconds);
     _petitionDeadline = _d(w['petitionDeadline']);
     _petitionModalOpen = _b(w['petitionModalOpen']) && _pendingPetition != null;
@@ -908,27 +943,21 @@ extension _SceneSave on _VillageSceneState {
 
   void _restorePolicies(Object? j) {
     if (j is! Map) return;
-    _policies.family =
-        _enumByName(FamilyPolicy.values, j['family'], FamilyPolicy.open);
-    _policies.familyEncouragement = _b(j['familyEncouragement']);
-    _policies.peacefulEnd = _b(j['peacefulEnd']);
-    _policies.eldersExemptFromFood = _b(j['eldersExemptFromFood']);
-    _policies.hospitality = _b(j['hospitality']);
-    _policies.apprenticeship = _b(j['apprenticeship']);
-    _policies.tradeGuidance = _b(j['tradeGuidance']);
-    _policies.slowMaturity = _b(j['slowMaturity']);
-    _policies.neighborliness = _b(j['neighborliness']);
-    _policies.familyReunion = _b(j['familyReunion']);
-    _policies.treePlanting = _b(j['treePlanting']);
-    _policies.sharedHarvest = _b(j['sharedHarvest']);
-    _policies.cropRotation = _b(j['cropRotation']);
-    _policies.greenVillage = _b(j['greenVillage']);
-    _policies.freeRange = _b(j['freeRange']);
-    _policies.herdGrowth = _b(j['herdGrowth']);
-    _policies.winterFodder = _b(j['winterFodder']);
-    _policies.cooldownUntilSim = _d(j['cooldownUntilSim']);
+    final ids = (j['sealed'] as List?)?.whereType<String>() ?? const <String>[];
+    // 'path' eski kayıtlarda vardı (dava kolu) — artık yok, sessizce yok sayılır.
+    _policies.restoreSealed(ids);
+    _policies.inkDryUntilSim = _d(j['inkDryUntilSim']);
+    _lawSeen
+      ..clear()
+      ..addAll((j['lawSeen'] as List?)?.whereType<String>() ?? const <String>[]);
+    // Eski kayıtta liste yok → ilk tarama sessiz geçsin (o köyün gündemi zaten
+    // oluşmuş, hepsini "yeni" diye duyurmak yanlış olur).
+    _lawSeeded = false;
+    _lawCtxCache = null;
+    _lawCtxAge = 0;
   }
 
+  /// Ada göre enum — eşleşmezse null (dava seçilmemiş kayıtlar için).
   BuildingEntity _buildingFromJson(Map<String, dynamic> j) {
     final b = BuildingEntity(
       type: _enumByName(BuildingType.values, j['type'], BuildingType.firepit),
@@ -978,10 +1007,17 @@ extension _SceneSave on _VillageSceneState {
     v.targetRow = _d(j['targetRow'], v.gridY);
     v.isFavorite = _b(j['isFavorite']);
     v.wed = _b(j['wed']);
+    // Üstlenilmiş iş rolü — atama detayı (claim/faz) _syncJobWorkforce'la kurulur.
+    final jobRole = j['jobRole'] as String?;
+    if (jobRole != null) {
+      final role = _enumByName(JobRole.values, jobRole, JobRole.none);
+      if (role != JobRole.none) v.job = VillagerJob(role);
+    }
     v.surname = (j['surname'] as String?) ?? '';
     v.injuryDays = _d(j['injuryDays']);
     v.disabled = _b(j['disabled']);
     v.feudKills = _i(j['feudKills']);
+    v.crimeCount = _i(j['crimeCount']);
     for (final e in (j['life'] as List? ?? const [])) {
       if (e is Map) {
         v.life.add(ChronicleEntry.fromJson(Map<String, dynamic>.from(e)));
@@ -998,17 +1034,11 @@ extension _SceneSave on _VillageSceneState {
     v.moraleReason = (j['moraleReason'] as String?) ?? 'huzurlu';
     // Eski kayıtta servet yok → yetişkinlere makul bir taban ver (0'da kalmasın).
     v.wealth = _d(j['wealth'], v.ageDays >= kAdultStartDay ? 30 : 0);
+    final rawMastery = j['mastery'];
+    if (rawMastery is Map) {
+      rawMastery.forEach((k, val) => v.mastery[k as String] = _d(val));
+    }
     return v;
-  }
-
-  /// İşçi base alanlarını uygula + döner (zincir için generic).
-  T _applyWorkerBase<T extends WorkerEntity>(T w, Map<String, dynamic> j) {
-    w.gridX = _d(j['x'], w.gridX);
-    w.gridY = _d(j['y'], w.gridY);
-    w.renderX = w.gridX;
-    w.renderY = w.gridY;
-    w.facingRight = _b(j['facingRight'], true);
-    return w;
   }
 
   AnimalEntity _animalFromJson(Map<String, dynamic> j) {
@@ -1065,6 +1095,10 @@ extension _SceneSave on _VillageSceneState {
     final t = FarmTile(_i(j['col']), _i(j['row']));
     t.stage = _i(j['stage']);
     t.growthProgress = _d(j['growthProgress']);
+    // Eski kayıtlarda ekim yoktu — tarlalar ekili sayılır (yükleyince köy
+    // birden çıplak toprağa dönmesin).
+    t.needsSowing = j['needsSowing'] as bool? ?? false;
+    t.fallowRemaining = _d(j['fallow']);
     return t;
   }
 

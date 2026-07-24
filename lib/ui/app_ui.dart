@@ -542,6 +542,62 @@ class AppSectionLabel extends StatelessWidget {
       );
 }
 
+// ─── Oyma altın çerçeve (premium diyalog yüzeyi) ─────────────────────────────
+
+/// İnce altın oyma çerçeveli koyu pano — oyunun "önemli an" diyalog dili
+/// (dilekçe modalı, Divan, kayıt ekranı aynı ağırlıkta görünsün). Parşömen/ahşap
+/// YOK. Çocuğu köşelere kadar yaslar (hero illüstrasyonu için kendi clip'i var).
+class AppGildedFrame extends StatelessWidget {
+  final Widget child;
+  final Color accent;
+  const AppGildedFrame({
+    super.key,
+    required this.child,
+    this.accent = AppUi.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const r = AppUi.radius;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [AppUi.surface2, AppUi.surface1],
+        ),
+        borderRadius: BorderRadius.circular(r),
+        border: Border.all(color: AppUi.gold.withValues(alpha: 0.32), width: 1.2),
+        boxShadow: [
+          ...AppUi.softShadow,
+          BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 26),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(r),
+        child: Stack(
+          children: [
+            child,
+            // İçte ince altın hairline — "oyma" derinliği.
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Container(
+                  margin: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(r - 4),
+                    border: Border.all(
+                        color: AppUi.gold.withValues(alpha: 0.12), width: 1),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Sekmeler ────────────────────────────────────────────────────────────────
 
 /// Sekme çubuğu + animasyonlu içerik geçişi. Yoğun panelleri tek kaydırma

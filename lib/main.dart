@@ -32,6 +32,8 @@ import 'world/day_night_cycle.dart';
 import 'world/season.dart';
 import 'text/voice.dart';
 import 'systems/law_book.dart';
+import 'systems/law_compass.dart';
+import 'systems/regime.dart';
 import 'ui/law_book_panel.dart';
 import 'farm/farm_tile.dart';
 import 'entities/farm_farmer.dart';
@@ -63,6 +65,7 @@ import 'world/world_generator.dart';
 import 'buildings/building_type.dart';
 import 'ui/app_ui.dart';
 import 'ui/hud.dart';
+import 'dev/animation_room.dart';
 import 'dev/dev_command.dart';
 import 'dev/dev_script_store.dart';
 import 'dev/dev_console.dart';
@@ -70,7 +73,7 @@ import 'ui/building_panel.dart';
 import 'ui/road_panel.dart';
 import 'ui/building_info_panel.dart';
 import 'ui/villager_info_panel.dart';
-import 'ui/villager_stats_panel.dart';
+import 'ui/villager_roster_view.dart';
 import 'ui/event_banner.dart';
 import 'ui/event_choice_modal.dart';
 import 'ui/petition_modal.dart';
@@ -83,7 +86,7 @@ import 'systems/villager_morale.dart';
 import 'ui/dev_panel.dart';
 import 'ui/objective_panel.dart';
 import 'ui/house_banner.dart';
-import 'ui/divan_panel.dart';
+import 'ui/village_ledger.dart';
 import 'systems/quest_book.dart';
 import 'ui/loading_screen.dart';
 import 'ui/mode_button.dart';
@@ -147,6 +150,7 @@ part 'scene/scene_imperial.dart';
 part 'scene/scene_merchant.dart';
 part 'scene/scene_land.dart';
 part 'scene/scene_dev_console.dart';
+part 'scene/scene_regime.dart';
 
 void main() => runApp(const VillageSimApp());
 
@@ -310,6 +314,15 @@ class _VillageSceneState extends State<VillageScene>
   double _imperialTimer = 6.0 * kGameDaySeconds;
   /// Aktif talep (null = ziyaret yok). Non-null iken sim duraklar + modal açık.
   ImperialDemand? _imperialDemand;
+  /// Kaç kez pazarlığa oturuldu — sinematik merdiveninin tabanı (ilk ziyaret
+  /// tam film, sonrası rutin). Bkz. scene_imperial._startImperialParley.
+  int _imperialVisits = 0;
+  /// Bir sonraki ziyaret KİNLİ mi (ret / direniş sonrası) → ton değişti, film
+  /// geri gelir. Ziyaret başlarken tüketilir.
+  bool _impGrudge = false;
+  /// "İlişki ilk kez düşmanlığa düştü" anı sahnelendi mi. İtibar toparlanınca
+  /// (≥0.5) yeniden kurulur → tekrar dibe inersen an bir kez daha oynar.
+  bool _impGrimShown = false;
 
   /// Fiziksel asker heyeti — köye formasyonla yürüyen geçici varlıklar (bkz.
   /// scene_imperial). Köyün sakini DEĞİL; kayda yazılmaz, nüfusa karışmaz.
@@ -592,12 +605,9 @@ class _VillageSceneState extends State<VillageScene>
   /// Non-null iken sim duraklar (scene_tick) + tam ekran CutscenePlayer overlay.
   Cutscene? _activeCutscene;
   /// Köyün hikâye güncesi (kronik) — büyük anlar + başarımlar, yapısal kayıtlar.
-  /// "Hikâye" panelinden okunur ([buildStoryButton]/[buildStoryPanel]). `_chronicle`
-  /// ile yazılır; başarımlar `_award` ile (milestone:true). Kalıcı (kaydedilir).
+  /// Köy Defteri'nin KRONİK bölümünden okunur. `_chronicle` ile yazılır;
+  /// başarımlar `_award` ile (milestone:true). Kalıcı (kaydedilir).
   final List<ChronicleEntry> _storyLog = [];
-  bool _storyPanelOpen = false;
-  /// Köy Nüfus Defteri (istatistik) modalı açık mı — HUD'daki nüfus butonundan.
-  bool _statsPanelOpen = false;
   /// Bir kez kazanılan başarımların id kümesi — tekrar tetiklenmez (kaydedilir).
   final Set<String> _achievedMilestones = {};
   /// Kıtlık sinematiği bir kez gösterildi mi (nadir kalsın).
@@ -771,6 +781,10 @@ class _VillageSceneState extends State<VillageScene>
   double _crimeNoticed = 0;
   // MEÇHUL kalan suçların biriktirdiği şüphe — eşiği aşınca asayiş dilekçesi.
   int _crimeSuspicion = 0;
+  // Köyde bugüne dek İŞLENMİŞ suç sayısı (yakalansın yakalanmasın, sönsün ya da
+  // sönmesin). Şüphe gibi düşmez — köyün hafızası. NİZAM kolunun kapıları buna
+  // bakar: suç görülmeden ceza kanunu yazılmaz (bkz. law_book gate'leri).
+  int _crimesSeen = 0;
   // Kaç kez af çıktı — merhametin politik bedeli (suç baskısını artırır).
   int _crimePardons = 0;
   // Suçüstü yakalanıp hüküm bekleyen fail (yargı dilekçesi buna bakar). Suçun
@@ -794,6 +808,30 @@ class _VillageSceneState extends State<VillageScene>
   LawDef? _lawRitual;                   // != null → mühür ritüeli açık
   // Son mühürün toplam müzakere süresi — defterdeki halka bunun oranını çizer.
   double _inkDryTotal = 0;
+
+  // ── Defterin KADEMELİ AÇILIMI (scene_ui: _tickLawGates) ────────────────────
+  // Bir hüküm, derdi köyde doğmadan deftere düşmez. Kapılar köyün hâlinden
+  // okunur (LawContext); bağlam pahalı olduğundan saniyede bir tazelenir.
+  LawContext? _lawCtxCache;
+  double _lawCtxAge = 0;
+  /// Bugüne dek gündeme GELMİŞ hüküm id'leri — bir hüküm iki kez duyurulmaz.
+  /// Kaydedilir; yoksa her yüklemede bütün defter "yeni açıldı" diye bağırır.
+  final Set<String> _lawSeen = {};
+  /// İlk tarama yapıldı mı — köyün başlangıç gündemi sessizce içeri alınır.
+  bool _lawSeeded = false;
+
+  // ── REJİM (scene_regime) ───────────────────────────────────────────────────
+  // Pusulanın oyuncuya dokunan yarısı: kimliğin bedeli. Huzursuzluk rejimin
+  // kendi doğasından birikir (Ilımlı Köy'de hiç birikmez — merkez cezasızdır),
+  // eşiği aşınca rejime özgü kriz doğar. Yemin edilen rejim `_villageMemory`
+  // bayrağında durur (ayrı doğruluk kaynağı yok), yalnız günü burada tutulur.
+  double _unrest = 0.0;
+  double _regimeScan = 0;        // huzursuzluk poll sayacı (2 sn)
+  double _crisisCooldown = 0;    // krizler arası nefes (sim sn)
+  bool _unrestStirShown = false; // "köy homurdanıyor" uyarısı bir kez
+  /// Yürüyen kriz dilekçesinde şık başlığı → huzursuzluk deltası. Kriz
+  /// sunulurken dolar, karar verilince tükenir (anlık, kaydedilmez).
+  Map<String, double> _regimeCrisisUnrest = const {};
 
   // ── Haneler (soylar) — köyün politik birimi (eski 4-zümre sistemi söküldü;
   // `Estate` enum yalnız meslek-sınıflandırması olarak kaldı). Her köylü
@@ -819,9 +857,13 @@ class _VillageSceneState extends State<VillageScene>
   final List<DevScript> _devUserScripts = [];
   final FocusNode _devKeyFocus = FocusNode(debugLabel: 'devConsoleHotkey');
 
-  // Divan — köyün yönetişim merkezi paneli açık mı (zümre nabzından açılır).
-  // Salt-okunur gösterge; oyun durmaz. scene_world reset'te kapanır.
-  bool _divanOpen = false;
+  // KÖY DEFTERİ — köy içi işlerin tek kapısı: null = kapalı, doluysa o bölüm
+  // açık (Divan / Kanunname / Nüfus / Tüzük / Kronik). Eskiden bunlar üç ayrı
+  // bayraktı (_divanOpen + _statsPanelOpen + _storyPanelOpen) ve üç ayrı
+  // yerden açılıyordu; tek state = aynı anda iki köy panelinin üst üste
+  // binmesi de imkânsız. Salt-okunur gösterge; oyun durmaz. scene_world
+  // reset'te kapanır.
+  LedgerSection? _ledgerSection;
 
   // Ana menüye dönüş onay modal'ı açık mı.
   bool _exitConfirmOpen = false;
@@ -1083,12 +1125,32 @@ class _VillageSceneState extends State<VillageScene>
     super.dispose();
   }
 
-  /// Backtick → dev konsolu aç. Konsol zaten açıksa dokunma (arama alanına
-  /// backtick yazılabilsin; kapatma Esc/scrim ile).
+  /// Genel kısayollar:
+  ///   ` (backtick) → dev konsolu (açıkken dokunma: arama alanına backtick
+  ///                  yazılabilsin; kapatma Esc/scrim ile).
+  ///   Tab          → Köy Defteri aç/kapa (köy içi işlerin tek kapısı).
+  ///   Esc          → açık defteri kapat.
   bool _onDevHotkey(KeyEvent e) {
     if (e is! KeyDownEvent) return false;
     if (e.logicalKey == LogicalKeyboardKey.backquote && !_devConsoleOpen) {
       setStateHere(() => _devConsoleOpen = true);
+      return true;
+    }
+    // Defter kısayolu — modal/sinematik varken karışma (o an odak onların).
+    final busy = _devConsoleOpen ||
+        _petitionModalOpen ||
+        _activeCutscene != null ||
+        _imperialDemand != null ||
+        _pendingChoice != null ||
+        _lawRitual != null ||
+        _exitConfirmOpen;
+    if (e.logicalKey == LogicalKeyboardKey.tab && !busy) {
+      setStateHere(() => _ledgerSection =
+          _ledgerSection == null ? LedgerSection.divan : null);
+      return true;
+    }
+    if (e.logicalKey == LogicalKeyboardKey.escape && _ledgerSection != null) {
+      setStateHere(() => _ledgerSection = null);
       return true;
     }
     return false;
@@ -1191,9 +1253,10 @@ class _VillageSceneState extends State<VillageScene>
             // Bekleyen dilekçe mührü — HUD üstünde, modal kapalıyken (ambient).
             if (_pendingPetition != null && !_petitionModalOpen)
               buildPetitionSeal(),
-            // Divan mührü — yönetişimin KALICI kapısı (sol üst). Sağ-dock paneller
-            // açıkken bile durur: Meclis artık hiçbir seçimle ekrandan kaybolmaz.
-            buildDivanSeal(),
+            // Defter mührü — köy içi işlerin KALICI kapısı (sol üst). Sağ-dock
+            // paneller açıkken bile durur: köyün defteri hiçbir seçimle
+            // ekrandan kaybolmaz.
+            buildLedgerSeal(),
             if (_selectedBuilding != null) buildSelectedBuildingPanel(),
             if (_selectedVillager != null) buildSelectedVillagerPanel(),
             // Karar bekleyen olay — modal açıkken simülasyon dt = 0 (tick
@@ -1209,10 +1272,11 @@ class _VillageSceneState extends State<VillageScene>
             if (_devPanelOpen) buildDevPanel(),
             // Dev komut konsolu — backtick (`) ile açılır; her şeyin üstünde.
             if (_devConsoleOpen) buildDevConsole(),
-            // Divan — yönetişim merkezi (gündem + gerilimler + köyün hâli).
-            // Oyun durmaz; boşluğa dokun = kapat. Dilekçe modal'ının üstünde
-            // DEĞİL (modal açıksa Divan'a değil dilekçeye odaklanılır).
-            if (_divanOpen && !_petitionModalOpen) buildDivanPanel(),
+            // Köy Defteri — divan + kanunname + nüfus + tüzük + kronik tek
+            // çerçevede. Oyun durmaz; boşluğa dokun = kapat. Dilekçe modal'ının
+            // üstünde DEĞİL (modal açıksa deftere değil dilekçeye odaklanılır).
+            if (_ledgerSection != null && !_petitionModalOpen)
+              buildVillageLedger(),
             if (_lawRitual != null && !_petitionModalOpen) buildLawRitual(),
             if (_exitConfirmOpen) buildExitConfirm(),
             if (_pendingJudgment != null) buildJudgmentConfirm(),
@@ -1234,11 +1298,11 @@ class _VillageSceneState extends State<VillageScene>
                 _mineMode ||
                 _placingRoad != null)
               buildHintRibbon(),
-            if (_storyPanelOpen) buildStoryPanel(),
-            if (_statsPanelOpen) buildStatsPanel(),
             // İmparatorluk varış anonsu — HUD üstünde ama sinematiğin altında
             // (kolon eşiğe varınca cutscene bunu örter).
-            if (_imperialAlertLeft > 0) buildImperialAlert(),
+            // Koşul İÇERİDE (_frame'e bağlı): dış ağaç her frame rebuild
+            // olmadığından buradaki bir `if` anonsu donuk bir karede dondurur.
+            buildImperialAlert(),
             // Sinematik — her şeyin üstünde, tam ekran. Sim duraklı.
             if (_activeCutscene != null)
               Positioned.fill(

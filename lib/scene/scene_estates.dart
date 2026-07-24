@@ -46,18 +46,20 @@ extension _SceneEstates on _VillageSceneState {
   void _onSeasonTurn(Season to) {
     switch (to) {
       case Season.spring:
-        _showNotification('🌱 İlkbahar geldi — tarlalar uyanıyor, ekim vakti.');
-        _chronicle('İlkbahar: tarlalar yeniden yeşeriyor.', icon: '🌱');
+        _showNotification('🌱 ${Voice.pick(_kSpringLines, _stableSeed('spring', _dayCount))}');
+        _chronicle(Voice.pick(_kSpringAnnal, _stableSeed('springA', _dayCount)),
+            icon: '🌱');
         _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.04, swayGain: 0.02);
 
       case Season.summer:
-        _showNotification('☀️ Yaz bastırdı — ekinler susadı, kuyular hayati.');
-        _chronicle('Yaz: güneş yükseldi, sulama olmadan ekin kavrulur.',
+        _showNotification('☀️ ${Voice.pick(_kSummerLines, _stableSeed('summer', _dayCount))}');
+        _chronicle(Voice.pick(_kSummerAnnal, _stableSeed('summerA', _dayCount)),
             icon: '☀️');
 
       case Season.autumn:
-        _showNotification('🍂 Sonbahar — hasat bereketi başladı, ambarlar dolacak!');
-        _chronicle('Sonbahar: bereketli hasat mevsimi.', icon: '🍂');
+        _showNotification('🍂 ${Voice.pick(_kAutumnLines, _stableSeed('autumn', _dayCount))}');
+        _chronicle(Voice.pick(_kAutumnAnnal, _stableSeed('autumnA', _dayCount)),
+            icon: '🍂');
         // Emekçilerin mevsimi — moral + nüfuz yükselir, köy kısa süre sevinir.
         _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.06, swayGain: 0.06);
         pushPolicyMorale(0.04, 2.0);
@@ -67,12 +69,13 @@ extension _SceneEstates on _VillageSceneState {
         final mouths = _villagers.length + _farmers.length;
         final lean = _stockpile.food < mouths * 3;
         if (lean) {
-          _showNotification('❄️ Kış bastırdı — tarlalar dondu, ambar dar.');
-          _chronicle('Kış: tarlalar dondu, kışlık erzak kaygısı.', icon: '❄️');
+          _showNotification('❄️ ${Voice.pick(_kWinterLeanLines, _stableSeed('winterL', _dayCount))}');
+          _chronicle(Voice.pick(_kWinterLeanAnnal, _stableSeed('winterLA', _dayCount)),
+              icon: '❄️');
           _nudgeHousesByEstate(Estate.laborers, moodDelta: -0.05);
         } else {
-          _showNotification('❄️ Kış bastırdı — tarlalar dondu ama ambar dolu.');
-          _chronicle('Kış: tarlalar uykuda, ambar dolu, köy huzurlu.',
+          _showNotification('❄️ ${Voice.pick(_kWinterFullLines, _stableSeed('winterF', _dayCount))}');
+          _chronicle(Voice.pick(_kWinterFullAnnal, _stableSeed('winterFA', _dayCount)),
               icon: '❄️');
           _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.02);
         }
@@ -116,13 +119,20 @@ extension _SceneEstates on _VillageSceneState {
     if (asc.changed) {
       _updateVillageIdentity(); // bonus anında yeni kimliğe geçsin
       if (asc.current != null) {
-        _showNotification('👑 Köy bir haneye kayıyor: ${asc.current} Hanesi.');
-        _chronicle('Köy ${asc.current} Hanesi\'nin gölgesine kaydı.',
+        _showNotification(Voice.say(_kAscendLines,
+            _voice(null, seed: _stableSeed('ascend', _dayCount),
+                extra: {'soy': asc.current!})));
+        _chronicle(
+            Voice.say(_kAscendAnnal,
+                _voice(null, seed: _stableSeed('ascendA', _dayCount),
+                    extra: {'soy': asc.current!})),
             icon: '👑');
         pushPolicyMorale(0.05, 2.0); // köyün kısa sevinci
       } else {
-        _showNotification('⚖️ Köyün baskın hanesi çözüldü — denge geri döndü.');
-        _chronicle('Köy dengeye döndü — baskın hane çözüldü.', icon: '⚖️');
+        _showNotification(
+            '⚖️ ${Voice.pick(_kBalanceLines, _stableSeed('balance', _dayCount))}');
+        _chronicle(Voice.pick(_kBalanceAnnal, _stableSeed('balanceA', _dayCount)),
+            icon: '⚖️');
       }
     }
 
@@ -334,7 +344,8 @@ extension _SceneEstates on _VillageSceneState {
 
   /// Kronik mutsuz köylü köyü terk eder — diegetik kayıp (bildirim + hane yası).
   void _emigrateVillager(VillagerEntity v) {
-    _showNotification('${v.name} köyü terk etti — uzun süre mutsuzdu');
+    _showNotification(Voice.say(_kEmigrateLines,
+        _voice(v, seed: _stableSeed('emigrate${v.name}', _dayCount))));
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.06);
     _removeVillager(v);
   }
@@ -411,36 +422,84 @@ extension _SceneEstates on _VillageSceneState {
     v.feel(emo, 2.0 + _rng.nextDouble() * 1.5);
   }
 
-  /// Bir FERMAN kararının zümre etkisi (proaktif kaldıraç). [enacting] true →
-  /// yürürlüğe sokmak: sevindirdiği zümre memnun olur + kalıcı nüfuz kazanır
-  /// (köy o yöne kayar). false → kaldırmak: yalnızca mood'un TERSİ uygulanır
-  /// (sevenler küser); nüfuz geri ALINMAZ — köy zaten o yöne kaymıştı.
-  void _applyEstateDecree(List<(Estate, double)> effects,
-      {required bool enacting}) {
-    for (final (e, delta) in effects) {
-      if (enacting) {
-        _nudgeHousesByEstate(e,
-            moodDelta: delta, swayGain: delta > 0 ? delta * _kSwayFromMood : 0);
-      } else {
-        _nudgeHousesByEstate(e, moodDelta: -delta);
-      }
-    }
-  }
-
-  /// Bir toggle fermanının zümre etkisini id'den çözer.
-  List<(Estate, double)> _policyEstateMood(String id) {
-    for (final d in kPolicyDefs) {
-      if (d.id == id) return d.estateMood;
-    }
-    return const [];
-  }
-
-  /// Bir zümrenin doğal rakibi (#9 zümreler arası baskı). Emek↔Zanaat ekonomi
-  /// ekseninde, İnanç↔Ocak ruh/gelenek ekseninde çekişir.
-  Estate _estateRival(Estate e) => switch (e) {
-        Estate.laborers => Estate.artisans,
-        Estate.artisans => Estate.laborers,
-        Estate.faithful => Estate.hearth,
-        Estate.hearth => Estate.faithful,
-      };
 }
+
+// ── Mevsim ve hane satırları: havuzlu, seed gün numarasından ────────────────
+// Bunlar oyunun EN ÇOK tekrar eden metinleri (her mevsim, her göç). Tek sabit
+// cümle burada en çabuk ezberlenen yer olurdu; o yüzden havuz.
+
+const _kSpringLines = [
+  'İlkbahar girdi. Toprak yumuşadı, sabanın izi kalıyor.',
+  'Kar çekildi. Tarlada ilk yeşil göründü, ekim vakti.',
+  'İlkbahar geldi. Kuşlar döndü, tohum çuvalları açıldı.',
+];
+const _kSpringAnnal = [
+  'İlkbahar girdi. Tarlalar sürüldü.',
+  'Kar çekildi. Ekim başladı.',
+  'İlkbahar. Toprak uyandı.',
+];
+const _kSummerLines = [
+  'Yaz bastırdı. Kuyunun kovası ağır çıkıyor, ekin su istiyor.',
+  'Sıcak oturdu. Öğle vakti tarlada kimse kalmıyor.',
+  'Yaz geldi. Toprak çatlamaya başladı, sulama şart.',
+];
+const _kSummerAnnal = [
+  'Yaz. Sıcak oturdu, sulama başladı.',
+  'Yaz girdi. Kuyular kritik.',
+  'Yaz. Ekin susadı.',
+];
+const _kAutumnLines = [
+  'Sonbahar açtı. Harman başladı, ambarın kapağı sabaha kadar açık.',
+  'Hasat vakti. Başak ağır, orak keskin.',
+  'Sonbahar girdi. Arabalar dolu geliyor tarladan.',
+];
+const _kAutumnAnnal = [
+  'Sonbahar. Harman başladı.',
+  'Hasat girdi. Ambar doluyor.',
+  'Sonbahar. Ambarlar açıldı.',
+];
+const _kWinterLeanLines = [
+  'Kış bastırdı. Tarlalar dondu, ambarda dip göründü.',
+  'Kar yağdı. Kilerde sayılı kile kaldı, herkes farkında.',
+  'Kış girdi. Toprak taş gibi, ambar dar.',
+];
+const _kWinterLeanAnnal = [
+  'Kış. Tarlalar dondu, erzak az.',
+  'Kış girdi. Ambar dar.',
+  'Kış. Kile sayılıyor.',
+];
+const _kWinterFullLines = [
+  'Kış bastırdı. Tarlalar dondu ama ambarın kapağı zor kapanıyor.',
+  'Kar yağdı. Ocaklar yanıyor, kiler dolu.',
+  'Kış girdi. Toprak uykuda, sofra tok.',
+];
+const _kWinterFullAnnal = [
+  'Kış. Tarlalar uykuda, ambar dolu.',
+  'Kış girdi. Erzak yeterli.',
+  'Kış. Kiler tam.',
+];
+const _kAscendLines = [
+  '👑 Artık {soy} Hanesi konuşuyor, köy dinliyor.',
+  '👑 {soy} Hanesi öne geçti. Meydanda ilk söz onların.',
+  '👑 Köy {soy} Hanesi\'nin gölgesine girdi.',
+];
+const _kAscendAnnal = [
+  '{soy} Hanesi öne geçti.',
+  'Köy {soy} Hanesi\'ne yaslandı.',
+  'Baskın hane: {soy}.',
+];
+const _kBalanceLines = [
+  'Hiçbir hane öne çıkmıyor artık. Söz yeniden ortada.',
+  'Baskın hane dağıldı. Meydanda herkes eşit yükseklikte konuşuyor.',
+  'Denge döndü. Kimsenin sözü diğerinden ağır değil.',
+];
+const _kBalanceAnnal = [
+  'Baskın hane çözüldü.',
+  'Köy dengeye döndü.',
+  'Hiçbir hane baskın değil.',
+];
+const _kEmigrateLines = [
+  '{ad} çıkınını bağladı, kimseye söylemeden yola çıktı.',
+  '{ad} gitti. Uzun zamandır burada değildi zaten.',
+  '{ad-in} kapısı bu sabah açık kaldı. Geri dönmeyecek.',
+];

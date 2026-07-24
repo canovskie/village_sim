@@ -21,6 +21,7 @@ class DevPanel extends StatelessWidget {
 
   // ── Callback'ler ────────────────────────────────────────────────────────
   final VoidCallback onClose;
+  final VoidCallback onOpenConsole;
   final VoidCallback onToggleGod;
   final void Function(double) onSetRain;
   final void Function(double) onSetTimeOfDay;
@@ -54,6 +55,8 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onStartChat;
   final VoidCallback onStartConflict;
   final VoidCallback onIgniteFeud;
+  /// Rastgele bir suç tetikler (sinsi yaklaşma → eylem → kaçış; yakalanabilir).
+  final VoidCallback onStartCrime;
   final VoidCallback onClearActivities;
   final VoidCallback onMeteorShower;
 
@@ -66,6 +69,8 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onToggleRain;
   final VoidCallback onAllPolicies;
   final VoidCallback onClearPolicies;
+  /// Test: köyün bildiği tüm zanaatları aç (kilitli binaları menüde göster).
+  final VoidCallback onUnlockAllCrafts;
   final VoidCallback onMakeSage;
   final VoidCallback onSpawnMigrant;
   /// Test: İmparatorluk vergi heyetini anında sahneye çağır (refah/sayaç geçitlerini
@@ -82,6 +87,9 @@ class DevPanel extends StatelessWidget {
   final void Function(String id) onForcePetitionId;
   final bool perfMode;
   final VoidCallback onTogglePerf;
+  /// Ekranda kayan dev olay günlüğü konsolu açık mı (god mode'dan bağımsız).
+  final bool devLogOn;
+  final VoidCallback onToggleDevLog;
 
   const DevPanel({
     super.key,
@@ -92,6 +100,7 @@ class DevPanel extends StatelessWidget {
     required this.buildingCount,
     this.fps = 0,
     required this.onClose,
+    required this.onOpenConsole,
     required this.onToggleGod,
     required this.onSetRain,
     required this.onSetTimeOfDay,
@@ -119,6 +128,7 @@ class DevPanel extends StatelessWidget {
     required this.onStartChat,
     required this.onStartConflict,
     required this.onIgniteFeud,
+    required this.onStartCrime,
     required this.onClearActivities,
     required this.onMeteorShower,
     required this.onSeedShowcase,
@@ -129,6 +139,7 @@ class DevPanel extends StatelessWidget {
     required this.onToggleRain,
     required this.onAllPolicies,
     required this.onClearPolicies,
+    required this.onUnlockAllCrafts,
     required this.onMakeSage,
     required this.onSpawnMigrant,
     required this.onSummonImperial,
@@ -139,6 +150,8 @@ class DevPanel extends StatelessWidget {
     required this.onForcePetitionId,
     required this.perfMode,
     required this.onTogglePerf,
+    required this.devLogOn,
+    required this.onToggleDevLog,
   });
 
   static const _accent = AppUi.accent;
@@ -175,6 +188,15 @@ class DevPanel extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Komut konsolu — tüm dev aksiyonları tek arama
+                        // kutusunda (buton çöplüğünün yerine geçen ana giriş).
+                        _bigPrimaryBtn(
+                          'Komut Konsolu  (`)',
+                          'Ara · parametre gir · senaryo kaydet & tek tıkla oynat',
+                          GameIconData.bolt,
+                          onOpenConsole,
+                        ),
+                        const SizedBox(height: 7),
                         // Hızlı kurulum — en sık kullanılan iki aksiyon her
                         // zaman üstte, tek tık uzaklıkta.
                         _bigPrimaryBtn(
@@ -225,6 +247,7 @@ class DevPanel extends StatelessWidget {
                               const SizedBox(height: 7),
                               _wrapButtons([
                                 AppButton(label: 'Tüm Yasaları Aç', icon: GameIconData.scroll, onTap: onAllPolicies),
+                                AppButton(label: 'Tüm Zanaatları Aç', icon: GameIconData.hammer, onTap: onUnlockAllCrafts),
                                 AppButton(label: 'Yasaları Sıfırla', icon: GameIconData.scroll, onTap: onClearPolicies),
                                 AppButton(label: 'Bilge Yap', icon: GameIconData.star, onTap: onMakeSage),
                                 AppButton(label: 'Göçmen Çağır', icon: GameIconData.people, onTap: onSpawnMigrant),
@@ -240,6 +263,16 @@ class DevPanel extends StatelessWidget {
                                         : AppButtonKind.tonal,
                                     tint: AppUi.sage,
                                     onTap: onTogglePerf),
+                                AppButton(
+                                    label: devLogOn
+                                        ? '🎲 Olay Günlüğü AÇIK'
+                                        : '🎲 Olay Günlüğü',
+                                    icon: GameIconData.scroll,
+                                    kind: devLogOn
+                                        ? AppButtonKind.filled
+                                        : AppButtonKind.tonal,
+                                    tint: AppUi.info,
+                                    onTap: onToggleDevLog),
                               ]),
                             ],
                           ),
@@ -293,6 +326,7 @@ class DevPanel extends StatelessWidget {
                             AppButton(label: 'Sohbet', icon: GameIconData.people, onTap: onStartChat),
                             AppButton(label: 'Kavga', icon: GameIconData.people, tint: AppUi.rust, onTap: onStartConflict),
                             AppButton(label: 'Kan Davası', icon: GameIconData.people, tint: AppUi.rust, onTap: onIgniteFeud),
+                            AppButton(label: 'Suç', icon: GameIconData.people, tint: AppUi.rust, onTap: onStartCrime),
                             AppButton(label: 'Göktaşı Yağmuru', icon: GameIconData.star, tint: AppUi.info, onTap: onMeteorShower),
                             AppButton(label: 'Temizle', icon: GameIconData.demolish, kind: AppButtonKind.ghost, onTap: onClearActivities),
                           ]),

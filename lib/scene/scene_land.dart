@@ -62,5 +62,55 @@ extension _SceneLand on _VillageSceneState {
       _zoom += (mz - _zoom) * (dt * 1.5).clamp(0.0, 1.0); // yumuşak geri çekilme
     }
     _lastMinZoom = mz;
+
+    _tickOreDiscovery(dt);
+  }
+
+  // ── Kaynak keşfi ────────────────────────────────────────────────────────────
+  //
+  // Madenler world_generator'da reach MESAFE bandlarına konur (yakın=taş,
+  // orta=kömür, derin=demir) → ilk yerleşimde maden yok. Reach bir cevher
+  // türünü İLK kez kadraja alınca burada tek seferlik keşif anı yaşanır:
+  // bildirim + kronik (kâtip üslubu). [[lib/text/voice.dart]] havuzları.
+
+  static const Map<OreType, List<String>> _kOreFoundPool = {
+    OreType.stone: [
+      'Otlağın ötesinde taş damarı bulundu. Kazmalar bileniyor.',
+      'Tepede kaya çıktı. Taş artık uzak değil.',
+      'Taş damarı görüldü. Duvar sözü ağızlarda dolaşıyor.',
+    ],
+    OreType.coal: [
+      'Toprağın altından kara damar çıktı. Kömür ocakları bekliyor.',
+      'Kömür damarı bulundu. Kış bir parça küçüldü.',
+      'Derinlerde kömür görüldü. İs kokusu şimdiden burunlarda.',
+    ],
+    OreType.iron: [
+      'Demir damarı bulundu. Örs için gün sayılıyor.',
+      'Kızıl toprak demir verdi. Aletler yenilenecek.',
+      'En derinde demir görüldü. Kazma ona uzanacak.',
+    ],
+  };
+
+  /// Her saniye: keşfedilmemiş cevher türlerinden biri reach kutusuna girdiyse
+  /// duyur. Gerçek viewport oranıyla bakar (band eşiği worst-case olduğundan
+  /// keşif hiçbir zaman banddan ÖNCE gelmez).
+  void _tickOreDiscovery(double dt) {
+    _oreScanTimer -= dt;
+    if (_oreScanTimer > 0) return;
+    _oreScanTimer = 1.0;
+    if (_oreDiscovered.length >= OreType.values.length) return;
+    final size = _viewSize;
+    if (size.width <= 0 || size.height <= 0) return;
+    final (hu, hv) = _reachHalfExtents(size);
+    for (final n in _mineNodes) {
+      if (_oreDiscovered.contains(n.type.name)) continue;
+      if (((n.col - n.row) - _centerU).abs() > hu) continue;
+      if (((n.col + n.row) - _centerV).abs() > hv) continue;
+      _oreDiscovered.add(n.type.name);
+      final line = Voice.say(_kOreFoundPool[n.type]!,
+          _voice(null, seed: _stableSeed('ore_${n.type.name}', _dayCount)));
+      _showNotification('⛏️ $line');
+      _chronicle(line, icon: '⛏️', milestone: true);
+    }
   }
 }

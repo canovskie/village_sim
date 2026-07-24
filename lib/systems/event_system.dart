@@ -3,6 +3,23 @@ import 'package:flutter/material.dart';
 import '../buildings/building_entity.dart';
 import '../buildings/building_type.dart';
 import '../core/resources.dart';
+import '../text/voice.dart';
+
+/// Olayların KALICI kimlikleri. Kod bir olayı BUNLARLA tanır — asla başlıkla.
+/// Başlık oyuncunun gördüğü metindir ve serbestçe yeniden yazılabilir; id ise
+/// omen/sahne/senaryo bağlarının tutunduğu çividir.
+abstract final class EventIds {
+  static const drought   = 'drought';
+  static const plague    = 'plague';
+  static const beastRaid = 'beastRaid';
+  static const thief     = 'thief';
+  static const storm     = 'storm';
+  static const houseFire = 'houseFire';
+  static const bard      = 'bard';
+  static const caravan   = 'caravan';
+  static const bounty    = 'bounty';
+  static const accord    = 'accord';
+}
 
 /// Olay kategorisi — UI banner rengi ve filtre için.
 enum EventCategory { positive, negative, neutral }
@@ -83,8 +100,15 @@ class EventContext {
 /// Karar gerektiren olaylarda oyuncuya sunulan seçenek. Seçilince delta'lar
 /// stoğa uygulanır, varsa moral ve sahne efekti aktive edilir.
 class EventChoice {
+  /// Kalıcı kimlik — sahne tepkisi (kova zinciri / kovalama / kaçış) buna bakar.
+  /// Buton metni değişince davranış bozulmasın diye label'a ASLA switch'lenmez.
+  final String id;
+
   final String label;   // buton metni (örn. "Yakala")
   final String detail;  // alt açıklama (örn. "15 altına muhafız tutarsın")
+
+  /// Vakanüvis satırı — kuru, kısa; kararın yıllığa düşen izi.
+  final String annal;
 
   final int foodDelta;
   final int goldDelta;
@@ -100,9 +124,11 @@ class EventChoice {
   final String resolutionMessage;
 
   const EventChoice({
+    required this.id,
     required this.label,
     required this.detail,
     required this.resolutionMessage,
+    this.annal = '',
     this.foodDelta = 0,
     this.goldDelta = 0,
     this.woodDelta = 0,
@@ -136,9 +162,24 @@ class EventChoice {
 /// Bir rastgele köy olayının sonucu. Anlık delta'lar hemen stoğa uygulanır;
 /// [moraleModifier] varsa [duration] saniye boyunca köy moraline eklenir.
 class EventOutcome {
+  /// Kalıcı kimlik ([EventIds]). Omen metni, sahnelenmiş tepki, odak noktası ve
+  /// tetiklenme koşulu hep buna bakar — başlığa DEĞİL. Başlık yeniden yazılınca
+  /// hiçbir bağ kopmaz.
+  final String id;
+
   final String title;
   final String icon;
-  final String message;
+
+  /// Olayın anlatısı — tek metin değil HAVUZ. Aynı olay ikinci kez geldiğinde
+  /// başka kelimelerle okunur; varyant sabit tohumla seçilir ([messageFor]).
+  final List<String> messagePool;
+
+  /// Vakanüvis havuzu — kuru, kısa yıllık satırı ("Kuyu dibini gösterdi.").
+  final List<String> annalPool;
+
+  /// Havuz verilmeyen (senaryo/çözüm gibi tek-metinlik) olaylarda kullanılan
+  /// düz metin. Havuz doluysa yok sayılır.
+  final String _single;
 
   final EventCategory category;
   final EventSeverity severity;
@@ -172,9 +213,12 @@ class EventOutcome {
   final List<EventChoice>? choices;
 
   const EventOutcome({
+    this.id = '',
     required this.title,
     required this.icon,
-    required this.message,
+    String message = '',
+    this.messagePool = const <String>[],
+    this.annalPool = const <String>[],
     required this.category,
     this.severity = EventSeverity.minor,
     this.foodDelta = 0,
@@ -189,7 +233,44 @@ class EventOutcome {
     this.weight = 1.0,
     this.effect,
     this.choices,
-  });
+  }) : _single = message;
+
+  /// Gösterilecek metin. Havuzdan varyant seçilmemişse ilki (UI'ın doğrudan
+  /// `.message` okuduğu yerler için güvenli varsayılan).
+  String get message => messagePool.isEmpty ? _single : messagePool.first;
+
+  /// Varyantı SABİT tohumla seçer (gün gibi) — her karede yeni Random yok,
+  /// kayıt/yükleme sonrası cümle değişmez.
+  String messageFor(int seed) =>
+      messagePool.isEmpty ? _single : Voice.pick(messagePool, seed);
+
+  /// Vakanüvis satırı — havuzdan sabit tohumla. Havuz boşsa başlığa düşer.
+  String annalFor(int seed) =>
+      annalPool.isEmpty ? title : Voice.pick(annalPool, seed);
+
+  /// Seçilen varyantı taşıyan kopya — banner/modal ile bildirim aynı cümleyi
+  /// göstersin diye olay vurduğu anda materyalize edilir.
+  EventOutcome withMessage(String m) => EventOutcome(
+        id: id,
+        title: title,
+        icon: icon,
+        message: m,
+        annalPool: annalPool,
+        category: category,
+        severity: severity,
+        foodDelta: foodDelta,
+        goldDelta: goldDelta,
+        woodDelta: woodDelta,
+        stoneDelta: stoneDelta,
+        ironDelta: ironDelta,
+        coalDelta: coalDelta,
+        moraleModifier: moraleModifier,
+        duration: duration,
+        canFire: canFire,
+        weight: weight,
+        effect: effect,
+        choices: choices,
+      );
 
   bool get isTemporary => duration > 0 && moraleModifier != 0;
 
@@ -224,8 +305,18 @@ class EventSystem {
   static const events = <EventOutcome>[
     // ─── NEGATİF (afet/tehdit — hepsi bespoke fx) ─────────────────────────────
     EventOutcome(
+      id: EventIds.drought,
       title: 'Kuraklık', icon: '☀',
-      message: 'Kuraklık bastı — ekinler soldu, moral düştü.',
+      messagePool: [
+        'Kuyunun kovası bugün iki kez boş çıktı. Tarlada toprak ayak altında un gibi dağılıyor.',
+        'Dere yatağı taş kesti. Başaklar öğle olmadan başını eğiyor.',
+        'Sıcak sabahtan beri kımıldamıyor. Ekinin kökü kuru toprağı çoktan bıraktı.',
+      ],
+      annalPool: [
+        'Gün {gün}. Kuyu dibini gösterdi. Tarla kavruldu.',
+        'Gün {gün}. Yağmur yağmadı. Ekin ayakta kurudu.',
+        'Gün {gün}. {mevsim} kurak geçti. Ambar eksik doldu.',
+      ],
       category: EventCategory.negative,
       foodDelta: -15, moraleModifier: -0.20, duration: 45,
       weight: 1.0,
@@ -237,8 +328,18 @@ class EventSystem {
       ),
     ),
     EventOutcome(
+      id: EventIds.plague,
       title: 'Salgın', icon: '🤒',
-      message: 'Köyde bir salgın çıktı. Müdahale etmezsen uzun sürer.',
+      messagePool: [
+        'İki hane kapısını içeriden sürgüledi. Geceleri öksürük sesi geliyor.',
+        'Ateşi çıkan üç köylü yatağa düştü. Hastalık ocaktan ocağa atlıyor.',
+        'Pazarda kimse kimseye yaklaşmıyor. Hastalık {köy} sınırından çoktan girdi.',
+      ],
+      annalPool: [
+        'Gün {gün}. Hastalık girdi. Kapılar sürgülendi.',
+        'Gün {gün}. Ateş üç haneye düştü. Pazar boşaldı.',
+        'Gün {gün}. Salgın başladı. {mevsim} uzun sürecek.',
+      ],
       category: EventCategory.negative,
       severity: EventSeverity.major,
       weight: 0.7,
@@ -250,9 +351,12 @@ class EventSystem {
       ),
       choices: [
         EventChoice(
+          id: 'healer',
           label: 'Şifacı çağır',
-          detail: '20 altın harca; salgın hızla kontrol altına alınır.',
-          resolutionMessage: 'Şifacı çağrıldı — salgın yavaşladı.',
+          detail: '20 altın. Kasabadan şifacı gelir, hastalık erken kırılır.',
+          resolutionMessage:
+              'Şifacı kapı kapı dolaştı, kaynattığı otu her ocağa bıraktı. Öksürük seyrekleşti.',
+          annal: 'Şifacı çağrıldı. Hastalık erken kırıldı.',
           goldDelta: -20, moraleModifier: -0.10, duration: 20,
           effect: EventEffect(
             fx: EventFx.plagueAura,
@@ -262,9 +366,12 @@ class EventSystem {
           ),
         ),
         EventChoice(
+          id: 'endure',
           label: 'Kendi başına atlat',
-          detail: 'Müdahale yok — etki tam ve uzun sürer.',
-          resolutionMessage: 'Köy kendi başına savaştı, bedeli ağır oldu.',
+          detail: 'Kimse çağrılmaz. Hastalık tam gücüyle ve uzun sürer.',
+          resolutionMessage:
+              'Köy hastalığı kendi yatağında bekledi. Bedelini de o yatakta ödedi.',
+          annal: 'Şifacı çağrılmadı. Köy hastalığı yatarak bekledi.',
           moraleModifier: -0.25, duration: 50,
           effect: EventEffect(
             fx: EventFx.plagueAura,
@@ -276,50 +383,92 @@ class EventSystem {
       ],
     ),
     EventOutcome(
-      title: 'Hayvan Baskını', icon: '🐺',
-      message: 'Kurtlar köyün kenarına dadandı. Hareket gerekiyor!',
+      id: EventIds.beastRaid,
+      title: 'Kurtlar', icon: '🐺',
+      messagePool: [
+        'Ağılın çiti gece yarısı yıkıldı. Geriye kan ve dört ayak izi kaldı.',
+        'Sürü bu sabah eksik döndü. Ağaç hattında kırık dallar, taze iz var.',
+        'Koyunlar tek yığın halinde sıkıştı, hiçbiri otlamıyor. Kurt kokusu almışlar.',
+      ],
+      annalPool: [
+        'Gün {gün}. Kurtlar ağıla indi. Çit yıkıldı.',
+        'Gün {gün}. Sürü eksik döndü. Ağaç hattı beklendi.',
+        'Gün {gün}. Ormandan kurt geldi. {köy} kapısını erken kapattı.',
+      ],
       category: EventCategory.negative,
       weight: 0.9,
       effect: EventEffect(fx: EventFx.beastEyes, duration: 25),
       choices: [
         EventChoice(
+          id: 'guards',
           label: 'Muhafızları gönder',
-          detail: '5 yiyecek harca; kurtlar geri püskürtülür, az kayıp.',
-          resolutionMessage: 'Muhafızlar sürüleri korudu, kurtlar geri çekildi.',
+          detail: '5 yiyecek. Meşaleli adamlar ağaç hattına dayanır, sürü kurtulur.',
+          resolutionMessage:
+              'Meşaleler ağaç hattına dayandı. Uluma uzaklaştı, sürü ağılda kaldı.',
+          annal: 'Muhafızlar gönderildi. Sürü kurtarıldı.',
           foodDelta: -5,
         ),
         EventChoice(
-          label: 'Saklan',
-          detail: 'Hayvan kayıpları tam: yiyecek -18, moral -10%.',
-          resolutionMessage: 'Korkudan saklandın, ahırı kaybettin.',
+          id: 'hide',
+          label: 'Kapıları sürgüle',
+          detail: 'Kimse dışarı çıkmaz. Ağıl açıkta kalır: yiyecek -18, moral -10%.',
+          resolutionMessage:
+              'Kapılar sürgülendi, ağıl açıkta kaldı. Sabah sayım eksik çıktı.',
+          annal: 'Kapılar sürgülendi. Ağıl kurda bırakıldı.',
           foodDelta: -18, moraleModifier: -0.10, duration: 25,
         ),
       ],
     ),
     EventOutcome(
+      id: EventIds.thief,
       title: 'Hırsız', icon: '🦹',
-      message: 'Pazardan altın kapan bir hırsız kaçıyor!',
+      messagePool: [
+        'Tezgâhın altındaki kese boş. Kalabalıkta biri sırtını dönüp yürüyor.',
+        'Pazarcı avaz avaz bağırdı: kutu açık, altın yok. Bir gölge sokağa saptı.',
+        'Terazinin yanındaki kesenin ipi kesilmiş. Hırsız daha köy sınırında.',
+      ],
+      annalPool: [
+        'Gün {gün}. Pazarda kese kesildi.',
+        'Gün {gün}. Tezgâhtan altın çalındı.',
+        'Gün {gün}. {köy} pazarına hırsız düştü.',
+      ],
       category: EventCategory.negative,
       weight: 0.8,
       effect: EventEffect(fx: EventFx.thiefDash, duration: 8),
       choices: [
         EventChoice(
+          id: 'chase',
           label: 'Peşine düş',
-          detail: '15 altın muhafız ücreti; kayıp önlenir.',
-          resolutionMessage: 'Hırsız yakalandı — para muhafıza, altın köyde.',
+          detail: '15 altın muhafız ücreti. Kese geri gelir.',
+          resolutionMessage:
+              'Kese değirmen yolunda geri alındı. Muhafız ücretini aldı, gerisi köyde kaldı.',
+          annal: 'Hırsızın peşine düşüldü. Kese geri alındı.',
           goldDelta: -15,
         ),
         EventChoice(
+          id: 'ignore',
           label: 'Bırak gitsin',
-          detail: 'Kovalamak risk — altın 22 birim eksilir.',
-          resolutionMessage: 'Hırsız sokaklarda kayboldu, altın gitti.',
+          detail: 'Kimse peşine düşmez. Altın 22 birim eksilir.',
+          resolutionMessage:
+              'Gölge sokak arasında kayboldu. Kese de onunla gitti.',
+          annal: 'Hırsız kovalanmadı. Altın gitti.',
           goldDelta: -22,
         ),
       ],
     ),
     EventOutcome(
+      id: EventIds.storm,
       title: 'Fırtına', icon: '⛈',
-      message: 'Şiddetli fırtına çatıları söktü, ahşap kayboldu.',
+      messagePool: [
+        'Rüzgâr çatı kirişini söktü, tahtalar avluya savruldu.',
+        'Kepenkler gece boyu çarptı. Sabah damların yarısı yerdeydi.',
+        'Dolu taze sıvayı deldi. Yığılı kereste dereye gitti.',
+      ],
+      annalPool: [
+        'Gün {gün}. Fırtına çatıları söktü.',
+        'Gün {gün}. Rüzgâr kerestenin yarısını götürdü.',
+        'Gün {gün}. {mevsim} fırtınası vurdu. İnşaat durdu.',
+      ],
       category: EventCategory.negative,
       woodDelta: -16, moraleModifier: -0.10, duration: 20,
       weight: 0.9,
@@ -332,8 +481,18 @@ class EventSystem {
       ),
     ),
     EventOutcome(
+      id: EventIds.houseFire,
       title: 'Ev Yangını', icon: '🔥',
-      message: 'Bir kulübede yangın çıktı! Kararını çabuk ver.',
+      messagePool: [
+        'Bacadan sıçrayan kıvılcım samanı tutuşturdu. Alev şimdiden kirişte.',
+        'Bir kulübenin kapısından duman fışkırıyor, içeriden çıtırtı geliyor.',
+        'Ocaktan kaçan köz kuru çatıyı yakaladı. Rüzgâr da körüklüyor.',
+      ],
+      annalPool: [
+        'Gün {gün}. Bir kulübe tutuştu.',
+        'Gün {gün}. Yangın çıktı. Duman meydandan görüldü.',
+        'Gün {gün}. Ateş çatıya vurdu. {köy} uyanık geceledi.',
+      ],
       category: EventCategory.negative,
       severity: EventSeverity.major,
       weight: 0.5,
@@ -344,15 +503,21 @@ class EventSystem {
       ),
       choices: [
         EventChoice(
-          label: 'Söndürme ekibi',
-          detail: '10 odun + 4 yiyecek bedeli; hasarın yarısı atlatılır.',
-          resolutionMessage: 'Köylüler kovaları kaptı, alevler durduruldu.',
+          id: 'extinguish',
+          label: 'Kova zinciri kur',
+          detail: '10 odun, 4 yiyecek. Kuyudan çatıya el ele su taşınır.',
+          resolutionMessage:
+              'Kova zinciri kuyudan çatıya uzandı. Kirişler tuttu, ev ayakta kaldı.',
+          annal: 'Kova zinciri kuruldu. Ev kurtarıldı.',
           woodDelta: -10, foodDelta: -4, moraleModifier: -0.05, duration: 18,
         ),
         EventChoice(
+          id: 'letBurn',
           label: 'Yansın',
-          detail: 'Müdahale yok; odun -28, moral -15%.',
-          resolutionMessage: 'Kulübe küle döndü, köy bir akşam üzüldü.',
+          detail: 'Kimse müdahale etmez. Odun -28, moral -15%.',
+          resolutionMessage:
+              'Kulübe sabaha kül oldu. Köylüler tek kelime etmeden dağıldı.',
+          annal: 'Yangına girilmedi. Kulübe kül oldu.',
           woodDelta: -28, moraleModifier: -0.15, duration: 30,
         ),
       ],
@@ -362,22 +527,52 @@ class EventSystem {
     // "Hepsi negatif" hissini kırar: köye bazen iyi şeyler de uğrar. Hepsi omen
     // (sevinçli bekleyiş) + dünya-içi sahne (toplanma/müzik/dans/şölen) yaşar.
     EventOutcome(
+      id: EventIds.bard,
       title: 'Gezgin Ozan', icon: '🎵',
-      message: 'Bir gezgin ozan köye uğradı — ezgileri herkesi neşelendirdi.',
+      messagePool: [
+        'Yoldan sazlı bir adam geldi, ateşin başına oturdu. Çemberi ilk kuran çocuklar oldu.',
+        'Ozan ilk türküye başlayınca kimse işine dönmedi. Akşam uzadıkça uzadı.',
+        'Bir kopuz sesi meydanı doldurdu. {köy} bu gece geç yattı.',
+      ],
+      annalPool: [
+        'Gün {gün}. Bir ozan uğradı. Meydanda türkü söylendi.',
+        'Gün {gün}. Ozan geldi, iki gece kaldı.',
+        'Gün {gün}. Ateş başında saz çalındı.',
+      ],
       category: EventCategory.positive,
       moraleModifier: 0.12, duration: 40,
       weight: 0.9,
     ),
     EventOutcome(
-      title: 'Gezgin Tüccar', icon: '🛒',
-      message: 'Bir kervan pazara uğradı — bereketli bir alışveriş oldu.',
+      id: EventIds.caravan,
+      title: 'Kervan', icon: '🛒',
+      messagePool: [
+        'Kervan tepeyi aştı, katırlar yüklü. Pazara tuz, kumaş, bir de bal kokusu indi.',
+        'Tüccar denkleri açtı. Akşama kadar el kese değiştirdi.',
+        'Yabancının terazisi doğru tarttı. Alışveriş {köy} lehine kapandı.',
+      ],
+      annalPool: [
+        'Gün {gün}. Kervan geldi. Pazar bir gün açık kaldı.',
+        'Gün {gün}. Tuz ve kumaş alındı, kese doldu.',
+        'Gün {gün}. Tüccar uğradı. Ticaret {köy} lehine döndü.',
+      ],
       category: EventCategory.positive,
       goldDelta: 10, foodDelta: 4, moraleModifier: 0.05, duration: 30,
       weight: 0.8,
     ),
     EventOutcome(
+      id: EventIds.bounty,
       title: 'Bereketli Hasat', icon: '🌾',
-      message: 'Başaklar beklenmedik bir bollukla doldu — ambarlar şenlendi.',
+      messagePool: [
+        'Başak öyle ağır ki sap taşımıyor. Orak bugün iki kat iş gördü.',
+        'Ambarın kapısı zor kapandı. Çuvallar duvara kadar dizili.',
+        'Tarla altın rengine kesti. Toprak bu yıl {köy} halkına cömert davrandı.',
+      ],
+      annalPool: [
+        'Gün {gün}. Hasat bereketli geçti. Ambar doldu.',
+        'Gün {gün}. Başak ağır geldi. Çuval yetmedi.',
+        'Gün {gün}. Toprak cömert davrandı.',
+      ],
       category: EventCategory.positive,
       foodDelta: 18, moraleModifier: 0.08, duration: 30,
       weight: 0.7,
@@ -388,8 +583,18 @@ class EventSystem {
       ),
     ),
     EventOutcome(
-      title: 'Zümre Barışı', icon: '🤝',
-      message: 'Zümreler arasındaki gerginlik yumuşadı — köy bir nefes aldı.',
+      id: EventIds.accord,
+      title: 'Hanelerin Barışı', icon: '🤝',
+      messagePool: [
+        'İki hane kuyu başında karşılaştı, kavga çıkmadı. Biri diğerine sıra verdi.',
+        'Yıllardır selam vermeyen iki kapı bu akşam aynı ateşe oturdu.',
+        'Küskün haneler ekmeği bölüştü. Meydan uzun zamandır bu kadar rahat değildi.',
+      ],
+      annalPool: [
+        'Gün {gün}. Küskün haneler barıştı.',
+        'Gün {gün}. İki hane aynı ateşe oturdu.',
+        'Gün {gün}. {köy} dargınlığı bıraktı.',
+      ],
       category: EventCategory.positive,
       moraleModifier: 0.10, duration: 40,
       weight: 0.6,
@@ -398,10 +603,10 @@ class EventSystem {
 
   /// Verilen bağlamda uygun olan olaylar arasından ağırlıklı rastgele seçim.
   /// Koşullar:
-  /// - Salgın → en az 6 köylü
-  /// - Ev Yangını → en az 5 köylü ve odun stoğu ≥ 28
-  /// - Hırsız → mevcut altın ≥ 22 veya pazar var
-  /// Diğerleri (Kuraklık, Hayvan Baskını, Fırtına) koşulsuz uygundur.
+  /// - plague    → en az 6 köylü
+  /// - houseFire → en az 5 köylü ve odun stoğu ≥ 28
+  /// - thief     → mevcut altın ≥ 22 veya pazar var
+  /// Diğerleri (drought, beastRaid, storm) koşulsuz uygundur.
   static EventOutcome roll(Random rng, EventContext ctx) {
     final viable = <EventOutcome>[];
     final weights = <double>[];
@@ -413,26 +618,28 @@ class EventSystem {
     if (viable.isEmpty) {
       // Güvenlik: en azından kuraklık daima uygun olsun
       return events.firstWhere(
-          (e) => e.title == 'Kuraklık', orElse: () => events.first);
+          (e) => e.id == EventIds.drought, orElse: () => events.first);
     }
     return _weightedPick(rng, viable, weights);
   }
 
+  /// Koşul kapıları KİMLİĞE bakar — başlık yeniden yazılınca olay sessizce
+  /// koşulsuz hale gelmesin diye.
   static bool _canFire(EventOutcome e, EventContext ctx) {
-    switch (e.title) {
-      case 'Salgın':
+    switch (e.id) {
+      case EventIds.plague:
         return ctx.population >= 6;
-      case 'Ev Yangını':
+      case EventIds.houseFire:
         return ctx.population >= 5 && ctx.stockpile.wood >= 28;
-      case 'Hırsız':
+      case EventIds.thief:
         return ctx.stockpile.gold >= 22 ||
                ctx.hasBuilding(BuildingType.market);
       // Pozitif olaylar — küçük köyde anlamsız olmasın diye nüfus kapısı.
-      case 'Gezgin Ozan':
+      case EventIds.bard:
         return ctx.population >= 4;
-      case 'Gezgin Tüccar':
+      case EventIds.caravan:
         return ctx.population >= 5;
-      case 'Zümre Barışı':
+      case EventIds.accord:
         return ctx.population >= 6;
       default:
         return true;

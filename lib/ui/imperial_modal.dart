@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../systems/imperial.dart';
+import '../text/voice.dart';
 import 'app_ui.dart';
 
 /// İmparatorluk vergi heyetiyle pazarlık modalı. Karar ZORUNLU (boşluğa
@@ -40,12 +41,56 @@ class ImperialModal extends StatefulWidget {
 class _ImperialModalState extends State<ImperialModal> {
   bool _haggling = false;
 
+  /// Metin tohumu — TALEBE bağlı, rebuild'e değil. setState (pazarlık sekmesi)
+  /// cümleyi değiştirmesin diye Random değil, sabit bir tohum kullanılır.
+  int get _seed =>
+      (widget.demand.amount * 131 + widget.demand.kind.index * 17) & 0x7fffffff;
+
+  /// Komutanın masadaki sözü. İtibar merdiveni: yüksekte neredeyse nazik bir
+  /// memur, düşükte sıkılmış bir cellat. Sesini hiçbir kademede yükseltmez.
+  String get _commanderLine {
+    final f = widget.favor;
+    final d = widget.demand;
+    if (_haggling) {
+      return Voice.pick([
+        'Komutan kalemi bıraktı. "Söyle. Ama önce şunu bil: rakamı ben koymadım, '
+            'ben yalnız eksiğini tamamlarım."',
+        'Komutan sana ilk kez doğrudan baktı. "Dinliyorum. Kısa tut, atlar ayakta."',
+        'Komutan defteri parmağıyla tuttu. "Bir sayı söyle köylü. Yanlış sayı da '
+            'bir cevaptır, unutma."',
+      ], _seed);
+    }
+    final opener = Voice.pick(
+        f >= 0.7
+            ? const [
+                'Komutan atından indi, eldivenini çıkardı. Defteri açtı:',
+                'Komutan seni adınla selamladı, sonra defteri açtı:',
+              ]
+            : f >= 0.25
+                ? const [
+                    'Bölük meydanda dizildi. Komutan defterini açtı, satırı buldu:',
+                    'Komutan inmedi bile. Eyerden okudu:',
+                  ]
+                : const [
+                    'Askerler sıraya girdi, mızraklar indi. Komutan defteri sıkıntıyla açtı:',
+                    'Komutan bugün konuşmak istemiyor. Satırı buldu, parmağını üstüne koydu:',
+                  ],
+        _seed);
+    final close = f >= 0.7
+        ? 'Bugün de kolay geçsin.'
+        : f >= 0.25
+            ? 'Akşama kadar vaktin var.'
+            : 'Bu satır bir şekilde kapanacak. Nasıl kapanacağı senin elinde değil, '
+                'ne kadar acıyacağı senin elinde.';
+    return '$opener\n"${d.label}." ${d.bite} $close';
+  }
+
   String get _favorWord {
     final f = widget.favor;
-    if (f >= 0.7) return 'sana iyi gözle bakıyor';
-    if (f >= 0.45) return 'sana tarafsız bakıyor';
-    if (f >= 0.25) return 'senden hoşnut değil';
-    return 'sana düşman gözüyle bakıyor';
+    if (f >= 0.7) return 'adın temiz sayfada duruyor';
+    if (f >= 0.45) return 'adın yazılı, karşısı henüz boş';
+    if (f >= 0.25) return 'adının karşısına bir çentik atılmış';
+    return 'adın, silinmiş köylerin arasına yazılmış';
   }
 
   Color get _favorColor {
@@ -83,15 +128,11 @@ class _ImperialModalState extends State<ImperialModal> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text('Vergi vakti geldi',
+                      Text(_haggling ? 'Pazarlık masası' : 'Defter açıldı',
                           style: AppUi.title.copyWith(fontSize: 18)),
                       const SizedBox(height: 10),
                       Text(
-                        _haggling
-                            ? 'Komutan kaşını kaldırdı: "Ne öneriyorsun köylü? '
-                                'Dikkatli ol — sabrımı zorlama."'
-                            : 'Silahlı bir bölük meydanda. Komutan buyurdu: '
-                                '"${d.label} — derhal." ${d.isConscript ? '' : 'Ödemezsen alırız."'}',
+                        _commanderLine,
                         style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
                       ),
                       const SizedBox(height: 12),
@@ -123,7 +164,7 @@ class _ImperialModalState extends State<ImperialModal> {
           color: _favorColor,
         ),
         const SizedBox(height: 4),
-        Text('İmparatorluk $_favorWord.',
+        Text('İmparatorluğun defterinde $_favorWord.',
             style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
       ],
     );
@@ -132,24 +173,24 @@ class _ImperialModalState extends State<ImperialModal> {
   List<Widget> _mainOptions(ImperialDemand d) {
     return [
       if (d.isConscript) ...[
-        _opt('Genci teslim et', 'Bir genç askere alınır — köy yas tutar.',
+        _opt('Genci teslim et', 'Kolona katılır ve bir daha dönmez. Köy yas tutar.',
             AppUi.textMid, widget.onAccept),
         _opt(
             'Altınla kurtar · ${widget.ransomCost}★',
             widget.canRansom
-                ? 'Fidye öde, genç köyde kalır.'
-                : 'Yeterli altın yok.',
+                ? 'Keseyi tart, çocuğu bırak. İtibar da biraz kazanılır.'
+                : 'Kese bu kadarını kaldırmıyor.',
             AppUi.gold,
             widget.canRansom ? widget.onRansom : null),
       ] else ...[
         _opt(
             'Tam öde · ${d.amount}${d.icon}',
             widget.canAcceptFull
-                ? 'Talebi karşıla — güvenli, itibar artar.'
-                : 'Elindeki yetmez; ne varsa alınır.',
+                ? 'Rakamı sorgusuz kapat. En güvenli yol; itibarın yükselir.'
+                : 'Elindeki yetmiyor. Ne bulurlarsa onu alırlar.',
             AppUi.sage,
             widget.onAccept),
-        _opt('Pazarlık et', 'İtibarın yüksekse daha azı tutabilir — riskli.',
+        _opt('Pazarlık et', 'Daha düşük bir sayı söyle. İtibarın yüksekse tutar.',
             AppUi.accent, () => setState(() => _haggling = true)),
       ],
       const SizedBox(height: 8),
@@ -158,11 +199,12 @@ class _ImperialModalState extends State<ImperialModal> {
       if (widget.resistChance > 0)
         _opt(
             'Diren ve kov  ·  %${(widget.resistChance * 100).round()} başarı',
-            'Heyeti zorla kov. Tutarsa onur + ölüm yok; tutmazsa savunucular düşer.',
+            'Muhafızlar eşiğe dizilir. Tutarsa kimse ölmez, köy başını dik tutar; '
+                'tutmazsa ilk düşenler onlar olur.',
             AppUi.accent,
             widget.onResist),
-      _opt('Reddet', 'Hiçbir şey verme — ama kan dökülür.', AppUi.rust,
-          widget.onRefuse),
+      _opt('Reddet', 'Hiçbir şey verme. Bedeli komutan kendi eliyle toplar.',
+          AppUi.rust, widget.onRefuse),
     ];
   }
 
@@ -177,12 +219,12 @@ class _ImperialModalState extends State<ImperialModal> {
         _opt(
             '${(d.amount * f).round()}${d.icon} öner  (%${(f * 100).round()})',
             f >= threshold
-                ? '✓ İtibarın bu teklifi tutturmaya yeter — büyük olasılıkla kabul.'
-                : '⚠ Düşük teklif — komutan reddedip öfkelenebilir (tam ödersin).',
+                ? '✓ İtibarın bu sayıyı taşır. Kalemi büyük ihtimalle çizer.'
+                : '⚠ Bu sayı komutanı güldürür. Reddederse rakamın tamamını ödersin.',
             f >= threshold ? AppUi.sage : AppUi.rust,
             () => widget.onHaggle(f)),
       const SizedBox(height: 8),
-      _opt('Vazgeç', 'Pazarlığı bırak, baştaki seçeneklere dön.', AppUi.textLo,
+      _opt('Vazgeç', 'Ağzını açma. Baştaki seçeneklere dön.', AppUi.textLo,
           () => setState(() => _haggling = false)),
     ];
   }

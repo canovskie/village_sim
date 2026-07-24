@@ -94,7 +94,7 @@ const Map<ResourceKind, (int batch, int gold)> kMarketSellRates = {
 const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.firepit: BuildingFunction(
     role: BuildingRole.none,
-    summary: 'Köyün kalbi. Köylüler geceleri etrafında toplanır.',
+    summary: 'Köyün ilk ateşi ve hâlâ kalbi. Karanlık basınca herkes buraya toplanır; yakacak biterse sohbet de biter.',
   ),
 
   BuildingType.tent: BuildingFunction(
@@ -106,130 +106,134 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
 
   BuildingType.woodenHouse: BuildingFunction(
     role: BuildingRole.housing,
-    summary: 'Köylülere yuva. Dolu evler nüfus tavanını yükseltir.',
+    summary: 'Bir dam, bir ocak, iki yatak. Işığı yanan her ev köyün '
+        'taşıyabileceği can sayısını yukarı çeker.',
     housingCapacity: 2,
   ),
 
   BuildingType.stoneHouseBlue: BuildingFunction(
     role: BuildingRole.housing,
-    summary: 'Taş ve ahşaptan sağlam bir konut. Köy Evi\'nden geniş ve daha '
-        'huzurlu — sakinleri burada rahat eder (moral). Üç köylü barındırır.',
+    summary: 'Kalın taş duvar, kışın içeri sızmaz. Köy Evi\'nden geniş: üç kişi '
+        'sıkışmadan yaşar, sabah dinlenmiş kalkar (moral).',
     housingCapacity: 3,
   ),
 
   // stoneHouseBlue ile birebir aynı işlev — yalnız çatı rengi farklı.
   BuildingType.stoneHouseGreen: BuildingFunction(
     role: BuildingRole.housing,
-    summary: 'Taş ve ahşaptan sağlam bir konut. Köy Evi\'nden geniş ve daha '
-        'huzurlu — sakinleri burada rahat eder (moral). Üç köylü barındırır.',
+    summary: 'Kalın taş duvar, kışın içeri sızmaz. Köy Evi\'nden geniş: üç kişi '
+        'sıkışmadan yaşar, sabah dinlenmiş kalkar (moral).',
     housingCapacity: 3,
   ),
 
   BuildingType.manor: BuildingFunction(
     role: BuildingRole.housing,
-    summary: 'Köyün en görkemli evi. Geniş taş konak dört köylüye lüks bir '
-        'yuva sunar; burada yaşamak köylüyü belirgin biçimde mutlu eder.',
+    summary: 'Köyün en büyük kapısı bu konağa açılır. Dört kişi burada dar '
+        'değil geniş yaşar; içinde uyuyan kendini şanslı bilir.',
     housingCapacity: 4,
   ),
 
   BuildingType.lumberCamp: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: 'Bölgesindeki ağaçları keser, yenilerini diker. Odun üretir.',
+    summary: 'Balta sesi buradan gelir. Oduncu çevresindeki ağaçları devirir, '
+        'yerine fidan diker; kütükler istif olur, istif odun olur.',
   ),
 
   BuildingType.mineBuilding: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: 'Maden damarını kazar. Taş, demir ve kömür çıkarır.',
+    summary: 'Damarın ağzına kurulmuş bir baraka. İçeriden çekiç sesi, dışarıya taş, demir ve kömür çıkar.',
   ),
 
   BuildingType.fisherCabin: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: 'Sudan balık tutar. Doğrudan yiyecek üretir.',
+    summary: 'Suyun kıyısında bir kulübe. Balıkçı sabah ağını atar, akşam sepetini ambara boşaltır: doğrudan yiyecek.',
   ),
 
   BuildingType.mill: BuildingFunction(
     role: BuildingRole.processing,
-    summary: 'Tahılı öğütüp ekmek yapar. Çalışırken tarladan gelen her balya '
-        '+1 fazla yiyecek verir.',
+    summary: 'Kanatlar döndükçe içerisi un kokar. Değirmen çalışırken tarladan '
+        'gelen her balya +1 fazla yiyecek eder.',
   ),
 
   BuildingType.market: BuildingFunction(
     role: BuildingRole.trade,
-    summary: 'Fazla kaynakları altına çevirir. Pasif gelir + manuel satış.',
+    summary: 'Tezgâhlar, bağırışlar, terazi. Fazla neyin varsa burada altına '
+        'döner: kendiliğinden gelir getirir, istersen elinle de satarsın.',
     civicValue: 1.0, // periyodik pasif altın
   ),
 
   BuildingType.warehouse: BuildingFunction(
     role: BuildingRole.storage,
-    summary: 'Köy stoğunun taşıma kapasitesini artırır.',
+    summary: 'Serin, karanlık, tıka basa. Ambar durdukça harman yerde çürümez: köyün stok tavanı yükselir.',
     storageCapacity: 180,
   ),
 
   BuildingType.townhall: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün yönetimi. Yiyecek harcayarak yeni köylüler yetiştirir.',
+    summary: 'Mühür burada durur, defter burada tutulur. Ambardaki yiyeceği harcayıp köye yeni can katar. Deftere geçen her hüner köyün kalıcı hafızasına girer — zanaat bir daha kaybolmaz.',
     civicEffect: CivicEffect.populationGrowth,
     civicValue: 22.0, // büyüme süresi (sn)
   ),
 
   BuildingType.well: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Temiz su sağlar: evlerin su deposunu doldurur, çiftçiler ekinleri '
-        'sular (daha hızlı büyür) ve köy morali yükselir.',
+    summary: 'Kova iner, dolu çıkar. Evlerin küpü dolar, çiftçi ekinini sular '
+        '(daha hızlı büyür); temiz suyu olan köy hâlinden memnun olur.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
   ),
 
   BuildingType.tavern: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köylülerin dinlendiği yer. Morali güçlü biçimde yükseltir.',
+    summary: 'Akşam işten çıkanın uğradığı yer. Kahkaha, dedikodu, bir kadeh; köyün morali en çok buradan beslenir.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.18,
   ),
 
   BuildingType.stable: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Yük hayvanları barındırır. Taşıyıcıların hızını artırır.',
+    summary: 'Saman ve at kokusu. Yük hayvanı burada dinlenir, taşıyıcılar yolu daha kısa katar.',
     civicEffect: CivicEffect.carrierSpeed,
     civicValue: 0.15,
   ),
 
   BuildingType.barn: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: 'İnekleri barındırır. Çoban inekleri sağar ve süt → yiyecek üretir.',
+    summary: 'İnekler burada gecelenir. Çoban sabah sağar, süt ambara yiyecek olarak yazılır.',
   ),
 
   BuildingType.lamppost: BuildingFunction(
     role: BuildingRole.none,
-    summary: 'Geceleri sokağı aydınlatır. Yol kenarına dizilirse köy ışıl ışıl.',
+    summary: 'Akşam olunca kendiliğinden yanar. Yol kenarına dizilenler köyü gece haritada bir kolye gibi gösterir.',
   ),
 
   BuildingType.floristCottage: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Çiçekçi kadın etki alanındaki çiçekleri sular ve bakar; köy '
-        'morali sürekli yüksek kalır. Kulübenin etrafına doğal çiçek demetleri biter.',
+    summary: 'Çiçekçi kadın sabahtan akşama etrafındakileri sular, ayıklar, '
+        'budar. Kulübenin çevresi kendiliğinden çiçek tutar; güzel bir köyde '
+        'yaşamak morali sürekli ayakta tutar.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
   ),
 
   BuildingType.chickenCoop: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: '3-4 tavuk barındırır. Tavuklar dolaşır ve periyodik olarak '
-        'yumurta yumurtlar — kümes düzenli olarak yiyecek üretir.',
+    summary: 'Üç dört tavuk gün boyu avluda eşinir, arada yumurtlar. Kümes '
+        'gösterişsizdir ama ambara düzenli yiyecek yazar.',
   ),
 
   BuildingType.beehive: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: 'Arılar etraftaki çiçeklerden bal taşır. Menzilinde ne kadar çok '
-        'çiçek varsa o kadar hızlı bal üretir — çiçekçinin yanına yakışır. '
-        'Biriken bal köyü mutlu eder (lüks).',
+    summary: 'Vızıltı sıcak günlerde köyün arka sesidir. Arılar menzildeki her '
+        'çiçekten bal taşır: ne kadar çok çiçek, o kadar hızlı kavanoz. Bal '
+        'lükstür; lüksü olan köy kendini şanslı sayar.',
   ),
 
   BuildingType.church: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün ruh evi. Köylüler huzur ve birlik bulur, moral yükselir. '
-        'Biri hayata veda ettiğinde köy onu burada uğurlar; yanında usulca '
-        'bir mezarlık büyür.',
+    summary: 'Serin taş, mum kokusu, alçak sesler. Köy burada toplanır, burada '
+        'iyileşir; biri göçtüğünde onu buradan uğurlar. Yanı başında mezarlık '
+        'sessizce büyür.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.12,
   ),
@@ -237,30 +241,30 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   // ─── Köy Meydanı & Kültür Mahallesi ────────────────────────────────────────
   BuildingType.fountain: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün gündüz kalbi. Temiz su verir (kuyu gibi yakın evleri/ekinleri '
-        'besler) ve köylüler gün boyu başında toplanıp serinler — su erişimi '
-        'morali yukarı çeker.',
+    summary: 'Suyun şıpırtısı meydanın gündüz sesidir. Kuyu gibi yakın evleri ve '
+        'ekinleri besler; sıcakta herkes başına toplanır, serinler, konuşur.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
   ),
   BuildingType.library: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün belleği. Bir kültür ocağı: okuryazar, dingin bir köy daha '
-        'mutludur. Köyün vakanüvis defteri burada tutulur.',
+    summary: 'Köyün hafızası. Rafta ne varsa okuyan bulunur; vakanüvis defteri '
+        'de burada tutulur. Okuyan köy daha sakin, daha memnun bir köydür. Bir '
+        'zanaat yazıya geçince artık unutulmaz — usta göçse de bilgi rafta kalır.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
   ),
   BuildingType.bathhouse: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Sıcak buharlı hamam. Köylüler yıkanıp dinlenir; temizlik ve '
-        'sohbet morali tatlı tatlı yükseltir.',
+    summary: 'Buhar, mermer, uzun sohbetler. Köylü yıkanır, gevşer, dedikodusunu '
+        'eder; temiz ve dinlenmiş bir köyün morali kendiliğinden yükselir.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
   ),
   BuildingType.monument: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün gururu. Dikildiği yerde bir landmark — köylüler ondan '
-        'onur duyar, moral hafifçe yükselir.',
+    summary: 'Taşa kazınmış bir hatıra. Yolu buradan geçen başını kaldırıp bakar; '
+        'köylü ona bakınca kendini biraz daha büyük hisseder.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.06,
   ),
@@ -268,28 +272,28 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   // ─── Liman & Ziyaret Mahallesi ─────────────────────────────────────────────
   BuildingType.dock: BuildingFunction(
     role: BuildingRole.trade,
-    summary: 'Deniz kapısı. Tüccar tekneleri yanaşır; köy fazlasını denizaşırı '
-        'satar — düzenli pasif altın geliri sağlar.',
+    summary: 'Köyün denize açılan kapısı. Tüccar teknesi yanaşır, fazlan '
+        'denizaşırı gider, kese düzenli olarak şişer.',
     civicValue: 1.0, // periyodik pasif altın (market mekaniği)
   ),
   BuildingType.caravanserai: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Kervanların konak yeri. Yük hayvanları dinlenir, tüccarlar uğrar; '
-        'taşıyıcılar daha hızlı yol alır.',
+    summary: 'Kervan burada mola verir: hayvan dinlenir, tüccar uyur, avlu geceyi '
+        'yabancı dillerle geçirir. Köyün taşıyıcıları da bu düzenden hızlanır.',
     civicEffect: CivicEffect.carrierSpeed,
     civicValue: 0.15,
   ),
   BuildingType.shrine: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün ziyaretgâhı. Sessiz bir maneviyat ocağı — köylüler huzur '
-        'bulur, "yaşanası köy" morali yükselir.',
+    summary: 'Bez bağlanmış bir ziyaretgâh. Kimse yüksek sesle konuşmaz; derdi '
+        'olan uğrar, biraz hafiflemiş çıkar.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
   ),
   BuildingType.belltower: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Köyün çan kulesi. Saatleri ve törenleri çanıyla duyurur; dikilişi '
-        'köye düzen ve moral katar.',
+    summary: 'Çan vakti söyler: iş başını, töreni, tehlikeyi. Sesini duyan köy '
+        'kendini bir düzenin içinde hisseder.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.08,
   ),

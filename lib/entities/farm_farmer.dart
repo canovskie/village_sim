@@ -6,6 +6,8 @@ import 'worker_entity.dart';
 
 enum FarmerState {
   idle,
+  walkingToSow,
+  sowing,
   walkingToFarm,
   harvesting,
   walkingToWell,
@@ -18,8 +20,6 @@ class FarmFarmer extends WorkerEntity {
   FarmerState state       = FarmerState.idle;
   double      harvestPhase = 0.0;
 
-  bool harvestReady = false;
-
   /// Set when a harvest completes — main.dart reads and spawns a HayEntity.
   (int, int)? harvestHayPos;
 
@@ -27,11 +27,13 @@ class FarmFarmer extends WorkerEntity {
   double get speed => kFarmerSpeed;
 
   static const double harvestTime     = kFarmHarvestDuration;
+  static const double sowTime         = kFarmSowDuration;
   static const double _waterFetchTime = kFarmWaterFetchTime;
   static const double _waterTime      = kFarmWaterTime;
 
   FarmTile? _target;
   double    _harvestTimer = 0.0;
+  double    _sowTimer     = 0.0;
 
   bool   hasWater       = false;
   double _waterTimer    = 0.0;
@@ -56,9 +58,14 @@ class FarmFarmer extends WorkerEntity {
         _homeRow = startRow;
 
   bool get isMoving => state == FarmerState.walkingToFarm ||
+      state == FarmerState.walkingToSow ||
       state == FarmerState.walkingToWell ||
       state == FarmerState.walkingToWater;
   bool get isCarryingWater => hasWater;
+
+  /// Ekim de hasat gibi eğilip kalkma hareketi — render aynı animasyonu sürer.
+  bool get isWorkingField =>
+      state == FarmerState.harvesting || state == FarmerState.sowing;
 
   /// Su işiyle meşgul mü — kuyuya gidiyor / su alıyor / sulamaya gidiyor /
   /// suluyor. Render bu sürede çiftçinin eline su kovası çizer.
@@ -72,8 +79,9 @@ class FarmFarmer extends WorkerEntity {
       {Set<(int, int)> waterTiles    = const {},
        Set<(int, int)> softObstacles = const {},
        AnchorSystem? anchorSystem,
-       bool farmingActive            = true}) {
-    harvestReady  = false;
+       bool farmingActive            = true,
+       bool irrigate                 = true,
+       double fallowSeconds          = 0.0}) {
     harvestHayPos = null;
 
     _waterCooldown -= dt;
@@ -86,10 +94,12 @@ class FarmFarmer extends WorkerEntity {
         // (Hem diegetik kış molası hem de boş O(N) taramalardan kaçınma.)
         if (!farmingActive) break;
 
-        // Sulama turu: cooldown bitti, erişilebilir kuyu slot'u var ve
-        // sulanacak (büyüyen) ekin var. Anchor sistemi en yakın BOŞ slot'u
-        // verir — birden çok çiftçi aynı kuyuda farklı yönlerden yaklaşır.
-        if (_waterCooldown <= 0 &&
+        // Sulama turu: yalnız Su Yolu Fermanı ([irrigate]) yürürlükteyken.
+        // Cooldown bitti, erişilebilir kuyu slot'u var ve sulanacak (büyüyen)
+        // ekin var. Anchor sistemi en yakın BOŞ slot'u verir — birden çok
+        // çiftçi aynı kuyuda farklı yönlerden yaklaşır.
+        if (irrigate &&
+            _waterCooldown <= 0 &&
             anchorSystem != null &&
             anchorSystem.wellPoints.isNotEmpty &&
             tiles.any((t) => t.isGrowing)) {
@@ -114,7 +124,7 @@ class FarmFarmer extends WorkerEntity {
           }
         }
 
-        // Harvest search
+        // Önce hasat: olgunlaşmış ekin tarlada bekletilmez.
         FarmTile? best;
         double bestD = double.infinity;
         for (final t in tiles) {
@@ -129,6 +139,47 @@ class FarmFarmer extends WorkerEntity {
           best.beingHarvested = true;
           state               = FarmerState.walkingToFarm;
           _idleTimer          = 0;
+          break;
+        }
+
+        // Hasat yoksa ekim: boş (ve nadası dolmuş) toprağa tohum at.
+        FarmTile? sowBest;
+        double sowBestD = double.infinity;
+        for (final t in tiles) {
+          if (!t.readyToSow) continue;
+          final dx = t.col + 0.5 - gridX;
+          final dy = t.row + 0.5 - gridY;
+          final d  = dx * dx + dy * dy;
+          if (d < sowBestD) { sowBestD = d; sowBest = t; }
+        }
+        if (sowBest != null) {
+          _target           = sowBest;
+          sowBest.beingSown = true;
+          state             = FarmerState.walkingToSow;
+          _idleTimer        = 0;
+        }
+
+      case FarmerState.walkingToSow:
+        // Hedef arada başkasınca ekildiyse / tarla silindiyse bırak.
+        if (_target == null || !_target!.needsSowing) {
+          _target?.beingSown = false;
+          _target = null;
+          state   = FarmerState.idle;
+          break;
+        }
+        if (_moveTowards(_target!.col + 0.5, _target!.row + 0.5, dt)) {
+          state     = FarmerState.sowing;
+          _sowTimer = 0.0;
+        }
+
+      case FarmerState.sowing:
+        _sowTimer += dt;
+        harvestPhase = (harvestPhase + dt * 2 * pi * 1.0) % (2 * pi);
+        if (_sowTimer >= sowTime) {
+          _target?.sow();
+          _target      = null;
+          state        = FarmerState.idle;
+          harvestPhase = 0;
         }
 
       case FarmerState.walkingToFarm:
@@ -144,10 +195,11 @@ class FarmFarmer extends WorkerEntity {
         if (_harvestTimer >= harvestTime) {
           final hCol = _target?.col ?? gridX.round();
           final hRow = _target?.row ?? gridY.round();
-          _target?.harvest();
+          // Hasat sonrası tarla çıplak kalır → yeniden ekilmeyi bekler.
+          // Dönemli Ekim yürürlükteyse önce nadasa yatar.
+          _target?.harvest(fallowSeconds: fallowSeconds);
           _target      = null;
           state        = FarmerState.idle;
-          harvestReady = true;
           harvestPhase = 0;
           harvestHayPos = (hCol, hRow);
         }
@@ -249,6 +301,21 @@ class FarmFarmer extends WorkerEntity {
       _idleTimer = 0.1;
     }
     // walkPhase güncellemesi artık update() sonunda tek yerde (tam 2π döngüsü).
+  }
+
+  /// Kadro küçültülürken bu çiftçi listeden çıkarılmadan önce çağrılır —
+  /// tuttuğu tile ve kuyu slot'unu bırakır, yoksa tarla "biçiliyor/ekiliyor"
+  /// bayrağında ya da kuyu slot'u dolu takılı kalır.
+  void releaseClaim() {
+    _target?.beingHarvested = false;
+    _target?.beingSown = false;
+    _target = null;
+    _waterTarget = null;
+    if (_wellSlot != null && _wellPoint != null) {
+      _wellPoint!.release(_wellSlot!, this);
+      _wellSlot = null;
+      _wellPoint = null;
+    }
   }
 
   /// [true] döner = hedefe ulaştı. Path-aware: base moveTowards uzak hedefte

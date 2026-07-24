@@ -7,11 +7,27 @@ extension _ScenePlacement on _VillageSceneState {
   bool _isValidPlacement(int col, int row, BuildingType type) =>
       _placementReason(col, row, type) == null;
 
+  /// Köy bu binanın zanaatını biliyor mu? Ortak bilgi (craft == null) hep açık;
+  /// godMode her şeyi açar (dev/showcase). Menü filtresi + kilit mesajı bunu okur.
+  bool _isCraftKnown(BuildingType type) {
+    if (_godMode) return true;
+    final craft = kBuildingCraft[type];
+    return craft == null || _knownCrafts.contains(craft);
+  }
+
   /// Yerleştirme neden GEÇERSİZ — geçerliyse null, değilse oyuncuya gösterilecek
   /// Türkçe sebep (akıllı yerleştirme ipucu). `_isValidPlacement` bunu kullanır,
   /// böylece doğrulama mantığı ile mesaj asla ayrışmaz.
   String? _placementReason(int col, int row, BuildingType type) {
     final meta = kBuildingMeta[type]!;
+    // Zanaat kilidi (tek doğruluk kaynağı → hem menü hem commit hem ipucu):
+    // köy bu yapının zanaatını bilmiyorsa dikilemez.
+    if (!_isCraftKnown(type)) {
+      final craft = kBuildingCraft[type];
+      return craft != null
+          ? '${Craft.displayName(craft)} köyde henüz bilinmiyor'
+          : 'Bu zanaat köyde henüz bilinmiyor';
+    }
     if (col < 0 ||
         row < 0 ||
         col + meta.cols > kCols ||
@@ -209,24 +225,12 @@ extension _ScenePlacement on _VillageSceneState {
           }
         }
       }
-      // İşbölümü ölçeklenir: ~her 7 tile'a bir çiftçi, büyük tarlada 8'e dek.
-      // Küçük bahçe 1 çiftçiyle, geniş tarla daha çok elle işlenir.
-      final needed = (_farmTiles.length / 7).ceil().clamp(1, 8);
-      final centerC = (c1 + c2) / 2.0;
-      final centerR = (r1 + r2) / 2.0;
-      while (_farmers.length < needed) {
-        final angle = _rng.nextDouble() * 2 * pi;
-        _farmers.add(
-          FarmFarmer(
-            startCol: centerC + cos(angle) * 1.5,
-            startRow: centerR + sin(angle) * 1.5,
-          ),
-        );
-      }
       _farmMode = false;
       _farmStart = null;
       _farmEnd = null;
     });
+    // Tarla çizmek ARTIK çiftçi doğurmaz — saha eli sayısı köyün çiftçi
+    // kadrosundan + işgücü politikasından türer (_syncFarmerWorkforce, tick).
   }
 
   /// Tek tık yerleştirme: bir bina kur, ardından seçimi BIRAK. Çoklu dikim
@@ -318,7 +322,7 @@ extension _ScenePlacement on _VillageSceneState {
   /// (tam iade + tekrar koy = bedava taşıma). Ateş yeri köyün kalbi → yıkılamaz.
   void _demolishBuilding(BuildingEntity b, {double refund = 0.5, bool reselect = false}) {
     if (b.type == BuildingType.firepit) {
-      _showNotification('🔥 Ateş yeri köyün kalbi — yıkılamaz.');
+      _showNotification('🔥 Ateş yeri köyün kalbidir. Sökülmez.');
       return;
     }
     final meta = kBuildingMeta[b.type];

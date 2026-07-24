@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../buildings/craft.dart';
 import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
@@ -433,6 +434,17 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         return _emojiChip('Tartışıyor', AppUi.rust, '💢');
       case VillagerActivity.brawling:
         return _emojiChip('Kavgada', AppUi.rust, '👊');
+      // Suç evreleri (scene_crime) — panel de aynı dili konuşsun.
+      case VillagerActivity.prowling:
+        return _emojiChip('Sinsice', AppUi.rust, '🌑');
+      case VillagerActivity.committing:
+        return _emojiChip('Suçüstü', AppUi.rust, '🗝️');
+      case VillagerActivity.fleeing:
+        return _emojiChip('Kaçıyor', AppUi.rust, '💨');
+      case VillagerActivity.chasing:
+        return _emojiChip('Kovalıyor', AppUi.accent, '🏃');
+      case VillagerActivity.abducted:
+        return _emojiChip('Kaçırıldı', AppUi.rust, '⛓️');
       case VillagerActivity.none:
         return null;
     }
@@ -592,6 +604,24 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   // ─── Kişilik — mizaç + sevdiği şey + tek cümlelik künye ────────────────────
 
+  /// Birikim ustalığı satırı — köylünün en güçlü YAPI zanaatı (marangozluk/taş
+  /// ustalığı). Eşiği geçen "köyün ustası", altında "eli alışıyor". Meslek
+  /// zanaatları meslek rozetinden zaten belli, buraya girmez.
+  String? _masteryLine(VillagerEntity v) {
+    String? best;
+    double bestVal = 0;
+    v.mastery.forEach((c, val) {
+      if (val > bestVal) {
+        bestVal = val;
+        best = c;
+      }
+    });
+    if (best == null || bestVal < 3) return null;
+    final name = Craft.displayName(best!);
+    // 8 = usta eşiği (scene_craft _kMasteryHolderThreshold ile aynı fikir).
+    return bestVal >= 8 ? '⚒ köyün $name ustası' : '⚒ eli $name işine alışıyor';
+  }
+
   /// KİŞİLİK sekmesinin gövdesi — başlık/divider YOK (sekme adı üstleniyor).
   List<Widget> _personalitySection(VillagerEntity v) {
     final p = v.personality;
@@ -624,6 +654,19 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           '🌫️ gönlü bir ${v.calling.displayName.toLowerCase()} işinde',
           style: AppUi.body.copyWith(
             color: AppUi.rust,
+            fontSize: 11,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
+      // Zanaat ustalığı (birikim) — bu köylü elini bir YAPI zanaatına ne kadar
+      // alıştırdı. Eşiği geçen köyün ustasıdır (bkz. scene_craft).
+      if (_masteryLine(v) case final ml?) ...[
+        const SizedBox(height: 7),
+        Text(
+          ml,
+          style: AppUi.body.copyWith(
+            color: AppUi.accentSoft,
             fontSize: 11,
             fontStyle: FontStyle.italic,
           ),

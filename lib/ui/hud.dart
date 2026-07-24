@@ -492,14 +492,14 @@ class GameHUD extends StatelessWidget {
   String get _timeHint {
     final t = timeOfDay;
     final (phase, flavor) = switch (t) {
-      < 0.22 => ('Gece', 'Köy uyuyor — ateş başı sıcak'),
-      < 0.30 => ('Şafak söküyor', 'Köylüler birazdan uyanır'),
-      < 0.45 => ('Sabah', 'İş başı — pazar canlanır'),
-      < 0.55 => ('Öğle', 'Günün en aydınlık vakti'),
-      < 0.68 => ('Öğleden sonra', 'İşler sürüyor'),
-      < 0.78 => ('Akşam yaklaşıyor', 'Köy ateş başına toplanmaya başlar'),
-      < 0.82 => ('Gün batıyor', 'Herkes yavaşça yuvasına/yatağına döner'),
-      _      => ('Gece', 'Köy uyuyor — ateş başı sıcak'),
+      < 0.22 => ('Gece', 'Köy uyuyor. Ateş başı hâlâ sıcak.'),
+      < 0.30 => ('Şafak söküyor', 'İlk ışık damlara vurdu.'),
+      < 0.45 => ('Sabah', 'Kapılar açıldı, iş başladı.'),
+      < 0.55 => ('Öğle', 'Gölgeler en kısa hâlinde.'),
+      < 0.68 => ('Öğleden sonra', 'İşin ağır kısmı sürüyor.'),
+      < 0.78 => ('Akşam yaklaşıyor', 'Ocaklar tütmeye başladı.'),
+      < 0.82 => ('Gün batıyor', 'Herkes yavaşça kapısına dönüyor.'),
+      _      => ('Gece', 'Köy uyuyor. Ateş başı hâlâ sıcak.'),
     };
     return 'Gün $dayCount · $phase\n$flavor';
   }

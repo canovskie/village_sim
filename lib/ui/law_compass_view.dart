@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../systems/law_compass.dart';
+import '../systems/regime.dart';
 import 'app_ui.dart';
 
 /// POLİTİK PUSULA'nın görünen yüzü — Kanunname'nin başına konan pirinç kadran.
@@ -38,10 +39,25 @@ class LawCompassCard extends StatelessWidget {
   /// Defterdeki toplam ferman sayısı (sayaç için).
   final int totalLaws;
 
+  /// Rejimin oyuncuya verdiği yetki + köyün huzursuzluğu. null = rejim sistemi
+  /// bağlanmamış yüzey (harness/preview) — kart eski hâlini çizer.
+  final RegimeRule? rule;
+  final double unrest;
+
+  /// Köy yemin etmiş mi (etmişse hangi rejime).
+  final VillageRegime? sworn;
+
+  /// Yemin edilebiliyorsa çağrılır — null ise düğme çizilmez.
+  final VoidCallback? onSwearOath;
+
   const LawCompassCard({
     super.key,
     required this.sealed,
     required this.totalLaws,
+    this.rule,
+    this.unrest = 0,
+    this.sworn,
+    this.onSwearOath,
   });
 
   @override
@@ -109,12 +125,100 @@ class LawCompassCard extends StatelessWidget {
                     _tag(id.committed ? 'KÖKLEŞTİ' : 'EĞİLİM',
                         id.committed ? tint : AppUi.textLo),
                     if (id.religious) _tag('☾ DİNÎ', AppUi.accent),
+                    if (sworn != null) _tag('⚑ YEMİNLİ', AppUi.gold),
+                    if (rule != null && rule!.powerTitle.isNotEmpty)
+                      _tag(rule!.powerTitle, tint),
                   ]),
+                ],
+                if (rule != null) ...[
+                  const SizedBox(height: 9),
+                  _unrestBar(tint),
+                ],
+                if (onSwearOath != null) ...[
+                  const SizedBox(height: 9),
+                  _oathButton(id, tint),
                 ],
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Köyün sabrı — rejimin kendi çürümesi. Merkez'de (birikim yokken) hiç
+  /// çizilmez: ılımlı köyün ödemediği bir bedeli göstermek yanıltıcı olur.
+  Widget _unrestBar(Color tint) {
+    if (rule!.unrestPerDay <= 0 && unrest <= 0.02) {
+      return Text('Ilımlı köy: rejimin bedeli yok.',
+          style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo));
+    }
+    final hot = unrest >= Regime.kCrisis
+        ? AppUi.rust
+        : unrest >= Regime.kStir
+            ? AppUi.accent
+            : tint;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(children: [
+          Text('KÖYÜN SABRI',
+              style: AppUi.label.copyWith(
+                  fontSize: 7.5, color: AppUi.textLo, letterSpacing: 1.4)),
+          const Spacer(),
+          Text(Regime.unrestLabel(unrest),
+              style: AppUi.body.copyWith(fontSize: 9.5, color: hot)),
+        ]),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: SizedBox(
+            height: 5,
+            child: Stack(children: [
+              Container(color: AppUi.surface2),
+              FractionallySizedBox(
+                widthFactor: unrest.clamp(0.0, 1.0),
+                child: Container(color: hot.withValues(alpha: 0.85)),
+              ),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// KÖYÜN YEMİNİ — opt-in radikal ilan. Sinsi kayma seni ele verir, yemin
+  /// seni mühürler: rejim fermanları açılır, yetki keskinleşir, geri dönüş
+  /// pahalılaşır. Kart bunu süslemeden söyler.
+  Widget _oathButton(RegimeIdentity id, Color tint) {
+    final (title, _) = Regime.oathText(id);
+    return GestureDetector(
+      onTap: onSwearOath,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+        decoration: BoxDecoration(
+          color: tint.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: tint.withValues(alpha: 0.45)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title.isEmpty ? 'KÖYÜN YEMİNİ' : title,
+                style: AppUi.label
+                    .copyWith(fontSize: 9.5, color: tint, letterSpacing: 1.3)),
+            const SizedBox(height: 4),
+            Text(
+                'Köy kendini ilan eder: ${id.title} fermanları deftere açılır, '
+                'yetkin keskinleşir — ama bu yoldan dönüş pahalı olur.',
+                style: AppUi.body
+                    .copyWith(fontSize: 10, height: 1.4, color: AppUi.textMid)),
+          ],
+        ),
       ),
     );
   }

@@ -19,6 +19,11 @@ class ObjectivePanel extends StatelessWidget {
   final bool collapsed;
   final VoidCallback onToggleCollapse;
 
+  /// Başlığa dokununca Köy Defteri'nin TÜZÜK bölümü açılır (kademe merdiveni +
+  /// biten görevler orada). Bu pano yalnız bir "şu an ne yapıyorum" hatırlatıcı;
+  /// tam döküm defterde. Daralt/aç oku ayrı kalır.
+  final VoidCallback? onOpenLedger;
+
   const ObjectivePanel({
     super.key,
     required this.quests,
@@ -30,6 +35,7 @@ class ObjectivePanel extends StatelessWidget {
     required this.next,
     required this.collapsed,
     required this.onToggleCollapse,
+    this.onOpenLedger,
   });
 
   @override
@@ -68,35 +74,54 @@ class ObjectivePanel extends StatelessWidget {
   }
 
   Widget _header() {
-    return GestureDetector(
-      onTap: onToggleCollapse,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          Text(tierIcon, style: const TextStyle(fontSize: 14)),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(tierName.toUpperCase(),
-                overflow: TextOverflow.ellipsis,
-                style: AppUi.title.copyWith(
-                  fontSize: 12,
-                  color: AppUi.accentSoft,
-                  letterSpacing: 1.2,
-                )),
+    return Row(
+      children: [
+        // Künye kısmı → defterin TÜZÜK bölümü (tam döküm). onOpenLedger yoksa
+        // (harness/preview) eski davranış: daralt/aç.
+        Expanded(
+          child: GestureDetector(
+            onTap: onOpenLedger ?? onToggleCollapse,
+            behavior: HitTestBehavior.opaque,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: Row(
+                children: [
+                  Text(tierIcon, style: const TextStyle(fontSize: 14)),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(tierName.toUpperCase(),
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.title.copyWith(
+                          fontSize: 12,
+                          color: AppUi.accentSoft,
+                          letterSpacing: 1.2,
+                        )),
+                  ),
+                  GameIcon(GameIconData.star, size: 11, color: AppUi.sage),
+                  const SizedBox(width: 3),
+                  Text('$completedCount',
+                      style: AppUi.number
+                          .copyWith(fontSize: 11, color: AppUi.sage)),
+                ],
+              ),
+            ),
           ),
-          GameIcon(GameIconData.star, size: 11, color: AppUi.sage),
-          const SizedBox(width: 3),
-          Text('$completedCount',
-              style: AppUi.number.copyWith(fontSize: 11, color: AppUi.sage)),
-          const SizedBox(width: 7),
-          // Daralt/aç oku — yön collapsed durumuna göre döner.
-          Transform.rotate(
-            angle: collapsed ? 1.5708 : -1.5708,
-            child: GameIcon(GameIconData.chevron,
-                size: 13, color: AppUi.textLo),
+        ),
+        const SizedBox(width: 7),
+        // Daralt/aç oku — yön collapsed durumuna göre döner.
+        GestureDetector(
+          onTap: onToggleCollapse,
+          behavior: HitTestBehavior.opaque,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            child: Transform.rotate(
+              angle: collapsed ? 1.5708 : -1.5708,
+              child: GameIcon(GameIconData.chevron,
+                  size: 13, color: AppUi.textLo),
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

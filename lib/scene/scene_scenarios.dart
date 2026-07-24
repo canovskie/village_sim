@@ -129,9 +129,10 @@ extension _SceneScenarios on _VillageSceneState {
 
   void _scenarioPlague() => _runScenario('Salgın Stresi (8 dk)', 480, () {
     _buildLivingVillage();
-    final e = EventSystem.events.firstWhere((e) => e.title == 'Salgın');
+    final e = EventSystem.events.firstWhere((e) => e.id == EventIds.plague);
     _applyEventAutomatic(
       EventOutcome(
+        id: e.id,
         title: e.title,
         icon: e.icon,
         message: e.message,
@@ -150,15 +151,16 @@ extension _SceneScenarios on _VillageSceneState {
 
   void _scenarioDrought() => _runScenario('Kuraklık (8 dk)', 480, () {
     _buildLivingVillage();
-    final e = EventSystem.events.firstWhere((e) => e.title == 'Kuraklık');
+    final e = EventSystem.events.firstWhere((e) => e.id == EventIds.drought);
     _applyEventAutomatic(e);
   });
 
   void _scenarioFire() => _runScenario('Yangın (5 dk)', 300, () {
     _buildLivingVillage();
-    final e = EventSystem.events.firstWhere((e) => e.title == 'Ev Yangını');
+    final e = EventSystem.events.firstWhere((e) => e.id == EventIds.houseFire);
     _applyEventAutomatic(
       EventOutcome(
+        id: e.id,
         title: e.title,
         icon: e.icon,
         message: e.message,

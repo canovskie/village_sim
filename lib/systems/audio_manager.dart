@@ -12,6 +12,7 @@ enum Sfx {
   owl,
   birds,
   thunderClap,
+  imperialMarch, // İmparatorluk kolonu yaklaşırken — kalabalık ordu yürüyüşü
 }
 
 /// Oyunun ses motoru — iki katman:
@@ -54,6 +55,7 @@ class AudioManager {
     Sfx.owl: 0.9,
     Sfx.birds: 0.7,
     Sfx.thunderClap: 0.65,
+    Sfx.imperialMarch: 0.95, // dramatik varış anı — öne çıksın
   };
   static const Map<Sfx, String> _sfxFile = {
     Sfx.bellChime: 'bell_chime.mp3',
@@ -64,6 +66,7 @@ class AudioManager {
     Sfx.owl: 'owl.mp3',
     Sfx.birds: 'birds_singing.mp3',
     Sfx.thunderClap: 'thunder_clap.mp3',
+    Sfx.imperialMarch: 'imperial_march.mp3',
   };
 
   // Ortam taban tavanları (kaynak yüksekliğine göre).

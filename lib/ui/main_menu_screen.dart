@@ -10,6 +10,7 @@ import 'app_ui.dart';
 import 'save_slots_screen.dart';
 import 'settings_screen.dart';
 import 'sky_widgets.dart';
+import '../dev/animation_room.dart';
 
 /// Açılış ekranı — atmosferik ŞAFAK sahnesi (yeni köy = yeni başlangıç) +
 /// zarif altın başlık + temiz koyu menü paneli. Ön planda karşılayıcı köylü
@@ -33,6 +34,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   Duration _last = Duration.zero;
   double _time = 0;
   bool _hasSaves = false;
+  bool _slotsOpen = false;
 
   // Sahnedeki güneşin ekran-uzayı merkezi (ışınlar + hâle bundan türetilir).
   Offset _sunCenter(Size size) =>
@@ -54,13 +56,12 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     if (mounted) setState(() => _hasSaves = has);
   }
 
-  Future<void> _openSlots() async {
-    await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => SaveSlotsScreen(onContinue: (meta) {
-        Navigator.of(context).pop();
-        widget.onContinue(meta);
-      }),
-    ));
+  /// Kayıtlı köyler artık AYRI SAYFA değil — şafak sahnesinin üstünde overlay
+  /// pano (atmosfer kesilmesin, geri dönüş tek dokunuş/Esc).
+  void _openSlots() => setState(() => _slotsOpen = true);
+
+  void _closeSlots() {
+    setState(() => _slotsOpen = false);
     _refreshHasSaves();
   }
 
@@ -166,7 +167,11 @@ class _MainMenuScreenState extends State<MainMenuScreen>
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 380),
-                child: Padding(
+                // Menü kısa ekranda TAŞIYORDU (dar pencerede alt satırlar
+                // kırpılıyor, testte RenderFlex overflow atıyordu). Kaydırılabilir
+                // olunca yükseklik ne olursa olsun tüm satırlara ulaşılır;
+                // sığdığında görünüm değişmez (içerik yüksekliği kadar yer kaplar).
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 28),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -192,6 +197,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                             MaterialPageRoute(
                                 builder: (_) => const LightEditorScreen()),
                           ),
+                          onAnimationRoom: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                  builder: (_) => const AnimationRoomScreen())),
                           onPlacementEditor: () => Navigator.of(context).push(
                             MaterialPageRoute(
                                 builder: (_) => const PlacementEditorScreen()),
@@ -208,6 +216,16 @@ class _MainMenuScreenState extends State<MainMenuScreen>
               ),
             ),
           ),
+
+          // ── Kayıtlı köyler — sahnenin ÜSTÜNDE, sayfa değiştirmeden ─────────
+          if (_slotsOpen)
+            SaveSlotsPanel(
+              onClose: _closeSlots,
+              onContinue: (meta) {
+                setState(() => _slotsOpen = false);
+                widget.onContinue(meta);
+              },
+            ),
         ],
       ),
     );
@@ -299,7 +317,7 @@ class _TitleBlock extends StatelessWidget {
 
 class _MenuCard extends StatelessWidget {
   final VoidCallback onNewGame, onSettings, onAbout, onContinue, onLightEditor,
-      onPlacementEditor;
+      onPlacementEditor, onAnimationRoom;
   final bool hasSaves;
   const _MenuCard({
     required this.onNewGame,
@@ -309,6 +327,7 @@ class _MenuCard extends StatelessWidget {
     required this.onAbout,
     required this.onLightEditor,
     required this.onPlacementEditor,
+    required this.onAnimationRoom,
   });
 
   @override
@@ -356,6 +375,12 @@ class _MenuCard extends StatelessWidget {
             icon: GameIconData.hammer,
             label: 'EBAT EDİTÖRÜ',
             onTap: onPlacementEditor,
+          ),
+          const SizedBox(height: 9),
+          _MenuRow(
+            icon: GameIconData.play,
+            label: 'ANİMASYONLAR',
+            onTap: onAnimationRoom,
           ),
         ],
       ),

@@ -39,21 +39,46 @@ extension _SceneWorld on _VillageSceneState {
     return null;
   }
 
-  /// Tile merkezine en yakın görünür köylüyü döndür (mesafe < 0.7 tile).
-  /// Bina içindeyse veya çok uzaksa null. Tıklama hedefi olarak kullanılır.
-  VillagerEntity? _villagerAt(int col, int row) {
-    final cx = col + 0.5;
-    final cy = row + 0.5;
+  /// EKRAN-uzayı köylü hit testi: tıklamayı köylünün ayak tile'ıyla değil,
+  /// ÇİZİLEN sprite gövdesiyle karşılaştırır. İzometride sprite ayak
+  /// noktasından ekranda YUKARI uzar — eski tile-bazlı test gövdeye/kafaya
+  /// tıklamayı hep kaçırıyordu (ekranda yukarı = grid'de çapraz komşu tile).
+  ///
+  /// Kritik UX kuralı: sprite ne kadar küçük/uzak olursa olsun her köylünün
+  /// EKRANDA garanti bir dokunma yarıçapı olur (min ~26px) → parmak/imleç
+  /// hedefi asla iğne deliğine düşmez (eski hata: gerçek gövde ~9px'e
+  /// büzülüyordu). Sprite büyükse kutu büyür, küçükse taban yarıçap devreye
+  /// girer. En yakın görsel-merkez kazanır; üst üste binenlerde önde çizilen
+  /// (depth büyük) öncelikli. `pos` doğrudan ekran (post-zoom) koordinatı —
+  /// d.localPosition ile aynı uzay, dönüşüm gerekmez.
+  VillagerEntity? _villagerAtScreen(Offset pos) {
+    final center = Offset(_viewSize.width / 2, _viewSize.height / 2);
     VillagerEntity? best;
-    double bestD2 = 0.49; // 0.7² eşik
+    double bestScore = double.infinity; // küçük = daha iyi (merkeze yakınlık)
+    double bestDepth = double.negativeInfinity;
     for (final v in _villagers) {
       if (v.isInsideBuilding) continue;
-      final dx = v.gridX - cx;
-      final dy = v.gridY - cy;
-      final d2 = dx * dx + dy * dy;
-      if (d2 < bestD2) {
-        bestD2 = d2;
+      // Köylünün EKRANDAKI (zoom uygulanmış) ayak konumu.
+      final world = gridToScreen(v.renderX, v.renderY, _viewSize, _camera);
+      final feet = (world - center) * _zoom + center;
+      final sc = kCharScale * v.lifeStage.renderScale * _zoom;
+      // Sprite görsel merkezi: ayaktan ~36 birim yukarı (gövde ortası).
+      final cy = feet.dy - 36 * sc;
+      // Ekran yarı-uzanımları (sprite büyüdükçe büyür) + garanti taban.
+      final halfW = (16.0 * sc).clamp(15.0, 60.0);
+      final halfH = (42.0 * sc).clamp(20.0, 90.0);
+      final dx = (pos.dx - feet.dx).abs();
+      final dy = (pos.dy - cy).abs();
+      if (dx > halfW || dy > halfH) continue; // gövde kutusu dışında
+      // Skor: normalize edilmiş merkeze uzaklık (en isabetli tık kazanır).
+      final score = (dx / halfW) * (dx / halfW) + (dy / halfH) * (dy / halfH);
+      // Üst üste binen sprite'larda önde çizilen (depth büyük) öncelikli;
+      // aynı depth'te merkeze en yakın.
+      if (v.depth > bestDepth + 0.001 ||
+          (v.depth > bestDepth - 0.001 && score < bestScore)) {
         best = v;
+        bestScore = score;
+        bestDepth = v.depth;
       }
     }
     return best;
@@ -248,10 +273,14 @@ extension _SceneWorld on _VillageSceneState {
     _petitionFollowUps.clear();
     _petitionCooldowns.clear();
     _villageMemory.clear();
-    _divanOpen = false;
-    _councilSession = null;
-    _councilSpeaker = null;
-    _councilCooldownUntil = 0;
+    // Yeni köy hiçbir zanaat bilmez — yalnız ortak survival kiti açık. Gerisi
+    // köyün insanlarından organik doğar (çağrı/birikim/dışarıdan).
+    _knownCrafts.clear();
+    _ledgerSection = null;
+    _lawRitual = null;
+    _policies.restoreSealed(const []); // defter boş: yeni köy, yeni hüküm
+    _policies.inkDryUntilSim = 0;
+    _inkDryTotal = 0;
     _governanceLegacy = 0;
 
     _stockpile.clear();

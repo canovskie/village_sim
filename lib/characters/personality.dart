@@ -195,56 +195,57 @@ VillagerType callingFor(Personality p, int seed) {
   return tied[seed.abs() % tied.length];
 }
 
-/// Sevdiği şeye göre künye havuzu — sıcak, tek cümlelik. Seed havuzdan seçer.
+/// Sevdiği şeye göre künye havuzu — bir cümlelik SOMUT insan detayı (alışkanlık,
+/// eşya, kusur), açıklama değil. Seed havuzdan seçer.
 const Map<Likes, List<String>> _backstories = {
   Likes.fire: [
-    'Akşamları ateşin çıtırtısında huzur bulur.',
-    'En sevdiği yer, alevin ısıttığı o küçük çember.',
-    'Karanlık çökünce gözleri hep ateşi arar.',
+    'Elini alevlere fazla yaklaştırır; parmak uçlarında eski yanık izleri var.',
+    'Ateşi hep o tutuşturur. Başkası denerse tepesi atar.',
+    'Karanlık çökünce sırtını rüzgâra, yüzünü kora çevirir.',
   ],
   Likes.stories: [
-    'Eski bir masalı dinlemek için her şeyi bırakır.',
-    'Anlatılan her hikâyeyi yıllarca aklında tutar.',
-    'Bir gün kendi öyküsünün anlatılmasını diler.',
+    'Duyduğu masalı bir daha anlatır, her seferinde biraz uzatır.',
+    'Anlatıcı susunca ilk soruyu hep o sorar.',
+    'Bir gün kendi adının da anlatılacağını umuyor, ama kimseye söylemiyor.',
   ],
   Likes.company: [
-    'Kalabalığın sıcaklığı olmadan duramaz.',
-    'Bir gülüşü paylaşmak ona yeter.',
-    'Yalnız bir akşamı asla sevmedi.',
+    'Tek kişilik sofraya oturmaz; bir bahane uydurup komşu kapısını çalar.',
+    'Kalabalıkta pek konuşmaz. Orada olmak yeter ona.',
+    'Herkesin adını bilir, kimin neyi sevmediğini de.',
   ],
   Likes.flowers: [
-    'Yol kenarındaki her çiçeğe eğilip bakar.',
-    'Evinin önünü çiçeklendirmek en büyük zevki.',
-    'Baharın ilk tomurcuğunu herkesten önce görür.',
+    'Pencere önündeki kırık testide her zaman taze bir dal durur.',
+    'Kokusuna göre ayırır çiçekleri; adlarını çoğu zaman karıştırır.',
+    'Baharın ilk tomurcuğunu herkesten önce görür ve kimseye söylemez.',
   ],
   Likes.fishing: [
-    'Suyun kıyısında saatlerce oturabilir.',
-    'Denizi özler, sular onu çağırır.',
-    'Durgun bir gölün yüzü onu büyüler.',
+    'Kıyıda saatlerce oturur; oltasının ucu çoğu gün boş döner, umursamaz.',
+    'Ayakkabılarının içi hep nemlidir.',
+    'Su sesi olmayan bir gecede zor uyuyor.',
   ],
   Likes.animals: [
-    'Sürünün arasında kendini evinde hisseder.',
-    'Her kuzuya bir ad takar.',
-    'Hayvanların dilinden anladığına inanır.',
+    'Her kuzuya ad takar, sonra hepsini birbirine karıştırır.',
+    'Hayvanlar onun elinden ilk günden yem alır; kimse sebebini bilmiyor.',
+    'Cebinde daima bir tutam arpa taşır.',
   ],
   Likes.harvest: [
-    'Dolu bir ambardan daha güzel bir şey bilmez.',
-    'Toprağın kokusu içini ısıtır.',
-    'Hasat vakti gözleri parlar.',
+    'Ambarı sebepsiz açar, içine bakar, kapatır.',
+    'Toprağı avucuna alıp koklar; yağmuru bir gün önceden bildiğini söyler.',
+    'Hasat vakti geldi mi geceyi birkaç saatlik uykuyla geçirir.',
   ],
   Likes.market: [
-    'Pazarın curcunasında pazarlık etmeye bayılır.',
-    'Bir kese altının şıkırtısı onu mutlu eder.',
-    'En iyi takası yapmakla övünür.',
+    'Pazarlıkta acele etmez; karşısındakini bıktırıp fiyatı kırar.',
+    'Kesesini saymadan yatmaz.',
+    'Bir kez kötü takas yaptı, yıllardır anlatıyor.',
   ],
   Likes.solitude: [
-    'Tek başına bir yürüyüş ona dünyaları değer.',
-    'Sessizlikte kendi düşüncelerine sığınır.',
-    'Kalabalıktan sıyrılıp ufka bakmayı sever.',
+    'Kalabalıktan sıyrılıp tepeye çıkar, nereye gittiğini söylemez.',
+    'Az konuşuyor diye kimseye küs değil. Öyle işte.',
+    'Yemeğini çoğu akşam eşikte, tek başına yer.',
   ],
   Likes.stars: [
-    'Berrak gecelerde başını göğe çevirip kaybolur.',
-    'Yıldızların bir gün ona yol göstereceğine inanır.',
-    'Her takımyıldıza kendi adını koymuş.',
+    'Berrak gecelerde damda uyuyakalır; sabah üstü çiy içinde bulunur.',
+    'Takımyıldızlara kendi adlarını koymuş, listeyi kimseye göstermiyor.',
+    'Yıldız kayınca dileğini yüksek sesle söyler, sonra utanır.',
   ],
 };

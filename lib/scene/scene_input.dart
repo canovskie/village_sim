@@ -3,6 +3,19 @@ part of '../main.dart';
 /// Oyun canvas'ı pointer/gesture input işleyicileri.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneInput on _VillageSceneState {
+  // ── Mezar başı + kavgadan çekme metinleri ([[lib/text/voice.dart]]) ────────
+
+  static const _kGravePool = [
+    '🕯️ Burada {merhum} yatıyor.',
+    '🕯️ {merhum-in} taşı. Üstünde kurumuş bir demet var.',
+    '🕯️ {merhum} bu toprakta. Köy adını unutmadı.',
+  ];
+  static const _kPulledFromFightPool = [
+    '✋ {ad-i} kavgadan çekip aldın.',
+    '✋ {ad} yumruğunu indirdi.',
+    '✋ {ad} kavgadan koparıldı, hâlâ nefes nefese.',
+  ];
+
   // ── Mouse scroll wheel ile zoom ────────────────────────────────────────────
 
   void _onCanvasPointerSignal(PointerSignalEvent event) {
@@ -132,17 +145,14 @@ extension _SceneInput on _VillageSceneState {
       // Tutup-bırak SADECE kavga anında — yalnız dövüşen (ağız dalaşı/yumruklaşma)
       // bir köylü kavranabilir (onu kavgadan çekip ayır). Diğer zamanlarda
       // köylü sürüklenemez; sürükleme serbest moda (kamera) düşer.
-      final tile = _toTile(d.localFocalPoint);
-      if (tile != null) {
-        final v = _villagerAt(tile.$1, tile.$2);
-        if (v != null &&
-            !v.isDying &&
-            !v.isInsideBuilding &&
-            (v.activity == VillagerActivity.brawling ||
-                v.activity == VillagerActivity.arguing)) {
-          _draggedVillager = v;
-          _dragMovedVillager = false;
-        }
+      final v = _villagerAtScreen(d.localFocalPoint);
+      if (v != null &&
+          !v.isDying &&
+          !v.isInsideBuilding &&
+          (v.activity == VillagerActivity.brawling ||
+              v.activity == VillagerActivity.arguing)) {
+        _draggedVillager = v;
+        _dragMovedVillager = false;
       }
     }
   }
@@ -231,7 +241,8 @@ extension _SceneInput on _VillageSceneState {
         v.chatBubbleTime = 1.5;
         v.feel(NpcEmotion.content, 2.0, moodDelta: 0.04);
         v.conflictCooldown = 90.0 + _rng.nextDouble() * 60.0;
-        _showNotification('✋ ${v.name} kavgadan çekildi.');
+        _showNotification(Voice.say(_kPulledFromFightPool,
+            _voice(v, seed: _stableSeed('çek${v.name}', _dayCount))));
       }
       _draggedVillager = null;
       _dragMovedVillager = false;
@@ -313,33 +324,47 @@ extension _SceneInput on _VillageSceneState {
     } else if (_placing != null) {
       _tryPlace(d.localPosition);
     } else {
-      // Seçim: önce bina, yoksa NPC, yoksa hiçbir şey.
+      // Seçim: önce NPC (ekran-uzayı sprite hit — bina önünde duran köylü
+      // görsel olarak öndedir, tıklama ona gider), sonra bina, sonra mezar.
+      final v = _villagerAtScreen(d.localPosition);
       final tile = _toTile(d.localPosition);
-      if (tile != null) {
+      if (v != null) {
+        // SUÇÜSTÜ: suç işlemekte olan faile dokunmak onu yakalar (seçmez).
+        // Sinsi yaklaşma/eylem/kaçış boyunca geçerli — pencere kaçarsa fail
+        // meçhul kalır (bkz. scene_crime).
+        if (_isCriminalInAct(v)) {
+          _catchCriminal(v);
+        } else if (v.activity == VillagerActivity.brawling ||
+            v.activity == VillagerActivity.arguing) {
+          // Doğrudan müdahale: dövüşen köylüye tıklayınca seçmek yerine kavgayı
+          // ayır (kavgalar anlık/geçici → tıklama o an müdahaleye ayrılır).
+          _interveneConflict(v);
+        } else {
+          setStateHere(() {
+            _selectedVillager = v;
+            _selectedBuilding = null;
+          });
+        }
+      } else if (tile != null) {
         final b = _buildingAt(tile.$1, tile.$2);
+        // Köylü/bina yoksa: mezara tıklandıysa burada yatanı an (seçim değişmez).
+        final g = b == null ? _graveAt(tile.$1, tile.$2) : null;
         if (b != null) {
           setStateHere(() {
             _selectedBuilding = b;
             _selectedVillager = null;
           });
+        } else if (g != null) {
+          _showNotification(Voice.say(
+              _kGravePool,
+              _voice(null,
+                  seed: _stableSeed('mezar${g.name}', _dayCount),
+                  extra: {'merhum': g.name})));
         } else {
-          final v = _villagerAt(tile.$1, tile.$2);
-          // Köylü yoksa: mezara tıklandıysa burada yatanı an (seçim değişmez).
-          final g = v == null ? _graveAt(tile.$1, tile.$2) : null;
-          // Doğrudan müdahale: dövüşen köylüye tıklayınca seçmek yerine kavgayı
-          // ayır (kavgalar anlık/geçici → tıklama o an müdahaleye ayrılır).
-          if (v != null &&
-              (v.activity == VillagerActivity.brawling ||
-                  v.activity == VillagerActivity.arguing)) {
-            _interveneConflict(v);
-          } else if (g != null) {
-            _showNotification('🕯️ Burada ${g.name} yatıyor — köy onu anıyor.');
-          } else {
-            setStateHere(() {
-              _selectedVillager = v;
-              _selectedBuilding = null;
-            });
-          }
+          setStateHere(() {
+            _selectedVillager = null;
+            _selectedBuilding = null;
+          });
         }
       } else {
         setStateHere(() {
@@ -367,27 +392,26 @@ extension _SceneInput on _VillageSceneState {
       _clearHover();
       return;
     }
-    // Boş elde: bina/NPC üstüne gelince ad + durum etiketi.
+    // Boş elde: NPC/bina üstüne gelince ad + durum etiketi. NPC önce —
+    // tıklama önceliğiyle tutarlı (sprite bina önünde görünür).
     final tile = _toTile(e.localPosition);
     String? title, sub;
-    if (tile != null) {
+    final v = _villagerAtScreen(e.localPosition);
+    if (v != null) {
+      title = v.name;
+      sub = v.homeBuilding == null
+          ? '${v.type.displayName} · evsiz'
+          : v.type.displayName;
+    } else if (tile != null) {
       final b = _buildingAt(tile.$1, tile.$2);
       if (b != null) {
         title = kBuildingMeta[b.type]?.label ?? '?';
         sub = _buildingHoverSub(b);
       } else {
-        final v = _villagerAt(tile.$1, tile.$2);
-        if (v != null) {
-          title = v.name;
-          sub = v.homeBuilding == null
-              ? '${v.type.displayName} · evsiz'
-              : v.type.displayName;
-        } else {
-          final g = _graveAt(tile.$1, tile.$2);
-          if (g != null) {
-            title = '🕯️ ${g.name}';
-            sub = 'huzur içinde yatıyor';
-          }
+        final g = _graveAt(tile.$1, tile.$2);
+        if (g != null) {
+          title = '🕯️ ${g.name}';
+          sub = 'huzur içinde yatıyor';
         }
       }
     }

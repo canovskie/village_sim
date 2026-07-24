@@ -6,6 +6,7 @@ import '../characters/villager_type.dart';
 import '../characters/life_stage.dart';
 import '../rendering/portrait_renderer.dart';
 import 'app_ui.dart';
+import 'option_scene_card.dart';
 import 'petition_scene_card.dart';
 
 /// Köyden gelen bir ricanın oyuncu-yüzlü karşılığı — Meclis önüne gelen
@@ -38,6 +39,14 @@ class PetitionModal extends StatelessWidget {
   /// / "meclisi dağıt"). forced iken gösterilmez.
   final String dismissHint;
 
+  /// VETO — hür rejimde oyuncunun kaba kuvveti: dilekçe hiç karara bağlanmadan
+  /// düşer, meşruiyet bedeli ödenir (bkz. scene_regime._vetoPetition).
+  /// null = veto yok (baskı rejiminde zaten söz senin; ılımlı köyde gereksiz).
+  final VoidCallback? onVeto;
+
+  /// Veto düğmesinin altına yazılan bedel — "moral düşer, haneler küser".
+  final String vetoNote;
+
   const PetitionModal({
     super.key,
     required this.petition,
@@ -49,7 +58,39 @@ class PetitionModal extends StatelessWidget {
     this.onAuthorTap,
     this.kicker = 'DİLEKÇE',
     this.dismissHint = 'boşluğa dokun — kararı sonraya bırak',
+    this.onVeto,
+    this.vetoNote = '',
   });
+
+  /// VETO satırı — seçeneklerin ALTINDA, bilerek sönük: bu bir şık değil,
+  /// şıkları reddetmek. Meşruiyeti olan bir rejimde bunun bir faturası var.
+  Widget _vetoRow() => GestureDetector(
+        onTap: onVeto,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(color: AppUi.rust.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('✋  DİLEKÇEYİ REDDET',
+                  style: AppUi.label.copyWith(
+                      fontSize: 9.5, color: AppUi.rust, letterSpacing: 1.3)),
+              if (vetoNote.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(vetoNote,
+                    textAlign: TextAlign.center,
+                    style: AppUi.body
+                        .copyWith(fontSize: 9.5, color: AppUi.textLo)),
+              ],
+            ],
+          ),
+        ),
+      );
 
   /// Dilekçe tonuna göre vurgu rengi — etiket/stakes/aksan renklendirmesi.
   Color get _toneAccent => switch (petition.tone) {
@@ -125,16 +166,18 @@ class PetitionModal extends StatelessWidget {
                                 _VillageStateStrip(state: state!),
                               ],
                               const SizedBox(height: 14),
-                              for (int i = 0;
-                                  i < petition.options.length;
-                                  i++) ...[
-                                _PetitionOptionCard(
-                                  option: petition.options[i],
-                                  accent: _toneAccent,
-                                  onTap: () => onChoose(petition.options[i]),
-                                ),
-                                if (i != petition.options.length - 1)
-                                  const SizedBox(height: 9),
+                              // Kararlar YATAY kart şeridi — her kart eylemi
+                              // canlandıran 2B sahneyle taçlanır (Reigns/Total
+                              // War kart hissi). 2 seçenekte yan yana sığar,
+                              // 4-5'te yatay kaydırılır.
+                              _OptionStrip(
+                                options: petition.options,
+                                accent: _toneAccent,
+                                onChoose: onChoose,
+                              ),
+                              if (onVeto != null) ...[
+                                const SizedBox(height: 10),
+                                _vetoRow(),
                               ],
                               const SizedBox(height: 12),
                               // Ambient'te ertelenebilir; zorunlu huzurda köy
@@ -572,24 +615,104 @@ class _StakesLine extends StatelessWidget {
   }
 }
 
-/// Bir dilekçe seçeneği — Total War karar kartı: solda mühür-numarası, ortada
-/// kararın başlığı + tek-satır flavor (asgari metin), altında kararın
-/// SONUÇLARI büyük ikon tabletleri olarak (ikon konuşur). Hover'da ton-aksanlı
-/// kenar + parıltı, üç ok ileri kayar.
-class _PetitionOptionCard extends StatefulWidget {
+/// Kararlar YATAY kart şeridi. Her seçenek eylemini canlandıran 2B sahneyle
+/// taçlanmış bir kart (Reigns/Total War hissi). Az seçenek (2) ortalanır ve
+/// panele yayılır; çok seçenek (4-5) yatay kaydırılır — kenarda soluk bir
+/// gradyan "devamı var" der.
+class _OptionStrip extends StatefulWidget {
+  final List<PetitionOption> options;
+  final Color accent;
+  final void Function(PetitionOption) onChoose;
+  const _OptionStrip({
+    required this.options,
+    required this.accent,
+    required this.onChoose,
+  });
+  @override
+  State<_OptionStrip> createState() => _OptionStripState();
+}
+
+class _OptionStripState extends State<_OptionStrip> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final opts = widget.options;
+    // 3'e kadar seçenek panele sığar → yay (Expanded). Fazlası kaydırılır.
+    final fits = opts.length <= 3;
+
+    Widget card(PetitionOption o) => _OptionCard(
+          option: o,
+          accent: widget.accent,
+          onTap: () => widget.onChoose(o),
+        );
+
+    if (fits) {
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (int i = 0; i < opts.length; i++) ...[
+              Expanded(child: card(opts[i])),
+              if (i != opts.length - 1) const SizedBox(width: 9),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // Kaydırmalı şerit — sabit kart genişliği + kenar "devamı var" ipucu.
+    return SizedBox(
+      height: 214,
+      child: ShaderMask(
+        shaderCallback: (rect) => const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color(0x00000000),
+            Color(0xFFFFFFFF),
+            Color(0xFFFFFFFF),
+            Color(0x00000000),
+          ],
+          stops: [0.0, 0.035, 0.965, 1.0],
+        ).createShader(rect),
+        blendMode: BlendMode.dstIn,
+        child: ListView.separated(
+          controller: _scroll,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          itemCount: opts.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 9),
+          itemBuilder: (_, i) => SizedBox(width: 156, child: card(opts[i])),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tek karar kartı — üstte eylemi canlandıran 2B sahne (bağışla/cezalandır/
+/// sür/idam/kürek), altında başlık + kısa flavor + SONUÇ ikon tabletleri.
+/// Hover'da ton-aksanlı kenar + parıltı; dokun = kararı uygula.
+class _OptionCard extends StatefulWidget {
   final PetitionOption option;
   final Color accent;
   final VoidCallback onTap;
-  const _PetitionOptionCard({
+  const _OptionCard({
     required this.option,
     required this.accent,
     required this.onTap,
   });
   @override
-  State<_PetitionOptionCard> createState() => _PetitionOptionCardState();
+  State<_OptionCard> createState() => _OptionCardState();
 }
 
-class _PetitionOptionCardState extends State<_PetitionOptionCard> {
+class _OptionCardState extends State<_OptionCard> {
   bool _hover = false;
 
   @override
@@ -604,13 +727,12 @@ class _PetitionOptionCardState extends State<_PetitionOptionCard> {
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
+          duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.fromLTRB(10, 10, 12, 11),
           decoration: BoxDecoration(
             color: _hover
                 ? Color.alphaBlend(
-                    accent.withValues(alpha: 0.14), AppUi.surface2)
+                    accent.withValues(alpha: 0.12), AppUi.surface2)
                 : AppUi.surface1,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
@@ -618,74 +740,107 @@ class _PetitionOptionCardState extends State<_PetitionOptionCard> {
               width: _hover ? 1.5 : 1,
             ),
             boxShadow: _hover
-                ? [BoxShadow(color: accent.withValues(alpha: 0.25), blurRadius: 10)]
+                ? [BoxShadow(color: accent.withValues(alpha: 0.28), blurRadius: 12)]
                 : null,
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Mühür çubuğu — hover'da ton rengine kızışır.
-              Container(
-                width: 4,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _hover ? accent : AppUi.accentDeep,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Üst: eylem sahnesi (kartın başrolü).
+                Stack(
                   children: [
-                    Text(o.label, style: AppUi.bodyHi.copyWith(fontSize: 13.5)),
-                    const SizedBox(height: 2),
-                    Text(o.detail,
+                    OptionSceneCard(scene: optionSceneFor(o), height: 84),
+                    // Alt okunaklılık zemini (başlık sahneye binmesin).
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 34,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0x00000000), Color(0xCC14171C)],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 10,
+                      right: 10,
+                      bottom: 7,
+                      child: Text(
+                        o.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppUi.body
-                            .copyWith(fontSize: 10, color: AppUi.textLo)),
-                    // SONUÇLAR — ikon tabletleri (kararın bedeli/faydası görsel).
-                    if (chips.isNotEmpty) ...[
-                      const SizedBox(height: 7),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [for (final d in chips) _effectTablet(d.$1, d.$2)],
+                        style: AppUi.bodyHi.copyWith(
+                          fontSize: 13.5,
+                          shadows: const [
+                            Shadow(color: Color(0xCC000000), blurRadius: 6)
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              GameIcon(GameIconData.chevron,
-                  size: 16, color: _hover ? accent : AppUi.textLo),
-            ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(11, 8, 11, 11),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        o.detail,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.body.copyWith(
+                            fontSize: 10, height: 1.35, color: AppUi.textLo),
+                      ),
+                      if (chips.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 5,
+                          runSpacing: 5,
+                          children: [
+                            for (final d in chips) _effectTablet(d.$1, d.$2)
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// Tek sonuç tableti — büyük ikon + delta, sonucun rengiyle dolu. Total War'ın
-  /// "etki ikonu" dili: oyuncu kararın bedelini/faydasını okumadan görür.
+  /// Tek sonuç tableti — ikon + delta, sonucun rengiyle. Kararın bedeli/faydası
+  /// okunmadan görülür.
   Widget _effectTablet(String icon, String label) {
     final color = _chipColor((icon, label));
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 14)),
-          const SizedBox(width: 5),
+          Text(icon, style: const TextStyle(fontSize: 12.5)),
+          const SizedBox(width: 4),
           Text(label,
-              style: AppUi.number.copyWith(fontSize: 12, color: color)),
+              style: AppUi.number.copyWith(fontSize: 11, color: color)),
         ],
       ),
     );

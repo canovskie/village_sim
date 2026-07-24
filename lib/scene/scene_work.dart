@@ -49,17 +49,36 @@ extension _SceneWork on _VillageSceneState {
   /// Değirmende çalışan değirmenci varken balya verimi çarpanı.
   static const double _kMillerYieldBonus = 1.25;
 
+  /// Muhafızın nöbet noktaları — köyün kıymetli/kalabalık yerleri (suçun hedef
+  /// aldığı yerler). Muhafız bunlar arasında dolaşır; suç çıkarsa üstüne koşar
+  /// (kovalama scene_crime'da: `_guardResponse`).
+  static const List<BuildingType> _kWatchPosts = [
+    BuildingType.warehouse,
+    BuildingType.market,
+    BuildingType.barn,
+    BuildingType.firepit,
+  ];
+
+  /// Muhafızın post değiştirme periyodu (sn) — devriye hissi.
+  static const double _kWatchRotate = 30.0;
+
   /// Bu meslek kendi iş döngüsünü sürüyor mu?
   bool _hasJobLoop(VillagerEntity v) =>
-      v.canRunErrands &&
-      (v.type == VillagerType.shepherd ||
-          v.type == VillagerType.hunter ||
-          v.type == VillagerType.miller ||
-          v.type == VillagerType.innkeeper ||
-          v.type == VillagerType.priest);
+      // Üstlenilmiş bina-işi (inşaat/tarla/maden…) — rutin/wander ona dokunmasın.
+      v.hasActiveJob ||
+      (v.canRunErrands &&
+          (v.type == VillagerType.shepherd ||
+              v.type == VillagerType.hunter ||
+              v.type == VillagerType.miller ||
+              v.type == VillagerType.innkeeper ||
+              v.type == VillagerType.priest ||
+              v.type == VillagerType.guard));
 
   /// Şu an GERÇEKTEN yapacak iş var mı? Yoksa rutin devralsın.
   bool _workTaskAvailable(VillagerEntity v) {
+    // Üstlenilmiş iş her zaman "yapılacak iş"tir (site'ta çakılı kalsın, rutin
+    // errand atamasın). Gündüz/gece ayrımı iş yürütücüsünde (uyku askıya alır).
+    if (v.hasActiveJob) return true;
     if (_cycle.dayLight <= 0.35) return false; // iş gündüz
     switch (v.type) {
       case VillagerType.shepherd:
@@ -73,9 +92,27 @@ extension _SceneWork on _VillageSceneState {
         return _postReachable(BuildingType.tavern, v);
       case VillagerType.priest:
         return _postReachable(BuildingType.church, v);
+      case VillagerType.guard:
+        // Nöbet tutulacak bir yer varsa muhafızın işi HEP vardır.
+        return _watchPost(v) != null;
       default:
         return false;
     }
+  }
+
+  /// Muhafızın o an nöbet tutacağı bina — ulaşılabilir postlar arasında zamanla
+  /// DÖNER (her ~30 sn başka bir noktaya geçer → sabit heykel değil, devriye).
+  /// Dönüş sırası köylüye göre kaydırılır ki iki muhafız aynı yerde toplanmasın.
+  /// Post yoksa null → rutin devralır (köylü ulaşılamaz binaya bakıp donmaz).
+  BuildingEntity? _watchPost(VillagerEntity v) {
+    final reachable = <BuildingEntity>[];
+    for (final t in _kWatchPosts) {
+      final b = _nearestOf(t, v);
+      if (b != null && _standSpotFor(b, v) != null) reachable.add(b);
+    }
+    if (reachable.isEmpty) return null;
+    final turn = (_time / _kWatchRotate).floor() + v.name.hashCode.abs();
+    return reachable[turn % reachable.length];
   }
 
   /// İşyeri var VE yanına yürünebilir mi? İkisi de yoksa iş "yok" sayılır →
@@ -110,6 +147,10 @@ extension _SceneWork on _VillageSceneState {
     if (_cycle.dayLight <= 0.35) return; // gece: uyku/rutin sistemi devralır
 
     for (final v in _villagers) {
+      // Üstlenilmiş bina-işi olan köylüyü civil döngü SÜRMEZ — onu _tickJobs
+      // yürütür (yoksa çoban-tipli bir inşaatçı hem güder hem inşa eder → çift
+      // goTo çakışması).
+      if (v.hasActiveJob) continue;
       if (!_hasJobLoop(v)) continue;
       if (v.isInsideBuilding ||
           v.isSleeping ||
@@ -130,6 +171,8 @@ extension _SceneWork on _VillageSceneState {
           _workHost(v, BuildingType.tavern, '🍺', NpcEmotion.joy);
         case VillagerType.priest:
           _workHost(v, BuildingType.church, '🕯️', NpcEmotion.content);
+        case VillagerType.guard:
+          _workGuard(v);
         default:
           break;
       }
@@ -146,6 +189,14 @@ extension _SceneWork on _VillageSceneState {
     final taverns = _buildings.where((b) => b.type == BuildingType.tavern).length;
     final churches = _buildings.where((b) => b.type == BuildingType.church).length;
     sb.write('b[mill=$mills tavern=$taverns church=$churches] ');
+    // Soy dökümü — "tek aile ile başla" doğrulaması (hane sayısı + kimler).
+    final fam = <String, int>{};
+    for (final v in _villagers) {
+      if (v.isDying) continue;
+      fam[v.surname.isEmpty ? '(yok)' : v.surname] =
+          (fam[v.surname.isEmpty ? '(yok)' : v.surname] ?? 0) + 1;
+    }
+    sb.write('aile=${fam.length} ${fam.entries.map((e) => '${e.key}:${e.value}').join(',')} ');
     sb.write('food=${_stockpile.food}');
     if (_cows.isNotEmpty) {
       final avg = _cows.fold<double>(0, (s, a) => s + a.hunger) / _cows.length;
@@ -320,6 +371,34 @@ extension _SceneWork on _VillageSceneState {
       }
     }
     return 1.0;
+  }
+
+  // ── MUHAFIZ — nöbet noktaları arasında devriye gezer ──────────────────────
+  /// Muhafız köyün kıymetli noktalarında (depo/pazar/ağıl/ateş) nöbet tutar ve
+  /// zamanla post değiştirir. Suç işlenirken bu döngü DEVRE DIŞI kalır: fail
+  /// üstüne koşma/yakalama scene_crime'ın işidir (`activity == chasing` iken
+  /// `_tickWork` bu köylüye zaten dokunmaz).
+  ///
+  /// Nöbetin gerçek etkisi mekaniktir, süs değil: sahnedeki her uyanık muhafız
+  /// suç olasılığını belirgin biçimde kısar (`_crimePressure`).
+  void _workGuard(VillagerEntity v) {
+    final b = _watchPost(v);
+    if (b == null) return;
+    final spot = _standSpotFor(b, v);
+    if (spot == null) return;
+
+    if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten posta yürüyor
+    if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
+      // Nöbette — çevreyi tarar (gövde dili: sürekli bakınma).
+      if (v.workCooldown <= 0) {
+        v.chatBubbleIcon = '🛡️';
+        v.chatBubbleTime = 2.0;
+        v.workCooldown = _kAuraCooldown;
+      }
+      v.glanceAround(duration: 2.0);
+    } else {
+      v.goTo(spot.$1, spot.$2, 4.0);
+    }
   }
 
   // ── HANCI / RAHİP — işyerinde durur, çevresine iyi gelir ──────────────────

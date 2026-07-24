@@ -78,6 +78,13 @@ const Map<String, LawVector> kLawVectors = {
   'dergah.tithe': LawVector(authority: 1, economy: -2, faith: 3), // öşür = yeniden dağıtım
   'dergah.penance': LawVector(authority: 2, faith: 3), // aleni tövbe = sosyal denetim
   'dergah.oneFaith': LawVector(authority: 4, faith: 5), // tek inanç = dinî mutlakiyet
+
+  // ── REJİM FERMANLARI (yemin sonrası; köyü kendi köşesine ÇİVİLER) ──────────
+  // Bilerek güçlü: yemin edip bu fermanı da mühürleyen köy artık ortada değil.
+  'rejim.meclisDaimi': LawVector(authority: -4, economy: -2),
+  'rejim.mulkTapusu': LawVector(authority: -1, economy: 5),
+  'rejim.ortakAmbar': LawVector(authority: 2, economy: -5),
+  'rejim.muhassil': LawVector(authority: 4, economy: 3),
 };
 
 /// Köyün pusuladaki KONUMU — mühür setinin özeti. Eksenler ölçekli ([-1,1]),

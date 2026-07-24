@@ -40,6 +40,7 @@ extension _SceneEvents on _VillageSceneState {
       buildings:  _buildings,
     );
     final e = EventSystem.roll(_rng, ctx);
+    logDev('Rastgele olay mayalanıyor: ${e.title}', tag: '🎲', color: AppUi.info);
     _omenEvent = e;
     _omenLeft = _kOmenMin + _rng.nextDouble() * (_kOmenMax - _kOmenMin);
     _playOmen(e);
@@ -75,21 +76,73 @@ extension _SceneEvents on _VillageSceneState {
     }
   }
 
-  /// Diegetik omen metni — olaydan ÖNCE köyün sezdiği işaret.
-  String _omenText(EventOutcome e) => switch (e.title) {
-        'Kuraklık' => '☀ Gökyüzü günlerdir bulutsuz — toprak çatlamaya başladı…',
-        'Salgın' => '🤒 Birkaç köylü halsiz düştü — bir şeyler yayılıyor olabilir…',
-        'Hayvan Baskını' => '🐺 Ağaç hattından tedirgin uluma sesleri geliyor…',
-        'Hırsız' => '🦹 Pazarın çevresinde şüpheli bir gölge dolaşıyor…',
-        'Fırtına' => '⛈ Ufukta kara bulutlar toplanıyor, rüzgâr sertleşti…',
-        'Ev Yangını' => '🔥 Bir bacadan kıvılcımlar sıçradı — dikkatli olun!',
-        // Pozitif — sevinçli bekleyiş.
-        'Gezgin Ozan' => '🎵 Yoldan bir ozanın ezgisi duyuluyor — köye yaklaşıyor…',
-        'Gezgin Tüccar' => '🛒 Tepenin ardında renkli bir kervan belirdi…',
-        'Bereketli Hasat' => '🌾 Başaklar her zamankinden ağır — bereket yakın…',
-        'Zümre Barışı' => '🤝 Zümreler arasında bir yakınlaşma seziliyor…',
-        _ => '${e.icon} Köyde bir hareketlilik var…',
-      };
+  /// Omen havuzları — olay HENÜZ olmadı; bunlar dünyanın seğirmesi. Sessiz,
+  /// somut, hafifçe yanlış. Kimliğe göre seçilir (başlık serbestçe değişebilsin).
+  static const Map<String, List<String>> _kOmens = {
+    EventIds.drought: [
+      '☀ Kuyunun suyu bir karış aşağıda. Kova ipi ilk kez ıslanmadan çıktı.',
+      '☀ Tarlanın kenarında toprak çatladı. Çatlak dün yoktu.',
+      '☀ Gökte tek bulut yok, üç gündür. Yaprak bile kımıldamıyor.',
+    ],
+    EventIds.plague: [
+      '🤒 Değirmenci sabah kalkamadı. Karısı kimseye söylemedi.',
+      '🤒 İki çocuk oyunun ortasında oturdu, kalkmadı.',
+      '🤒 Geceleyin bir haneden öksürük geliyor. Susmuyor.',
+    ],
+    EventIds.beastRaid: [
+      '🐺 Köpekler ağaç hattına bakıp hırlıyor, havlamıyorlar.',
+      '🐺 Çobanın sürüsü bu akşam ağıla girmek için itişti.',
+      '🐺 Ormanın kıyısında bir uluma duyuldu. Ardından çok sessiz oldu.',
+    ],
+    EventIds.thief: [
+      '🦹 Pazarda yabancı bir yüz, tezgâhları değil keseleri sayıyor.',
+      '🦹 Biri sabahtan beri aynı sokakta üçüncü kez göründü.',
+      '🦹 Tezgâhın arkasındaki iple oynayan bir el görüldü.',
+    ],
+    EventIds.storm: [
+      '⛈ Kuşlar alçaktan uçuyor, hepsi aynı yöne.',
+      '⛈ Ufuk mürekkep gibi karardı. Rüzgâr yön değiştirdi.',
+      '⛈ Hava ağırlaştı; kepenkler kendiliğinden çarpmaya başladı.',
+    ],
+    EventIds.houseFire: [
+      '🔥 Bir bacadan kıvılcım sıçradı, çatının samanına düştü.',
+      '🔥 Bir kulübenin damından ince, yanlış renkte bir duman çıkıyor.',
+      '🔥 Ocak fazla harlandı. Kuru kereste tam duvarın dibinde.',
+    ],
+    // Pozitif — sevinçli bekleyiş.
+    EventIds.bard: [
+      '🎵 Yoldan tel sesi geliyor. Yaklaşıyor.',
+      '🎵 Tepede sırtında saz taşıyan bir yolcu göründü.',
+      '🎵 Çocuklar yola koştu; birinin türkü söylediğini duymuşlar.',
+    ],
+    EventIds.caravan: [
+      '🛒 Tepenin ardında toz bulutu var. Toz katır tozu.',
+      '🛒 Yoldan çıngırak sesi geliyor, tek tek değil, sıra sıra.',
+      '🛒 Pazarcı tezgâhını erkenden genişletti. Bir şey duymuş olmalı.',
+    ],
+    EventIds.bounty: [
+      '🌾 Başaklar sapı bükecek kadar ağır. Daha orak vurulmadı.',
+      '🌾 Çiftçi bir avuç tane aldı, saydı, bir daha saydı.',
+      '🌾 Tarla göz alabildiğine sarardı. Erken oldu.',
+    ],
+    EventIds.accord: [
+      '🤝 İki küskün hane bugün aynı kuyudan su çekti. Kavga çıkmadı.',
+      '🤝 Bir kapının önüne, kimin bıraktığı belli olmayan bir sepet konmuş.',
+      '🤝 Dargın iki adam meydanda karşılaştı. İkisi de yolunu değiştirmedi.',
+    ],
+  };
+
+  /// Diegetik omen metni — olaydan ÖNCE köyün sezdiği işaret. Varyant, gün +
+  /// olay kimliğinden türeyen SABİT tohumla seçilir (aynı gün aynı cümle).
+  String _omenText(EventOutcome e) {
+    final pool = _kOmens[e.id];
+    if (pool == null || pool.isEmpty) return '${e.icon} Köyde bir kıpırtı var.';
+    return Voice.say(pool, _voice(null, seed: _eventSeed(e)));
+  }
+
+  /// Bir olayın metin tohumu: gün + olay kimliği. Aynı gün aynı olay → aynı
+  /// varyant (banner, bildirim ve günce aynı cümleyi konuşur).
+  int _eventSeed(EventOutcome e) => _stableSeed(e.id, _dayCount);
 
   /// Omen doldu → olay gerçekten vurur.
   void _strikeOmen() {
@@ -99,13 +152,14 @@ extension _SceneEvents on _VillageSceneState {
     if (e == null) return;
     // Başarım: köyün ilk afeti / ilk bereketi (tek seferlik dönüm noktaları).
     if (e.category == EventCategory.negative) {
-      _award('first_crisis', 'İlk afetle yüzleşildi', '⛑️');
+      _award('first_crisis', 'İlk afet görüldü. Köy yerinde durdu.', '⛑️');
     } else if (e.category == EventCategory.positive) {
-      _award('first_blessing', 'Köye ilk bereket uğradı', '✨');
+      _award('first_blessing', 'Talih ilk kez bu kapıya uğradı.', '✨');
     }
     if (e.needsChoice) {
-      _pendingChoice = e;
-      _showNotification('${e.icon} ${e.title} — karar bekliyor');
+      // Modal ile bildirim aynı cümleyi konuşsun: varyant burada materyalize.
+      _pendingChoice = e.withMessage(e.messageFor(_eventSeed(e)));
+      _showNotification('${e.icon} ${e.title}. Köy karar bekliyor.');
       return;
     }
     _applyEventAutomatic(e);
@@ -137,7 +191,11 @@ extension _SceneEvents on _VillageSceneState {
       _eventMoraleLeft = e.duration;
       _eventLabel      = '${e.icon} ${e.title}';
     }
-    _activeEvent = e;
+    // Havuzdan varyantı SABİT tohumla seç ve olaya işle — banner ile bildirim
+    // aynı cümleyi göstersin (ikisi de `.message` okur).
+    final seed  = _eventSeed(e);
+    final shown = e.withMessage(e.messageFor(seed));
+    _activeEvent = shown;
     _activeEventLeft = kEventBannerDuration;
 
     if (e.effect != null && e.effect!.duration > 0) {
@@ -146,9 +204,11 @@ extension _SceneEvents on _VillageSceneState {
     }
 
     _reactToEvent(e); // köy gövde diliyle tepki verir (emoji yok, postür)
-    _stageEventResponse(e, choiceLabel: null); // köylüler amaçlı koşuşur (sahne)
-    _chronicle(e.title, icon: e.icon); // büyük an → kalıcı günce
-    _showNotification(e.message);
+    _stageEventResponse(e, choiceId: null); // köylüler amaçlı koşuşur (sahne)
+    // Vakanüvis: kuru, kısa yıllık satırı (havuzdan; olay başlığı değil).
+    _chronicle(Voice.weave(e.annalFor(seed), _voice(null, seed: seed)),
+        icon: e.icon);
+    _showNotification(shown.message);
   }
 
   /// fireOutbreak gibi belirli bir bina/NPC'ye bağlı fx'lerin hedeflerini
@@ -198,10 +258,14 @@ extension _SceneEvents on _VillageSceneState {
     }
     // Sahne: seçime göre köylüler amaçlı hareket eder (kova zinciri / kovalama /
     // kaçış). _attachFxTargets'tan SONRA — yangın hedefi artık biliniyor.
-    _stageEventResponse(base, choiceLabel: c.label);
-    _chronicle('${base.title} — ${c.label}', icon: base.icon); // karar günceye
+    // Kimliğe bakar, buton metnine DEĞİL (metin serbestçe yeniden yazılabilsin).
+    _stageEventResponse(base, choiceId: c.id);
+    // Vakanüvis: kararın kuru izi ("Kova zinciri kuruldu. Ev kurtarıldı.").
+    _chronicle(c.annal.isEmpty ? '${base.title}: ${c.label}' : c.annal,
+        icon: base.icon);
     _activeEvent = EventOutcome(
-      title:    '${base.title} — ${c.label}',
+      id:       base.id,
+      title:    base.title,
       icon:     base.icon,
       message:  c.resolutionMessage,
       category: base.category,
@@ -269,49 +333,50 @@ extension _SceneEvents on _VillageSceneState {
   // Salt duygu+sarsıntı değil: tehdide koşar (muhafız/kova zinciri/kovalama) ya
   // da barınağa/ateşe kaçar. Olayı "dünyada gerçekleşen" bir an yapar.
 
-  /// Olayın (ve varsa seçimin) köy davranışına çevrimi.
-  void _stageEventResponse(EventOutcome base, {String? choiceLabel}) {
+  /// Olayın (ve varsa seçimin) köy davranışına çevrimi. Hem olay hem seçim
+  /// KİMLİKLE tanınır — başlık/buton metni yeniden yazılınca sahne susmasın.
+  void _stageEventResponse(EventOutcome base, {String? choiceId}) {
     final (tx, ty) = _eventFocusPoint(base);
     final (cx, cy) = _villageCenter();
     final center = (cx.toDouble(), cy.toDouble());
-    switch (base.title) {
+    switch (base.id) {
       // ── Pozitif — köye gelen iyilik dünya-içi kutlamayla karşılanır ──────────
-      case 'Gezgin Ozan':
+      case EventIds.bard:
         _stageCelebration(music: true, dance: true, gather: 7);
-      case 'Gezgin Tüccar':
+      case EventIds.caravan:
         _spawnMerchant(); // olayla birlikte fiziksel tüccar da köşeden gelsin
         _stageCelebration(atMarket: true, gather: 6);
-      case 'Bereketli Hasat':
+      case EventIds.bounty:
         _stageCelebration(dance: true, gather: 6);
-      case 'Zümre Barışı':
+      case EventIds.accord:
         _stageReconciliation();
       // ── Negatif — tehdide amaçlı tepki ──────────────────────────────────────
-      case 'Hayvan Baskını':
-        if (choiceLabel == 'Muhafızları gönder') {
+      case EventIds.beastRaid:
+        if (choiceId == 'guards') {
           _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.anger, dwell: 5);
         } else {
           _rallyToward(center.$1, center.$2,
               count: 5, emotion: NpcEmotion.fear, dwell: 5); // ateşe sığın
         }
-      case 'Hırsız':
-        if (choiceLabel == 'Peşine düş') {
+      case EventIds.thief:
+        if (choiceId == 'chase') {
           _rallyToward(tx, ty, count: 3, emotion: NpcEmotion.anger, dwell: 3);
         } // "bırak gitsin" → sadece bakış (reactToEvent yeterli)
-      case 'Ev Yangını':
-        if (choiceLabel == 'Söndürme ekibi') {
+      case EventIds.houseFire:
+        if (choiceId == 'extinguish') {
           _rallyToward(tx, ty, count: 5, emotion: NpcEmotion.fear, dwell: 6);
         } else {
           _rallyToward(center.$1, center.$2,
               count: 4, emotion: NpcEmotion.grief, dwell: 5); // geri çekil
         }
-      case 'Salgın':
-        if (choiceLabel == 'Şifacı çağır') {
+      case EventIds.plague:
+        if (choiceId == 'healer') {
           _rallyToward(center.$1, center.$2,
               count: 3, emotion: NpcEmotion.fear, dwell: 6); // tedavi etrafı
         }
-      case 'Kuraklık':
+      case EventIds.drought:
         _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.fear, dwell: 5); // kuyu
-      case 'Fırtına':
+      case EventIds.storm:
         _rallyToward(center.$1, center.$2,
             count: 5, emotion: NpcEmotion.fear, dwell: 5); // barınağa koş
     }
@@ -320,22 +385,22 @@ extension _SceneEvents on _VillageSceneState {
   /// Olayın "odak noktası" — köylülerin koşacağı/bakacağı yer (negatifte tehdit,
   /// pozitifte geliş/toplanma yönü).
   (double, double) _eventFocusPoint(EventOutcome e) {
-    switch (e.title) {
-      case 'Ev Yangını':
+    switch (e.id) {
+      case EventIds.houseFire:
         if (_burningBuildings.isNotEmpty) {
           final b = _burningBuildings.first;
           return (b.col + b.cols / 2.0, b.row + b.rows / 2.0);
         }
         return _villageCenterD();
-      case 'Hırsız':
-      case 'Gezgin Tüccar':
+      case EventIds.thief:
+      case EventIds.caravan:
         final m = _firstBuildingOf(BuildingType.market);
         if (m != null) return (m.col + m.cols / 2.0, m.row + m.rows / 2.0);
         return _villageEdgePoint();
-      case 'Hayvan Baskını':
-      case 'Gezgin Ozan': // yoldan gelir → kenar yönüne bakılır (geliş hissi)
+      case EventIds.beastRaid:
+      case EventIds.bard: // yoldan gelir → kenar yönüne bakılır (geliş hissi)
         return _villageEdgePoint();
-      case 'Kuraklık':
+      case EventIds.drought:
         final w = _firstBuildingOf(BuildingType.well);
         if (w != null) return (w.col + w.cols / 2.0, w.row + w.rows / 2.0);
         return _villageCenterD();
@@ -524,7 +589,9 @@ extension _SceneEvents on _VillageSceneState {
     }
     _fxRainBoost   = rain;
     _fxNpcSpeedMul = npc;
-    _fxFarmMul     = farm * _identityFarmMul; // kimlik bonusu: Bereketli Köy +%15
+    // Kimlik bonusu (Bereketli Köy +%15) × rejim çürümesi (Demir Sofra
+    // huzursuzken tezgâh soğur, bkz. scene_regime._regimeWorkMul).
+    _fxFarmMul     = farm * _identityFarmMul * _regimeWorkMul;
     _fxBuilderMul  = builder;
     if (!_fxActiveIds.contains(EventFx.fireOutbreak) &&
         _burningBuildings.isNotEmpty) {

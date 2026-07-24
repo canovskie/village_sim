@@ -1,32 +1,34 @@
+import '../core/constants.dart';
 import '../farm/farm_tile.dart';
 import '../world/hay_entity.dart';
 
 /// Tarladan toplanan saman yığınları (pile) belirli bir **harman** noktasında
-/// balyaya (bale) dönüşür. Her 6 yığın → 1 balya. Balyalar harman ve etrafında
-/// 2×2 grid'de düzenli dizilir, harman dolarsa komşu tile'lara taşar.
+/// balyaya (bale) dönüşür. Her [kHayPilesPerBale] yığın → 1 balya. Balyalar
+/// harman ve etrafında 2×2 grid'de düzenli dizilir, harman dolarsa komşu
+/// tile'lara taşar.
 ///
 /// Harman = tüm farm tile'larının centroid'ine en yakın farm tile.
 /// Birden çok kopuk tarla olsa bile şimdilik tek harman paylaşılır (basit).
 ///
-/// Yığın seçimi FIFO: en eski 6 pile dönüştürülür → tahmin edilebilir akış.
+/// Yığın seçimi FIFO: en eski yığınlar dönüştürülür → tahmin edilebilir akış.
 void processHayPiles(List<HayEntity> hayEntities, List<FarmTile> farmTiles) {
   if (farmTiles.isEmpty) return;
 
   final piles = hayEntities
       .where((h) => !h.isBale && !h.isBeingCarried && !h.isDelivered)
       .toList();
-  if (piles.length < 6) return;
+  if (piles.length < kHayPilesPerBale) return;
 
   piles.sort((a, b) => a.spawnTime.compareTo(b.spawnTime));
-  for (int i = 0; i < 6; i++) {
-    piles[i].isDelivered = true;
-  }
+  final consumed = piles.take(kHayPilesPerBale).toList();
 
   final (hc, hr) = _harmanPos(farmTiles);
   final (bx, by) = _findFreeBaleSpot(hayEntities, hc, hr);
   hayEntities.add(HayEntity(type: HayType.bale, gridX: bx, gridY: by));
 
-  hayEntities.removeWhere((h) => h.isDelivered);
+  // Sadece tükettiğimiz yığınları sil — geniş `removeWhere(isDelivered)`
+  // aynı karede taşıyıcının teslim ettiği BALYAYI da süpürebiliyordu.
+  hayEntities.removeWhere(consumed.contains);
 }
 
 (int, int) _harmanPos(List<FarmTile> tiles) {

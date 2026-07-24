@@ -42,9 +42,16 @@ class FarmRenderer {
         Season.winter => (const Color(0x59CFE4F2), BlendMode.srcATop),
       };
 
+  // Sulanmış toprak: ıslak koyu ton. Oyuncunun sulamanın çalıştığını görmesi
+  // için tek sinyal — kova animasyonu bitince tarlada iz kalsın.
+  static final _pWet = Paint()
+    ..color     = const Color(0x33203A4A)
+    ..blendMode = BlendMode.multiply;
+
   static void drawTile(Canvas canvas,
       double px, double py, double hw, double hh,
-      int stage, double progress, Season season) {
+      int stage, double progress, Season season,
+      {bool watered = false}) {
 
     _diamond
       ..reset()
@@ -66,6 +73,8 @@ class FarmRenderer {
       final t = ((progress - 0.65) / 0.35).clamp(0.0, 1.0);
       _blit(canvas, s + 1, dst, t.toDouble());
     }
+
+    if (watered) canvas.drawRect(dst, _pWet);
 
     // Mevsim tonu — clip içinde, sadece tarla yüzeyini boyar.
     if (_seasonTint(season) case (final c, final blend)) {

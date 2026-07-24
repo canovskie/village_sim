@@ -12,12 +12,22 @@ enum CutsceneBg {
   valleyDusk,  // akşam — turuncu/mor, tepeler koyu
   fireNight,   // gece + ateş közü — lacivert, yıldız, sıcak hâle
   titleCard,   // koyu vinyet — kapanış/başlık
+
+  /// KUŞBAKIŞI — izometrik yüksek açı. Bu oyunda "yukarıdan bakmak" yeni bir
+  /// çizim tekniği değil, oyunun kendi dili: game_painter da aynı dik figürleri
+  /// gridToScreen ile küçük küçük yerleştiriyor. Ölçek anlatan çekimler için
+  /// (köy büyüdü / kolon iniyor / tarlalar boş). Yoğunluk [CutsceneShot.aerialGrowth].
+  aerial,
 }
 
 /// Sahnedeki bir aktör — bir çekim boyunca [fromX]→[toX] (normalize 0..1)
 /// kayar; [walk] true ise yürüyüş animasyonu oynar. [y] taban çizgisi (0..1).
 class CutsceneActor {
   final VillagerType type;
+  /// Aktörün adı — [CutsceneLine.speaker] ile eşleşirse o replik boyunca ışık
+  /// bu aktörün üstünde kalır, sahnedeki diğerleri karartılır (kimin konuştuğu
+  /// belli olsun; ör. üç aynı muhafız arasında komutan).
+  final String? name;
   final int seed;       // NpcVisual.fromSeed — yüz/saç/kıyafet çeşidi
   /// Verilirse [seed] yerine bu görsel kimlik kullanılır — sahnedeki aktörün
   /// oyundaki GERÇEK köylüye birebir benzemesi için (ör. düğün çifti).
@@ -30,6 +40,7 @@ class CutsceneActor {
   final bool walk;
   const CutsceneActor({
     required this.type,
+    this.name,
     this.seed = 0,
     this.visual,
     required this.fromX,
@@ -56,6 +67,21 @@ enum CutsceneGate {
   nameVillage,  // köye ad ver (metin girişi onaylanana dek bekler)
 }
 
+/// Çekimin ölçeği — kamerayı özneye göre konumlandırır. Diyalog kutusu +
+/// letterbox ekranın altını yediği için ÖZNENİN NEREYE OTURACAĞI kadraja bağlı.
+enum CutsceneFraming {
+  /// Geniş plan — mekân başrolde, özne küçük. Kamera özneyi kollamaz.
+  wide,
+
+  /// Orta plan (varsayılan) — özne tam boy. Ayak basma noktası her zaman
+  /// diyalog kutusunun ÜSTÜNDE tutulur; figür havada asılı kalmaz.
+  mid,
+
+  /// Yakın plan — özne büyük, bel altı kasıtlı olarak kadraj dışında. Kamera
+  /// gövdenin üst yarısını görünür banda oturtur + biraz yaklaşır.
+  close,
+}
+
 /// Bir çekim: arka plan + aktörler + replikler + hafif kamera pan/zoom.
 class CutsceneShot {
   final CutsceneBg bg;
@@ -64,8 +90,26 @@ class CutsceneShot {
   /// Kamera parallax pan (normalize, sahne süresince fromX→toX) + zoom.
   final double panFrom;
   final double panTo;
+  /// Dikey pan (tilt) — ekran yüksekliğinin oranı. Pozitif = kamera YUKARI
+  /// bakar (gökten aşağı inmek için tiltFrom negatif verilir).
+  final double tiltFrom;
+  final double tiltTo;
+  /// Zoom artık tek parça büyütme değil DOLLY: katmanlar derinliğine göre
+  /// farklı oranda büyür (yakın katman hızlı) → sahneye girme hissi.
   final double zoomFrom;
   final double zoomTo;
+  /// Çekimin ölçeği — kameranın özneyi nasıl kadrajlayacağı.
+  final CutsceneFraming framing;
+
+  /// ÖZNEL KAMERA — kamera artık sahneyi seyreden bir göz değil, KÖYÜN ORTAK
+  /// GÖZÜ: halkanın içinden bakan isimsiz biri. Kadrajda özne yoktur; kenarlarda
+  /// komşuların omuzları durur, kamera nefesle salınır ve çekim göz kapağı
+  /// açılışıyla başlar. Anlatı da ona göre yazılır (birinci çoğul: "halka olduk").
+  final bool pov;
+
+  /// [CutsceneBg.aerial] için köyün büyüklüğü (0..1) — kademe filmlerinde köyün
+  /// gözle görülür biçimde büyümesi buradan.
+  final double aerialGrowth;
   /// Çekim ilerlemeden önce beklenen oyuncu eylemi (mini aksiyon).
   final CutsceneGate gate;
   const CutsceneShot({
@@ -74,8 +118,13 @@ class CutsceneShot {
     this.lines = const [],
     this.panFrom = 0.0,
     this.panTo = 0.0,
+    this.tiltFrom = 0.0,
+    this.tiltTo = 0.0,
     this.zoomFrom = 1.0,
     this.zoomTo = 1.0,
+    this.framing = CutsceneFraming.mid,
+    this.pov = false,
+    this.aerialGrowth = 0.5,
     this.gate = CutsceneGate.none,
   });
 }
@@ -95,15 +144,16 @@ const Cutscene kOpeningCutscene = Cutscene([
   // 1) NEDEN yola düştüler — vergi eli. Bağlamı kuran açılış (aktörsüz).
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
+    framing: CutsceneFraming.wide,
     panFrom: 0.0,
     panTo: 0.03,
     zoomFrom: 1.0,
     zoomTo: 1.06,
     lines: [
       CutsceneLine(
-          'Vergiciler her hasatta gelirdi. Önce tahılın üçte biri… sonra yarısı.'),
+          'Vergiciler her harmanda gelirdi. İlk yıl tahılın üçte birini aldılar. Sonra yarısını.'),
       CutsceneLine(
-          'Sonunda geriye ekmek değil, yalnız imparatorluğun defterinde bir ad kaldı.'),
+          'Son gelişlerinde ambarda ölçecek bir şey kalmamıştı. Yine de deftere bir şey yazdılar.'),
     ],
   ),
 
@@ -112,32 +162,44 @@ const Cutscene kOpeningCutscene = Cutscene([
     bg: CutsceneBg.road,
     panFrom: 0.0,
     panTo: 0.02,
+    // Kamera gökten aşağı iner ve kafileyi bulur (tilt) + hafifçe yaklaşır.
+    tiltFrom: -0.10,
+    tiltTo: 0.0,
+    zoomFrom: 1.0,
+    zoomTo: 1.05,
     actors: [
-      CutsceneActor(type: VillagerType.guard, seed: 21, fromX: -0.85, toX: 0.66, y: 0.86, scale: 1.2, walk: true),
-      CutsceneActor(type: VillagerType.merchant, seed: 3, fromX: -0.62, toX: 0.52, y: 0.80, scale: 1.05, walk: true),
-      CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: -0.42, toX: 0.36, y: 0.82, scale: 1.1, walk: true),
-      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: -0.22, toX: 0.20, y: 0.78, scale: 1.0, walk: true),
+      // Varış sırası GİRİŞ sırasıyla aynı olmalı: en önde giren en sağda durur.
+      // Ters verilirse öndeki kafile üyesi durur, arkadaki onun İÇİNDEN geçip
+      // öne gider — kafile değil, hayalet geçişi olur.
+      CutsceneActor(type: VillagerType.guard, seed: 21, fromX: -0.85, toX: 0.18, y: 0.86, scale: 1.2, walk: true),
+      CutsceneActor(type: VillagerType.merchant, seed: 3, fromX: -0.62, toX: 0.34, y: 0.80, scale: 1.05, walk: true),
+      CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: -0.42, toX: 0.50, y: 0.82, scale: 1.1, walk: true),
+      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: -0.22, toX: 0.68, y: 0.78, scale: 1.0, walk: true),
     ],
     lines: [
       CutsceneLine(
-          'Bir gece, ambarları boşaltılmış birkaç hane sessizce yola düştü.'),
+          'Bir gece, birkaç hane kapısını çekip kilitlemedi bile. Kilitlenecek ne kalmıştı ki.'),
       CutsceneLine(
-          'Günlerce yürüdüler. Çocuklar, yaşlılar, birkaç hayvan… ve tek bir düş: kendilerine ait bir ocak.'),
+          'Günlerce yürüdüler. Yaşlılar arabada, çocuklar arkada, bir de topal keçi. Kimse nereye gittiğini bilmiyordu; herkes neden gittiğini biliyordu.'),
     ],
   ),
 
   // 3) Varış — şafakta vadi görünür. İlk kez nefes.
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
+    framing: CutsceneFraming.wide,
     panFrom: 0.0,
     panTo: 0.04,
+    // Sis çekilirken kamera yerden ufka doğru kalkar.
+    tiltFrom: 0.08,
+    tiltTo: -0.03,
     zoomFrom: 1.06,
     zoomTo: 1.0,
     lines: [
       CutsceneLine(
-          'Bir şafak vakti, sisin arasından vadi göründü. Su sesi, çayır kokusu.'),
+          'Şafakta sis çekildi ve vadi göründü. Önce suyun sesi geldi, sonra çayırın kokusu.'),
       CutsceneLine(
-          'Ne sınır taşı vardı, ne vergi defteri. Yalnız toprak — ve sessizlik.'),
+          'Ne bir sınır taşı vardı burada, ne bir vergi defteri. Kimsenin adı yazılı değildi bu toprağa.'),
     ],
   ),
 
@@ -147,12 +209,12 @@ const Cutscene kOpeningCutscene = Cutscene([
     zoomFrom: 1.0,
     zoomTo: 1.05,
     actors: [
-      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.42, y: 0.80, scale: 1.6),
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.42, y: 0.80, scale: 1.6),
     ],
     lines: [
-      CutsceneLine('Ben Maple. Bu kafileye yıllardır yol gösteririm — ama bu toprağı ilk kez görüyorum.',
+      CutsceneLine('Ben Maple. Bu kafileyi yıllardır ben yürütüyorum. Bu vadiyi ben de ilk kez görüyorum.',
           speaker: 'Maple'),
-      CutsceneLine('İmparatorluk buraya uzak. Şimdilik. Burada yakacağın ateş, senin olacak.',
+      CutsceneLine('İmparatorluk buraya uzak. Şimdilik. Burada yakacağın ateşin dumanını kimse saymayacak.',
           speaker: 'Maple'),
     ],
   ),
@@ -164,10 +226,10 @@ const Cutscene kOpeningCutscene = Cutscene([
     zoomTo: 1.04,
     gate: CutsceneGate.nameVillage,
     actors: [
-      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
     ],
     lines: [
-      CutsceneLine('Bir yurt, adıyla var olur. Söyle — bu yuvaya ne ad verelim?',
+      CutsceneLine('Adı olmayan yere kimse dönmez. Söyle, buraya ne diyeceğiz?',
           speaker: 'Maple'),
     ],
   ),
@@ -179,11 +241,11 @@ const Cutscene kOpeningCutscene = Cutscene([
     zoomFrom: 1.0,
     zoomTo: 1.04,
     actors: [
-      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
     ],
     lines: [
-      CutsceneLine('Güzel isim. Bir köy, tek bir kıvılcımla başlar.', speaker: 'Maple'),
-      CutsceneLine('İlk ateşi nereye kuracağımızı sen seç. Işığı nereye düşerse, dünya oradan açılır.',
+      CutsceneLine('Güzel ad. Şimdi geriye tek iş kaldı: ısınmak.', speaker: 'Maple'),
+      CutsceneLine('İlk ateşi nereye kuracağımızı sen seç. Işığı nereye düşerse, vadi oradan açılır.',
           speaker: 'Maple'),
     ],
   ),
@@ -194,19 +256,27 @@ const Cutscene kOpeningCutscene = Cutscene([
 
 /// İlk ateş HARİTADA kurulduktan sonra oynayan kısa "ateş yakma" sinematiği.
 /// Otomatik yanma animasyonu (gate yok) + Maple'ın hoş geldin sözü.
+/// POV: kamera KÖYÜN ORTAK GÖZÜ — halkanın içinden bakan isimsiz biri. Kadrajda
+/// özne yok; iki yanda komşuların omuzları duruyor, çekim göz kapağıyla açılıyor.
+/// Anlatı da ona göre birinci çoğul.
 const Cutscene kFireLightingCutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.fireNight,
+    pov: true,
+    tiltFrom: 0.06,
+    tiltTo: -0.02,
     zoomFrom: 1.14,
     zoomTo: 1.0,
     actors: [
-      CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.34, y: 0.80, scale: 1.4, flip: true),
-      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.66, y: 0.80, scale: 1.45),
+      CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.30, y: 0.80, scale: 1.2, flip: true),
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.70, y: 0.80, scale: 1.25),
     ],
     lines: [
       CutsceneLine(
-          'İlk ateş tutuştu. Karanlık vadi bir yuvaya döndü — imparatorluğun defterinde olmayan bir yuvaya.'),
-      CutsceneLine('Hoş geldin, kurucu. Gerisi senin elinde.', speaker: 'Maple'),
+          'Çıra tutuştu. İlk kez halka olduk; eller ateşe uzandı, kimse ilk sözü söylemedi.'),
+      CutsceneLine(
+          'Yüzler karşıdan aydınlandı. Hiçbir deftere geçmeyen bir ısıydı bu.'),
+      CutsceneLine('Oturun, ısının. Yarından sonrası size kalmış.', speaker: 'Maple'),
     ],
   ),
 ]);
@@ -224,23 +294,44 @@ Cutscene? cutsceneForTier(int tier) => switch (tier) {
 
 // Kademe 1 — Konuksever Köy.
 const Cutscene _kTier1Cutscene = Cutscene([
+  // Kuşbakışı: "ocaklar çoğaldı" cümlesini KADRAJ söyler, metin değil.
+  CutsceneShot(
+    bg: CutsceneBg.aerial,
+    aerialGrowth: 0.30,
+    framing: CutsceneFraming.wide,
+    zoomFrom: 1.0,
+    zoomTo: 1.08,
+    lines: [
+      CutsceneLine('Ocaklar çoğaldı. Patika, gide gele yola dönüştü.'),
+    ],
+  ),
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
     zoomFrom: 1.0,
-    zoomTo: 1.06,
+    zoomTo: 1.05,
     actors: [
       CutsceneActor(type: VillagerType.merchant, seed: 3, fromX: -0.2, toX: 0.40, y: 0.80, scale: 1.2, walk: true),
-      CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.66, y: 0.82, scale: 1.3, flip: true),
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.68, y: 0.82, scale: 1.3, flip: true),
     ],
     lines: [
-      CutsceneLine('İlk ocaklar çoğaldı, yollar aşındı.'),
-      CutsceneLine('Köyün kapısı artık yorgun yolculara da açık.', speaker: 'Maple'),
+      CutsceneLine('Artık yabancı da geliyor. Kapıyı açık tutalım; bir zamanlar yabancı bizdik.',
+          speaker: 'Maple'),
     ],
   ),
 ]);
 
 // Kademe 2 — Şenlikli Kasaba.
 const Cutscene _kTier2Cutscene = Cutscene([
+  CutsceneShot(
+    bg: CutsceneBg.aerial,
+    aerialGrowth: 0.65,
+    framing: CutsceneFraming.wide,
+    zoomFrom: 1.10,
+    zoomTo: 1.0,
+    lines: [
+      CutsceneLine('Pazar kuruldu. Tezgâhta üç çeşit peynir var, biri komşu vadiden.'),
+    ],
+  ),
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
     zoomFrom: 1.08,
@@ -251,14 +342,23 @@ const Cutscene _kTier2Cutscene = Cutscene([
       CutsceneActor(type: VillagerType.guard, seed: 21, fromX: 0.70, y: 0.82, scale: 1.25),
     ],
     lines: [
-      CutsceneLine('Pazar kuruldu, tezgâhlar doldu, akşamlar şenlendi.'),
-      CutsceneLine('Küçük köy, artık bir kasaba.'),
+      CutsceneLine('Akşamları meydandan kaval sesi geliyor. Buraya artık köy demiyorlar.'),
     ],
   ),
 ]);
 
 // Kademe 3 — Bereketli Kasaba (final / zafer).
 const Cutscene _kTier3Cutscene = Cutscene([
+  CutsceneShot(
+    bg: CutsceneBg.aerial,
+    aerialGrowth: 1.0,
+    framing: CutsceneFraming.wide,
+    zoomFrom: 1.0,
+    zoomTo: 1.12,
+    lines: [
+      CutsceneLine('Ambarlar kışa hazır. İlk gelen çocuklar şimdi kendi çocuklarını taşıyor.'),
+    ],
+  ),
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
     zoomFrom: 1.0,
@@ -270,7 +370,7 @@ const Cutscene _kTier3Cutscene = Cutscene([
       CutsceneActor(type: VillagerType.guard, seed: 21, fromX: 0.78, y: 0.84, scale: 1.2),
     ],
     lines: [
-      CutsceneLine('Ambarlar doldu, çocuklar büyüdü, vadi bereketle örtüldü.'),
+      CutsceneLine('Kimse kimseye nereden geldiğini sormuyor artık.'),
     ],
   ),
   CutsceneShot(
@@ -279,8 +379,8 @@ const Cutscene _kTier3Cutscene = Cutscene([
     zoomTo: 1.05,
     lines: [
       CutsceneLine(
-          'Bir zamanlar yalnız bir ateş olan yer, artık müreffeh bir kasaba. '
-          'Hikâyen burada bitmiyor — daha nice bahar gelecek.'),
+          'Burası bir zamanlar bir avuç köz idi. Şimdi kimse buraya nereden geldiğini sormuyor. '
+          'Hikâye bitmedi; sadece anlatacak insan çoğaldı.'),
     ],
   ),
 ]);
@@ -288,16 +388,26 @@ const Cutscene _kTier3Cutscene = Cutscene([
 /// Nadir büyük kriz — kıtlık. event/tick tarafından bir kez tetiklenir.
 const Cutscene kFamineCutscene = Cutscene([
   CutsceneShot(
+    bg: CutsceneBg.aerial,
+    aerialGrowth: 0.55,
+    framing: CutsceneFraming.wide,
+    zoomFrom: 1.06,
+    zoomTo: 1.0,
+    lines: [
+      CutsceneLine('Tarlalar boş. Yukarıdan bakınca köy hâlâ yerinde duruyor; eksik olan görünmüyor.'),
+    ],
+  ),
+  CutsceneShot(
     bg: CutsceneBg.valleyDusk,
     zoomFrom: 1.06,
     zoomTo: 1.0,
     actors: [
       CutsceneActor(type: VillagerType.farmer, seed: 12, fromX: 0.42, y: 0.82, scale: 1.3),
-      CutsceneActor(type: VillagerType.priest, seed: 7, fromX: 0.62, y: 0.80, scale: 1.25, flip: true),
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.62, y: 0.80, scale: 1.25, flip: true),
     ],
     lines: [
-      CutsceneLine('Yağmurlar geç kaldı, ambarlar boşaldı.'),
-      CutsceneLine('Zor günler geliyor. Dayanışmaya her zamankinden çok muhtacız.', speaker: 'Maple'),
+      CutsceneLine('Yağmur gelmedi. Ambarın dibi göründü, kimse yüksek sesle söylemedi.'),
+      CutsceneLine('Kış uzun olacak. Kaşığı bölüşenler açlığı da bölüşür.', speaker: 'Maple'),
     ],
   ),
 ]);
@@ -322,15 +432,15 @@ Cutscene weddingCutscene({
       zoomTo: 1.0,
       actors: [
         CutsceneActor(
-            type: brideType, visual: brideVisual,
+            type: brideType, name: brideName, visual: brideVisual,
             fromX: 0.40, y: 0.80, scale: 1.4),
         CutsceneActor(
-            type: groomType, visual: groomVisual,
+            type: groomType, name: groomName, visual: groomVisual,
             fromX: 0.60, y: 0.80, scale: 1.4, flip: true),
       ],
       lines: [
         CutsceneLine(
-            'Ateş yükseldi, köy çepeçevre toplandı — bu gece bir yuva kuruluyor.'),
+            'Ateşe fazladan odun attılar. Köy halka oldu, ortada iki kişi kaldı.'),
       ],
     ),
     // 2) Yeminler — gelin & damat karşılıklı (yüz yüze, hafif zoom).
@@ -340,15 +450,15 @@ Cutscene weddingCutscene({
       zoomTo: 1.06,
       actors: [
         CutsceneActor(
-            type: brideType, visual: brideVisual,
+            type: brideType, name: brideName, visual: brideVisual,
             fromX: 0.42, y: 0.80, scale: 1.5),
         CutsceneActor(
-            type: groomType, visual: groomVisual,
+            type: groomType, name: groomName, visual: groomVisual,
             fromX: 0.62, y: 0.80, scale: 1.5, flip: true),
       ],
       lines: [
-        CutsceneLine('Bu ocağı seninle paylaşmaya geldim.', speaker: groomName),
-        CutsceneLine('Ve ben seninle — bu vadi artık ikimizin yurdu.',
+        CutsceneLine('Ben ekmeğimi bölmeye geldim. Yarısı senin.', speaker: groomName),
+        CutsceneLine('Bölmene gerek yok. Bundan sonra aynı sofradan yiyoruz.',
             speaker: brideName),
       ],
     ),
@@ -359,15 +469,15 @@ Cutscene weddingCutscene({
       zoomTo: 1.0,
       actors: [
         CutsceneActor(
-            type: brideType, visual: brideVisual,
+            type: brideType, name: brideName, visual: brideVisual,
             fromX: 0.46, y: 0.82, scale: 1.35),
         CutsceneActor(
-            type: groomType, visual: groomVisual,
+            type: groomType, name: groomName, visual: groomVisual,
             fromX: 0.58, y: 0.82, scale: 1.35, flip: true),
       ],
       lines: [
         CutsceneLine(
-            '$brideName ile $groomName evlendi — ateş başında halaylar gece boyu sürdü.'),
+            '$brideName ile $groomName evlendi. Halay gün ağarana kadar sürdü; ertesi gün kimse tarlaya erken çıkmadı.'),
       ],
     ),
   ]);

@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'character_renderer.dart';
 import '../entities/villager_entity.dart';
+import '../entities/villager_job.dart';
 import '../entities/worker_entity.dart';
 import '../characters/life_stage.dart';
 import '../entities/builder_entity.dart';
@@ -486,6 +487,14 @@ class _VillagerDrawable extends _Drawable {
       return;
     }
 
+    // Üstlenilmiş iş (inşaat/tarla/maden…) — köylüyü baz meslek yerine iş
+    // sprite'ıyla (alet + aksiyon pozu) çiz. Kimlik (yüz/saç) e.visual'dan gelir,
+    // yani isimli köylü doğru yüzle görünür. Gölge/torch yukarıda çizildi.
+    if (e.job != null && _jobHasSprite(e.job!.role)) {
+      _drawJobVillager(canvas, e, s);
+      return;
+    }
+
     // Yaşam evresine göre boy ölçeği — çocuk küçük, yetişkin tam, yaşlı hafif.
     final charScale = kCharScale * e.lifeStage.renderScale;
     // Dans → gerçek zıplama. NPC her vuruşta yere iner çıkar.
@@ -588,13 +597,56 @@ class _VillagerDrawable extends _Drawable {
       final dir = e.effectiveFacingRight ? 1.0 : -1.0;
       brawlShove = sin(time * 13.0 + e.gridX * 1.3) * 2.6 * dir;
     }
+    // SUÇ gövde dili (scene_crime) — baş üstü "suçlu" ikonu YOK; suç yalnız
+    // POSTÜRDEN okunur: fail çömelip sinsice sokulur, eylem sırasında telaşla
+    // kıpırdar, sonra öne atılıp kaçar; muhafız üstüne yüklenerek koşar;
+    // kaçırılan kurban geriye direnip çırpınır. Ölçülü genlikler — "yukarıdan
+    // izleyen" oyuncu fark etsin ama sahne cambazlığa dönmesin.
+    double crimeShove = 0, crimeLift = 0, crimeRot = 0, crimeScaleY = 1.0;
+    if (e.activity == VillagerActivity.prowling ||
+        e.activity == VillagerActivity.committing ||
+        e.activity == VillagerActivity.fleeing ||
+        e.activity == VillagerActivity.chasing ||
+        e.activity == VillagerActivity.abducted) {
+      final cdir = e.effectiveFacingRight ? 1.0 : -1.0;
+      switch (e.activity) {
+        case VillagerActivity.prowling:
+          crimeScaleY = 0.90;        // çömelme
+          crimeLift = -1.6;          // alçalıp gölgeye sinme
+          crimeRot = 0.09 * cdir;    // öne eğik sinsi duruş
+        case VillagerActivity.committing:
+          crimeShove = sin(time * 17.0 + e.gridX * 1.7) * 1.5 * cdir; // telaş
+          crimeScaleY = 0.94;
+          crimeLift = -1.0;
+        case VillagerActivity.fleeing:
+          crimeLift = sin(time * 16.0 + e.gridX).abs() * 1.8; // telaşlı sıçrama
+          crimeRot = 0.11 * cdir;                             // öne atılma
+        case VillagerActivity.chasing:
+          crimeLift = sin(time * 14.0 + e.gridX).abs() * 1.2;
+          crimeRot = 0.09 * cdir;                             // öne yüklenme
+        case VillagerActivity.abducted:
+          crimeRot = -0.16 * cdir;                            // geriye direnme
+          crimeShove = sin(time * 20.0 + e.gridY) * 1.2;      // çırpınma
+        default:
+          break;
+      }
+    }
     canvas.save();
-    canvas.translate(s.dx + brawlShove,
-        s.dy - danceBounce - talkBob - moodLift + sitYOff - emoBounce - emoLift);
+    canvas.translate(
+        s.dx + brawlShove + crimeShove,
+        s.dy -
+            danceBounce -
+            talkBob -
+            moodLift +
+            sitYOff -
+            emoBounce -
+            emoLift -
+            crimeLift);
     if (danceSway != 0) canvas.rotate(danceSway);
     if (sitSway != 0)   canvas.rotate(sitSway);
     if (talkSway != 0)  canvas.rotate(talkSway);
     if (emoRot != 0)    canvas.rotate(emoRot);
+    if (crimeRot != 0)  canvas.rotate(crimeRot);
     // Idle micro-anim — nefes + sway, yalnız dans/oturma/sohbet yokken anlamlı
     // (idle helper'ları walking/işteyken zaten 0/1 döner).
     final calm = danceSway == 0 && sitSway == 0 && talkSway == 0;
@@ -603,7 +655,8 @@ class _VillagerDrawable extends _Drawable {
       if (swayR != 0) canvas.rotate(swayR);
     }
     final breathY = calm ? e.idleBreathScale(time) : 1.0;
-    canvas.scale(charScale, charScale * sitYScale * breathY * moodScaleY * emoScaleY);
+    canvas.scale(charScale,
+        charScale * sitYScale * breathY * moodScaleY * emoScaleY * crimeScaleY);
     CharacterRenderer.draw(canvas, e.type,
         flipX:         !e.effectiveFacingRight,
         walkPhase:     e.walkPhase,
@@ -765,6 +818,124 @@ class _VillagerDrawable extends _Drawable {
           canvas, base.dx + ox, base.dy - 24, time, entitySeed + i * 17);
     }
   }
+
+  /// Bu iş rolünün kendine ait bir çalışma sprite'ı/pozu var mı — varsa köylü
+  /// baz meslek yerine iş görünümüyle (alet + aksiyon) çizilir.
+  bool _jobHasSprite(JobRole role) => role != JobRole.none;
+
+  /// Köylüyü ÜSTLENDİĞİ iş sprite'ıyla çiz (kimlik e.visual'dan). Gölge/torch
+  /// zaten çizilmiş olarak gelir; burada gövde + alet + ilerleme/partikül.
+  void _drawJobVillager(Canvas canvas, VillagerEntity e, Offset s) {
+    final job = e.job!;
+    final charScale = kCharScale * e.lifeStage.renderScale;
+    final working = job.working;
+    canvas.save();
+    canvas.translate(s.dx, s.dy);
+    // Aksiyon sırasında idle sway/breath uygulama (aksi halde nefes + sway).
+    if (!working) {
+      final swayR = e.idleSwayRotation(time);
+      if (swayR != 0) canvas.rotate(swayR);
+    }
+    final breathY = working ? 1.0 : e.idleBreathScale(time);
+    canvas.scale(charScale, charScale * breathY);
+    final flip = !e.effectiveFacingRight;
+    // Aksiyon animasyonu köylünün duran walkPhase'i yerine job.phaseAnim'den.
+    final actPhase = working ? job.phaseAnim : e.walkPhase;
+    switch (job.role) {
+      case JobRole.builder:
+        CharacterRenderer.drawBuilder(canvas,
+            flipX: flip, visual: e.visual, time: time,
+            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
+            walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            working: working);
+      case JobRole.farmer:
+        CharacterRenderer.drawFarmer(canvas,
+            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
+            carryingWater: job.carryingWater, visual: e.visual, time: time,
+            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
+      case JobRole.miner:
+        CharacterRenderer.drawMiner(canvas,
+            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            mining: working, chopPhase: job.phaseAnim, visual: e.visual,
+            time: time, torchLevel: e.torchLevel, torchPhase: e.torchPhase);
+      case JobRole.fisher:
+        CharacterRenderer.drawFisher(canvas,
+            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            fishing: working, fishPhase: job.phaseAnim,
+            visual: e.visual, time: time,
+            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
+      case JobRole.shepherd:
+        CharacterRenderer.drawShepherd(canvas,
+            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            milking: working, milkPhase: job.phaseAnim,
+            visual: e.visual, time: time,
+            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
+      case JobRole.florist:
+        CharacterRenderer.drawFarmer(canvas,
+            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
+            carryingWater: job.carryingWater, visual: e.visual, time: time,
+            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
+      case JobRole.woodcutter:
+        CharacterRenderer.drawWoodcutter(canvas,
+            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
+            chopping: working, chopPhase: job.phaseAnim, visual: e.visual,
+            time: time, torchLevel: e.torchLevel, torchPhase: e.torchPhase);
+      case JobRole.none:
+        break;
+    }
+    canvas.restore();
+
+    // İş-özel overlay: ilerleme çubuğu + kıvılcım/talaş/splash.
+    if (job.role == JobRole.builder && working) {
+      _drawJobProgressBar(canvas, s, job.progress);
+      if (sin(job.phaseAnim).abs() > 0.92) {
+        _drawJobSpark(canvas, s.dx, s.dy, e.facingRight);
+      }
+    }
+    // Çiftçi kuyu/sulama anının ilk 0.4 sn'sinde su sıçraması.
+    if (job.role == JobRole.farmer &&
+        job.splashTimer >= 0 && job.splashTimer < 0.4) {
+      ParticleRenderer.drawSplash(canvas, s.dx, s.dy - 10, job.splashTimer / 0.4);
+    }
+    // Madenci kazma darbesinde taş chip'i (chopPhase döngü başı %30).
+    if (job.role == JobRole.miner && working) {
+      const chipWindow = 2 * pi * 0.30;
+      if (job.phaseAnim < chipWindow) {
+        final lt = job.phaseAnim / chipWindow;
+        final dir = e.facingRight ? 1.0 : -1.0;
+        final seed = e.gridX.toInt() * 7 + e.gridY.toInt() * 13;
+        ParticleRenderer.drawChip(canvas, s.dx + dir * 12, s.dy - 18, lt,
+            color: const Color(0xFFA8A4A0), shade: const Color(0xFF5A5450),
+            direction: dir, seed: seed);
+      }
+    }
+  }
+
+  void _drawJobProgressBar(Canvas canvas, Offset pos, double progress) {
+    const w = 34.0, h = 4.0;
+    final left = pos.dx - w / 2;
+    final top = pos.dy - 52;
+    canvas.drawRect(Rect.fromLTWH(left, top, w, h), _ppBg);
+    canvas.drawRect(Rect.fromLTWH(left, top, w * progress, h), _ppFill);
+    canvas.drawRect(Rect.fromLTWH(left, top, w, h), _ppBorder);
+  }
+
+  void _drawJobSpark(Canvas canvas, double sx, double sy, bool facingRight) {
+    final dir = facingRight ? 1.0 : -1.0;
+    final px = sx + dir * 14, py = sy - 38;
+    final paint = Paint()
+      ..color = const Color(0xFFFFFFB0)
+      ..isAntiAlias = false;
+    final dim = Paint()
+      ..color = const Color(0xCCFFD060)
+      ..isAntiAlias = false;
+    canvas.drawRect(Rect.fromLTWH(px, py, 2, 2), paint);
+    canvas.drawRect(Rect.fromLTWH(px + dir * 3, py - 2, 2, 2), paint);
+    canvas.drawRect(Rect.fromLTWH(px - dir * 2, py + 2, 1, 1), dim);
+    canvas.drawRect(Rect.fromLTWH(px + dir * 5, py + 1, 1, 1), dim);
+  }
 }
 
 class _BuilderDrawable extends _Drawable {
@@ -856,7 +1027,7 @@ class _FarmerDrawable extends _Drawable {
         flipX:         !f.effectiveFacingRight,
         walkPhase:     f.walkPhase,
         moveIntensity: f.moveIntensity,
-        harvesting:    f.state == FarmerState.harvesting,
+        harvesting:    f.isWorkingField,
         harvestPhase:  f.harvestPhase,
         carryingWater: f.isHandlingWater,
         visual:        f.visual,
@@ -2298,8 +2469,11 @@ class VillageGamePainter extends CustomPainter {
       final py = s.dy.roundToDouble();
       if (px < minX || px > maxX) continue;
       if (py < minY || py > maxY) continue;
-      FarmRenderer.drawTile(canvas, px, py, hw, hh, t.stage, t.growthProgress,
-          season);
+      // Ekilmemiş / nadastaki tarla çıplak toprak (stage 0, progress yok) —
+      // büyüyen ekinin cross-fade'i tetiklenmesin.
+      final showProgress = t.needsSowing ? 0.0 : t.growthProgress;
+      FarmRenderer.drawTile(canvas, px, py, hw, hh, t.stage, showProgress,
+          season, watered: t.isWatered);
     }
   }
 

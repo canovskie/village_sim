@@ -273,6 +273,30 @@ class WorldGenerator {
   }
 
   // ── Madenler ────────────────────────────────────────────────────────────────
+  //
+  // KONTROLLÜ AÇILIM: kamera reveal'ı bir "reach" kutusudur (ekran-ekseni u,v;
+  // span=hu+hv, başlangıç 50 → görev/bina ile ~117; bkz. scene_land +
+  // scene_input._clampCamera). Madenler spawn'da bu metrikte MESAFE bandlarına
+  // konur → ilk yerleşimde HİÇ maden görünmez; dünya açıldıkça önce taş, sonra
+  // kömür, en derinde demir kadraja girer.
+
+  /// Band eşikleri (span cinsinden). Başlangıç 50'nin üstünde marj bırakılır.
+  static const double _kSpanStone = 56;
+  static const double _kSpanCoal = 72;
+  static const double _kSpanIron = 88;
+  /// Bunun ötesi (maxSpan ~117'ye tampanlı) pratikte hiç kadraja girmez —
+  /// oraya maden koymak israftır.
+  static const double _kSpanCap = 112;
+
+  /// (c,r)'nin kamera reach'ine girebilmesi için gereken en küçük span (hu+hv).
+  /// Kesin değer viewport oranına bağlı (reach kutusu ekran oranıyla bölünür);
+  /// burada MAKUL EN KÖTÜ durum alınır: u ekseni için en geniş (~21:9), v için
+  /// en dar (~4:3) viewport → band eşiği hiçbir ekranda erken delinmez.
+  static double _spanNeeded(num c, num r) {
+    final du = ((c - r) - (kCols - kRows) / 2).abs();
+    final dv = ((c + r) - (kCols + kRows - 2) / 2).abs();
+    return max(du * 1.86, dv * 1.65);
+  }
 
   List<MineNode> _generateMines(
     Set<(int, int)> water,
@@ -281,50 +305,53 @@ class WorldGenerator {
     final mines = <MineNode>[];
     final occupied = <(int, int)>{};
 
-    // Taş: 1-2 grup baz, alan ile ölçekli (en çok kullanılan, biraz fazla)
-    final stoneGroups = _scaledRange(1, 2);
-    for (int i = 0; i < stoneGroups; i++) {
-      _placeGroup(OreType.stone, water, treeTiles, occupied, mines);
+    // Her tür için İLK grup dar banda zorlanır → açılan reach o türü KESİN ve
+    // sırayla karşılar; kalan gruplar band mininden cap'e serbest dağılır.
+    void groups(OreType type, int count, double minSpan) {
+      _placeGroup(type, water, treeTiles, occupied, mines,
+          minSpan: minSpan, maxSpan: minSpan + 16);
+      for (int i = 1; i < count; i++) {
+        _placeGroup(type, water, treeTiles, occupied, mines,
+            minSpan: minSpan, maxSpan: _kSpanCap);
+      }
     }
 
-    // Demir: 1 grup baz, alan ile ölçekli
-    final ironGroups = _scaledRange(1, 1);
-    for (int i = 0; i < ironGroups; i++) {
-      _placeGroup(OreType.iron, water, treeTiles, occupied, mines);
-    }
-
-    // Kömür: 1 grup baz, alan ile ölçekli
-    final coalGroups = _scaledRange(1, 1);
-    for (int i = 0; i < coalGroups; i++) {
-      _placeGroup(OreType.coal, water, treeTiles, occupied, mines);
-    }
+    groups(OreType.stone, _scaledRange(1, 2), _kSpanStone); // ilk genişleme
+    groups(OreType.coal, _scaledRange(1, 1), _kSpanCoal); // orta
+    groups(OreType.iron, _scaledRange(1, 1), _kSpanIron); // en derin
 
     return mines;
   }
 
   /// 2×2 kare mine grubu yerleştirir. Her grup tam 4 node içerir,
-  /// maden binası (2×2) üstüne tam oturur.
+  /// maden binası (2×2) üstüne tam oturur. [minSpan]/[maxSpan]: grubun tüm
+  /// tile'ları bu reach bandında kalmalı (kontrollü açılım).
   void _placeGroup(
     OreType type,
     Set<(int, int)> water,
     Set<(int, int)> treeTiles,
     Set<(int, int)> occupied,
-    List<MineNode> out,
-  ) {
-    for (int attempt = 0; attempt < 60; attempt++) {
+    List<MineNode> out, {
+    required double minSpan,
+    required double maxSpan,
+  }) {
+    // Bandlar haritanın küçük bir dilimi — rejection sampling'e bol deneme.
+    for (int attempt = 0; attempt < 160; attempt++) {
       final col = 3 + _rng.nextInt(kCols - 6); // sol-üst köşe
       final row = 3 + _rng.nextInt(kRows - 6);
 
-      // 2×2 bloğun tamamı boş, su yok, ağaç yok, safe zone dışı olmalı
+      // 2×2 bloğun tamamı boş, su yok, ağaç yok, reach bandının içinde olmalı
       bool ok = true;
       for (int dc = 0; dc < 2 && ok; dc++) {
         for (int dr = 0; dr < 2 && ok; dr++) {
           final c = col + dc;
           final r = row + dr;
+          final span = _spanNeeded(c, r);
           if (occupied.contains((c, r)) ||
               water.contains((c, r)) ||
               treeTiles.contains((c, r)) ||
-              _inSafe(c, r, margin: 2)) {
+              span < minSpan ||
+              span > maxSpan) {
             ok = false;
           }
         }

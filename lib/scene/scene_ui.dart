@@ -241,7 +241,7 @@ extension _SceneUi on _VillageSceneState {
               setStateHere(() => SettingsModel.instance.toggleMute()),
           godMode: _godMode,
           onNewMap: () => setStateHere(() => _generateWorld()),
-          onOpenRoster: () => setStateHere(() => _statsPanelOpen = true),
+          onOpenRoster: () => _openLedger(LedgerSection.nufus),
           onToggleGod: () => setStateHere(() => _godMode = !_godMode),
           onTriggerEvent: _triggerRandomEvent,
           timeScale: _timeScale,
@@ -291,6 +291,7 @@ extension _SceneUi on _VillageSceneState {
       selected: _placing,
       hasFirepit: _hasFire,
       category: _buildCategory,
+      isUnlocked: _isCraftKnown,
       onSelect: _onSelectBuilding,
     );
   }
@@ -547,12 +548,12 @@ extension _SceneUi on _VillageSceneState {
         planning: selected.type == BuildingType.townhall
             ? _computePopulationPlanning()
             : null,
-        // Yönetişim (Karar Defteri + hane nabzı) Divan'a taşındı — belediye
-        // panelinde yalnız oraya açılan kapı kalır.
+        // Yönetişim (Karar Defteri + hane nabzı) Köy Defteri'ne taşındı —
+        // belediye panelinde yalnız oraya açılan kapı kalır.
         onOpenDivan: selected.type == BuildingType.townhall
             ? () => setStateHere(() {
                   _selectedBuilding = null;
-                  _divanOpen = true;
+                  _ledgerSection = LedgerSection.divan;
                 })
             : null,
                 ),
@@ -564,102 +565,204 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
-  /// Politika cooldown — bir karar değiştirildikten sonra geçmesi gereken
-  /// sim time (sn). 1 oyun günü = decree ağırlığı.
-  static const double _kPolicyCooldownSec = 1.0 * kGameDaySeconds;
+  // ── KANUNNAME — mühür ──────────────────────────────────────────────────────
+  // Eski toggle/cooldown ikilisi öldü. Yerine tek bir eylem var: MÜHÜR. Geri
+  // alınmaz, bir günde bir tane basılır, ve basılmadan önce meclis toplanır.
 
-  /// Cooldown'da kalan saniye (0 = serbest).
-  double _policyCooldownRemaining() =>
-      (_policies.cooldownUntilSim - _time).clamp(0.0, double.infinity);
+  /// Mürekkebin kuruması için kalan sim saniyesi (0 = defter açık, mühür basılır).
+  double _inkDryRemaining() =>
+      (_policies.inkDryUntilSim - _time).clamp(0.0, double.infinity);
 
-  /// Toggle politikalarını flip eder + cooldown başlatır + bildirim.
-  /// Cooldown bitmediyse no-op (UI zaten disable gösterir, ama safety).
-  void _togglePolicy(String key) {
-    if (_policyCooldownRemaining() > 0) return;
-    String? msg;
-    setStateHere(() {
-      switch (key) {
-        case 'familyEncouragement':
-          _policies.familyEncouragement = !_policies.familyEncouragement;
-          msg = _policies.familyEncouragement
-              ? '📜 Aile teşviki yürürlükte.'
-              : '📜 Aile teşviki kaldırıldı.';
-        case 'peacefulEnd':
-          _policies.peacefulEnd = !_policies.peacefulEnd;
-          msg = _policies.peacefulEnd
-              ? '📜 Yaşlıya huzur yürürlükte.'
-              : '📜 Yaşlıya huzur kaldırıldı.';
-        case 'eldersExemptFromFood':
-          _policies.eldersExemptFromFood = !_policies.eldersExemptFromFood;
-          msg = _policies.eldersExemptFromFood
-              ? '📜 Yaşlıya saygı yürürlükte.'
-              : '📜 Yaşlıya saygı kaldırıldı.';
-        case 'hospitality':
-          _policies.hospitality = !_policies.hospitality;
-          msg = _policies.hospitality
-              ? '📜 Misafirperverlik yürürlükte — gezginler köye buyur.'
-              : '📜 Misafirperverlik kaldırıldı.';
-        case 'apprenticeship':
-          _policies.apprenticeship = !_policies.apprenticeship;
-          msg = _policies.apprenticeship
-              ? '📜 Çıraklık yürürlükte — meslek babadan geçer.'
-              : '📜 Çıraklık kaldırıldı.';
-        case 'tradeGuidance':
-          _policies.tradeGuidance = !_policies.tradeGuidance;
-          msg = _policies.tradeGuidance
-              ? '📜 Zanaat yönlendirmesi — gençler kıt mesleklere yöneltilir.'
-              : '📜 Zanaat yönlendirmesi kaldırıldı.';
-        case 'slowMaturity':
-          _policies.slowMaturity = !_policies.slowMaturity;
-          msg = _policies.slowMaturity
-              ? '📜 Geç olgunlaşma — çocukluk uzun sürer.'
-              : '📜 Geç olgunlaşma kaldırıldı.';
-        case 'neighborliness':
-          _policies.neighborliness = !_policies.neighborliness;
-          msg = _policies.neighborliness
-              ? '📜 Komşuluk — köylüler selam verir.'
-              : '📜 Komşuluk kaldırıldı.';
-        case 'familyReunion':
-          _policies.familyReunion = !_policies.familyReunion;
-          msg = _policies.familyReunion
-              ? '📜 Aile birleşimi — bekarlar bir araya gelir.'
-              : '📜 Aile birleşimi kaldırıldı.';
-        case 'treePlanting':
-          _policies.treePlanting = !_policies.treePlanting;
-          msg = _policies.treePlanting
-              ? '📜 Doğa dostu — kesilen ağacın yanına fidan dikilir.'
-              : '📜 Doğa dostu kaldırıldı.';
-        case 'sharedHarvest':
-          _policies.sharedHarvest = !_policies.sharedHarvest;
-          msg = _policies.sharedHarvest
-              ? '📜 Müşterek hasat — geri kalan tarla hızlanır.'
-              : '📜 Müşterek hasat kaldırıldı.';
-        case 'cropRotation':
-          _policies.cropRotation = !_policies.cropRotation;
-          msg = _policies.cropRotation
-              ? '📜 Dönemli ekim — toprak dinlenir, hasat verimi artar.'
-              : '📜 Dönemli ekim kaldırıldı.';
-        case 'greenVillage':
-          _policies.greenVillage = !_policies.greenVillage;
-          msg = _policies.greenVillage
-              ? '📜 Yeşil köy — binalar çiçekle taçlanır.'
-              : '📜 Yeşil köy kaldırıldı.';
-        case 'freeRange':
-          _policies.freeRange = !_policies.freeRange;
-          msg = _policies.freeRange
-              ? '📜 Otlama serbest — hayvanlar geniş dolaşır.'
-              : '📜 Otlama serbest kaldırıldı.';
+  /// Fermanı meclisin önüne koy. Meclis burada toplanır — ayrı bir "topla"
+  /// düğmesi yok, çünkü meclis bir aksiyon değil, imzanın kendisidir.
+  void _openLawRitual(LawDef l) => setStateHere(() => _lawRitual = l);
+  void _closeLawRitual() => setStateHere(() => _lawRitual = null);
+
+  /// MÜHRÜ BAS — geri dönüşü yok. Ferman deftere girer, etkileri köye bağlanır,
+  /// mürekkep ıslanır (bir sonraki hüküm müzakere bitene dek yazılmaz).
+  ///
+  /// Bir mühür = bir KARAR. Dilekçe karar motoru ([_applyDecisionEffects])
+  /// olduğu gibi devralınır: kaynak deltası, süreli moral, zümre morali+nüfuzu,
+  /// köy hafızası bayrağı, zincir dilekçesi. Yasa da bir karardır.
+  /// Köyün hâli — ağır yasa kapıları buradan okunur (yasa şartı değil, dünya
+  /// şartı). Küçük/genç köy sert hükümleri kaldıramaz.
+  /// Köyün hâli — hüküm kapıları buradan okunur (yasa şartı DEĞİL, dünya şartı).
+  /// Bir hüküm, DERDİ köyde doğmadan deftere düşmez: tarla açılmadan su yolu,
+  /// ilk suç işlenmeden bekçi, ilk beşik sallanmadan beşik fermanı görünmez.
+  ///
+  /// PERF: set/sayım kurar → her frame değil, saniyede bir tazelenir
+  /// ([_lawCtxAge], bkz. _tickLawGates). Mühür anında bir saniyelik bayatlık
+  /// zararsız; kapılar zaten yavaş değişen dünya şartları.
+  LawContext get _lawContext => _lawCtxCache ??= _computeLawContext();
+
+  LawContext _computeLawContext() {
+    var children = 0, elders = 0;
+    final houses = <String>{};
+    for (final v in _villagers) {
+      switch (v.lifeStage) {
+        case LifeStage.child:
+          children++;
+        case LifeStage.elder:
+          elders++;
+        case LifeStage.youth:
+        case LifeStage.adult:
+          break;
       }
-      // Ferman zümre dengesini oynatır — yürürlüğe sokmak/kaldırmak farklı.
-      _applyEstateDecree(_policyEstateMood(key), enacting: _policies.isOn(key));
-      _policies.cooldownUntilSim = _time + _kPolicyCooldownSec;
-      _applyPolicySideChannels();
-    });
-    if (msg != null) _showNotification(msg!);
+      if (v.surname.isNotEmpty) houses.add(v.surname);
+    }
+    return LawContext(
+      population: _villagers.length,
+      dayCount: _dayCount,
+      villageMorale: _morale,
+      households: houses.length,
+      children: children,
+      elders: elders,
+      farmTiles: _farmTiles.length,
+      animals: _cows.length,
+      deaths: _graves.length,
+      crimesSeen: _crimesSeen,
+      knownCrafts: _knownCrafts,
+      buildings: {for (final b in _buildings) b.type},
+      memory: _villageMemory,
+    );
   }
 
-  /// Policy → global side channel'lar (life_stage, animal). Toggle anında ve
-  /// init'te çağrılır.
+  /// KAPI NÖBETİ — köyün hâli değiştikçe deftere yeni hüküm düşer. Sessizce
+  /// belirmesin: gündeme gelen her hüküm bir kez duyurulur (bildirim + kronik).
+  /// Yeni oyunda ilk tarama sessizdir ([_lawSeen] o an doldurulur) — yoksa köy
+  /// kurulur kurulmaz on bildirim üst üste yağar.
+  void _tickLawGates(double dt) {
+    _lawCtxAge += dt;
+    if (_lawCtxAge < 1.0) return;
+    _lawCtxAge = 0;
+    _lawCtxCache = null; // bir sonraki okumada tazelenir
+
+    final open = LawBook.openAgenda(_policies.sealed, _lawContext);
+    final fresh = [for (final l in open) if (!_lawSeen.contains(l.id)) l];
+    if (fresh.isEmpty) return;
+    for (final l in fresh) {
+      _lawSeen.add(l.id);
+    }
+    if (!_lawSeeded) {
+      _lawSeeded = true; // ilk tarama: köyün başlangıç gündemi, duyuru yok
+      return;
+    }
+    // Aynı saniyede birden fazla açıldıysa tek satırda topla — üst üste toast
+    // yağdırmak yerine "defter kabardı" hissi.
+    final title = fresh.length == 1
+        ? '${fresh.first.icon} Kanunname\'ye yeni hüküm düştü: ${fresh.first.title}'
+        : '📜 Kanunname kabardı — ${fresh.length} yeni hüküm gündemde.';
+    _showNotification(title);
+    _chronicle(
+        fresh.length == 1
+            ? '${fresh.first.title} Meclis gündemine girdi.'
+            : 'Köyün hâli değişti; deftere ${fresh.length} yeni hüküm düştü.',
+        icon: '📜');
+  }
+
+  /// KÖYÜN SESİ — o an en çok ihtiyaç duyulan (çıkarılabilir) yasa. Serbest
+  /// kataloğun içinden köyün gündemini öne çıkarır: önce geçim, ucuz/hızlı ve
+  /// ağır olmayan hüküm. Path DEĞİL, bir tavsiye — istersen başkasını çıkarırsın.
+  String? get _lawSpotlightId {
+    final ctx = _lawContext;
+    LawDef? best;
+    var bestScore = 1 << 30;
+    for (final l in kLawBook) {
+      if (!LawBook.available(l, _policies.sealed, ctx)) continue;
+      final score = (l.branch == LawBranch.gecim ? 0 : 1000) +
+          (l.isGrave ? 500 : 0) +
+          (l.deliberationDays * 10).round() +
+          l.seal.goldDelta.abs();
+      if (score < bestScore) {
+        bestScore = score;
+        best = l;
+      }
+    }
+    return best?.id;
+  }
+
+  void _sealLaw(LawDef l) {
+    if (_inkDryRemaining() > 0) return;
+    if (!LawBook.available(l, _policies.sealed, _lawContext)) return;
+
+    final rule = _regimeRule;
+    // MECLİS OYU — hür ve köklü bir rejimde ferman senin imzanla değil, köyün
+    // rızasıyla geçer. Oy düşerse mühür basılmaz; meclis dağılır ve mürekkep
+    // kısa bir süre ıslak kalır (aynı fermanı hemen tekrar dayatamazsın).
+    if (_lawNeedsVote(l)) {
+      final vote = _voteOnLaw(l);
+      if (!vote.passed) {
+        AudioManager.instance.playSfx(Sfx.bellChime);
+        setStateHere(() {
+          _inkDryTotal = 0.6 * kGameDaySeconds;
+          _policies.inkDryUntilSim = _time + _inkDryTotal;
+          _lawRitual = null;
+        });
+        final no = vote.voices.where((v) => !v.yes).map((v) => v.line).take(2);
+        _showNotification('🏛 Meclis fermanı geçirmedi '
+            '(${(vote.support * 100).round()}% destek). ${no.join(' ')}');
+        _chronicle('${l.title} meclisten döndü.', icon: '🏛');
+        // Reddedilen ferman meşruiyeti aşındırır: ısrar edersen köy gerilir.
+        _unrest = (_unrest + 0.04).clamp(0.0, 1.0);
+        return;
+      }
+    }
+
+    AudioManager.instance.playSfx(Sfx.bellChime);
+    setStateHere(() {
+      _policies.seal(l);
+      _applyDecisionEffects(_lawAsDecision(l), l.seal, null);
+      // Büyük fermanlar geçici moralle kalmaz — köy ruhunda sönmeyen bir iz.
+      if (l.legacy != 0) {
+        _governanceLegacy = (_governanceLegacy + l.legacy).clamp(-0.12, 0.12);
+      }
+      // Müzakere temposu rejimin: baskıda mürekkep çabuk kurur, hür rejimde
+      // meclis uzun konuşur.
+      _inkDryTotal = l.deliberationDays * kGameDaySeconds * rule.inkDryMul;
+      _policies.inkDryUntilSim = _time + _inkDryTotal;
+      _applyPolicySideChannels();
+      _lawCtxCache = null; // yeni mühür kapıları da oynatabilir
+      _lawRitual = null;
+    });
+    _chronicle('${l.title} deftere girdi.',
+        icon: l.icon, milestone: l.isGrave);
+    if (l.seal.resolution.isNotEmpty) _showNotification(l.seal.resolution);
+  }
+
+  /// Mühürü karar motoruna geçirmek için ince sarmalayıcı. `estate` bilerek
+  /// null: bir yasa bir haneye değil, bütün köye yazılır — kimse "bizim
+  /// dilekçemiz kabul edildi" nüfuzunu ceplemez.
+  Petition _lawAsDecision(LawDef l) => Petition(
+        id: 'law.${l.id}',
+        petitioner: 'Kanunname',
+        icon: l.icon,
+        title: l.title,
+        tone: PetitionTone.solemn,
+        bodyPool: [l.decree],
+        options: [l.seal],
+      );
+
+  /// Mühürlü fermanların GÜNLÜK idamesi — gece bekçisi keseden yer, hane sicili
+  /// vergi toplar, öşür ambardan alır. Bir yasa imzalandığı gün bitmez; her
+  /// sabah köyün sırtındadır. [_advanceWorldClock] gün dönümünde çağırır.
+  void _applyLawUpkeep() {
+    final (gold, food) = LawBook.dailyUpkeep(_policies.sealed);
+    if (gold != 0) {
+      _stockpile.gold = (_stockpile.gold + gold).clamp(0, 1 << 30);
+    }
+    if (food != 0) {
+      _stockpile.food = (_stockpile.food + food).clamp(0, 1 << 30);
+    }
+    // TEK SÖZ FERMANI — sessizliğin bedeli. Köy sesini yitirdi; her gün küçük
+    // bir moral sızıntısı (dilekçe kanalı kapalı, kimse dinlenmiyor). İlk şok
+    // fermanın moraleAmount'unda, bu ise sönmeyen tortu: baskının kronik yükü.
+    if (_policies.sealed.contains('nizam.sole')) {
+      pushPolicyMorale(-0.015, 1.5);
+    }
+  }
+
+  /// Policy → global side channel'lar (life_stage, animal). Mühür anında ve
+  /// init/yükleme'de çağrılır.
   void _applyPolicySideChannels() {
     kMaturityScale = _policies.slowMaturity ? 1.0 / 1.6 : 1.0;
     AnimalEntity.kWanderScale = _policies.freeRange ? 1.5 : 1.0;
@@ -667,21 +770,6 @@ extension _SceneUi on _VillageSceneState {
     WoodcutterEntity.kChopSpeedScale = _policies.treePlanting ? 0.85 : 1.0;
   }
 
-  /// Aile planlaması mutex set — radio select. Aynı değer seçilirse no-op.
-  void _setFamilyPolicy(FamilyPolicy fp) {
-    if (_policyCooldownRemaining() > 0) return;
-    if (_policies.family == fp) return;
-    final old = _policies.family;
-    setStateHere(() {
-      _policies.family = fp;
-      // Eski aile fermanını geri al, yenisini yürürlüğe sok (zümre salınımı).
-      _applyEstateDecree(familyPolicyEstateMood(old), enacting: false);
-      _applyEstateDecree(familyPolicyEstateMood(fp), enacting: true);
-      _policies.cooldownUntilSim = _time + _kPolicyCooldownSec;
-      _applyPolicySideChannels();
-    });
-    _showNotification('📜 Aile planlaması: ${fp.label}.');
-  }
 
   /// Belediye seçildiğinde panele geçen aggregat — yaş dağılımı, çiftler,
   /// hamile, konut, günlük yiyecek tüketimi. Pure read-only snapshot.
@@ -942,6 +1030,10 @@ extension _SceneUi on _VillageSceneState {
           villagerCount: _villagers.length,
           buildingCount: _buildings.length,
           onClose: () => setStateHere(() => _devPanelOpen = false),
+          onOpenConsole: () => setStateHere(() {
+            _devPanelOpen = false;
+            _devConsoleOpen = true;
+          }),
           onToggleGod: () => setStateHere(() => _godMode = !_godMode),
           onSetRain: (v) => setStateHere(() => _cycle.rainIntensity = v),
           onSetTimeOfDay: (v) => setStateHere(() => _cycle.timeOfDay = v),
@@ -949,7 +1041,7 @@ extension _SceneUi on _VillageSceneState {
             setStateHere(() {
               if (e.needsChoice) {
                 _pendingChoice = e;
-                _showNotification('${e.icon} ${e.title} — karar bekliyor');
+                _showNotification('${e.icon} ${e.title}. Köy karar bekliyor.');
               } else {
                 _applyEventAutomatic(e);
               }
@@ -992,6 +1084,10 @@ extension _SceneUi on _VillageSceneState {
             _buildLivingVillage();
             setStateHere(() => _devPanelOpen = false);
           },
+          onUnlockAllCrafts: () => setStateHere(() {
+            _knownCrafts.addAll(Craft.all);
+            _showNotification('⚒ Tüm zanaatlar açıldı');
+          }),
           onSeedShowcase: () {
             _buildShowcaseVillage();
             setStateHere(() {
@@ -1007,41 +1103,23 @@ extension _SceneUi on _VillageSceneState {
           onToggleRain:  () => setStateHere(() {
             _cycle.rainIntensity = _cycle.rainIntensity > 0.05 ? 0.0 : 0.7;
           }),
+          // DEV: defteri tek hamlede doldur (GEÇİM kolu) / defteri yak.
+          // Mühür geri alınmaz — ama dev paneli oyunun kuralına tabi değil.
           onAllPolicies: () => setStateHere(() {
-            _policies.familyEncouragement = true;
-            _policies.peacefulEnd = true;
-            _policies.eldersExemptFromFood = true;
-            _policies.hospitality = true;
-            _policies.apprenticeship = true;
-            _policies.tradeGuidance = true;
-            _policies.slowMaturity = true;
-            _policies.neighborliness = true;
-            _policies.familyReunion = true;
-            _policies.treePlanting = true;
-            _policies.sharedHarvest = true;
-            _policies.greenVillage = true;
-            _policies.freeRange = true;
-            _policies.cooldownUntilSim = 0;
+            for (final l in LawBook.ofBranch(LawBranch.gecim)) {
+              if (LawBook.available(l, _policies.sealed, _lawContext)) {
+                _policies.seal(l);
+              }
+            }
+            _policies.inkDryUntilSim = 0;
             _applyPolicySideChannels();
           }),
           onClearPolicies: () => setStateHere(() {
-            _policies.family = FamilyPolicy.open;
-            _policies.familyEncouragement = false;
-            _policies.peacefulEnd = false;
-            _policies.eldersExemptFromFood = false;
-            _policies.hospitality = false;
-            _policies.apprenticeship = false;
-            _policies.tradeGuidance = false;
-            _policies.slowMaturity = false;
-            _policies.neighborliness = false;
-            _policies.familyReunion = false;
-            _policies.treePlanting = false;
-            _policies.sharedHarvest = false;
-            _policies.greenVillage = false;
-            _policies.freeRange = false;
-            _policies.cooldownUntilSim = 0;
+            _policies.restoreSealed(const []);
+            _policies.inkDryUntilSim = 0;
             _applyPolicySideChannels();
           }),
+
           onMakeSage: () => setStateHere(() {
             // Zaten varsa flag'i temizle ki yeni biri olabilsin
             for (final v in _villagers) {
@@ -1086,6 +1164,11 @@ extension _SceneUi on _VillageSceneState {
           onForcePetitionId: _forcePetitionById,
           perfMode: _perfMode,
           onTogglePerf: () => setStateHere(() => _perfMode = !_perfMode),
+          devLogOn: _devLogOn,
+          onToggleDevLog: () => setStateHere(() {
+            _devLogOn = !_devLogOn;
+            if (!_devLogOn) _devLog.clear();
+          }),
           simSpeedBoost: _devSpeedBoost,
           simHistory: [
             for (final s in _simHistory)
@@ -1144,6 +1227,13 @@ extension _SceneUi on _VillageSceneState {
           onIgniteFeud: () => setStateHere(() {
             if (!_devIgniteFeud()) {
               _showNotification('Kan davası için 2 uygun köylü bulunamadı');
+            }
+          }),
+          onStartCrime: () => setStateHere(() {
+            if (!_devRandomCrime()) {
+              _showNotification(_activeCrime != null
+                  ? 'Zaten bir suç işleniyor'
+                  : 'Uygun fail/hedef bulunamadı');
             }
           }),
           onClearActivities: () => setStateHere(_devClearActivities),
@@ -1208,6 +1298,7 @@ extension _SceneUi on _VillageSceneState {
               onToggleCollapse: () => setStateHere(
                 () => _objectivesCollapsed = !_objectivesCollapsed,
               ),
+              onOpenLedger: () => _openLedger(LedgerSection.tuzuk),
             );
           },
         ),
@@ -1235,7 +1326,7 @@ extension _SceneUi on _VillageSceneState {
             collapsed: _estateCollapsed,
             onToggleCollapse: () =>
                 setStateHere(() => _estateCollapsed = !_estateCollapsed),
-            onOpenDivan: _openDivan,
+            onOpenDivan: () => _openLedger(LedgerSection.divan),
             agendaCount: _divanAgendaCount(),
           ),
         ),
@@ -1316,6 +1407,313 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
+  // ── Dev olay günlüğü konsolu ────────────────────────────────────────────────
+  // Sol-altta yarı saydam, salt-okunur konsol: en yeni satır üstte ve parlak,
+  // eskiler kademeli soluk. IgnorePointer → dokunuşları geçirir (oyun altında
+  // tıklanabilir). Yalnız _devLogOn açıkken ve satır varken Stack'e eklenir.
+  Widget buildDevLogConsole() {
+    return Positioned(
+      left: 12,
+      bottom: 92,
+      child: IgnorePointer(
+        child: Container(
+          width: 276,
+          padding: const EdgeInsets.fromLTRB(11, 8, 11, 9),
+          decoration: BoxDecoration(
+            color: const Color(0xE60C1014),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Text('🎲', style: TextStyle(fontSize: 11)),
+                  const SizedBox(width: 6),
+                  Text(
+                    'OLAY GÜNLÜĞÜ',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                      color: Colors.white.withValues(alpha: 0.42),
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${_devLog.length}',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      color: Colors.white.withValues(alpha: 0.30),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              for (int i = 0; i < _devLog.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Opacity(
+                    opacity: (1.0 - i * 0.055).clamp(0.32, 1.0),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(top: 4, right: 7),
+                          width: 5,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            color: _devLog[i].color,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(children: [
+                              if (_devLog[i].tag.isNotEmpty)
+                                TextSpan(
+                                  text: '${_devLog[i].tag} ',
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              TextSpan(text: _devLog[i].text),
+                            ]),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.25,
+                              color: Colors.white.withValues(alpha: 0.88),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── İmparatorluk varış anonsu ───────────────────────────────────────────────
+  // Kolon yaklaşırken birkaç saniyelik gergin, tam-ekran "İMPARATORLUK GELİYOR".
+  // Sim'i DURDURMAZ (IgnorePointer → oyuncu kolonu görür, pan yapabilir). Giriş:
+  // letterbox açılır + başlık slam-in (easeOut); çıkış: solar. Kırmızı vignette +
+  // nabızlı kızıl glow = tehdit tonu. Cinzel oyma-kapital başlık.
+  // TUZAK: bu anons dış widget ağacında duruyor ama o ağaç her frame rebuild
+  // OLMUYOR (perf: sadece _frame/_hudFrame'e bağlı leaf'ler repaint eder).
+  // ListenableBuilder olmadan intro fade/slam-in tek bir yarı-saydam karede
+  // donuyordu ve ancak oyuncu tıklayınca (setState) "netleşiyordu".
+  Widget buildImperialAlert() => ListenableBuilder(
+        listenable: _frame,
+        builder: (_, _) => _imperialAlertBody(),
+      );
+
+  Widget _imperialAlertBody() {
+    const total = _VillageSceneState._kImperialAlertDur;
+    if (_imperialAlertLeft <= 0) return const SizedBox.shrink();
+    final left = _imperialAlertLeft.clamp(0.0, total);
+    final elapsed = total - left;
+    final introT = (elapsed / 0.5).clamp(0.0, 1.0);
+    final outT = (left / 1.15).clamp(0.0, 1.0);
+    final alpha = introT * outT;
+    if (alpha <= 0.004) return const SizedBox.shrink();
+
+    final ease = Curves.easeOutCubic.transform(introT);
+    final scale = 1.0 + (1.0 - ease) * 0.13; // 1.13 → 1.0 slam-in
+    final pulse = 0.5 + 0.5 * sin(_time * 3.4);
+    final barH = 76.0 * ease;
+    final w = _viewSize.width <= 0 ? 900.0 : _viewSize.width;
+    final big = (w * 0.088).clamp(40.0, 96.0);
+    final topSize = big * 0.60;
+
+    const bone = Color(0xFFF0EEE9);
+    const blood = Color(0xFFC9351F);
+
+    Widget bar(bool isTop) => Container(
+          height: barH,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
+              end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
+              colors: const [Color(0xF2090607), Color(0x00090607)],
+            ),
+            border: Border(
+              top: isTop
+                  ? BorderSide.none
+                  : BorderSide(color: blood.withValues(alpha: 0.45), width: 1.2),
+              bottom: isTop
+                  ? BorderSide(color: blood.withValues(alpha: 0.45), width: 1.2)
+                  : BorderSide.none,
+            ),
+          ),
+        );
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Opacity(
+          opacity: alpha.clamp(0.0, 1.0),
+          child: Stack(
+            children: [
+              // Kanlı vignette — TÜM ekranı bastır (HUD panelleri de dahil geri
+              // çekilsin), kenarlara doğru neredeyse siyaha git.
+              const DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: RadialGradient(
+                    center: Alignment.center,
+                    radius: 1.18,
+                    colors: [
+                      Color(0x9E0B0605),
+                      Color(0xCC240808),
+                      Color(0xF5120402),
+                    ],
+                    stops: [0.0, 0.68, 1.0],
+                  ),
+                ),
+                child: SizedBox.expand(),
+              ),
+              // Sinematik letterbox — üst/alt.
+              Positioned(top: 0, left: 0, right: 0, child: bar(true)),
+              Positioned(bottom: 0, left: 0, right: 0, child: bar(false)),
+              // Okunabilirlik perdesi — radial vignette merkezi ŞEFFAF; parlak
+              // gündüz köyü üstünde başlık kaybolmasın diye yalnız merkez metin
+              // bloğunun arkasını yumuşakça karartır (kenarlarda tamamen erir).
+              const Center(
+                child: FractionallySizedBox(
+                  widthFactor: 0.92,
+                  heightFactor: 0.62,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        radius: 0.72,
+                        colors: [
+                          Color(0xCF0B0605),
+                          Color(0x780B0605),
+                          Color(0x000B0605),
+                        ],
+                        stops: [0.0, 0.5, 1.0],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Merkez başlık bloğu.
+              Center(
+                child: Transform.scale(
+                  scale: scale,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(left: 5),
+                        child: Text(
+                          '⚔   D I Ş   G Ü Ç',
+                          style: AppUi.label.copyWith(
+                            color: blood.withValues(alpha: 0.75 + 0.25 * pulse),
+                            letterSpacing: 5,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // letterSpacing son harfin SAĞINA da boşluk koyar →
+                      // ortalama sola kayar; eşit padding ile telafi et.
+                      Padding(
+                        padding: EdgeInsets.only(left: topSize * 0.05),
+                        child: Text(
+                          'İMPARATORLUK',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Cinzel',
+                            fontWeight: FontWeight.w700,
+                            fontSize: topSize,
+                            height: 1.0,
+                            letterSpacing: topSize * 0.05,
+                            color: bone,
+                            shadows: const [
+                              Shadow(color: Colors.black, blurRadius: 16),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: EdgeInsets.only(left: big * 0.08),
+                        child: Text(
+                          'GELİYOR',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontFamily: 'Cinzel',
+                            fontWeight: FontWeight.w900,
+                            fontSize: big,
+                            height: 1.06,
+                            letterSpacing: big * 0.08,
+                            color: blood,
+                            shadows: [
+                              Shadow(
+                                  color:
+                                      blood.withValues(alpha: 0.35 + 0.35 * pulse),
+                                  blurRadius: 38),
+                              const Shadow(color: Colors.black54, blurRadius: 12),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Kan-kırmızı hat + elmas.
+                      SizedBox(
+                        width: 244,
+                        height: 10,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              height: 1.5,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(colors: [
+                                  blood.withValues(alpha: 0),
+                                  blood.withValues(alpha: 0.85),
+                                  blood.withValues(alpha: 0),
+                                ]),
+                              ),
+                            ),
+                            Transform.rotate(
+                              angle: 0.7853981634,
+                              child: Container(width: 7, height: 7, color: blood),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 470),
+                        child: Text(
+                          _imperialAlertSub,
+                          textAlign: TextAlign.center,
+                          style: AppUi.body.copyWith(
+                            color: bone.withValues(alpha: 0.86),
+                            fontSize: 13.5,
+                            height: 1.5,
+                            shadows: const [
+                              Shadow(color: Colors.black, blurRadius: 8),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ── Yerleştirme/seçim modu ipucu ────────────────────────────────────────────
 
   Widget buildHintRibbon() {
@@ -1380,151 +1778,14 @@ extension _SceneUi on _VillageSceneState {
         return ('Barınak', 2);
     }
   }
+}
 
-  /// Köy Nüfus Defteri modalı — köylülerin hane/meslek/servet/moral istatistikleri
-  /// (Köylüler + Haneler sekmeleri). Salt-okunur; satıra dokun = detay paneli açılır.
-  Widget buildStatsPanel() {
-    final rows = [
-      for (final v in _villagers)
-        if (!v.isDying)
-          () {
-            final (label, tier) = _housingInfo(v);
-            return VillagerStatRow(v, label, tier);
-          }(),
-    ];
-    return VillagerStatsPanel(
-      rows: rows,
-      houses: _houses.snapshot(),
-      onClose: () => setStateHere(() => _statsPanelOpen = false),
-      onSelect: (v) => setStateHere(() {
-        _statsPanelOpen = false;
-        _selectedVillager = v;
-      }),
-    );
-  }
-
-  /// Hikâye güncesi paneli — köyün büyük anlarının kronolojik özeti (sinematik
-  /// satırları). Salt-okunur; boşluğa dokun = kapat. "Ulaşılabilir hikâye".
-  Widget buildStoryPanel() {
-    return Positioned.fill(
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setStateHere(() => _storyPanelOpen = false),
-              child: const ColoredBox(color: AppUi.scrim),
-            ),
-          ),
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
-              child: GestureDetector(
-                onTap: () {},
-                child: AppPanel(
-                  accent: AppUi.accent,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text('📖', style: TextStyle(fontSize: 20)),
-                          const SizedBox(width: 10),
-                          Text('Köyün Hikâyesi', style: AppUi.title),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                          _achievedMilestones.isEmpty
-                              ? 'Büyük anların güncesi'
-                              : 'Büyük anların güncesi · 🏆 ${_achievedMilestones.length} başarım',
-                          style: AppUi.label.copyWith(color: AppUi.textLo)),
-                      const AppDivider(),
-                      if (_storyLog.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Text('Henüz yazılacak bir şey yok…',
-                              style: AppUi.body.copyWith(color: AppUi.textLo)),
-                        )
-                      else
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 320),
-                          child: SingleChildScrollView(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                for (final entry in _storyLog.reversed)
-                                  Padding(
-                                    padding:
-                                        const EdgeInsets.symmetric(vertical: 6),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 1),
-                                          child: Text(entry.icon,
-                                              style: const TextStyle(
-                                                  fontSize: 15)),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              if (entry.day > 0)
-                                                Text('${entry.day}. Gün',
-                                                    style: AppUi.label.copyWith(
-                                                        color: AppUi.textLo,
-                                                        fontSize: 10)),
-                                              Text(entry.text,
-                                                  style: entry.milestone
-                                                      ? AppUi.body.copyWith(
-                                                          fontSize: 12.5,
-                                                          height: 1.4,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: AppUi.accent)
-                                                      : AppUi.body.copyWith(
-                                                          fontSize: 12.5,
-                                                          height: 1.4)),
-                                            ],
-                                          ),
-                                        ),
-                                        if (entry.milestone)
-                                          const Padding(
-                                            padding: EdgeInsets.only(
-                                                left: 6, top: 1),
-                                            child: Text('🏆',
-                                                style:
-                                                    TextStyle(fontSize: 12)),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 14),
-                      Center(
-                        child: GestureDetector(
-                          onTap: () =>
-                              setStateHere(() => _storyPanelOpen = false),
-                          child: AppChip(label: 'kapat', color: AppUi.accent),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+/// Dev olay günlüğü satırı. [seq] artan sıra no (debug), [tag] kısa kategori
+/// işareti, [text] gösterilecek metin, [color] kanal noktası rengi.
+class DevLogEntry {
+  final int seq;
+  final String tag;
+  final String text;
+  final Color color;
+  const DevLogEntry(this.seq, this.tag, this.text, this.color);
 }
