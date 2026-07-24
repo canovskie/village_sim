@@ -253,7 +253,9 @@
       "Bash(dart format *)",
       "Bash(awk -F: '$1>1740 && $1<1960')",
       "Bash(sysctl -n machdep.cpu.brand_string)",
-      "Bash(sw_vers)"
+      "Bash(sw_vers)",
+      "Bash(awk -F/ '{print $1\"/\"$2}')",
+      "Bash(xargs du -ch)"
     ]
   }
 }

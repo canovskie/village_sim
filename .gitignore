@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Üretilmiş çıktılar — capture/harness'ların ekrandan üretip yazdığı PNG'ler ve
+# HTML galeri. Repoda tutulmaz (yeniden üretilebilir, MB'larca yer kaplıyordu):
+#   flutter run -t lib/tools/*_capture_main.dart  → preview/
+/preview/
+
+# Geçici / scratch çalışma dosyaları
+/scratch/
+*.tmp
