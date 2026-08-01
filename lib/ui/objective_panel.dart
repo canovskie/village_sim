@@ -134,11 +134,10 @@ class ObjectivePanel extends StatelessWidget {
         children: [
           SizedBox(
             width: 16,
-            child: Text(s.quest.icon,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: active ? AppUi.accent : AppUi.textLo,
-                )),
+            // Emoji DEĞİL — HUD'la aynı temalı Phosphor glyph (renkli oyuncak
+            // emoji tema/göz yorgunluğunun bir parçasıydı).
+            child: GameIcon(questGlyph(s.quest.id),
+                size: 12, color: active ? AppUi.accent : AppUi.textLo),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -163,12 +162,30 @@ class ObjectivePanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
         border: Border.all(color: AppUi.accent.withValues(alpha: 0.4), width: 1),
       ),
-      child: Text(active.quest.hint,
-          style: AppUi.body.copyWith(
-            fontSize: 10,
-            color: AppUi.textHi,
-            height: 1.4,
-          )),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // GÖREVİ KİM İSTİYOR — kuruluş görevlerinin çoğu bir kurucunun
+          // ağzından çıkar. İsim üstte durur ki ipucu bir sistem mesajı değil
+          // birinin ricası gibi okunsun; kurucu ölmüşse satır hiç çizilmez.
+          if (active.speakerName case final who?) ...[
+            Text('$who istiyor',
+                style: AppUi.label.copyWith(
+                  fontSize: 9,
+                  color: AppUi.accentSoft,
+                  letterSpacing: 0.5,
+                )),
+            const SizedBox(height: 3),
+          ],
+          Text(active.quest.hint,
+              style: AppUi.body.copyWith(
+                fontSize: 10,
+                color: AppUi.textHi,
+                height: 1.4,
+              )),
+        ],
+      ),
     );
   }
 
@@ -195,3 +212,41 @@ class ObjectivePanel extends StatelessWidget {
     );
   }
 }
+
+/// Görev kimliği → temalı Phosphor glyph (emoji yerine). ObjectivePanel ve
+/// QuestTracker paylaşır. Bilinmeyen id star'a düşer — yeni görev eklenince
+/// buraya bir satır ekle.
+GameIconData questGlyph(String id) => switch (id) {
+      'firepit' => GameIconData.flame,
+      'lumber' => GameIconData.axe,
+      'house' => GameIconData.home,
+      'farm' => GameIconData.wheat,
+      'well' => GameIconData.drop,
+      // ── Kuruluş mikro adımları ──────────────────────────────────────────
+      // Karar adımları (birine iş ver) insan glyph'i, sonuç adımları o işin
+      // ürününü taşır → panelde "ben ne yaptım / ne oldu" ritmi okunur.
+      'giveBasket' => GameIconData.people,
+      'firstBerries' => GameIconData.wheat,
+      'giveCook' => GameIconData.people,
+      'firstMeal' => GameIconData.flame,
+      'tent' => GameIconData.home,
+      'giveAxe' => GameIconData.axe,
+      'firstNight' => GameIconData.moon,
+      'townhall' => GameIconData.bank,
+      'firstPolicy' => GameIconData.scroll,
+      'tavern' => GameIconData.tankard,
+      'pop10' => GameIconData.people,
+      'church' => GameIconData.church,
+      'market' => GameIconData.market,
+      'beehive' => GameIconData.honey,
+      'florist' => GameIconData.flower,
+      'threePolicies' => GameIconData.scales,
+      'neighborly' => GameIconData.handshake,
+      'pop20' => GameIconData.people,
+      'bloomVillage' => GameIconData.flower,
+      'fivePolicies' => GameIconData.crown,
+      'hospitality' => GameIconData.door,
+      'warehouse' => GameIconData.warehouse,
+      'pop30' => GameIconData.star,
+      _ => GameIconData.star,
+    };

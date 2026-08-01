@@ -109,6 +109,52 @@ extension _SceneWorld on _VillageSceneState {
     return (gx, gy); // fallback (olmamalı)
   }
 
+  // ── Sahneden çıkan köylü ───────────────────────────────────────────────────
+
+  /// Köyden ÇIKAN bir köylüye kalan tüm sahne referanslarını koparır.
+  ///
+  /// Köyden çıkışın dört kapısı var (ölüm/sürgün → `_tickPopulation`, kaçırılma
+  /// → `_takeCaptive`, devşirme → `_takeConscript`) ve her biri temizliği kendi
+  /// bildiğince yapıyordu: ölüm yalnız küslük/kan davasını siliyor, devşirme
+  /// hiçbirini. Kalan referans "hayalet köylü" üretiyordu — açık kalan panelden
+  /// olmayan birini idam etmek, hayalet bir kan düşmanı yüzünden sonsuz süren
+  /// husumet, ölüye koşan muhafız. Tek kapı: çıkışın SEBEBİ ne olursa olsun buradan geç.
+  ///
+  /// Ailevi bağlar burada KOPARILMAZ — geri dönüşü olan çıkışlar (fidye) onları
+  /// tek yönlü koparıp geri kurar, ölüm ise yasın kaynağı olarak korur.
+  void _forgetVillager(VillagerEntity v) {
+    if (identical(_selectedVillager, v)) _selectedVillager = null;
+    if (identical(_followedVillager, v)) _followedVillager = null;
+    if (identical(_draggedVillager, v)) _draggedVillager = null;
+    if (identical(_hoverVillager, v)) _hoverVillager = null;
+    if (identical(_petitionAuthor, v)) _petitionAuthor = null;
+    if (identical(_accusedCriminal, v)) _accusedCriminal = null;
+    if (identical(_firekeeper, v)) _firekeeper = null;
+    if (identical(_brideElect, v)) _brideElect = null;
+    if (identical(_groomElect, v)) _groomElect = null;
+    if (identical(_ransomVictim, v)) _ransomVictim = null;
+    final couple = _weddingCouple;
+    if (couple != null &&
+        (identical(couple.$1, v) || identical(couple.$2, v))) {
+      _weddingCouple = null;
+    }
+
+    for (final o in _villagers) {
+      if (identical(o, v)) continue;
+      o.grudges.remove(v);
+      o.bloodEnemies.remove(v);
+      if (identical(o.convoPartner, v)) o.convoPartner = null;
+      // Kanaat + anı: gitmiş birine dair kanaat yalnız sızıntı, ama ANI aktif
+      // zarar — `strongestReportable` hâlâ onu seçebilir ve tanık, sahnede
+      // olmayan biri için muhafıza koşar (`_deliverReport` canlılık sormuyor).
+      o.memory.opinion.remove(v);
+      o.memory.recollections.removeWhere((r) => identical(r.subject, v));
+    }
+    // Gömdüğü zulalar toprakta KALIR (mal buharlaşmaz) ama artık kimseyi
+    // suçlamaz — sahneden çıkmış birine dangling referans tutulmaz.
+    _forgetLootOwner(v);
+  }
+
   // ── Nüfus & ev kapasitesi ──────────────────────────────────────────────────
 
   /// Ev binalarındaki boş sakin kapasitesinin toplamı.
@@ -239,6 +285,8 @@ extension _SceneWorld on _VillageSceneState {
     _lotuses.clear();
     _reeds.clear();
     _reedBeds.clear();
+    _berryBushes.clear();
+    _cookedMeals = 0;
     _decor.clear();
     _trees.clear();
     _mineNodes.clear();
@@ -247,21 +295,15 @@ extension _SceneWorld on _VillageSceneState {
     _roadOrders.clear();
     _roadSystem.clear();
     _placingRoad = null;
-    _roadStrokeTiles.clear();
+    _roadErase = false;
+    _clearRoadDrag();
     _pathContext.bumpVersion(); // yeni harita → tüm cached path'ler iptal
     _anchorSystem.rebuild(const []); // tüm slot rezervasyonlarını sil
-    _lumberCamps.clear();
-    _miners.clear();
-    _fishers.clear();
-    _florists.clear();
-    _shepherds.clear();
     _cows.clear();
-    _farmers.clear();
-    _woodcutters.clear();
-    _builders.clear();
     _villagers.clear();
     _resourceBoxes.clear();
     _eggs.clear();
+    _lootCaches.clear();
     _hayEntities.clear();
     _birdFlocks.clear();
     _beeSwarms.clear();
@@ -310,6 +352,11 @@ extension _SceneWorld on _VillageSceneState {
     _completedQuests.clear();
     _charterTier = 0;
     _flowScan = 0;
+    _stepCache = null; // ilk _tickFlow taramasında yeniden kurulur
+    // Yeni köy âdeti yeniden öğrenir — dersler sıfırlanır.
+    _customLessons.clear();
+    _firstMealShown = false;
+    _berriesPicked = 0;
     _foodHunger = 0.0;
     _dayCount = 1;
     _lastTimeOfDay = _cycle.timeOfDay;
@@ -330,6 +377,7 @@ extension _SceneWorld on _VillageSceneState {
     _decor.addAll(result.decor);
     _trees.addAll(result.trees);
     _mineNodes.addAll(result.mineNodes);
+    _berryBushes.addAll(result.berryBushes);
 
     // Arazi: merkezde açıklık aç, gen ormanını yoğun vahşi ormanla değiştir,
     // sınır halkasına kesilebilir ağaçları diz. _trees'i yeniden kurar.
@@ -337,6 +385,12 @@ extension _SceneWorld on _VillageSceneState {
 
     // Yeni map → ground picture cache invalid.
     _groundVersion++;
+
+    // KURULUŞ — kafile ilk saniyeden sahnede. Ateş yeri henüz yok; kurucular
+    // haritanın bir kenarından girip merkeze doğru yürürler (bkz.
+    // _spawnFoundingCaravan). Eski açılışta ekran boştu ve ilk insan ancak
+    // ateş yakılınca beliriyordu.
+    _spawnFoundingCaravan();
 
     _fixNpcSpawns();
   }

@@ -12,7 +12,6 @@ abstract final class EventIds {
   static const drought   = 'drought';
   static const plague    = 'plague';
   static const beastRaid = 'beastRaid';
-  static const thief     = 'thief';
   static const storm     = 'storm';
   static const houseFire = 'houseFire';
   static const bard      = 'bard';
@@ -35,11 +34,10 @@ enum EventFx {
   meteorShower,   // BESPOKE: gece gökten süzülen kayan yıldızlar + köye düşen göktaşı flaşı
   wedding,        // BESPOKE: ateş başında dans eden çift + yükselen kalpler + yaprak/konfeti yağmuru
   harvestBounty,  // BESPOKE: tarlalarda altın ışıltı + olgunlaşan başak + yukarı süzülen bereket zerresi
-  plagueAura,     // NPC'lerin üstünde yeşil hastalık ikonu
+  plagueAura,     // hastalıklı yeşil ekran tonu + yavaşlama (görsel: sick duruşu)
   fireOutbreak,   // rastgele bina üstünde alev + yoğun duman
   storm,          // yağmur boost + ekran maviye kayar
   droughtHaze,    // ekran sarımsı, hava sıcak hissi
-  thiefDash,      // ekran kenarından koşan koyu silüet
   beastEyes,      // gece ateş etrafında çift kırmızı göz
 }
 
@@ -420,43 +418,6 @@ class EventSystem {
       ],
     ),
     EventOutcome(
-      id: EventIds.thief,
-      title: 'Hırsız', icon: '🦹',
-      messagePool: [
-        'Tezgâhın altındaki kese boş. Kalabalıkta biri sırtını dönüp yürüyor.',
-        'Pazarcı avaz avaz bağırdı: kutu açık, altın yok. Bir gölge sokağa saptı.',
-        'Terazinin yanındaki kesenin ipi kesilmiş. Hırsız daha köy sınırında.',
-      ],
-      annalPool: [
-        'Gün {gün}. Pazarda kese kesildi.',
-        'Gün {gün}. Tezgâhtan altın çalındı.',
-        'Gün {gün}. {köy} pazarına hırsız düştü.',
-      ],
-      category: EventCategory.negative,
-      weight: 0.8,
-      effect: EventEffect(fx: EventFx.thiefDash, duration: 8),
-      choices: [
-        EventChoice(
-          id: 'chase',
-          label: 'Peşine düş',
-          detail: '15 altın muhafız ücreti. Kese geri gelir.',
-          resolutionMessage:
-              'Kese değirmen yolunda geri alındı. Muhafız ücretini aldı, gerisi köyde kaldı.',
-          annal: 'Hırsızın peşine düşüldü. Kese geri alındı.',
-          goldDelta: -15,
-        ),
-        EventChoice(
-          id: 'ignore',
-          label: 'Bırak gitsin',
-          detail: 'Kimse peşine düşmez. Altın 22 birim eksilir.',
-          resolutionMessage:
-              'Gölge sokak arasında kayboldu. Kese de onunla gitti.',
-          annal: 'Hırsız kovalanmadı. Altın gitti.',
-          goldDelta: -22,
-        ),
-      ],
-    ),
-    EventOutcome(
       id: EventIds.storm,
       title: 'Fırtına', icon: '⛈',
       messagePool: [
@@ -631,9 +592,6 @@ class EventSystem {
         return ctx.population >= 6;
       case EventIds.houseFire:
         return ctx.population >= 5 && ctx.stockpile.wood >= 28;
-      case EventIds.thief:
-        return ctx.stockpile.gold >= 22 ||
-               ctx.hasBuilding(BuildingType.market);
       // Pozitif olaylar — küçük köyde anlamsız olmasın diye nüfus kapısı.
       case EventIds.bard:
         return ctx.population >= 4;

@@ -119,6 +119,9 @@ extension _SceneCraft on _VillageSceneState {
   /// Bir zanaatı köyden sil (son ustası gitti, çırak yok). İdempotent.
   void _loseCraft(String craft) {
     if (!_knownCrafts.remove(craft)) return;
+    // Köyün UNUTTUĞU şey kalıcı bir izdir: geç oyun dilekçeleri bunu okur
+    // ("dedemin bildiği işi kimse bilmiyor"). Hafıza bayrağı kayda da girer.
+    _villageMemory.add('craft.lost');
     final name = Craft.displayName(craft);
     final ctx = _villagers.isNotEmpty
         ? _voice(_villagers.first,

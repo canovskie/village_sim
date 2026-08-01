@@ -4,8 +4,13 @@ part of '../main.dart';
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _ScenePlacement on _VillageSceneState {
   /// Geçerli mi — `_placementReason` null dönerse evet (tek doğruluk kaynağı).
-  bool _isValidPlacement(int col, int row, BuildingType type) =>
-      _placementReason(col, row, type) == null;
+  ///
+  /// [ignoreCraft]: yalnız FERMANLA dikilen yapı için. Bir hüküm "kurula"
+  /// diyorsa köy onu diker; zanaat bilgisi oyuncu menüsünün kapısıdır, buyruğun
+  /// değil. Geometri/arazi kuralları yine de tam işler.
+  bool _isValidPlacement(int col, int row, BuildingType type,
+          {bool ignoreCraft = false}) =>
+      _placementReason(col, row, type, ignoreCraft: ignoreCraft) == null;
 
   /// Köy bu binanın zanaatını biliyor mu? Ortak bilgi (craft == null) hep açık;
   /// godMode her şeyi açar (dev/showcase). Menü filtresi + kilit mesajı bunu okur.
@@ -18,11 +23,12 @@ extension _ScenePlacement on _VillageSceneState {
   /// Yerleştirme neden GEÇERSİZ — geçerliyse null, değilse oyuncuya gösterilecek
   /// Türkçe sebep (akıllı yerleştirme ipucu). `_isValidPlacement` bunu kullanır,
   /// böylece doğrulama mantığı ile mesaj asla ayrışmaz.
-  String? _placementReason(int col, int row, BuildingType type) {
+  String? _placementReason(int col, int row, BuildingType type,
+      {bool ignoreCraft = false}) {
     final meta = kBuildingMeta[type]!;
     // Zanaat kilidi (tek doğruluk kaynağı → hem menü hem commit hem ipucu):
     // köy bu yapının zanaatını bilmiyorsa dikilemez.
-    if (!_isCraftKnown(type)) {
+    if (!ignoreCraft && !_isCraftKnown(type)) {
       final craft = kBuildingCraft[type];
       return craft != null
           ? '${Craft.displayName(craft)} köyde henüz bilinmiyor'
@@ -91,7 +97,7 @@ extension _ScenePlacement on _VillageSceneState {
     else if (type == BuildingType.lumberCamp) {
       final cx = col + meta.cols / 2.0;
       final cy = row + meta.rows / 2.0;
-      const radius = LumberCampEntity.kTerritoryRadius;
+      const radius = kLumberTerritoryRadius;
       bool hasTree = false;
       for (final t in _trees) {
         if (t.isFelled) continue;
@@ -338,21 +344,10 @@ extension _ScenePlacement on _VillageSceneState {
       for (final v in _villagers) {
         if (identical(v.homeBuilding, b)) v.homeBuilding = null;
       }
-      // Binaya bağlı işçi/varlıklar — pozisyon referanslarıyla eşleştir.
-      _lumberCamps
-          .removeWhere((lc) => lc.buildingCol == b.col && lc.buildingRow == b.row);
-      _florists
-          .removeWhere((f) => f.cottageCol == b.col && f.cottageRow == b.row);
-      _shepherds.removeWhere((s) => s.barnCol == b.col && s.barnRow == b.row);
+      // Binaya bağlı varlıklar. (İşçi avatarları kaldırıldı: işi köylüler
+      // üstleniyor, bina yıkılınca _syncJobWorkforce kadroyu kendi çözer.)
       _cows.removeWhere((c) => c.barnCol == b.col && c.barnRow == b.row);
-      // Maden/balıkçı işçileri bina ref tutmaz → footprint yakınından temizle.
-      bool nearFoot(double x, double y) =>
-          x >= b.col - 1 &&
-          x < b.col + b.cols + 1 &&
-          y >= b.row - 1 &&
-          y < b.row + b.rows + 2;
       if (b.type == BuildingType.mineBuilding) {
-        _miners.removeWhere((m) => nearFoot(m.gridX, m.gridY));
         for (final n in _mineNodes) {
           if (n.col >= b.col &&
               n.col < b.col + b.cols &&
@@ -361,8 +356,6 @@ extension _ScenePlacement on _VillageSceneState {
             n.isMarkedForMining = false;
           }
         }
-      } else if (b.type == BuildingType.fisherCabin) {
-        _removeNearestFisher(b);
       }
       // Binayı kaldır + seçimi temizle.
       _buildings.remove(b);
@@ -385,41 +378,23 @@ extension _ScenePlacement on _VillageSceneState {
         : '🔨 ${meta?.label ?? 'Bina'} yıkıldı — malzemenin %${(refund * 100).round()}\'i geri alındı.');
   }
 
-  /// Bir binaya en yakın balıkçıyı kaldırır (balıkçı bina ref tutmaz; kabin o
-  /// binadan doğmuştu). Birden çok kabin varsa yanlış birini alabilir — kabul
-  /// edilebilir kenar durum.
-  void _removeNearestFisher(BuildingEntity b) {
-    if (_fishers.isEmpty) return;
-    final cx = b.col + b.cols / 2.0;
-    final cy = b.row + b.rows / 2.0;
-    FisherEntity? best;
-    double bestD = double.infinity;
-    for (final f in _fishers) {
-      final dx = f.gridX - cx;
-      final dy = f.gridY - cy;
-      final d = dx * dx + dy * dy;
-      if (d < bestD) {
-        bestD = d;
-        best = f;
-      }
-    }
-    if (best != null) _fishers.remove(best);
-  }
+  // ── YOL: planla → önizle → döşe ────────────────────────────────────────────
+  // Eski akış sürükleme sırasında her tile'ı ANINDA commit ediyordu: serbest
+  // el + geri alınamaz + hiçbir önizleme. Parmağın/farenin en ufak titremesi
+  // istenmeyen tile'lara yol döşüyordu ("sürekli yanlış yerlere yol yapılıyor").
+  //
+  // Yeni akış üç kuralla kontrolü geri veriyor:
+  //   1. Sürüklerken hiçbir şey harcanmaz — yalnız önizleme çizilir.
+  //   2. Güzergâh serbest el DEĞİL, dik "L": baskın eksende git, sonra köşe.
+  //   3. Silgi modu var — yanlış döşenmiş yol geri alınabilir.
 
-  /// Drag-paint döşeme: tek bir tile için validasyon + cost + order.
-  /// Sessiz fail (sürükleme akışı bozulmasın) — sadece geçerli + ödenebilen
-  /// tile'lara order eklenir.
-  void _paintRoadTile(int c, int r) {
-    if (_placingRoad == null) return;
-    if (_isWilderness(c, r)) return; // vahşi ormana yol döşenmez
-    _roadStrokeTiles.add((c, r));
-
-    final surface = _placingRoad!;
-    final bldTiles = <(int, int)>{};
+  /// Bina/şantiye kaplı tile'lar — yol bunların üstüne konamaz.
+  Set<(int, int)> _buildingFootprintTiles() {
+    final tiles = <(int, int)>{};
     for (final b in _buildings) {
       for (int bc = b.col; bc < b.col + b.cols; bc++) {
         for (int br = b.row; br < b.row + b.rows; br++) {
-          bldTiles.add((bc, br));
+          tiles.add((bc, br));
         }
       }
     }
@@ -428,34 +403,136 @@ extension _ScenePlacement on _VillageSceneState {
       final m = kBuildingMeta[o.type]!;
       for (int bc = o.col; bc < o.col + m.cols; bc++) {
         for (int br = o.row; br < o.row + m.rows; br++) {
-          bldTiles.add((bc, br));
+          tiles.add((bc, br));
         }
       }
     }
+    return tiles;
+  }
 
+  /// Sürükleme uçlarından önizlemeyi kurar — her tile için "uygulanabilir mi"
+  /// bilgisiyle. Hiçbir kaynak harcanmaz; painter yeşil/kırmızı çizer.
+  void _rebuildRoadPreview() {
+    _roadPreview.clear();
+    _roadPreviewV++;
+    final a = _roadDragStart, b = _roadDragEnd;
+    if (a == null || b == null) return;
+    final bld = _roadErase ? const <(int, int)>{} : _buildingFootprintTiles();
+    for (final (c, r) in roadRoute(a, b)) {
+      _roadPreview.add(((c, r), _roadTileActionable(c, r, bld)));
+    }
+  }
+
+  /// Bu tile'da seçili yol eylemi bir şey yapar mı (döşenebilir / silinebilir).
+  bool _roadTileActionable(int c, int r, Set<(int, int)> bld) {
+    if (c < 0 || r < 0 || c >= kCols || r >= kRows) return false;
+    if (_roadErase) {
+      if (_roadSystem.has(c, r)) return true;
+      return _roadOrders.any((o) => o.col == c && o.row == r && !o.completed);
+    }
+    if (_isWilderness(c, r)) return false; // vahşi ormana yol döşenmez
     if (!_roadSystem.canPlace(
       col: c, row: r,
-      surface: surface,
+      surface: _placingRoad!,
       maxCol: kCols, maxRow: kRows,
       waterTiles: _waterTiles,
-      buildingTiles: bldTiles,
+      buildingTiles: bld,
     )) {
+      return false;
+    }
+    // Aynı tile'a ikinci emir düşmesin.
+    return !_roadOrders.any((o) => o.col == c && o.row == r && !o.completed);
+  }
+
+  /// Önizlenen güzergâhı uygular (sürükleme bırakılınca). Kaynak İLK KEZ
+  /// burada harcanır; bütçe yetmezse güzergâh yettiği yere kadar döşenir ve
+  /// oyuncuya kaç tile'ın atlandığı söylenir (sessizce yarım kalmaz).
+  void _commitRoadPreview() {
+    if (_roadPreview.isEmpty) {
+      setStateHere(_clearRoadDrag);
       return;
     }
-
-    for (final o in _roadOrders) {
-      if (o.col == c && o.row == r && !o.completed) return;
+    if (_roadErase) {
+      _commitRoadErase();
+      return;
     }
-
+    final surface = _placingRoad!;
     final cost = surface.cost;
-    if (!_stockpile.canAfford(cost)) {
-      _showNotification('Eksik malzeme: ${_stockpile.formatMissing(cost)}');
-      return;
-    }
+    int laid = 0, skipped = 0, broke = 0;
     setStateHere(() {
-      _stockpile.spend(cost);
-      _roadOrders.add(RoadOrder(col: c, row: r, surface: surface));
+      for (final (tile, ok) in _roadPreview) {
+        if (!ok) {
+          skipped++;
+          continue;
+        }
+        if (!_stockpile.canAfford(cost)) {
+          broke++;
+          continue;
+        }
+        _stockpile.spend(cost);
+        _roadOrders.add(RoadOrder(col: tile.$1, row: tile.$2, surface: surface));
+        laid++;
+      }
+      _clearRoadDrag();
     });
+    final parts = <String>[];
+    if (laid > 0) parts.add('$laid tile yol emri verildi');
+    if (broke > 0) parts.add('$broke tile malzeme yetmedi');
+    if (skipped > 0 && laid == 0 && broke == 0) {
+      parts.add('güzergâh uygun değil');
+    }
+    if (parts.isNotEmpty) _showNotification('🛤 ${parts.join(' · ')}');
     _frame.value = _frame.value + 1;
+  }
+
+  /// Silgi — güzergâhtaki bekleyen emirleri ve döşenmiş yolları kaldırır.
+  /// Bekleyen emir tam iade (henüz kimse çalışmadı), döşenmiş yol yarı iade
+  /// (bina yıkımıyla aynı ilke).
+  void _commitRoadErase() {
+    int removed = 0;
+    setStateHere(() {
+      for (final (tile, ok) in _roadPreview) {
+        if (!ok) continue;
+        final (c, r) = tile;
+        final pending = _roadOrders
+            .where((o) => o.col == c && o.row == r && !o.completed)
+            .toList();
+        if (pending.isNotEmpty) {
+          for (final o in pending) {
+            for (final (kind, amt) in o.surface.cost.entries) {
+              _stockpile.add(kind, amt);
+            }
+            _roadOrders.remove(o);
+            removed++;
+          }
+          continue;
+        }
+        final t = _roadSystem.at(c, r);
+        if (t != null) {
+          for (final (kind, amt) in t.surface.cost.entries) {
+            final back = (amt * 0.5).floor();
+            if (back > 0) _stockpile.add(kind, back);
+          }
+          _roadSystem.remove(c, r);
+          removed++;
+        }
+      }
+      _clearRoadDrag();
+    });
+    if (removed > 0) {
+      // Yol topolojisi değişti → NPC path cache'leri tazelensin.
+      _pathContext.bumpVersion();
+      _showNotification('🧹 $removed tile yol kaldırıldı');
+    } else {
+      _showNotification('Seçilen güzergâhta yol yok.');
+    }
+    _frame.value = _frame.value + 1;
+  }
+
+  void _clearRoadDrag() {
+    _roadDragStart = null;
+    _roadDragEnd = null;
+    _roadPreview.clear();
+    _roadPreviewV++;
   }
 }

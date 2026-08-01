@@ -11,15 +11,15 @@ import 'petition_system.dart';
 ///
 /// Kanunname bunun tersi üç ilke üstüne kurulur:
 ///
-///   1. MÜHÜR GERİ ALINMAZ. Bir ferman deftere girdiyse o köy artık öyle bir
-///      köydür. Toggle yok — [LawDef] ya mühürlüdür ya değildir. Ağırlık
-///      buradan gelir: her dokunuş bir yol ayrımıdır.
+///   1. MÜHÜR UCUZ GERİ ALINMAZ. Bir ferman deftere girdiyse o köy artık öyle
+///      bir köydür. Toggle yok: geçim hükmü ancak ağır bedelle feshedilir
+///      ([LawBook.repealable]), kimliği yazan hüküm hiç bozulmaz.
 ///   2. MÜREKKEP KURUMADAN YENİSİ YAZILMAZ. Her mühür Divan'ı
 ///      [LawDef.deliberationDays] gün müzakerede bırakır. Oyunun ritmi bu:
 ///      "bugün hangi TEK fermanı mühürleyeceğim?"
-///   3. DAVA SEÇİLİR, İKİSİ BİRDEN OLMAZ. [LawBranch.nizam] (kılıç) ile
-///      [LawBranch.dergah] (iman) birbirini ebediyen dışlar. İlk dava fermanını
-///      mühürlediğin an öbür kol deftere kapanır.
+///   3. KOL SEÇİLMEZ, KİMLİK BİRİKİR. [LawBranch.nizam] ile [LawBranch.dergah]
+///      birbirini DIŞLAMAZ (eski tasarımdı, bırakıldı). Köyün ne olduğunu
+///      mühürlerin toplamı söyler — bkz. law_compass.dart.
 ///
 /// Mekanik olarak bir mühür = bir [PetitionOption]'ın uygulanması. Dilekçe
 /// karar motoru (kaynak deltası, süreli moral, zümre morali+nüfuzu, hafıza
@@ -87,6 +87,9 @@ const Map<String, LawTheme> kLawTheme = {
   'eldersExemptFromFood': LawTheme.koy,
   'apprenticeship': LawTheme.koy,
   'tradeGuidance': LawTheme.koy,
+  'quarantine': LawTheme.koy,
+  'hearthWatch': LawTheme.koy,
+  'outsideMarriage': LawTheme.aile,
   // Rejim fermanları — YENİ TEMA AÇMA (petek tam 6 yaprak; yedincisi düzeni
   // bozar). Yönetişim hükümleri Köy Yaşamı'na, vergi/zor Asayiş'e yazılır.
   'rejim.meclisDaimi': LawTheme.koy,
@@ -129,6 +132,15 @@ class LawContext {
   /// bunun üstüne kurulur: suç görülmeden ceza kanunu yazılmaz.
   final int crimesSeen;
 
+  /// Bugüne dek köyde görülmüş hastalık atağı sayısı (veba dahil). Karantina
+  /// hükmü bunun üstüne kurulur — köy hastalıkla tanışmadan tecrit konuşulmaz.
+  /// [crimesSeen] gibi monoton: iyileşme sayacı geri almaz.
+  final int illnessSeen;
+
+  /// Bugüne dek kan davası doğuran ölümcül kavga sayısı. Diyet hükmünün kapısı.
+  /// Husumet sonradan sulh olsa da sayaç düşmez: köy o kanı bir kez gördü.
+  final int feudsSeen;
+
   /// Köyün bildiği zanaatlar (bkz. [Craft]).
   final Set<String> knownCrafts;
 
@@ -149,6 +161,8 @@ class LawContext {
     this.animals = 0,
     this.deaths = 0,
     this.crimesSeen = 0,
+    this.illnessSeen = 0,
+    this.feudsSeen = 0,
     this.knownCrafts = const {},
     this.buildings = const {},
     this.memory = const {},
@@ -197,6 +211,15 @@ class LawDef {
   final LawBranch branch;
 
   /// Mühürün etkisi — dilekçe karar motoruna olduğu gibi verilir.
+  ///
+  /// [PetitionOption.fx] burada da işler: mühür anında köyde GERÇEKTEN bir şey
+  /// olur (mabet dikilir, köy mumlarla toplanır, meydan şenlenir). Uzun süre
+  /// hiçbir fermanda fx yoktu ve Kanunname dünyada görünmez kaldı.
+  ///
+  /// Ama fx NADİR olmalı — her mühür tören olursa hiçbiri tören olmaz. Ölçü:
+  /// yalnız kendi metninde kamusal bir an VAAT EDEN hüküm (bkz. dergah.lodge,
+  /// dergah.holyDay, peacefulEnd, rejim.*). fx'in kendi kalıcı moral izi vardır
+  /// (`_legacyOf`), o yüzden fx eklerken [legacy] ona göre kısılır.
   final PetitionOption seal;
 
   /// Divan'ın müzakere süresi (oyun günü). Mürekkep kurumadan yeni mühür yok.
@@ -227,6 +250,15 @@ class LawDef {
   /// bu ayrı ve bilinçli bir işarettir.
   final bool grave;
 
+  /// Fesihte köy hafızasından SİLİNECEK bayraklar.
+  ///
+  /// Bilerek `seal.setsFlags`'ten AYRI: bir bayrağı yalnız bu ferman basıyorsa
+  /// fesihle kalkmalı, ama aynı bayrağı bir dilekçe de basabiliyorsa (ör.
+  /// 'fields.tended', 'migrants.welcomed') fermanı bozmak o dilekçe kararının
+  /// izini silemez. Eskiden fesih `setsFlags`'in tamamını siliyordu ve tam da
+  /// bunu yapıyordu. Varsayılan boş: fesih hiçbir şey silmez.
+  final List<String> repealClears;
+
   /// BAĞLAYICI — bedeli ne olursa olsun feshedilemez (rejim fermanları).
   /// "Mühür geri alınmaz" tezi gevşetildi: günlük geçim hükümleri bedelle
   /// bozulabilir ([LawBook.repealable]) ama köyün KİMLİĞİNİ yazan hüküm bozulmaz.
@@ -249,6 +281,7 @@ class LawDef {
     this.gateReason = '',
     this.grave = false,
     this.binding = false,
+    this.repealClears = const [],
   });
 
   /// Ağır yasa mı — köyün ne olduğunu ilan eden, geri dönüşü ağır hüküm.
@@ -285,6 +318,18 @@ bool _cradleCrowded(LawContext c) => c.children >= 2 && c.households >= 2;
 bool _hasChildren(LawContext c) => c.children >= 1;
 
 // ── Köy Yaşamı ──
+/// Köy hastalıkla tanıştı mı — tecrit ancak bulaşan bir şey görülünce konuşulur.
+bool _illnessKnown(LawContext c) => c.illnessSeen >= 1;
+
+/// Ateşin sönmesi bir dert olacak kadar köy oldu mu.
+bool _hearthMatters(LawContext c) =>
+    c.has(BuildingType.firepit) && c.population >= 5 && c.dayCount >= 4;
+
+/// Köyde İKİNCİ bir hane var mı — yani dışarıdan biri gelip yerleşmiş mi.
+/// (Köy tek soyla kurulur; ikinci soyadı ancak dışarıdan gelir.) Dışarıya
+/// nikâh fermanı bu gerçeğin üstüne oturur.
+bool _outsidersSettled(LawContext c) => c.households >= 2 && c.population >= 6;
+
 bool _openDoorReady(LawContext c) =>
     c.population >= 6 && c.has(BuildingType.warehouse);
 bool _mortalityKnown(LawContext c) => c.deaths >= 1 || c.elders >= 1;
@@ -297,6 +342,9 @@ bool _craftsToSteer(LawContext c) => c.knownCrafts.length >= 3;
 bool _crimeOnce(LawContext c) => c.crimesSeen >= 1;
 bool _crimeTwice(LawContext c) => c.crimesSeen >= 2;
 bool _crimeRepeated(LawContext c) => c.crimesSeen >= 3 && c.population >= 8;
+
+/// Köy kan gördü mü — diyet ancak bir kan davası doğduktan sonra yazılır.
+bool _bloodSpilled(LawContext c) => c.feudsSeen >= 1;
 bool _manyHouseholds(LawContext c) => c.households >= 3 && c.dayCount >= 8;
 
 /// Tek Söz gibi sert hükümler ancak köy gerçek bir kasaba olduğunda konuşulur.
@@ -434,10 +482,15 @@ const List<LawDef> kLawBook = [
         'ama sofradan o kile eksildi.',
     branch: LawBranch.gecim,
     deliberationDays: 0.5,
+    // Murmur "sofradan o kile eksildi" diyor — hüküm de öyle desin. Yem bedava
+    // değil: sürü kışa tok girer ([AnimalEntity.kHungerScale] 0.55) ama harmanın
+    // payı her gün ambardan ahıra gider. Bedelsizken bu ferman saf kazançtı.
+    foodPerDay: -1,
     seal: PetitionOption(
       label: 'Mührü bas',
       detail: '',
       resolutionPool: ['📜 Kışlık Yem Fermanı deftere girdi. Ahır dolduruldu.'],
+      foodDelta: -6, // ilk kile: ahır bir kerede doldurulur
       estateMood: [(Estate.laborers, 0.07), (Estate.hearth, -0.04)],
     ),
   ),
@@ -488,7 +541,9 @@ const List<LawDef> kLawBook = [
       resolutionPool: [
         '📜 Su Yolu Fermanı deftere girdi. Kuyudan tarlaya su akıyor.',
       ],
-      setsFlags: ['fields.watered'],
+      // Not: eskiden burada 'fields.watered' bayrağı basılıyordu; hiçbir yer
+      // okumuyordu. Sulamanın gerçek yürütücüsü policies.irrigation
+      // (scene_jobs) — ölü bayrak kaldırıldı.
       estateMood: [(Estate.laborers, 0.06)],
     ),
   ),
@@ -795,7 +850,8 @@ const List<LawDef> kLawBook = [
         'Ölüm sessiz geldi, ardında dinginlik bıraktı. Yaşlılık kısaldı; '
         'bilgelik olgunlaşmaya vakit bulamıyor.',
     branch: LawBranch.gecim,
-    legacy: 0.01,
+    // legacy 0.01 → 0: kalıcı iz artık fx'ten geliyor (_legacyOf(remembrance)
+    // = 0.015). İkisini birden yazmak aynı anı iki kez saymak olurdu.
     seal: PetitionOption(
       label: 'Mührü bas',
       detail: '',
@@ -804,6 +860,8 @@ const List<LawDef> kLawBook = [
       ],
       moraleAmount: 0.03,
       moraleDays: 3,
+      // Berat bir anma günüyle açılır: köy mumlarla toplanır, KİMSE ölmez.
+      fx: PetitionFx.remembrance,
       estateMood: [(Estate.hearth, 0.10), (Estate.faithful, 0.05)],
     ),
   ),
@@ -878,6 +936,101 @@ const List<LawDef> kLawBook = [
     ),
   ),
 
+  // ── GEÇİM · kırılganlık hükümleri ─────────────────────────────────────────
+  // Köyün hastalık/ateş/nikâh sistemleri uzun süre kanunnamede karşılıksızdı:
+  // dünyada işleyen bir düzenek vardı ama oyuncunun ona dokunacak hiçbir hükmü
+  // yoktu. Üçü de o boşluğu kapatır.
+  LawDef(
+    id: 'quarantine',
+    gate: _illnessKnown,
+    gateReason:
+        'Köy henüz hastalıkla tanışmadı. Tecrit, bulaşan bir şey '
+        'görülmeden konuşulmaz.',
+    icon: '🌿',
+    title: 'Tecrit Fermanı',
+    decree:
+        '"Buyuruldu ki: ateşlenen kendi damına çekile, kapısına dal asıla. '
+        'Bir hane susarsa köy konuşmaya devam eder."',
+    murmur:
+        'Hasta kapısında bir dal var. İçeriden ses geliyor, kimse girmiyor; '
+        'eşiğe bırakılan çanak akşam boşalmış oluyor.',
+    branch: LawBranch.gecim,
+    deliberationDays: 1.0,
+    seal: PetitionOption(
+      label: 'Mührü bas',
+      detail: '',
+      resolutionPool: [
+        '🌿 Tecrit Fermanı deftere girdi. Hasta kendi damında kalıyor.',
+      ],
+      moraleAmount: -0.02,
+      moraleDays: 3,
+      estateMood: [
+        (Estate.faithful, 0.06),
+        (Estate.laborers, 0.04),
+        (Estate.hearth, -0.08), // ana çocuğundan ayrı kalıyor
+      ],
+    ),
+  ),
+  LawDef(
+    id: 'hearthWatch',
+    gate: _hearthMatters,
+    gateReason:
+        'Sönmesi dert olacak bir ocak yok daha. Önce meydanda ateş '
+        'yansın, köy onun başına toplansın.',
+    icon: '🪵',
+    title: 'Ocak Nöbeti Fermanı',
+    decree:
+        '"Buyuruldu ki: meydan ateşi sönmeye, odunu vaktinden önce '
+        'taşına. Sönmüş ocak, dağılmış köy demektir."',
+    murmur:
+        'Ateş artık hiç küllenmiyor. Odun ambarı da eskisi kadar dolmuyor; '
+        'oduncu bunu her akşam söylüyor.',
+    branch: LawBranch.gecim,
+    deliberationDays: 0.75,
+    seal: PetitionOption(
+      label: 'Mührü bas',
+      detail: '',
+      resolutionPool: [
+        '🪵 Ocak Nöbeti Fermanı deftere girdi. Meydan ateşi sönmeyecek.',
+      ],
+      moraleAmount: 0.03,
+      moraleDays: 3,
+      estateMood: [(Estate.hearth, 0.09), (Estate.laborers, -0.05)],
+    ),
+  ),
+  LawDef(
+    id: 'outsideMarriage',
+    gate: _outsidersSettled,
+    gateReason:
+        'Köyde tek ocak var; dışarıya nikâh, ikinci bir hane kurulunca '
+        'gündeme gelir.',
+    icon: '👰',
+    title: 'Dışarıya Nikâh Fermanı',
+    decree:
+        '"Buyuruldu ki: yolu düşen yabancıyla nikâh kıyıla, kurulan ocak '
+        'köyden sayıla. Kendi içine kapanan soy, kendi içinde tükenir."',
+    murmur:
+        'Bir gelin dışarıdan geldi; kendi adını da getirdi. Yaşlılar '
+        'düğüne gitti ama sofrada az konuştular.',
+    branch: LawBranch.gecim,
+    deliberationDays: 1.0,
+    legacy: 0.01,
+    seal: PetitionOption(
+      label: 'Mührü bas',
+      detail: '',
+      resolutionPool: [
+        '👰 Dışarıya Nikâh Fermanı deftere girdi. Yalnız kalana dışarıdan eş aranır.',
+      ],
+      moraleAmount: 0.03,
+      moraleDays: 3,
+      estateMood: [
+        (Estate.artisans, 0.10),
+        (Estate.laborers, 0.05),
+        (Estate.hearth, -0.07), // soy karışıyor; ocak tarafı hoşlanmaz
+      ],
+    ),
+  ),
+
   // ── DAVA ▸ ⚔ NİZAM ────────────────────────────────────────────────────────
   // Kılıç yolu: köy önce korunur, sonra sayılır, sonra hizaya sokulur. Her
   // basamak bir öncekinin doğal sonucu gibi görünür — merdivenin marifeti bu.
@@ -898,11 +1051,10 @@ const List<LawDef> kLawBook = [
     legacy: 0.01,
     goldPerDay: -1,
     seal: PetitionOption(
-      label: 'Mührü bas — bu yola gir',
+      label: 'Mührü bas',
       detail: '',
       resolutionPool: [
-        '⚔ Gece Bekçisi Fermanı deftere girdi. Meydanda ateş sönmeyecek. '
-            'Dergâh kolu ebediyen kapandı.',
+        '⚔ Gece Bekçisi Fermanı deftere girdi. Meydanda ateş sönmeyecek.',
       ],
       goldDelta: -3,
       moraleAmount: 0.02,
@@ -1012,6 +1164,39 @@ const List<LawDef> kLawBook = [
     ),
   ),
   LawDef(
+    id: 'nizam.bloodPrice',
+    gate: _bloodSpilled,
+    gateReason:
+        'Köy henüz kan görmedi. Diyet, bir kan davası doğduktan sonra '
+        'yazılır — önlem değil, cevaptır.',
+    icon: '🩸',
+    title: 'Diyet Fermanı',
+    decree:
+        '"Buyuruldu ki: dökülen kanın bedeli keseden ödene, öcü elle '
+        'alınmaya. Kan davası güden hane, köyün değil kendi hasmıdır."',
+    murmur:
+        'Bedel ödendi, bıçak çekilmedi. Maktulün anası keseyi aldı ve '
+        'uzun süre eline baktı.',
+    branch: LawBranch.nizam,
+    deliberationDays: 1.5,
+    legacy: 0.02,
+    seal: PetitionOption(
+      label: 'Mührü bas',
+      detail: '',
+      resolutionPool: [
+        '🩸 Diyet Fermanı deftere girdi. Kanın bedeli artık keseden ödenir.',
+      ],
+      moraleAmount: 0.03,
+      moraleDays: 4,
+      setsFlags: ['nizam.bloodPrice'],
+      estateMood: [
+        (Estate.hearth, 0.08),
+        (Estate.faithful, 0.06),
+        (Estate.artisans, -0.05), // kese onların kesesi
+      ],
+    ),
+  ),
+  LawDef(
     id: 'nizam.sole',
     grave: true,
     icon: '⚑',
@@ -1064,17 +1249,18 @@ const List<LawDef> kLawBook = [
         'akşam meydanda yüzler yumuşaktı.',
     branch: LawBranch.dergah,
     deliberationDays: 1.5,
-    legacy: 0.02,
+    legacy: 0.01, // kalanı fx'ten (_legacyOf(remembrance) = 0.015)
     foodPerDay: -1,
     seal: PetitionOption(
-      label: 'Mührü bas — bu yola gir',
+      label: 'Mührü bas',
       detail: '',
       resolutionPool: [
-        '☾ Kutsal Gün Fermanı deftere girdi. Haftanın bir günü iş durur. '
-            'Nizam kolu ebediyen kapandı.',
+        '☾ Kutsal Gün Fermanı deftere girdi. Haftanın bir günü iş durur.',
       ],
       moraleAmount: 0.04,
       moraleDays: 3,
+      // İLK kutsal gün mühürle birlikte tutulur: köy toplanır, mumlar yanar.
+      fx: PetitionFx.remembrance,
       setsFlags: ['holyDay.active'],
       estateMood: [
         (Estate.faithful, 0.12),
@@ -1105,6 +1291,8 @@ const List<LawDef> kLawBook = [
       woodDelta: -20,
       moraleAmount: 0.04,
       moraleDays: 3,
+      // Hüküm "kurula" diyorsa köyün ortasına GERÇEKTEN bir mabet dikilir.
+      fx: PetitionFx.templeRaised,
       setsFlags: ['cult.active', 'cult.temple'],
       estateMood: [
         (Estate.faithful, 0.14),
@@ -1198,7 +1386,9 @@ const List<LawDef> kLawBook = [
         'Tek inanç ancak köy kök saldığında konuşulur. Dergâh küçük '
         'bir köye değil, kalabalık bir cemaate hüküm olur.',
     deliberationDays: 3.0,
-    legacy: -0.03,
+    // −0.045 çünkü ayin fx'i +0.015 getiriyor; hükmün net izi −0.03 kalsın.
+    // Bu fermanın töreni güzel olabilir, bıraktığı iz güzel olamaz.
+    legacy: -0.045,
     seal: PetitionOption(
       label: 'Mührü bas — geri dönüşü yok',
       detail: '',
@@ -1208,6 +1398,8 @@ const List<LawDef> kLawBook = [
       ],
       moraleAmount: -0.04,
       moraleDays: 6,
+      // Cemaat dizüstü toplanır — köyün tek sesi olduğu an görülsün.
+      fx: PetitionFx.cult,
       setsFlags: ['dergah.oneFaith', 'cult.suppressed'],
       estateMood: [
         (Estate.faithful, 0.16),
@@ -1223,12 +1415,18 @@ const List<LawDef> kLawBook = [
   // değil, köyün kendi hakkında ettiği ilandır). Her biri kendi rejimini
   // derinleştirir ve BAĞLAYICIDIR — feshi yoktur. Yeminin asıl ödülü budur:
   // uçların gücüne ancak kendini ilan eden köy erişir.
+  //
+  // Dördü de `grave`: yemin edilmemişken kapıları kapalıdır ama defterde
+  // GEREKÇESİYLE durur (bkz. LawBook.visible). Aksi hâlde yeminin ödülü,
+  // yemin edilene kadar hiç görünmüyordu — oyuncu neyi kazanacağını
+  // bilmeden yemin ediyordu. Ufukta duran ağırlık davetin kendisidir.
   LawDef(
     id: 'rejim.meclisDaimi',
     gate: _oathCommune,
     gateReason: 'Meclis-i Daimi, ancak sözünü meydana bırakacağına yemin etmiş '
         'bir köyde kurulur.',
     binding: true,
+    grave: true,
     icon: '🏛',
     title: 'Meclis-i Daimi Fermanı',
     decree: '"Buyuruldu ki: meclis dağılmaya, daim toplu ola. Köyün derdi '
@@ -1237,7 +1435,7 @@ const List<LawDef> kLawBook = [
         'senin vereceğinden iyi, bazıları değil.',
     branch: LawBranch.gecim,
     deliberationDays: 2.5,
-    legacy: 0.04,
+    legacy: 0.025, // kalanı şenlik fx'inden (_legacyOf(festival) = 0.015)
     seal: PetitionOption(
       label: 'Mührü bas — sözü meydana bırak',
       detail: '',
@@ -1246,6 +1444,8 @@ const List<LawDef> kLawBook = [
       ],
       moraleAmount: 0.05,
       moraleDays: 6,
+      // Söz meydana indi: köy meydanda kutlar. Yemin-kapılı olduğu için nadir.
+      fx: PetitionFx.festival,
       setsFlags: ['rejim.meclisDaimi'],
       estateMood: [
         (Estate.laborers, 0.12),
@@ -1260,6 +1460,7 @@ const List<LawDef> kLawBook = [
     gateReason: 'Tapu defteri, kapısını pazara açacağına yemin etmiş köyde '
         'açılır.',
     binding: true,
+    grave: true,
     icon: '📜',
     title: 'Mülk Tapusu Fermanı',
     decree: '"Buyuruldu ki: her dam, her tarla bir adla yazıla. Yazılan mülk '
@@ -1289,6 +1490,7 @@ const List<LawDef> kLawBook = [
     gate: _oathIronTable,
     gateReason: 'Ortak ambar, payı eşit ayıracağına yemin etmiş köyde kurulur.',
     binding: true,
+    grave: true,
     icon: '🥣',
     title: 'Ortak Ambar Fermanı',
     decree: '"Buyuruldu ki: harman tek ambara gire, sofraya eşit paylarla '
@@ -1297,7 +1499,7 @@ const List<LawDef> kLawBook = [
         'nasılsa eşit.',
     branch: LawBranch.gecim,
     deliberationDays: 2.5,
-    legacy: 0.02,
+    legacy: 0.005, // kalanı şenlik fx'inden (_legacyOf(festival) = 0.015)
     seal: PetitionOption(
       label: 'Mührü bas — payı eşitle',
       detail: '',
@@ -1306,6 +1508,8 @@ const List<LawDef> kLawBook = [
       ],
       moraleAmount: 0.06,
       moraleDays: 8,
+      // İlk eşit sofra bir şölenle kurulur. Yemin-kapılı: ömürde bir kez.
+      fx: PetitionFx.festival,
       setsFlags: ['rejim.ortakAmbar'],
       estateMood: [
         (Estate.laborers, 0.14),
@@ -1320,6 +1524,7 @@ const List<LawDef> kLawBook = [
     gateReason: 'Muhassıl, tek sözün kendisine ait olduğuna yemin etmiş köyde '
         'kapı çalar.',
     binding: true,
+    grave: true,
     icon: '👑',
     title: 'Muhassıl Fermanı',
     decree: '"Buyuruldu ki: hane hane gezile, pay toplana. Vermeyenin adı '
@@ -1354,7 +1559,8 @@ const List<LawDef> kLawBook = [
 const Map<String, String> kLawSummary = {
   'neighborliness':
       'Köylüler yolda selamlaşır; komşuluk bağı ve ocak morali güçlenir.',
-  'winterFodder': 'Harmanın bir payı ahıra ayrılır; sürü kışın aç kalmaz.',
+  'winterFodder':
+      'Harmanın bir payı ahıra ayrılır; sürü kışın aç kalmaz (günde 1 kile gider).',
   'sharedHarvest':
       'Tarlalar elbirliğiyle kaldırılır; kimse hasatta geride kalmaz.',
   'irrigation': 'Kuyudan tarlaya su taşınır; ekin susuz kalmaz, verim artar.',
@@ -1377,12 +1583,20 @@ const Map<String, String> kLawSummary = {
   'eldersExemptFromFood':
       'Yaşlılar yiyecek yükünden muaf tutulur; saygı görür.',
   'greenVillage': 'Köy baştan başa yeşerir; herkesin morali biraz yükselir.',
+  'quarantine':
+      'Hasta kendi damına kapanır; bulaşma yarıya iner, salgın bir can az alır (o el tarlada eksilir).',
+  'hearthWatch':
+      'Meydan ateşi vaktinden önce beslenir; sönmez, ama odun daha hızlı tükenir.',
+  'outsideMarriage':
+      'Yalnız kalana dışarıdan eş çağrılır; gelen kendi adıyla yeni bir hane kurar.',
+  'nizam.bloodPrice':
+      'Ölümcül kavgada kanın bedeli keseden ödenir; kan davası doğmaz (kese boşsa hüküm tutmaz).',
   'nizam.watch':
       'Geceleri bekçi devriye gezer; suç caydırılır (günde 1 akçe gider).',
   'nizam.registry':
       'Her hane deftere yazılır; suçlu kolay bulunur, vergi toplanır (günde +2 akçe; hane küser).',
   'nizam.labor':
-      'Suçlular kürek/angaryaya çekilir; ceza sertleşir (dua tarafı hoşnutsuz).',
+      'Yargıya "kürek cezası" hükmü eklenir: mahkûm sürülmez, taş ocağına koşulur. Zindan geliri günde +2 akçe (dua tarafı hoşnutsuz).',
   'nizam.exile': 'Ağır suçlu köyden sürülür; caydırıcı ama ocak ve dua küser.',
   'nizam.sole':
       'Divan ve dilekçe kapanır; tek söz senindir. Köy sesini yitirir (sürekli moral sızıntısı).',
@@ -1391,17 +1605,17 @@ const Map<String, String> kLawSummary = {
   'dergah.lodge':
       'Köyde bir dergâh açılır; gönlü kırık teselli bulur, moral artar.',
   'dergah.tithe':
-      'Öşür toplanır; hazineye gelir düşer ama ambardan pay gider (emekçi küser).',
+      'Her harmandan onda bir dergâha ayrılır; günde +1 akçe, −2 kile (emekçi küser).',
   'dergah.penance':
       'Suçlu ceza yerine tövbeyle bağışlanır; dua tarafı hoşnut, ocak değil.',
   'dergah.oneFaith':
       'Tek inanç dayatılır; yoldan sapan köylü sayılmaz (kapı yalnız içeri girene).',
   'rejim.meclisDaimi':
-      'Meclis daim toplu; bekleyen dilekçeyi köy kendi çözer, moral yükselir (karar senden çıkmaz).',
+      'Meclis daim toplu; süresi dolan dilekçeyi rejim ne olursa olsun köy çözer, müzakere %30 hızlanır (karar senden çıkmaz).',
   'rejim.mulkTapusu':
-      'Mülk sahibine yazılır; hazineye günde +3 akçe (emekçi küser, makas açılır).',
+      'Mülk sahibine yazılır; birikmiş servet kendi kazancını getirir, makas açılır. Hazineye günde +3 akçe (emekçi küser).',
   'rejim.ortakAmbar':
-      'Harman tek ambardan eşit dağıtılır; kimse aç kalmaz, üretim hevesi düşer.',
+      'Harman tek ambardan eşit dağıtılır; açlık eşiği yarıya iner (kimse aç kalmaz) ama üretim hevesi düşer.',
   'rejim.muhassil':
       'Hane hane vergi toplanır; günde +5 akçe (moral düşer, huzursuzluk kaynar).',
 };

@@ -4,9 +4,8 @@ import 'package:flutter/scheduler.dart';
 import '../rendering/character_renderer.dart';
 import '../characters/life_stage.dart';
 import '../characters/npc_visual.dart';
-import '../characters/villager_type.dart';
-import '../core/constants.dart';
 import '../ui/app_ui.dart';
+import '../ui/mobile_ui.dart';
 import 'cutscene.dart';
 
 /// Tam ekran 2B sinematik oynatıcı — [kOpeningCutscene] gibi storyline
@@ -312,8 +311,14 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                   style: TextButton.styleFrom(
                     foregroundColor: AppUi.textMid,
                     backgroundColor: const Color(0x55000000),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    // Sinematiği atlamak telefondaki en kritik kaçış kapısı;
+                    // 66×32dp'de kalıyordu. HIG tabanı 44dp. minimumSize tek
+                    // başına yetmiyor (VisualDensity kutuyu geri kısıyor) —
+                    // dikey payı da 44'ü verecek kadar aç.
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    minimumSize: const Size(MobileUi.tap, MobileUi.tap),
+                    visualDensity: VisualDensity.standard,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppUi.radiusSm)),
                   ),
@@ -618,12 +623,6 @@ class _CutscenePainter extends CustomPainter {
             warm: const Color(0x8CFFAE55),
             ambient: const Color(0x59101C34),
           ),
-        // Kuşbakışı: alçak akşam güneşi, uzun gölgeler (aşağıda çizilir).
-        CutsceneBg.aerial => (
-            keyX: 0.78,
-            warm: const Color(0x3DFFC98A),
-            ambient: const Color(0x33141C2E),
-          ),
         CutsceneBg.titleCard => null,
       };
 
@@ -850,8 +849,6 @@ class _CutscenePainter extends CustomPainter {
             _fireEmbers(canvas, size, const Offset(0.5, 0.80), fireLevel);
           }
         });
-      case CutsceneBg.aerial:
-        _paintAerial(canvas, size, cam);
       case CutsceneBg.titleCard:
         canvas.drawRect(
             Offset.zero & size, Paint()..color = const Color(0xFF0C0A07));
@@ -946,219 +943,6 @@ class _CutscenePainter extends CustomPainter {
     }
   }
 
-  // ── Kuşbakışı (izometrik yüksek açı) ───────────────────────────────────────
-  //
-  // Bu oyunda "yukarıdan bakmak" yeni bir teknik değil: game_painter da aynı dik
-  // figürleri gridToScreen ile küçük küçük yerleştiriyor. Burada da oyunun kendi
-  // projeksiyonu kullanılır → sinematik dünyaya YABANCI durmaz. Her şey
-  // prosedürel ve deterministik (aynı çekim hep aynı köyü gösterir).
-
-  /// Kuşbakışı köy — elmas karo zemin + evler + ateş + minik halk + uzun gölgeler.
-  void _paintAerial(Canvas canvas, Size size, _Cam cam) {
-    final g = shot.aerialGrowth.clamp(0.0, 1.0);
-    // Alacakaranlık zemin — gökyüzü yok, kadrajın tamamı toprak (yukarı bakış).
-    canvas.drawRect(Offset.zero & size, Paint()..color = const Color(0xFF2A3524));
-
-    canvas.save();
-    // İzometrik dünyayı kadraja sığdır: oyunun karo ölçüsü tam ekran için büyük.
-    final worldScale = 0.62 * (1 + (cam.zoom - 1) * 1.4);
-    canvas.translate(size.width / 2, size.height / 2);
-    canvas.scale(worldScale);
-    canvas.translate(-size.width / 2, -size.height / 2);
-    // Kamera kayması + yavaş süzülme (çekim boyunca köyün üstünden geçilir).
-    final camOff = Offset(-cam.panX / worldScale + sin(time * 0.13) * 10,
-        -cam.panY / worldScale - size.height * 0.06 + cos(time * 0.11) * 6);
-
-    Offset p(double gx, double gy) => gridToScreen(gx, gy, size, camOff);
-
-    // 1) Zemin karoları — merkeze yaklaştıkça çiğnenmiş toprak.
-    const half = 15;
-    for (int gx = -half; gx <= half; gx++) {
-      for (int gy = -half; gy <= half; gy++) {
-        final d = sqrt(gx * gx + gy * gy.toDouble());
-        if (d > half + 0.5) continue;
-        final worn = (1 - (d / (3.2 + g * 4)).clamp(0.0, 1.0));
-        final n = _h(gx * 91 + gy * 7 + 400, 5);
-        final grass = Color.lerp(const Color(0xFF44562F), const Color(0xFF55693A),
-            n * 0.9)!;
-        final col = Color.lerp(grass, const Color(0xFF6B5637), worn * 0.85)!;
-        final c = p(gx.toDouble(), gy.toDouble());
-        canvas.drawPath(
-            Path()
-              ..moveTo(c.dx, c.dy - kTileH / 2)
-              ..lineTo(c.dx + kTileW / 2, c.dy)
-              ..lineTo(c.dx, c.dy + kTileH / 2)
-              ..lineTo(c.dx - kTileW / 2, c.dy)
-              ..close(),
-            Paint()..color = col);
-      }
-    }
-
-    // 2) Ateş — köyün kalbi. Işık halkası zeminde yayılır.
-    final fire = p(0, 0);
-    final fr = kTileW * 3.2;
-    canvas.drawCircle(
-        fire,
-        fr,
-        Paint()
-          ..shader = RadialGradient(colors: [
-            const Color(0xFFFFB24D).withValues(alpha: 0.30),
-            const Color(0x00FFB24D),
-          ]).createShader(Rect.fromCircle(center: fire, radius: fr)));
-
-    // 2b) Ateşin kendisi — yalnız ışık lekesi bırakılırsa köyün kalbi görünmez.
-    _logs(canvas, fire, kTileH * 0.62);
-    _flames(canvas, size, fire.translate(0, -kTileH * 0.10), 0.34);
-
-    // 3) Evler — büyüme oranına göre çoğalır, merkez çevresine halka halka.
-    final houses = (3 + g * 13).round();
-    for (int i = 0; i < houses; i++) {
-      final ring = 3.0 + (i ~/ 5) * 3.2 + _h(i, 71) * 1.4;
-      final ang = _h(i, 72) * pi * 2 + (i % 5) * 1.25;
-      _isoHouse(canvas, p(cos(ang) * ring, sin(ang) * ring),
-          warm: _h(i, 73) > 0.35);
-    }
-
-    // 4) Ağaçlar — köyün dışına doğru seyrekleşir.
-    for (int i = 0; i < 26; i++) {
-      final r = 7.0 + _h(i, 81) * 7.5;
-      final ang = _h(i, 82) * pi * 2;
-      _isoTree(canvas, p(cos(ang) * r, sin(ang) * r), 0.8 + _h(i, 83) * 0.5);
-    }
-
-    // 5) Halk — oyunun kendi figürleri, minik. Bir kısmı ateşe doğru yürür.
-    final folk = (4 + g * 12).round();
-    for (int i = 0; i < folk; i++) {
-      final type = VillagerType
-          .values[(_h(i, 91) * VillagerType.values.length).floor()
-              .clamp(0, VillagerType.values.length - 1)];
-      final walker = _h(i, 92) > 0.55;
-      final ang = _h(i, 93) * pi * 2;
-      final rBase = 2.2 + _h(i, 94) * 5.0;
-      // Yürüyenler ateşe doğru yavaşça yaklaşır (döngüsel, kesintisiz).
-      final t = walker ? (time * 0.05 + _h(i, 95)) % 1.0 : 0.0;
-      final r = walker ? rBase + 4.0 * (1 - t) : rBase;
-      final pos = p(cos(ang) * r, sin(ang) * r);
-      // Uzun akşam gölgesi (ışık sağ üstten).
-      canvas.drawOval(
-          Rect.fromCenter(
-              center: pos.translate(-kTileW * 0.12, kTileH * 0.06),
-              width: kTileW * 0.42,
-              height: kTileH * 0.22),
-          Paint()..color = const Color(0x4D0A1208));
-      canvas.save();
-      canvas.translate(pos.dx, pos.dy);
-      canvas.scale(0.30);
-      CharacterRenderer.draw(
-        canvas,
-        type,
-        flipX: cos(ang) > 0,
-        // Yürüyen için adım fazı yoldan, duran için yavaş idle nefesi.
-        walkPhase: walker ? t * 90 : time * 1.1 + i * 1.7,
-        moveIntensity: walker ? 1.0 : 0.0,
-        visual: NpcVisual.fromSeed(i * 37 + 11),
-        time: time,
-        stage: LifeStage.adult,
-      );
-      canvas.restore();
-    }
-
-    canvas.restore();
-  }
-
-  /// İzometrik ev — üst rhombus + iki yan yüz + çatı. Prosedürel; kuşbakışında
-  /// küçük durduğu için PNG bina sprite'ına gerek yok.
-  void _isoHouse(Canvas canvas, Offset base, {bool warm = false}) {
-    const w = kTileW * 0.78;
-    const h = kTileH * 0.78;
-    const wallH = 20.0;
-    final top = base.translate(0, -wallH);
-    // Gölge.
-    canvas.drawPath(
-        Path()
-          ..moveTo(base.dx - w * 0.9, base.dy)
-          ..lineTo(base.dx - w * 0.2, base.dy + h * 0.55)
-          ..lineTo(base.dx + w * 0.5, base.dy + h * 0.1)
-          ..lineTo(base.dx - w * 0.2, base.dy - h * 0.45)
-          ..close(),
-        Paint()..color = const Color(0x400A1208));
-    // Yan yüzler.
-    canvas.drawPath(
-        Path()
-          ..moveTo(base.dx - w / 2, base.dy)
-          ..lineTo(base.dx, base.dy + h / 2)
-          ..lineTo(base.dx, base.dy + h / 2 - wallH)
-          ..lineTo(base.dx - w / 2, base.dy - wallH)
-          ..close(),
-        Paint()..color = const Color(0xFF4A3A2A));
-    canvas.drawPath(
-        Path()
-          ..moveTo(base.dx + w / 2, base.dy)
-          ..lineTo(base.dx, base.dy + h / 2)
-          ..lineTo(base.dx, base.dy + h / 2 - wallH)
-          ..lineTo(base.dx + w / 2, base.dy - wallH)
-          ..close(),
-        Paint()..color = const Color(0xFF3A2C1F));
-    // Beşik çatı — tek rhombus "sandık" gibi duruyordu. Sırt çizgisi + iki
-    // eğimli yüz: biri ışığa dönük (açık), diğeri gölgede (koyu).
-    const ridge = 13.0;
-    final peakL = Offset(top.dx - w / 4, top.dy - ridge);
-    final peakR = Offset(top.dx + w / 4, top.dy - ridge);
-    canvas.drawPath(
-        Path()
-          ..moveTo(top.dx - w / 2, top.dy)
-          ..lineTo(peakL.dx, peakL.dy)
-          ..lineTo(peakR.dx, peakR.dy)
-          ..lineTo(top.dx, top.dy + h / 2)
-          ..lineTo(top.dx - w / 2, top.dy)
-          ..close(),
-        Paint()..color = const Color(0xFF8A5F3E));
-    canvas.drawPath(
-        Path()
-          ..moveTo(top.dx + w / 2, top.dy)
-          ..lineTo(peakR.dx, peakR.dy)
-          ..lineTo(peakL.dx, peakL.dy)
-          ..lineTo(top.dx, top.dy + h / 2)
-          ..lineTo(top.dx + w / 2, top.dy)
-          ..close(),
-        Paint()..color = const Color(0xFF5C3F29));
-    // Sırt çizgisi.
-    canvas.drawLine(peakL, peakR,
-        Paint()
-          ..color = const Color(0xFFA37650)
-          ..strokeWidth = 1.6);
-    // Kapı — evin ölçeğini ve yönünü okutur.
-    canvas.drawRect(
-        Rect.fromLTWH(base.dx - w * 0.22, base.dy - wallH * 0.72, 5, wallH * 0.72),
-        Paint()..color = const Color(0xFF24190F));
-    // Yanan ocak — pencereden sızan ışık (köyün yaşadığını söyler).
-    if (warm) {
-      canvas.drawCircle(base.translate(w * 0.16, -wallH * 0.55), 2.4,
-          Paint()..color = const Color(0xFFFFC46B));
-    }
-  }
-
-  /// İzometrik ağaç — gövde + konik taç, rüzgârda hafif eğilir.
-  void _isoTree(Canvas canvas, Offset base, double s) {
-    final sway = _wind * 1.2 * s;
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: base.translate(-4 * s, 2 * s),
-            width: 16 * s,
-            height: 7 * s),
-        Paint()..color = const Color(0x3D0A1208));
-    canvas.drawRect(
-        Rect.fromLTWH(base.dx - 1.6 * s, base.dy - 10 * s, 3.2 * s, 10 * s),
-        Paint()..color = const Color(0xFF3B2A1A));
-    canvas.drawPath(
-        Path()
-          ..moveTo(base.dx - 8 * s, base.dy - 8 * s)
-          ..lineTo(base.dx + sway, base.dy - 30 * s)
-          ..lineTo(base.dx + 8 * s, base.dy - 8 * s)
-          ..close(),
-        Paint()..color = const Color(0xFF2E4526));
-  }
-
   /// En yakın katman — ekranın alt kenarında rüzgârda sallanan otlar. Asıl işi
   /// derinlik: pan'de en hızlı kayan şey bu olduğu için kamera hareketi
   /// "resim kaydı" değil "sahneye giriyoruz" hissi verir.
@@ -1168,7 +952,6 @@ class _CutscenePainter extends CustomPainter {
       CutsceneBg.road => const Color(0xFF48632C),
       CutsceneBg.valleyDusk => const Color(0xFF171326),
       CutsceneBg.fireNight => const Color(0xFF060C16),
-      CutsceneBg.aerial => null,   // kuşbakışında ön plan otu yok
       CutsceneBg.titleCard => null,
     };
     // POV: kamera halkanın İÇİNDE duruyor → kadrajın iki yanında komşuların

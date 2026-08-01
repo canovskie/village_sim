@@ -28,12 +28,14 @@ enum BuildingRole {
 }
 
 /// Bir civic binanın köy çapındaki etkisini niceleyen tek sayı.
-/// Yorumu role/türe göre değişir:
-///  • townhall → nüfus büyüme süresinin temel saniyesi
-///  • well     → moral katkısı (0..1)
-///  • tavern   → moral katkısı (0..1)
-///  • stable   → taşıyıcı hız çarpanı katkısı (ör. 0.15 = +%15)
-enum CivicEffect { populationGrowth, morale, carrierSpeed, none }
+/// Yorumu etkiye göre değişir:
+///  • morale       → amenite moral AĞIRLIĞI (bkz. amenityMoraleFrom). Ağırlıklar
+///    toplanıp yumuşak doyuma sokulur; bina başına birebir moral DEĞİLDİR ama
+///    büyüklükleri birbirine göre anlamlıdır (taverna 0.18 > anıt 0.06).
+///  • carrierSpeed → taşıyıcı hız çarpanı katkısı (ör. 0.15 = +%15)
+///  • none         → civicValue okunmaz (ör. belediye: yönetişimin koltuğu,
+///    sayısal bir köy-çapı etkisi yok)
+enum CivicEffect { morale, carrierSpeed, none }
 
 /// Her bina türünün işlevsel tanımı — [kBuildingMeta]'nın ekonomik karşılığı.
 class BuildingFunction {
@@ -48,7 +50,9 @@ class BuildingFunction {
   /// Stok kapasitesi katkısı (yalnızca storage).
   final int storageCapacity;
 
-  /// Civic etki türü + değeri.
+  /// Civic etki türü + değeri. [civicValue] SİMÜLASYONUN OKUDUĞU sayıdır —
+  /// panelde gösterilen ağırlık ile buradaki değer aynı yerden gelir, ikinci
+  /// bir "hangi bina moral verir" listesi yoktur.
   final CivicEffect civicEffect;
   final double civicValue;
 
@@ -73,12 +77,23 @@ const int kPopulationGrowthFoodCost = 10;
 /// Nüfus büyümesinin başlaması için gereken minimum yiyecek stoğu.
 const int kPopulationGrowthFoodFloor = 14;
 
-/// Pazar pasif altın geliri: her [kMarketIncomeInterval] sn'de civicValue altın.
+/// Pazar tahsilat periyodu (sn). Tahsilatın MİKTARI köyün fazlasından gelir —
+/// bkz. marketBaseIncome (building_system).
 const double kMarketIncomeInterval = 12.0;
 
 /// Değirmen bir balya öğütünce kaç saniye "çalışıyor" görünür (duman + panel).
 /// Hasat serpiştikçe her balya teslimi bu süreyi yeniler → değirmen döner.
 const double kMillGrindSeconds = 6.0;
+
+/// Çalışan bir değirmenin balyaya kattığı fazla yem (carrier_system).
+const int kMillBaleBonus = 2;
+
+/// Bonus veren azami değirmen sayısı — üçüncü değirmen ekonomiye katmaz.
+const int kMillBonusMaxCount = 2;
+
+/// Başında değirmenci DURAN bir değirmenin balya verimine çarpanı. İkinci
+/// değirmenci yarı katkı verir (bkz. scene_work._millerYieldMul).
+const double kMillerYieldBonus = 0.25;
 
 /// Pazarda manuel satış: kaynak türü → (satılan parti, kazanılan altın).
 const Map<ResourceKind, (int batch, int gold)> kMarketSellRates = {
@@ -89,12 +104,25 @@ const Map<ResourceKind, (int batch, int gold)> kMarketSellRates = {
   ResourceKind.food: (10, 2),
 };
 
+/// Gezgin tüccarın alımı: kaynak türü → (parti, altın, TABAN stok). Tüccar
+/// köyün YALNIZ fazlasını alır — elde en az `keepFloor` kalır (zorunluyu satmaz).
+/// Pazardan daha iyi öder (dışarıya satış primi) ve balın TEK alıcısıdır (pazarda
+/// satış oranı yok) → arı kovanı üretimine gerçek bir amaç kazandırır.
+const Map<ResourceKind, (int batch, int gold, int keepFloor)> kMerchantBuyRates = {
+  ResourceKind.food:  (12, 3, 60), // yiyecek en son satılır (yüksek taban)
+  ResourceKind.wood:  (12, 4, 45),
+  ResourceKind.stone: (12, 4, 45),
+  ResourceKind.coal:  (10, 4, 24),
+  ResourceKind.iron:  (6, 5, 16),
+  ResourceKind.honey: (4, 6, 6), // lüks — az parti, yüksek değer
+};
+
 // ─── Bina işlev tablosu ──────────────────────────────────────────────────────
 
 const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.firepit: BuildingFunction(
     role: BuildingRole.none,
-    summary: 'Köyün ilk ateşi ve hâlâ kalbi. Karanlık basınca herkes buraya toplanır; yakacak biterse sohbet de biter.',
+    summary: 'Köyün ilk ateşi ve hâlâ kalbi. Karanlık basınca herkes buraya toplanır; yakacak biterse sohbet de biter. Odun çabuk tutuşup çabuk biter, kömür uzun yanar — kışın ocak iki katı yer, o yüzden kara damar kışın altından değerlidir.',
   ),
 
   BuildingType.tent: BuildingFunction(
@@ -141,7 +169,7 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
 
   BuildingType.mineBuilding: BuildingFunction(
     role: BuildingRole.gathering,
-    summary: 'Damarın ağzına kurulmuş bir baraka. İçeriden çekiç sesi, dışarıya taş, demir ve kömür çıkar.',
+    summary: 'Damarın ağzına kurulmuş bir baraka. İçeriden çekiç sesi, dışarıya taş, demir ve kömür çıkar. Kömürün iki yolu var: ocakta yanar ya da pazarda satılır — kış yaklaşırken hangisi olduğuna sen karar verirsin.',
   ),
 
   BuildingType.fisherCabin: BuildingFunction(
@@ -151,15 +179,17 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
 
   BuildingType.mill: BuildingFunction(
     role: BuildingRole.processing,
-    summary: 'Kanatlar döndükçe içerisi un kokar. Değirmen çalışırken tarladan '
-        'gelen her balya +1 fazla yiyecek eder.',
+    summary: 'Kanatlar döndükçe içerisi un kokar. Tarladan gelen her balya +2 '
+        'fazla yiyecek eder (ikinci değirmen de sayılır, üçüncüsü katmaz); '
+        'başında bir değirmenci duruyorsa harman büsbütün bereketlenir.',
   ),
 
   BuildingType.market: BuildingFunction(
     role: BuildingRole.trade,
-    summary: 'Tezgâhlar, bağırışlar, terazi. Fazla neyin varsa burada altına '
-        'döner: kendiliğinden gelir getirir, istersen elinle de satarsın.',
-    civicValue: 1.0, // periyodik pasif altın
+    summary: 'Tezgâhlar, bağırışlar, terazi. Köyün ihtiyacından FAZLASI burada '
+        'altına döner: ambar taşarken kasa dolar, boşken tezgâh da boş durur. '
+        'İstersen elinle de satarsın.',
+    // Gelir civicValue'dan DEĞİL, köyün fazlasından hesaplanır (marketBaseIncome).
   ),
 
   BuildingType.warehouse: BuildingFunction(
@@ -170,9 +200,11 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
 
   BuildingType.townhall: BuildingFunction(
     role: BuildingRole.civic,
-    summary: 'Mühür burada durur, defter burada tutulur. Ambardaki yiyeceği harcayıp köye yeni can katar. Deftere geçen her hüner köyün kalıcı hafızasına girer — zanaat bir daha kaybolmaz.',
-    civicEffect: CivicEffect.populationGrowth,
-    civicValue: 22.0, // büyüme süresi (sn)
+    summary: 'Mühür burada durur, defter burada tutulur. Köyün yönetişimi — '
+        'divan, gündem, vergi — bu kapıdan geçer. Deftere geçen her hüner köyün '
+        'kalıcı hafızasına girer: zanaat bir daha kaybolmaz.',
+    // Nüfus büyümesi artık doğal doğumda; belediyenin sayısal bir köy-çapı
+    // etkisi yok — koltuğu yönetişim panelleri (Divan/Vergi) dolduruyor.
   ),
 
   BuildingType.well: BuildingFunction(
@@ -270,12 +302,6 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   ),
 
   // ─── Liman & Ziyaret Mahallesi ─────────────────────────────────────────────
-  BuildingType.dock: BuildingFunction(
-    role: BuildingRole.trade,
-    summary: 'Köyün denize açılan kapısı. Tüccar teknesi yanaşır, fazlan '
-        'denizaşırı gider, kese düzenli olarak şişer.',
-    civicValue: 1.0, // periyodik pasif altın (market mekaniği)
-  ),
   BuildingType.caravanserai: BuildingFunction(
     role: BuildingRole.civic,
     summary: 'Kervan burada mola verir: hayvan dinlenir, tüccar uyur, avlu geceyi '

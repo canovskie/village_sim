@@ -65,6 +65,8 @@ extension _SceneReed on _VillageSceneState {
     if (_cycle.dayLight <= 0.35) return;
 
     for (final v in _villagers) {
+      // SAHİPLİK — akıl bu köylüyü geçim uğraşına verdi mi (bkz. scene_mind).
+      if (!v.mind.owns(IntentKind.forage)) continue;
       if (!_homelessSeekingBed(v)) continue;
       if (v.isInsideBuilding ||
           v.isSleeping ||

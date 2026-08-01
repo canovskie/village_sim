@@ -75,14 +75,24 @@ class VillagePolicies {
   bool freeRange = false;
   bool herdGrowth = false;
   bool winterFodder = false;
+  bool quarantine = false;
+  bool hearthWatch = false;
+  bool outsideMarriage = false;
 
   VillagePolicies({this.inkDryUntilSim = 0});
+
+  /// Mühür seti her değiştiğinde çağrılır — sahne KÖYÜN HÂLİ tablosunu
+  /// ([WorldPressure]) burada tazeler. Tek kanca: mühür/fesih/kayıttan dönüş
+  /// hepsi buradan geçer, böylece "şu çağrı yerinde tazelemeyi unutmuşum"
+  /// sınıfı hatalar mümkün olmaz. Sahne kurulmadan önce null.
+  void Function()? onChanged;
 
   /// Bir fermanı deftere geçir. GERİ ALINMAZ — [sealed]'den bir şey çıkmaz.
   /// Sıra/path/foreclosure YOK: serbest katalog, tek sınır bedel+tempo+siyaset.
   void seal(LawDef l) {
     sealed.add(l.id);
     _mirror(l.id);
+    onChanged?.call();
   }
 
   /// Mühürlü id → sim bool'u. Tek yönlü (mühür kalkmaz).
@@ -106,6 +116,9 @@ class VillagePolicies {
       case 'freeRange': freeRange = true;
       case 'herdGrowth': herdGrowth = true;
       case 'winterFodder': winterFodder = true;
+      case 'quarantine': quarantine = true;
+      case 'hearthWatch': hearthWatch = true;
+      case 'outsideMarriage': outsideMarriage = true;
     }
   }
 
@@ -130,12 +143,16 @@ class VillagePolicies {
     freeRange = false;
     herdGrowth = false;
     winterFodder = false;
+    quarantine = false;
+    hearthWatch = false;
+    outsideMarriage = false;
     sealed
       ..clear()
       ..addAll(ids);
     for (final id in sealed) {
       _mirror(id);
     }
+    onChanged?.call();
   }
 
   bool isOn(String id) => sealed.contains(id);

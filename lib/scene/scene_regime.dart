@@ -51,11 +51,106 @@ extension _SceneRegime on _VillageSceneState {
   }
 
   /// Tembellik krizinin üretime yansıması — Demir Sofra huzursuzken tezgâh
-  /// soğur. Tarla büyümesi ve balya verimi bu çarpanı yer.
-  double get _regimeWorkMul =>
-      (_regimeRule.crisis == RegimeCrisis.idleness && _unrest >= Regime.kStir)
-          ? 0.82
-          : 1.0;
+  /// soğur. Tarla büyümesi ve balya verimi bu çarpanı yer. Kronikleşmişse
+  /// (Durgunluk) huzursuzluk inse bile tezgâh yavaş kalır: iz kalıcıdır.
+  double get _regimeWorkMul {
+    if (_regimeRule.crisis != RegimeCrisis.idleness) return 1.0;
+    if (_isFailing) return 0.74;
+    if (_isChronic) return 0.85;
+    return _unrest >= Regime.kStir ? 0.82 : 1.0;
+  }
+
+  // ── DIŞ GÜÇ: İMPARATORLUK KARŞISINDA REJİM ──────────────────────────────────
+
+  /// Köyün rejiminden gelen dış-güç duruşu (bkz. scene_imperial: direniş şansı,
+  /// pazarlık eşiği, dikkat çarpanı ve hür rejimde meclis vetosu buradan okur).
+  ImperialPosture get _imperialPosture => Regime.imperialPostureOf(
+        _regimeIdentity.regime,
+        oath: _oathRegime != null,
+        committed: _regimeIdentity.committed,
+      );
+
+  /// İmparatorluğun köyde GÖRDÜĞÜ servet — mülkçü köy göz doldurur, ortakçı köy
+  /// gözden ırak kalır. Ziyaret sıklığı ve talep sertliği bunu okur.
+  ///
+  /// ÇÜRÜME de görünürlüğü artırır: dağılmakta olan bir köy kolay avdır, heyet
+  /// kokuyu alır (bkz. Faz 3 — iç çözülme dışarıyı davet eder).
+  double get _imperialAttentionMul =>
+      _imperialPosture.attentionMul * (1.0 + _regimeRot * 0.5);
+
+  /// Hür ve köklü rejimde imparatorluğun talebi meclise düşer mi — köyün kendi
+  /// duruşunu belirlemesi. Baskı/ılımlı rejimde söz tek elden senindir.
+  bool get _imperialGoesToCouncil =>
+      _regimeRule.councilDecides && _regimeIdentity.committed;
+
+  /// Meclisin şu anki talebe önerdiği duruş (yoksa null — sen karar verirsin).
+  ImperialVerdict? get _imperialCouncilVerdict {
+    if (!_imperialGoesToCouncil) return null;
+    final d = _imperialDemand;
+    if (d == null) return null;
+    final onHand = d.isConscript ? _stockpile.gold : _resourceOf(d.kind);
+    final need = d.isConscript ? _imperialRansomCost() : d.amount;
+    return Regime.councilImperialVerdict(
+      affordability: need <= 0 ? 2.0 : onHand / need,
+      conscript: d.isConscript,
+      resistChance: _resistChance(),
+      mood: _estateMoodMap(),
+      villageMorale: _stats.morale,
+    );
+  }
+
+  /// Oyuncunun seçtiği eylem meclisin duruşuyla çelişiyor mu — çelişiyorsa
+  /// meşruiyet bedeli ödenir (hür rejimde meclise rağmen karar vermek pahalı).
+  bool _defiesCouncil(ImperialVerdict player) {
+    final rec = _imperialCouncilVerdict;
+    return rec != null && rec != player;
+  }
+
+  /// Meclise rağmen imparatorluk kararı vermenin bedeli: köy sözünü dinlemeyen
+  /// bir el gördü — moral sızar, taban küser, huzursuzluk birikir. Yağma gibi
+  /// ağır bir çelişkide (meclis öderken sen reddettin) bedel daha da ağır.
+  void _payCouncilOverride({required bool violent}) {
+    final mult = violent ? 1.8 : 1.0;
+    pushPolicyMorale(-0.05 * mult, 4.0);
+    _unrest = (_unrest + 0.08 * mult).clamp(0.0, 1.0);
+    final base = _regimeIdentity.base;
+    if (base != null) _nudgeHousesByEstate(base, moodDelta: -0.08 * mult);
+    _chronicle(
+        'Meclisin duruşuna rağmen imparatorluk kararını sen verdin.',
+        icon: '🏛');
+    _showNotification('🏛 Meclisi dinlemedin — köy sesini bir kez daha yuttu.');
+  }
+
+  /// İmparatorluk yükünün İÇ politik dalgası + huzursuzluk kaplinajı. Her ödeme/
+  /// yağma köyün sabrını yer; hangi kaynağın alındığı hangi zümreyi vurur.
+  /// [severity] 0..1 (tam yağma = 1, hafif öşür = ~0.3); [raid] kanlı bitiş.
+  void _imperialInternalToll(ImperialDemand d, double severity,
+      {bool raid = false}) {
+    // Zaten huzursuz bir köyü kanatmak daha tehlikeli: sabrı eşiği aşmışsa
+    // sızıntı %50 artar (bir sonraki tikte krize dönebilir).
+    final onEdge = _unrest >= Regime.kStir ? 1.5 : 1.0;
+    final add = (raid ? 0.20 : 0.05 + severity * 0.06) * onEdge;
+    _unrest = (_unrest + add).clamp(0.0, 1.0);
+
+    // Hangi kaynak koparıldıysa o zümre daha çok yaralanır (kesenin sahibi
+    // altını, harmanın sahibi tahılı, ocak evladını hisseder).
+    final hit = -0.03 - severity * 0.05;
+    switch (d.kind) {
+      case ImperialDemandKind.goldTax:
+        _nudgeHousesByEstate(Estate.artisans, moodDelta: hit);
+      case ImperialDemandKind.foodLevy:
+        _nudgeHousesByEstate(Estate.laborers, moodDelta: hit);
+      case ImperialDemandKind.woodLevy:
+        _nudgeHousesByEstate(Estate.laborers, moodDelta: hit * 0.7);
+        _nudgeHousesByEstate(Estate.artisans, moodDelta: hit * 0.5);
+      case ImperialDemandKind.conscript:
+        // İMAN: evladı "yoldan çıkmış" bir güce vermek inanan köye çok daha
+        // ağır gelir (faithEffect.conscriptSting).
+        final sting = _faithEffect.conscriptSting;
+        _nudgeHousesByEstate(Estate.hearth, moodDelta: hit * 1.4 * sting);
+        _nudgeHousesByEstate(Estate.faithful, moodDelta: hit * 0.6 * sting);
+    }
+  }
 
   // ── HUZURSUZLUK DÖNGÜSÜ ────────────────────────────────────────────────────
 
@@ -70,10 +165,19 @@ extension _SceneRegime on _VillageSceneState {
     final rule = _regimeRule;
     final days = elapsed / kGameDaySeconds;
     final before = _unrest;
+    // İMAN: inanan köy sıkıntıya sabreder — yatıştırma payı büyür (kader).
+    // Dinî bir tiranın neden daha uzun ayakta kalabildiğinin cevabı burası.
+    final faith = _faithEffect;
     _unrest = (_unrest +
             Regime.unrestStep(rule,
-                morale: _stats.morale, days: days))
+                    morale: _stats.morale, days: days) -
+                faith.unrestRelief * days)
         .clamp(0.0, 1.0);
+
+    // ÇÜRÜME — kaynayan köy iz bırakır, sakin köy izini yavaşça siler.
+    _tickRegimeRot(days);
+    // Kronik hâlin süregiden bedeli (kriz gibi tek atımlık değil, her gün).
+    _applyChronicToll(days);
 
     if (_crisisCooldown > 0) _crisisCooldown -= elapsed;
 
@@ -101,11 +205,101 @@ extension _SceneRegime on _VillageSceneState {
     }
   }
 
+  // ── ÇÜRÜME + KRONİK HÂL (Faz 3) ─────────────────────────────────────────────
+
+  /// İmanın mekanik karşılığı — pusuladaki dinî boyanın gerçek sonuçları
+  /// (sabır, direniş, suç, moral tabanı, devşirme yarası).
+  FaithEffect get _faithEffect => Regime.faithEffectOf(_compassPos.faith);
+
+  /// Köy kronik bir hâle düştü mü — süregiden, rejime özgü bedel.
+  bool get _isChronic =>
+      _regimeRot >= Regime.kChronic &&
+      _regimeRule.crisis != RegimeCrisis.none;
+
+  /// Rejim tamamen çözülüyor mu — kronik bedel ağırlaşır, dış güç kokuyu alır.
+  bool get _isFailing =>
+      _regimeRot >= Regime.kFailing &&
+      _regimeRule.crisis != RegimeCrisis.none;
+
+  /// Çürüme döngüsü + kronik hâlin giriş/çıkış duyurusu. Kronikleşmek bir
+  /// oyun-sonu değil: köy bu hâlde YAŞAR, ama bedelini her gün öder — ve uzun
+  /// süre sakin kalırsa iz silinir, hâl kalkar (çıkış kapalı değil).
+  void _tickRegimeRot(double days) {
+    final was = _isChronic;
+    _regimeRot =
+        (_regimeRot + Regime.rotStep(unrest: _unrest, days: days))
+            .clamp(0.0, 1.0);
+    final now = _isChronic;
+
+    if (now && !was && !_chronicShown) {
+      _chronicShown = true;
+      final (title, body) = Regime.chronicText(_regimeRule.crisis);
+      _showNotification('🕯 $title — ${_regimeIdentity.title} artık eskisi gibi değil.');
+      _chronicle('$title  $body', icon: '🕯', milestone: true);
+      _award('regime.chronic.${_regimeRule.crisis.name}', title, '🕯');
+    } else if (!now && was) {
+      _chronicShown = false;
+      _showNotification('🌱 Köy kendine geldi — yaralar kapandı.');
+      _chronicle('${_regimeIdentity.title} toparlandı; kronik hâl geçti.',
+          icon: '🌱', milestone: true);
+    }
+  }
+
+  /// Kronik hâlin SÜREGİDEN bedeli — her rejim kendi seçtiği yoldan çürür.
+  /// Tek atımlık krizden farkı: bu, çözülene kadar her gün işler.
+  ///
+  /// PERF/DOĞRULUK: burada `pushPolicyMorale` KULLANILMAZ — o her çağrıda
+  /// süreli bir kayıt listeye ekler; her tick çağrılınca (günde ~120 kez)
+  /// liste şişer. Sürekli sızıntının doğru aracı `nudgeMorale` (doğrudan,
+  /// tahsissiz). Süreli etkiler tek-atımlık olaylara aittir.
+  void _applyChronicToll(double days) {
+    if (!_isChronic) return;
+    final heavy = _isFailing ? 1.6 : 1.0;
+    switch (_regimeRule.crisis) {
+      case RegimeCrisis.revolt:
+        // Köy bölündü: sızıntı sürüyor, ara sıra biri sessizce çekip gider.
+        nudgeMorale(-0.02 * heavy * days);
+        if (_isFailing && _villagers.length >= 8 && _rng.nextDouble() < 0.10 * days) {
+          final q = _mostAggrieved();
+          if (q != null) _emigrateVillager(q);
+        }
+      case RegimeCrisis.deadlock:
+        // Divan felci: mürekkep bir türlü kurumaz (aşağıda inkDry çarpanı).
+        nudgeMorale(-0.015 * heavy * days);
+      case RegimeCrisis.idleness:
+        // Durgunluk: tezgâh kalıcı yavaş (aşağıda _regimeWorkMul).
+        nudgeMorale(-0.015 * heavy * days);
+      case RegimeCrisis.inequality:
+        // İki ayrı köy: en yoksul hane her gün biraz daha dibe iner.
+        final poor = _poorestHouse();
+        if (poor != null) {
+          _houses.nudge(poor, moodDelta: -0.03 * heavy * days);
+        }
+      case RegimeCrisis.none:
+        break;
+    }
+  }
+
+  /// Kronik felçte müzakere daha da ağırlaşır — mühür temposu çarpanı.
+  double get _chronicInkMul => (_isChronic &&
+          _regimeRule.crisis == RegimeCrisis.deadlock)
+      ? (_isFailing ? 1.45 : 1.25)
+      : 1.0;
+
+  /// MECLİS-İ DAİMİ — meclis hiç dağılmadığı için mürekkep çabuk kurur.
+  /// Hür rejimin en ağır bedeli müzakerenin yavaşlığıdır ([RegimeRule.inkDryMul]
+  /// hür rejimde > 1); daim toplu meclis o bedeli belirgin biçimde hafifletir.
+  /// Fermanın ödülünün somut, sayılabilir yüzü budur.
+  double get _daimiInkMul =>
+      _policies.sealed.contains('rejim.meclisDaimi') ? 0.7 : 1.0;
+
   /// Kriz: önce DÜNYADA bir şey olur (kaçan köylü, donan divan, soğuyan
   /// tezgâh, açılan makas), sonra köy kapına gelip karar ister. Kriz kendi
   /// başına oyunu bitirmez — çözülünce huzursuzluk düşer, çözülmezse kaynar.
   void _fireRegimeCrisis(RegimeCrisis c) {
     _crisisCooldown = 6.0 * kGameDaySeconds;
+    // Her kriz kalıcı bir iz bırakır — atlatsan bile köy bir şey kaybeder.
+    _regimeRot = (_regimeRot + Regime.kRotPerCrisis).clamp(0.0, 1.0);
     final (title, body) = Regime.crisisText(c);
     addCameraShake(2.2, dur: 0.5);
     _chronicle(title, icon: '🔥', milestone: true);
@@ -462,8 +656,10 @@ extension _SceneRegime on _VillageSceneState {
     setStateHere(() {
       _policies.restoreSealed(
           [for (final id in _policies.sealed) if (id != l.id) id]);
-      // Fermanın yazdığı hafıza bayrakları da kalkar (kapılar tazelensin).
-      _villageMemory.removeAll(l.seal.setsFlags);
+      // Fermanın KENDİ bayrakları kalkar (kapılar tazelensin). setsFlags'in
+      // tamamı DEĞİL: aynı bayrağı bir dilekçe de basabiliyor ve fermanı bozmak
+      // o kararın izini silmemeli (bkz. LawDef.repealClears).
+      _villageMemory.removeAll(l.repealClears);
       _lawCtxCache = null;
       pushPolicyMorale(-0.05 * heavy, 4.0);
       _governanceLegacy =

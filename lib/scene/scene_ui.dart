@@ -13,6 +13,16 @@ extension _SceneUi on _VillageSceneState {
     setStateHere(() {});
   }
 
+  // Cevher (demir/kömür) HUD hücreleri — maden dikilene dek ikisi de hep 0
+  // olur, boş sayaç göstermenin anlamı yok. Maden varsa ya da elde/yolda cevher
+  // varsa açılır (kayıt/senaryo stoklu başlarsa da doğru davranır).
+  bool get _showOreInHud =>
+      _stockpile.iron > 0 ||
+      _stockpile.coal > 0 ||
+      _ironInTransit > 0 ||
+      _coalInTransit > 0 ||
+      _buildings.any((b) => b.type == BuildingType.mineBuilding);
+
   // Moral katkı kırılımı — HUD moral barı hover tooltip'i. _tickBuildingSystems
   // moraleTarget formülünün AYNISI; oradan koptuysa burayı da güncelle.
   List<(String, double)> _moraleBreakdown() {
@@ -74,7 +84,9 @@ extension _SceneUi on _VillageSceneState {
             onLongPressEnd: _onCanvasLongPressEnd,
             child: MouseRegion(
               onHover: _onCanvasHover,
-              onExit: (_) => setStateHere(_clearHover),
+              // PERF: setState DEĞİL — künye _frame'e bağlı, bir sonraki karede
+              // kendiliğinden söner (imleç her çıkışında tam ağaç rebuild etme).
+              onExit: (_) => _clearHover(),
               child: RepaintBoundary(
                 child: ListenableBuilder(
                   listenable: _frame,
@@ -84,7 +96,6 @@ extension _SceneUi on _VillageSceneState {
                       merchants: _merchants,
                       soldiers: _soldiers,
                       buildings: _buildings,
-                      builders: _builders,
                       pendingOrders: _orders,
                       roadSystem: _roadSystem,
                       pendingRoadOrders: _roadOrders,
@@ -92,19 +103,20 @@ extension _SceneUi on _VillageSceneState {
                       ghostType: _placing,
                       ghostTile: _ghost,
                       ghostValid: _ghost != null && _placing != null
-                          ? _isValidPlacement(
-                              _ghost!.$1,
-                              _ghost!.$2,
-                              _placing!,
-                            )
+                          ? _isValidPlacement(_ghost!.$1, _ghost!.$2, _placing!)
                           : false,
+                      roadPreview: _roadPreview,
+                      roadPreviewSurface: _placingRoad,
+                      roadPreviewVersion: _roadPreviewV,
+                      revealTiles: _revealTiles(),
                       time: _time,
                       overlayTop: _cycle.overlayTop,
                       overlayBottom: _cycle.overlayBottom,
                       rainIntensity: _cycle.rainIntensity,
                       nightClarity: _cycle.nightClarity,
+                      // Adımın dünyadaki hedefi — yönlendirmenin görsel ayağı.
+                      stepBeacon: _stepBeacon,
                       farmTiles: _farmTiles,
-                      farmers: _farmers,
                       farmSelection:
                           (_farmMode && _farmStart != null && _farmEnd != null)
                           ? (
@@ -120,7 +132,6 @@ extension _SceneUi on _VillageSceneState {
                       wildTreeTiles: _wildTreeTiles,
                       forestVersion: _forestVersion,
                       leafBursts: _leafBursts,
-                      woodcutters: _woodcutters,
                       lumberSelection:
                           (_lumberMode &&
                               _lumberStart != null &&
@@ -133,7 +144,6 @@ extension _SceneUi on _VillageSceneState {
                             )
                           : null,
                       mineNodes: _mineNodes,
-                      miners: _miners,
                       mineSelection:
                           (_mineMode && _mineStart != null && _mineEnd != null)
                           ? (
@@ -147,17 +157,17 @@ extension _SceneUi on _VillageSceneState {
                       dayLight: _cycle.dayLight,
                       lotuses: _lotuses,
                       reeds: _reeds,
+                      berryBushes: _berryBushes,
                       decor: _decor,
                       graves: _graves,
                       reedBeds: _reedBeds,
-                      fishers: _fishers,
-                      florists: _florists,
-                      shepherds: _shepherds,
                       cows: _cows,
                       zoom: _zoom,
                       resourceBoxes: _resourceBoxes,
                       hayEntities: _hayEntities,
                       eggs: _eggs,
+                      lootCaches: _lootCaches,
+                      lootFade: _SceneCrime._kLootFade,
                       skyReflection: _cycle.skyMid,
                       timeOfDay: _cycle.timeOfDay,
                       season: _season,
@@ -174,7 +184,6 @@ extension _SceneUi on _VillageSceneState {
                       birdFlocks: _birdFlocks,
                       beeSwarms: _beeSwarms,
                       perfMode: _perfMode,
-                      lumberCamps: _lumberCamps,
                     ),
                   ),
                 ),
@@ -200,16 +209,19 @@ extension _SceneUi on _VillageSceneState {
           coalInTransit: _coalInTransit,
           foodInTransit: _foodInTransit,
           villagerCount: _villagers.length,
-          farmerCount: _farmers.length,
-          woodcutterCount: _woodcutters.length,
-          minerCount: _miners.length,
-          fisherCount: _fishers.length,
-          builderCount: _builders.length,
-          shepherdCount: _shepherds.length,
-          floristCount: _florists.length,
+          // Kadro sayaçları ÜSTLENİLMİŞ İŞTEN okunur — eski anonim işçi
+          // listeleri kaldırıldı (hepsi ömrü boyunca boştu, sayaçlar hep 0'dı).
+          farmerCount: _jobCount(JobRole.farmer),
+          woodcutterCount: _jobCount(JobRole.woodcutter),
+          minerCount: _jobCount(JobRole.miner),
+          fisherCount: _jobCount(JobRole.fisher),
+          builderCount: _jobCount(JobRole.builder),
+          shepherdCount: _jobCount(JobRole.shepherd),
+          floristCount: _jobCount(JobRole.florist),
           homelessCount: _villagers.where((v) => v.homeBuilding == null).length,
-          busyBuilders:
-              _builders.where((b) => b.state != BuilderState.idle).length,
+          busyBuilders: _villagers
+              .where((v) => v.job?.role == JobRole.builder && v.job!.working)
+              .length,
           timeOfDay: _cycle.timeOfDay,
           rainIntensity: _cycle.rainIntensity,
           dayLight: _cycle.dayLight,
@@ -225,17 +237,17 @@ extension _SceneUi on _VillageSceneState {
                 b.occupants > 0 &&
                 b.waterLevel < 0.3,
           ),
-          starving: !_godMode && _stockpile.food < kStarveRampFood,
+          starving: !_godMode && _stockpile.food < _starveRamp,
           eventLabel: _eventLabel,
           stockCapacity: _godMode ? (1 << 30) : _stats.stockCapacity,
+          showOre: _showOreInHud,
           fullPulse: sin(_time * 3.2) * 0.5 + 0.5,
           moraleBreakdown: _moraleBreakdown(),
           onHighlightHomeless: _highlightHomeless,
           effectTimeLeft: _eventMoraleLeft,
           effectDuration: _activeEvent?.duration ?? 1,
           effectPositive: (_eventMorale >= 0),
-          onToggleDev: () =>
-              setStateHere(() => _devPanelOpen = !_devPanelOpen),
+          onToggleDev: () => setStateHere(() => _devPanelOpen = !_devPanelOpen),
           muted: SettingsModel.instance.muted,
           onToggleMute: () =>
               setStateHere(() => SettingsModel.instance.toggleMute()),
@@ -246,38 +258,186 @@ extension _SceneUi on _VillageSceneState {
           onTriggerEvent: _triggerRandomEvent,
           timeScale: _timeScale,
           onCycleSpeed: _cycleSpeed,
+          // ŞU ANKİ ADIM — Köy Defteri'ni açmadan görünür tek satır.
+          stepText: _currentStep?.quest.label,
+          stepIcon: _currentStep == null
+              ? null
+              : questGlyph(_currentStep!.quest.id),
+          stepWho: _currentStep?.speakerName,
+          // Oyun dışı işler telefonda ray'ın araçlar menüsünde (masaüstünde
+          // sol-üst "⚙ Menü" kümesi olarak kalır).
+          onSaveNow: () => _saveNow(manual: true),
+          onExitToMenu: () => setStateHere(() => _exitConfirmOpen = true),
+          sheetOpen:
+              _detailExpanded &&
+              (_selectedVillager != null || _selectedBuilding != null),
         ),
       ),
     );
   }
 
-  // ── Alt araç çubuğu: bina/yol panel + Tarla/Kes/Kaz mode butonları ────────
+  // ── KOMUTA ÇUBUĞU (konsept 04) — tek alt hat: inşa · bağlam · menü ─────────
 
-  Widget buildBottomToolbar() {
-    if (kBuildingMeta.isEmpty) return const SizedBox.shrink();
+  /// Oyunun tek alt komuta çubuğu. Eski buildBottomToolbar + ObjectivePanel +
+  /// LedgerSeal + sağ-dock seçim panellerini tek hatta toplar.
+  Widget buildCommandBar() {
     return Positioned(
-      bottom: 14,
       left: 0,
       right: 0,
-      child: Center(
-        // Ateş yokken kategori yok — yalnız ateş yeri kartı. Sonra: kategori
-        // sekmeleri (üstte) + seçili kategorinin içeriği (altta). Tek sıralık
-        // kalabalık yerine derli toplu, ölçeklenebilir palet.
-        child: !_hasFire
-            ? BuildingPanel(
-                stockpile: _stockpile,
-                selected: _placing,
-                hasFirepit: false,
-                onSelect: _onSelectBuilding,
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildCategoryContent(),
-                  const SizedBox(height: 6),
-                  _buildCategoryTabs(),
-                ],
-              ),
+      bottom: 0,
+      child: RepaintBoundary(
+        child: ListenableBuilder(
+          listenable: _frame,
+          builder: (_, _) => CommandBar(
+            agenda: _divanAgendaCount(),
+            onDefter: () => _openLedger(LedgerSection.tuzuk),
+            onDivan: () => _openLedger(LedgerSection.divan),
+            onRoster: () => _openLedger(LedgerSection.nufus),
+            buildSegment: _commandBuildSegment(),
+            context: _commandContext(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Sol segment — inşa paleti (ateş yoksa yalnız ateş kartı; sonra kategori
+  /// sekmesi + kartlar). Eski alt çubuğun içeriğini yeniden kullanır.
+  Widget _commandBuildSegment() {
+    if (kBuildingMeta.isEmpty) return const SizedBox.shrink();
+    if (!_hasFire) {
+      return BuildingPanel(
+        stockpile: _stockpile,
+        selected: _placing,
+        hasFirepit: false,
+        // Adımın istediği kart — ateş yokken katalogda zaten tek kart var ama
+        // işaret yine de konur: oyuncunun ilk hamlesi budur.
+        hintType: _stepBuildTarget,
+        onSelect: _onSelectBuilding,
+      );
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildCategoryTabs(),
+        const SizedBox(height: 4),
+        _buildCategoryContent(),
+      ],
+    );
+  }
+
+  /// Orta segment — seçili bina/köylünün kompakt bağlamı + birincil eylemler.
+  /// Tam ayrıntı "Detay" ile açılır (_detailExpanded). Seçim yoksa null → ipucu.
+  CommandContext? _commandContext() {
+    // İNŞA — palette'ten bir bina seçildiyse (yerleştirme modu) o binanın NE
+    // İŞE YARADIĞINI göster (açıklama). "Bir bina seç" ipucunun yerini alır.
+    final p = _placing;
+    if (p != null) {
+      return CommandContext(
+        title: kBuildingMeta[p]?.label ?? '—',
+        description:
+            kBuildingFunctions[p]?.summary ??
+            'Boş bir yere tıklayarak yerleştir.',
+        actions: [
+          CommandAction(
+            'Vazgeç',
+            GameIconData.close,
+            onTap: () => setStateHere(() {
+              _placing = null;
+              _ghost = null;
+            }),
+          ),
+        ],
+      );
+    }
+    final b = _selectedBuilding;
+    if (b != null) {
+      final res = _villagers.where((v) => v.homeBuilding == b).toList();
+      final cap = kBuildingFunctions[b.type]?.housingCapacity ?? 0;
+      final sub = res.isNotEmpty && res.first.surname.isNotEmpty
+          ? '${res.first.surname} Hanesi'
+          : null;
+      final isFirepit = b.type == BuildingType.firepit;
+      return CommandContext(
+        title: kBuildingMeta[b.type]?.label ?? '—',
+        subtitle: sub,
+        stats: [if (cap > 0) ('Sakinler', '${res.length}/$cap', AppUi.sage)],
+        actions: [
+          CommandAction(
+            'Detay',
+            GameIconData.scroll,
+            onTap: () => setStateHere(() => _detailExpanded = true),
+          ),
+          CommandAction(
+            'Şenlik',
+            GameIconData.festival,
+            onTap: () => _hostFestival(b),
+          ),
+          if (!isFirepit)
+            CommandAction(
+              'Taşı',
+              GameIconData.hammer,
+              onTap: () => _demolishBuilding(b, refund: 1.0, reselect: true),
+            ),
+          if (!isFirepit)
+            CommandAction(
+              'Yık',
+              GameIconData.demolish,
+              danger: true,
+              onTap: () => _demolishBuilding(b, refund: 0.5),
+            ),
+        ],
+      );
+    }
+    final v = _selectedVillager;
+    if (v != null) {
+      return CommandContext(
+        title: v.name,
+        subtitle: v.hasProfession ? v.type.displayName : 'köylü',
+        actions: [
+          CommandAction(
+            'Detay',
+            GameIconData.scroll,
+            onTap: () => setStateHere(() => _detailExpanded = true),
+          ),
+        ],
+      );
+    }
+    return null;
+  }
+
+  /// Görev takipçisi — sağ üst. Eski sürekli-açık ObjectivePanel'in yerini alır;
+  /// yalnız aktif görev + kademe ilerlemesi, tam liste Defter'de.
+  Widget buildQuestTracker() {
+    final compact = useCompactGameUi(context);
+    return Positioned(
+      // MOBİL: üst şeridin TAM ALTINDA, sabit [MobileUi.railW] genişliğinde —
+      // böylece sağ kenar tek bir hat olur. Eskiden serbest genişlikteydi ve
+      // şeritle arasında birkaç piksellik kayma vardı; ekranda "hizasız
+      // kutular" hissi buradan geliyordu.
+      right: compact ? MobileUi.edgeRight(context) : 14,
+      top: compact ? MobileUi.top(context) + MobileUi.barH + MobileUi.gap : 92,
+      width: compact ? MobileUi.railW : null,
+      child: RepaintBoundary(
+        child: ListenableBuilder(
+          listenable: _frame,
+          builder: (_, _) {
+            final ctx = _questContext();
+            final quests = QuestBook.activeQuests(ctx, _completedQuests);
+            final tier = QuestBook.tierOf(_charterTier);
+            final active =
+                quests.where((q) => q.active).firstOrNull ?? quests.firstOrNull;
+            if (active == null) return const SizedBox.shrink();
+            return QuestTracker(
+              icon: questGlyph(active.quest.id),
+              activeLabel: active.quest.label,
+              tierName: tier.name,
+              done: _completedQuests.length,
+              total: QuestBook.all.length,
+              onOpen: () => _openLedger(LedgerSection.tuzuk),
+            );
+          },
+        ),
       ),
     );
   }
@@ -285,79 +445,172 @@ extension _SceneUi on _VillageSceneState {
   /// Seçili kategorinin içeriği — bina kategorisinde palet, Arazi/Yol'da
   /// yol döşeme + Tarla/Kes/Kaz modları.
   Widget _buildCategoryContent() {
-    if (_buildCategory == BuildCategory.araziYol) return _buildLandRoadTools();
+    if (_buildCategory == BuildCategory.araziYol) {
+      final tools = _buildLandRoadTools();
+      if (!useCompactGameUi(context)) return tools;
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: tools,
+      );
+    }
     return BuildingPanel(
       stockpile: _stockpile,
       selected: _placing,
       hasFirepit: _hasFire,
       category: _buildCategory,
       isUnlocked: _isCraftKnown,
+      hintType: _stepBuildTarget,
       onSelect: _onSelectBuilding,
     );
   }
 
   /// Kategori sekmeleri — alt çubuğun kalabalık tek sırasını gruplara böler.
   Widget _buildCategoryTabs() {
+    final tabs = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final cat in BuildCategory.values) ...[
+          if (cat != BuildCategory.values.first) const SizedBox(width: 4),
+          _categoryTab(cat),
+        ],
+      ],
+    );
+    if (useCompactGameUi(context)) {
+      return SizedBox(
+        height: 46,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: tabs,
+        ),
+      );
+    }
     return AppPanel(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (final cat in BuildCategory.values) ...[
-            if (cat != BuildCategory.values.first) const SizedBox(width: 4),
-            _categoryTab(cat),
-          ],
-        ],
-      ),
+      child: tabs,
     );
   }
 
   Widget _categoryTab(BuildCategory cat) {
     final sel = _buildCategory == cat;
+    final compact = useCompactGameUi(context);
+    // ADIM İŞARETİ — aranan kart BAŞKA bir sekmedeyse önce oraya geçmek gerek.
+    // Kartın etrafındaki halka, kart görünmüyorken hiçbir işe yaramaz; zincirin
+    // ilk halkası bu sekmedir. Zaten açık olan sekme işaretlenmez (oyuncuyu
+    // bulunduğu yere yönlendirmenin anlamı yok).
+    final target = _stepBuildTarget;
+    final hinted =
+        !sel && target != null && kBuildingCategory[target] == cat;
     return GestureDetector(
       onTap: () => setStateHere(() => _buildCategory = cat),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
+        // 44 = Apple HIG dokunma eşiği. 40'a indirmeyi denedim, harness altı
+        // kategori sekmesini de "tap<44" diye işaretledi — 4dp uğruna doğru
+        // takas değil.
+        constraints: compact
+            ? const BoxConstraints(minHeight: 44)
+            : const BoxConstraints(),
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
         decoration: BoxDecoration(
           color: sel
               ? Color.alphaBlend(
-                  AppUi.accent.withValues(alpha: 0.22), AppUi.surface2)
+                  AppUi.accent.withValues(alpha: 0.22),
+                  AppUi.surface2,
+                )
               : AppUi.surface0,
           borderRadius: BorderRadius.circular(AppUi.radiusSm),
           border: Border.all(
-              color: sel ? AppUi.accent : AppUi.line, width: sel ? 1.4 : 1),
+            // İşaretli sekme seçili gibi DURMAZ: seçili kenar dolu ember,
+            // işaret ise yarı ember. İki durum karışırsa oyuncu sekmenin açık
+            // olduğunu sanır ve boş kataloğa bakar.
+            color: sel
+                ? AppUi.accent
+                : hinted
+                ? AppUi.accent.withValues(alpha: 0.55)
+                : AppUi.line,
+            width: sel ? 1.4 : (hinted ? 1.4 : 1),
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(cat.icon, style: const TextStyle(fontSize: 12)),
             const SizedBox(width: 5),
-            Text(cat.label.toUpperCase(),
-                style: AppUi.button.copyWith(
-                    fontSize: 9.5,
-                    letterSpacing: 0.8,
-                    color: sel ? AppUi.accentSoft : AppUi.textMid)),
+            Text(
+              cat.label.toUpperCase(),
+              style: AppUi.button.copyWith(
+                fontSize: compact ? 11 : 9.5,
+                letterSpacing: 0.8,
+                color: sel ? AppUi.accentSoft : AppUi.textMid,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
+  /// ŞEFFAFLIK HEDEFLERİ — "şu an burada bir şey kuruluyor/planlanıyor" diyen
+  /// tile'lar. Bunları ÖRTEN binaları painter yarı saydam çizer.
+  ///
+  /// İzometride önde duran bir bina arkasındaki şantiyeyi ve yolu tamamen
+  /// yutuyordu; oyuncu nereye ne kurduğunu göremiyordu. Kapsam:
+  ///   • hayalet bina (yerleştirme anı)      • süren şantiyeler
+  ///   • bekleyen yol emirleri               • sürüklenen yol önizlemesi
+  /// Hiçbiri yoksa boş set döner → painter pass'i hiç çalıştırmaz.
+  Set<(int, int)> _revealTiles() {
+    if (_placing == null &&
+        _orders.isEmpty &&
+        _roadOrders.isEmpty &&
+        _roadPreview.isEmpty) {
+      return const {};
+    }
+    final out = <(int, int)>{};
+    void addFootprint(int col, int row, BuildingType type) {
+      final m = kBuildingMeta[type];
+      if (m == null) return;
+      for (int c = col; c < col + m.cols; c++) {
+        for (int r = row; r < row + m.rows; r++) {
+          out.add((c, r));
+        }
+      }
+    }
+
+    if (_placing != null && _ghost != null) {
+      addFootprint(_ghost!.$1, _ghost!.$2, _placing!);
+    }
+    for (final o in _orders) {
+      if (o.completed) continue;
+      addFootprint(o.col, o.row, o.type);
+    }
+    for (final o in _roadOrders) {
+      if (o.completed) continue;
+      out.add((o.col, o.row));
+    }
+    for (final (tile, _) in _roadPreview) {
+      out.add(tile);
+    }
+    return out;
+  }
+
   /// Bina seçimi — modları temizle, aynı binaya basınca bırak (toggle).
   void _onSelectBuilding(BuildingType type) => setStateHere(() {
-        _farmMode = false;
-        _lumberMode = false;
-        _mineMode = false;
-        _placingRoad = null;
-        if (_placing == type) {
-          _placing = null;
-          _ghost = null;
-        } else {
-          _placing = type;
-          _ghost = null;
-        }
-      });
+    _farmMode = false;
+    _lumberMode = false;
+    _mineMode = false;
+    _placingRoad = null;
+    _roadErase = false;
+    _clearRoadDrag();
+    if (_placing == type) {
+      _placing = null;
+      _ghost = null;
+    } else {
+      _placing = type;
+      _ghost = null;
+    }
+  });
 
   /// Arazi/Yol sekmesi içeriği — yol döşeme + Tarla/Kes/Kaz modları.
   Widget _buildLandRoadTools() {
@@ -374,8 +627,20 @@ extension _SceneUi on _VillageSceneState {
             _farmMode = false;
             _lumberMode = false;
             _mineMode = false;
+            _roadErase = false;
             _placingRoad = _placingRoad == s ? null : s;
-            _roadStrokeTiles.clear();
+            _clearRoadDrag();
+          }),
+          eraseSelected: _roadErase,
+          onSelectErase: () => setStateHere(() {
+            _placing = null;
+            _ghost = null;
+            _farmMode = false;
+            _lumberMode = false;
+            _mineMode = false;
+            _placingRoad = null;
+            _roadErase = !_roadErase;
+            _clearRoadDrag();
           }),
         ),
         const SizedBox(width: 6),
@@ -388,6 +653,8 @@ extension _SceneUi on _VillageSceneState {
             _placing = null;
             _ghost = null;
             _placingRoad = null;
+            _roadErase = false;
+            _clearRoadDrag();
             _lumberMode = false;
             _lumberStart = null;
             _lumberEnd = null;
@@ -409,6 +676,8 @@ extension _SceneUi on _VillageSceneState {
             _placing = null;
             _ghost = null;
             _placingRoad = null;
+            _roadErase = false;
+            _clearRoadDrag();
             _farmMode = false;
             _farmStart = null;
             _farmEnd = null;
@@ -430,6 +699,8 @@ extension _SceneUi on _VillageSceneState {
             _placing = null;
             _ghost = null;
             _placingRoad = null;
+            _roadErase = false;
+            _clearRoadDrag();
             _farmMode = false;
             _farmStart = null;
             _farmEnd = null;
@@ -461,8 +732,10 @@ extension _SceneUi on _VillageSceneState {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppUi.rust, width: 1),
             ),
-            child: Text('🚫 $_placeReason',
-                style: AppUi.bodyHi.copyWith(fontSize: 12, color: AppUi.rust)),
+            child: Text(
+              '🚫 $_placeReason',
+              style: AppUi.bodyHi.copyWith(fontSize: 12, color: AppUi.rust),
+            ),
           ),
         ),
       ),
@@ -484,79 +757,81 @@ extension _SceneUi on _VillageSceneState {
           Positioned.fill(
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => setStateHere(() => _selectedBuilding = null),
+              // Detay'ı kapat → komuta çubuğunda kompakt bağlama dön (seçim durur).
+              onTap: () => setStateHere(() => _detailExpanded = false),
               child: Container(color: const Color(0x2D000000)),
             ),
           ),
           // Sağ-dock: tüm seçim panelleri tutarlı biçimde sağ kenarda açılır.
+          // Mobilde köylü paneliyle AYNI yuva (bkz. buildSelectedVillagerPanel).
           Positioned(
-            top: 64,
-            right: 14,
-            bottom: 96,
-            child: SafeArea(
-              child: SingleChildScrollView(
-                child: BuildingInfoPanel(
-        building: selected,
-        residents:
-            _villagers.where((v) => v.homeBuilding == selected).toList(),
-        activeMiners: _miners.where((m) {
-          return m.isMining &&
-              m.gridX >= selected.col - 0.5 &&
-              m.gridX < selected.col + selected.cols + 0.5 &&
-              m.gridY >= selected.row - 0.5 &&
-              m.gridY < selected.row + selected.rows + 0.5;
-        }).toList(),
-        barnCows: (selected.type == BuildingType.barn ||
-                selected.type == BuildingType.chickenCoop)
-            ? _cows
-                .where((c) => c.barnCol == selected.col && c.barnRow == selected.row)
-                .toList()
-            : const [],
-        onBuyAnimal: (selected.type == BuildingType.barn ||
-                selected.type == BuildingType.chickenCoop)
-            ? (kind) => _buyAnimal(selected, kind)
-            : null,
-        barnShepherd: selected.type == BuildingType.barn
-            ? _shepherds
-                .where((sh) => sh.barnCol == selected.col && sh.barnRow == selected.row)
-                .firstOrNull
-            : null,
-        stockpile: _stockpile,
-        stats: _stats,
-        population: _villagers.length,
-        populationCap: _populationCap(),
-        onClose: () => setStateHere(() => _selectedBuilding = null),
-        onSell: (kind) => setStateHere(() {
-          if (sellAtMarket(_stockpile, kind)) {
-            // Satış oldu → seçili market binasına son satış zamanı
-            // mühürlenir; _BuildingDrawable 1sn altın parıltısı çizer.
-            _selectedBuilding?.lastSaleTime = _time;
-          }
-        }),
-        onFestival: () => _hostFestival(selected),
-        // Yık (kısmi iade) + Taşı (tam iade + yeniden yerleştir). Ateş yeri
-        // korunur (panelde gösterme).
-        onDemolish: selected.type == BuildingType.firepit
-            ? null
-            : () => _demolishBuilding(selected, refund: 0.5),
-        onMove: selected.type == BuildingType.firepit
-            ? null
-            : () => _demolishBuilding(selected, refund: 1.0, reselect: true),
-        onRefillWater: selected.type == BuildingType.well
-            ? () => _runWaterService(selected)
-            : null,
-        planning: selected.type == BuildingType.townhall
-            ? _computePopulationPlanning()
-            : null,
-        // Yönetişim (Karar Defteri + hane nabzı) Köy Defteri'ne taşındı —
-        // belediye panelinde yalnız oraya açılan kapı kalır.
-        onOpenDivan: selected.type == BuildingType.townhall
-            ? () => setStateHere(() {
-                  _selectedBuilding = null;
-                  _ledgerSection = LedgerSection.divan;
-                })
-            : null,
-                ),
+            top: useCompactGameUi(context) ? MobileUi.top(context) : 64,
+            right: useCompactGameUi(context) ? MobileUi.right(context) : 14,
+            bottom: useCompactGameUi(context)
+                ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
+                : 96,
+            child: _detailFrame(
+              compact: useCompactGameUi(context),
+              child: BuildingInfoPanel(
+                building: selected,
+                residents: _villagers
+                    .where((v) => v.homeBuilding == selected)
+                    .toList(),
+                barnCows:
+                    (selected.type == BuildingType.barn ||
+                        selected.type == BuildingType.chickenCoop)
+                    ? _cows
+                          .where(
+                            (c) =>
+                                c.barnCol == selected.col &&
+                                c.barnRow == selected.row,
+                          )
+                          .toList()
+                    : const [],
+                onBuyAnimal:
+                    (selected.type == BuildingType.barn ||
+                        selected.type == BuildingType.chickenCoop)
+                    ? (kind) => _buyAnimal(selected, kind)
+                    : null,
+                stockpile: _stockpile,
+                stats: _stats,
+                population: _villagers.length,
+                populationCap: _populationCap(),
+                onClose: () => setStateHere(() => _detailExpanded = false),
+                onSell: (kind) => setStateHere(() {
+                  if (sellAtMarket(_stockpile, kind)) {
+                    // Satış oldu → seçili market binasına son satış zamanı
+                    // mühürlenir; _BuildingDrawable 1sn altın parıltısı çizer.
+                    _selectedBuilding?.lastSaleTime = _time;
+                  }
+                }),
+                onFestival: () => _hostFestival(selected),
+                // Yık (kısmi iade) + Taşı (tam iade + yeniden yerleştir). Ateş yeri
+                // korunur (panelde gösterme).
+                onDemolish: selected.type == BuildingType.firepit
+                    ? null
+                    : () => _demolishBuilding(selected, refund: 0.5),
+                onMove: selected.type == BuildingType.firepit
+                    ? null
+                    : () => _demolishBuilding(
+                        selected,
+                        refund: 1.0,
+                        reselect: true,
+                      ),
+                onRefillWater: selected.type == BuildingType.well
+                    ? () => _runWaterService(selected)
+                    : null,
+                planning: selected.type == BuildingType.townhall
+                    ? _computePopulationPlanning()
+                    : null,
+                // Yönetişim (Karar Defteri + hane nabzı) Köy Defteri'ne taşındı —
+                // belediye panelinde yalnız oraya açılan kapı kalır.
+                onOpenDivan: selected.type == BuildingType.townhall
+                    ? () => setStateHere(() {
+                        _selectedBuilding = null;
+                        _ledgerSection = LedgerSection.divan;
+                      })
+                    : null,
               ),
             ),
           ),
@@ -564,212 +839,6 @@ extension _SceneUi on _VillageSceneState {
       ),
     );
   }
-
-  // ── KANUNNAME — mühür ──────────────────────────────────────────────────────
-  // Eski toggle/cooldown ikilisi öldü. Yerine tek bir eylem var: MÜHÜR. Geri
-  // alınmaz, bir günde bir tane basılır, ve basılmadan önce meclis toplanır.
-
-  /// Mürekkebin kuruması için kalan sim saniyesi (0 = defter açık, mühür basılır).
-  double _inkDryRemaining() =>
-      (_policies.inkDryUntilSim - _time).clamp(0.0, double.infinity);
-
-  /// Fermanı meclisin önüne koy. Meclis burada toplanır — ayrı bir "topla"
-  /// düğmesi yok, çünkü meclis bir aksiyon değil, imzanın kendisidir.
-  void _openLawRitual(LawDef l) => setStateHere(() => _lawRitual = l);
-  void _closeLawRitual() => setStateHere(() => _lawRitual = null);
-
-  /// MÜHRÜ BAS — geri dönüşü yok. Ferman deftere girer, etkileri köye bağlanır,
-  /// mürekkep ıslanır (bir sonraki hüküm müzakere bitene dek yazılmaz).
-  ///
-  /// Bir mühür = bir KARAR. Dilekçe karar motoru ([_applyDecisionEffects])
-  /// olduğu gibi devralınır: kaynak deltası, süreli moral, zümre morali+nüfuzu,
-  /// köy hafızası bayrağı, zincir dilekçesi. Yasa da bir karardır.
-  /// Köyün hâli — ağır yasa kapıları buradan okunur (yasa şartı değil, dünya
-  /// şartı). Küçük/genç köy sert hükümleri kaldıramaz.
-  /// Köyün hâli — hüküm kapıları buradan okunur (yasa şartı DEĞİL, dünya şartı).
-  /// Bir hüküm, DERDİ köyde doğmadan deftere düşmez: tarla açılmadan su yolu,
-  /// ilk suç işlenmeden bekçi, ilk beşik sallanmadan beşik fermanı görünmez.
-  ///
-  /// PERF: set/sayım kurar → her frame değil, saniyede bir tazelenir
-  /// ([_lawCtxAge], bkz. _tickLawGates). Mühür anında bir saniyelik bayatlık
-  /// zararsız; kapılar zaten yavaş değişen dünya şartları.
-  LawContext get _lawContext => _lawCtxCache ??= _computeLawContext();
-
-  LawContext _computeLawContext() {
-    var children = 0, elders = 0;
-    final houses = <String>{};
-    for (final v in _villagers) {
-      switch (v.lifeStage) {
-        case LifeStage.child:
-          children++;
-        case LifeStage.elder:
-          elders++;
-        case LifeStage.youth:
-        case LifeStage.adult:
-          break;
-      }
-      if (v.surname.isNotEmpty) houses.add(v.surname);
-    }
-    return LawContext(
-      population: _villagers.length,
-      dayCount: _dayCount,
-      villageMorale: _morale,
-      households: houses.length,
-      children: children,
-      elders: elders,
-      farmTiles: _farmTiles.length,
-      animals: _cows.length,
-      deaths: _graves.length,
-      crimesSeen: _crimesSeen,
-      knownCrafts: _knownCrafts,
-      buildings: {for (final b in _buildings) b.type},
-      memory: _villageMemory,
-    );
-  }
-
-  /// KAPI NÖBETİ — köyün hâli değiştikçe deftere yeni hüküm düşer. Sessizce
-  /// belirmesin: gündeme gelen her hüküm bir kez duyurulur (bildirim + kronik).
-  /// Yeni oyunda ilk tarama sessizdir ([_lawSeen] o an doldurulur) — yoksa köy
-  /// kurulur kurulmaz on bildirim üst üste yağar.
-  void _tickLawGates(double dt) {
-    _lawCtxAge += dt;
-    if (_lawCtxAge < 1.0) return;
-    _lawCtxAge = 0;
-    _lawCtxCache = null; // bir sonraki okumada tazelenir
-
-    final open = LawBook.openAgenda(_policies.sealed, _lawContext);
-    final fresh = [for (final l in open) if (!_lawSeen.contains(l.id)) l];
-    if (fresh.isEmpty) return;
-    for (final l in fresh) {
-      _lawSeen.add(l.id);
-    }
-    if (!_lawSeeded) {
-      _lawSeeded = true; // ilk tarama: köyün başlangıç gündemi, duyuru yok
-      return;
-    }
-    // Aynı saniyede birden fazla açıldıysa tek satırda topla — üst üste toast
-    // yağdırmak yerine "defter kabardı" hissi.
-    final title = fresh.length == 1
-        ? '${fresh.first.icon} Kanunname\'ye yeni hüküm düştü: ${fresh.first.title}'
-        : '📜 Kanunname kabardı — ${fresh.length} yeni hüküm gündemde.';
-    _showNotification(title);
-    _chronicle(
-        fresh.length == 1
-            ? '${fresh.first.title} Meclis gündemine girdi.'
-            : 'Köyün hâli değişti; deftere ${fresh.length} yeni hüküm düştü.',
-        icon: '📜');
-  }
-
-  /// KÖYÜN SESİ — o an en çok ihtiyaç duyulan (çıkarılabilir) yasa. Serbest
-  /// kataloğun içinden köyün gündemini öne çıkarır: önce geçim, ucuz/hızlı ve
-  /// ağır olmayan hüküm. Path DEĞİL, bir tavsiye — istersen başkasını çıkarırsın.
-  String? get _lawSpotlightId {
-    final ctx = _lawContext;
-    LawDef? best;
-    var bestScore = 1 << 30;
-    for (final l in kLawBook) {
-      if (!LawBook.available(l, _policies.sealed, ctx)) continue;
-      final score = (l.branch == LawBranch.gecim ? 0 : 1000) +
-          (l.isGrave ? 500 : 0) +
-          (l.deliberationDays * 10).round() +
-          l.seal.goldDelta.abs();
-      if (score < bestScore) {
-        bestScore = score;
-        best = l;
-      }
-    }
-    return best?.id;
-  }
-
-  void _sealLaw(LawDef l) {
-    if (_inkDryRemaining() > 0) return;
-    if (!LawBook.available(l, _policies.sealed, _lawContext)) return;
-
-    final rule = _regimeRule;
-    // MECLİS OYU — hür ve köklü bir rejimde ferman senin imzanla değil, köyün
-    // rızasıyla geçer. Oy düşerse mühür basılmaz; meclis dağılır ve mürekkep
-    // kısa bir süre ıslak kalır (aynı fermanı hemen tekrar dayatamazsın).
-    if (_lawNeedsVote(l)) {
-      final vote = _voteOnLaw(l);
-      if (!vote.passed) {
-        AudioManager.instance.playSfx(Sfx.bellChime);
-        setStateHere(() {
-          _inkDryTotal = 0.6 * kGameDaySeconds;
-          _policies.inkDryUntilSim = _time + _inkDryTotal;
-          _lawRitual = null;
-        });
-        final no = vote.voices.where((v) => !v.yes).map((v) => v.line).take(2);
-        _showNotification('🏛 Meclis fermanı geçirmedi '
-            '(${(vote.support * 100).round()}% destek). ${no.join(' ')}');
-        _chronicle('${l.title} meclisten döndü.', icon: '🏛');
-        // Reddedilen ferman meşruiyeti aşındırır: ısrar edersen köy gerilir.
-        _unrest = (_unrest + 0.04).clamp(0.0, 1.0);
-        return;
-      }
-    }
-
-    AudioManager.instance.playSfx(Sfx.bellChime);
-    setStateHere(() {
-      _policies.seal(l);
-      _applyDecisionEffects(_lawAsDecision(l), l.seal, null);
-      // Büyük fermanlar geçici moralle kalmaz — köy ruhunda sönmeyen bir iz.
-      if (l.legacy != 0) {
-        _governanceLegacy = (_governanceLegacy + l.legacy).clamp(-0.12, 0.12);
-      }
-      // Müzakere temposu rejimin: baskıda mürekkep çabuk kurur, hür rejimde
-      // meclis uzun konuşur.
-      _inkDryTotal = l.deliberationDays * kGameDaySeconds * rule.inkDryMul;
-      _policies.inkDryUntilSim = _time + _inkDryTotal;
-      _applyPolicySideChannels();
-      _lawCtxCache = null; // yeni mühür kapıları da oynatabilir
-      _lawRitual = null;
-    });
-    _chronicle('${l.title} deftere girdi.',
-        icon: l.icon, milestone: l.isGrave);
-    if (l.seal.resolution.isNotEmpty) _showNotification(l.seal.resolution);
-  }
-
-  /// Mühürü karar motoruna geçirmek için ince sarmalayıcı. `estate` bilerek
-  /// null: bir yasa bir haneye değil, bütün köye yazılır — kimse "bizim
-  /// dilekçemiz kabul edildi" nüfuzunu ceplemez.
-  Petition _lawAsDecision(LawDef l) => Petition(
-        id: 'law.${l.id}',
-        petitioner: 'Kanunname',
-        icon: l.icon,
-        title: l.title,
-        tone: PetitionTone.solemn,
-        bodyPool: [l.decree],
-        options: [l.seal],
-      );
-
-  /// Mühürlü fermanların GÜNLÜK idamesi — gece bekçisi keseden yer, hane sicili
-  /// vergi toplar, öşür ambardan alır. Bir yasa imzalandığı gün bitmez; her
-  /// sabah köyün sırtındadır. [_advanceWorldClock] gün dönümünde çağırır.
-  void _applyLawUpkeep() {
-    final (gold, food) = LawBook.dailyUpkeep(_policies.sealed);
-    if (gold != 0) {
-      _stockpile.gold = (_stockpile.gold + gold).clamp(0, 1 << 30);
-    }
-    if (food != 0) {
-      _stockpile.food = (_stockpile.food + food).clamp(0, 1 << 30);
-    }
-    // TEK SÖZ FERMANI — sessizliğin bedeli. Köy sesini yitirdi; her gün küçük
-    // bir moral sızıntısı (dilekçe kanalı kapalı, kimse dinlenmiyor). İlk şok
-    // fermanın moraleAmount'unda, bu ise sönmeyen tortu: baskının kronik yükü.
-    if (_policies.sealed.contains('nizam.sole')) {
-      pushPolicyMorale(-0.015, 1.5);
-    }
-  }
-
-  /// Policy → global side channel'lar (life_stage, animal). Mühür anında ve
-  /// init/yükleme'de çağrılır.
-  void _applyPolicySideChannels() {
-    kMaturityScale = _policies.slowMaturity ? 1.0 / 1.6 : 1.0;
-    AnimalEntity.kWanderScale = _policies.freeRange ? 1.5 : 1.0;
-    AnimalEntity.kHungerScale = _policies.winterFodder ? 0.55 : 1.0;
-    WoodcutterEntity.kChopSpeedScale = _policies.treePlanting ? 0.85 : 1.0;
-  }
-
 
   /// Belediye seçildiğinde panele geçen aggregat — yaş dağılımı, çiftler,
   /// hamile, konut, günlük yiyecek tüketimi. Pure read-only snapshot.
@@ -821,12 +890,7 @@ extension _SceneUi on _VillageSceneState {
     }
 
     final exemptElders = _policies.eldersExemptFromFood ? elders : 0;
-    final mouths = _villagers.length - exemptElders +
-        _farmers.length +
-        _woodcutters.length +
-        _miners.length +
-        _fishers.length +
-        _builders.length;
+    final mouths = _villagers.length - exemptElders;
     final foodPerDay = mouths * kFoodPerVillagerPerDay;
 
     return PopulationPlanning(
@@ -856,10 +920,10 @@ extension _SceneUi on _VillageSceneState {
     setStateHere(() {
       _stockpile.food -= foodCost;
       _stockpile.gold -= goldCost;
-      _eventMorale     = moraleBoost;
+      _eventMorale = moraleBoost;
       _eventMoraleLeft = durationSec;
-      _eventLabel      = '🎉 Şenlik';
-      b.lastSaleTime   = _time; // küçük görsel parıltı
+      _eventLabel = '🎉 Şenlik';
+      b.lastSaleTime = _time; // küçük görsel parıltı
     });
     _showNotification('🎉 Köyde şenlik başladı');
   }
@@ -877,9 +941,9 @@ extension _SceneUi on _VillageSceneState {
       }
       well.lastSaleTime = _time;
     });
-    _showNotification(touched > 0
-        ? '💧 $touched ev dolduruldu'
-        : '💧 Bütün evler zaten dolu');
+    _showNotification(
+      touched > 0 ? '💧 $touched ev dolduruldu' : '💧 Bütün evler zaten dolu',
+    );
   }
 
   // ── Köylü bilgi paneli — bina paneliyle aynı pozisyon ─────────────────────
@@ -888,35 +952,59 @@ extension _SceneUi on _VillageSceneState {
     final v = _selectedVillager!;
     // Sağ-dock: bina paneliyle tutarlı, hep sağ kenarda. Backdrop YOK — oyun
     // etkileşimli kalır (haritada başka köylüye tıklayıp panele geçilebilir).
-    // Yüksekse scroll eder (yaşam öyküsü uzun olabilir).
+    //
+    // MOBİL: yuva ızgaradan gelir (üst gutter → alt gutter) ve panel onu
+    // DOLDURUR; kaydırma panelin İÇİNDE olur. Dıştaki SingleChildScrollView
+    // telefonda yanlıştı — paneli sınırsız yükseklikte bırakıp altını
+    // kırptırıyordu ("yarısı kesik kutu" görüntüsü).
+    final compact = useCompactGameUi(context);
     return Positioned(
-      top: 64,
-      right: 14,
-      bottom: 96,
-      child: SafeArea(
-        child: SingleChildScrollView(
-          child: VillagerInfoPanel(
-        villager: v,
-        homeLabel: v.homeBuilding == null
-            ? null
-            : kBuildingMeta[(v.homeBuilding as BuildingEntity).type]?.label,
-        isFollowed: _followedVillager == v,
-        onClose: () => setStateHere(() => _selectedVillager = null),
-        onSelect: (next) => setStateHere(() => _selectedVillager = next),
-        onToggleFollow: () => _toggleFollowVillager(v),
-        onToggleFavorite: () => setStateHere(() => v.isFavorite = !v.isFavorite),
-        onRename: (newName) {
-          final cleaned = newName.trim();
-          if (cleaned.isEmpty || cleaned.length > 20) return;
-          setStateHere(() => v.name = cleaned);
-        },
-        // Kan davası yargısı — geri alınamaz, onay ister.
-        onExile: () => setStateHere(() => _pendingJudgment = (v, false)),
-        onExecute: () => setStateHere(() => _pendingJudgment = (v, true)),
-          ),
+      top: compact ? MobileUi.top(context) : 64,
+      right: compact ? MobileUi.right(context) : 14,
+      bottom: compact
+          ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
+          : 96,
+      child: _detailFrame(
+        compact: compact,
+        child: VillagerInfoPanel(
+          villager: v,
+          homeLabel: v.homeBuilding == null
+              ? null
+              : kBuildingMeta[(v.homeBuilding as BuildingEntity).type]?.label,
+          isFollowed: _followedVillager == v,
+          onClose: () => setStateHere(() => _detailExpanded = false),
+          onSelect: (next) => setStateHere(() => _selectedVillager = next),
+          onToggleFollow: () => _toggleFollowVillager(v),
+          onToggleFavorite: () =>
+              setStateHere(() => v.isFavorite = !v.isFavorite),
+          onRename: (newName) {
+            final cleaned = newName.trim();
+            if (cleaned.isEmpty || cleaned.length > 20) return;
+            setStateHere(() => v.name = cleaned);
+          },
+          // ELLE İŞ VERME — köyün işleri artık kendiliğinden dağılmak zorunda
+          // değil; oyuncu bir köylüyü bir işe kilitleyebilir.
+          assignableRoles: _assignableJobRoles(),
+          // Adımın istediği rol — zincirin son halkası (dünyadaki halka doğru
+          // köylüyü, bu da doğru düğmeyi gösterir).
+          hintRole: _stepJobTarget,
+          onAssignJob: (role) => setStateHere(() => _assignVillagerJob(v, role)),
+          // Kan davası yargısı — geri alınamaz, onay ister.
+          onExile: () => setStateHere(() => _pendingJudgment = (v, false)),
+          onExecute: () => setStateHere(() => _pendingJudgment = (v, true)),
         ),
       ),
     );
+  }
+
+  /// Detay panelinin ÇERÇEVESİ — telefonda ve masaüstünde farklı iş yapar.
+  ///
+  /// Masaüstü: panel doğal boyunda, taşarsa dıştan kayar (eski davranış).
+  /// Mobil: panel yuvayı doldurur, kaydırma İÇERİDE olur — böylece başlık ve
+  /// eylem kuşağı yerinde kalır, panelin altı ekranın altında kesilmez.
+  Widget _detailFrame({required bool compact, required Widget child}) {
+    if (compact) return child;
+    return SafeArea(child: SingleChildScrollView(child: child));
   }
 
   /// Kan davası yargısı onay modalı — sürgün/idam geri alınamaz, oyuncu onaylar.
@@ -941,15 +1029,17 @@ extension _SceneUi on _VillageSceneState {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(lethal ? '⚖️ İdam kararı' : '🚷 Sürgün kararı',
-                      style: AppUi.title),
+                  Text(
+                    lethal ? '⚖️ İdam kararı' : '🚷 Sürgün kararı',
+                    style: AppUi.title,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     lethal
                         ? '${v.name} halkın önünde idam edilecek. Kan davası kanla '
-                            'kapanır ama köyü dehşet sarar. Bu karar geri alınamaz.'
+                              'kapanır ama köyü dehşet sarar. Bu karar geri alınamaz.'
                         : '${v.name} köyden sürülecek. Kan davası uzaklaştırmayla '
-                            'diner. Bu karar geri alınamaz.',
+                              'diner. Bu karar geri alınamaz.',
                     style: AppUi.body.copyWith(color: AppUi.textMid),
                   ),
                   const SizedBox(height: 18),
@@ -959,7 +1049,8 @@ extension _SceneUi on _VillageSceneState {
                         child: AppButton(
                           label: 'Vazgeç',
                           kind: AppButtonKind.ghost,
-                          onTap: () => setStateHere(() => _pendingJudgment = null),
+                          onTap: () =>
+                              setStateHere(() => _pendingJudgment = null),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1001,6 +1092,9 @@ extension _SceneUi on _VillageSceneState {
         _showNotification('🎥 Takip bırakıldı');
       } else {
         _followedVillager = v;
+        // "İzle" kilidi varsa düşür — iki kamera kanalı aynı kareyi
+        // çekiştirirse ikisi de titrer (bkz. _tickWatchCamera).
+        _watchLeft = 0;
         _showNotification('🎥 ${v.name} takip ediliyor');
       }
     });
@@ -1096,11 +1190,11 @@ extension _SceneUi on _VillageSceneState {
             });
           },
           // ── Görsel test hızlı aksiyonlar ───────────────────────────────
-          onSetDawn:     () => setStateHere(() => _cycle.timeOfDay = 0.22),
-          onSetNoon:     () => setStateHere(() => _cycle.timeOfDay = 0.50),
-          onSetDusk:     () => setStateHere(() => _cycle.timeOfDay = 0.78),
-          onSetNight:    () => setStateHere(() => _cycle.timeOfDay = 0.92),
-          onToggleRain:  () => setStateHere(() {
+          onSetDawn: () => setStateHere(() => _cycle.timeOfDay = 0.22),
+          onSetNoon: () => setStateHere(() => _cycle.timeOfDay = 0.50),
+          onSetDusk: () => setStateHere(() => _cycle.timeOfDay = 0.78),
+          onSetNight: () => setStateHere(() => _cycle.timeOfDay = 0.92),
+          onToggleRain: () => setStateHere(() {
             _cycle.rainIntensity = _cycle.rainIntensity > 0.05 ? 0.0 : 0.7;
           }),
           // DEV: defteri tek hamlede doldur (GEÇİM kolu) / defteri yak.
@@ -1140,13 +1234,14 @@ extension _SceneUi on _VillageSceneState {
             if (elders.isNotEmpty) {
               final sage = elders[_rng.nextInt(elders.length)];
               sage.isSage = true;
-              _showNotification(
-                  '👵 ${sage.name} köyün bilgesi yapıldı (test)');
+              _showNotification('👵 ${sage.name} köyün bilgesi yapıldı (test)');
             }
           }),
           onSpawnMigrant: () => setStateHere(_spawnMigrant),
           onSummonImperial: () {
-            setStateHere(() => _devPanelOpen = false); // yaklaşan kolon görünsün
+            setStateHere(
+              () => _devPanelOpen = false,
+            ); // yaklaşan kolon görünsün
             _devSummonImperial();
           },
           onForcePetition: _forcePetition,
@@ -1231,9 +1326,11 @@ extension _SceneUi on _VillageSceneState {
           }),
           onStartCrime: () => setStateHere(() {
             if (!_devRandomCrime()) {
-              _showNotification(_activeCrime != null
-                  ? 'Zaten bir suç işleniyor'
-                  : 'Uygun fail/hedef bulunamadı');
+              _showNotification(
+                _activeCrime != null
+                    ? 'Zaten bir suç işleniyor'
+                    : 'Uygun fail/hedef bulunamadı',
+              );
             }
           }),
           onClearActivities: () => setStateHere(_devClearActivities),
@@ -1257,10 +1354,17 @@ extension _SceneUi on _VillageSceneState {
             builder: (_, _) {
               final e = _activeEvent;
               if (e == null) return const SizedBox.shrink();
+              // "İzle" yalnız BU olayın vinyeti hâlâ sahnedeyse çıkar —
+              // bittiyse (ya da kadro bulunamadıysa) düğme de yok: oyuncuyu
+              // boş bir tarlaya götürmek, hiç göndermemekten kötüdür.
+              final vg = _vignette;
+              final canWatch = vg != null && vg.eventId == e.id;
               return EventBanner(
                 event: e,
                 timeLeft: _activeEventLeft,
                 duration: kEventBannerDuration,
+                watchLabel: canWatch ? vg.title : null,
+                onWatch: canWatch ? _watchVignette : null,
                 onClose: () => setStateHere(() {
                   _activeEvent = null;
                   _activeEventLeft = 0;
@@ -1273,32 +1377,114 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
-  // ── Hedef listesi (sol kolon) ──────────────────────────────────────────────
+  // ── Geçici bildirim balonu ─────────────────────────────────────────────────
 
-  Widget buildObjectivesPanel() {
-    return Positioned(
-      left: 14,
-      top: 190,
-      child: RepaintBoundary(
+  // Hover künyesi — DÜNYA-uzayı: imleci değil hedefi takip eder, köylü
+  // yürüdükçe onunla gider. _frame'e bağlı (60fps) olduğu için hover olayının
+  // kendisi hiçbir şey tetiklemez; input yalnız _hoverVillager/_hoverBuilding
+  // alanlarını yazar. IgnorePointer: hover olaylarını yemez.
+  Widget buildHoverLabel() {
+    return Positioned.fill(
+      child: IgnorePointer(
         child: ListenableBuilder(
           listenable: _frame,
           builder: (_, _) {
-            final ctx = _questContext();
-            final quests = QuestBook.activeQuests(ctx, _completedQuests);
-            final tier = QuestBook.tierOf(_charterTier);
-            return ObjectivePanel(
-              quests: quests,
-              tierIndex: _charterTier,
-              tierName: tier.name,
-              tierIcon: tier.icon,
-              completedCount: _completedQuests.length,
-              totalCount: QuestBook.all.length,
-              next: QuestBook.nextTier(_charterTier),
-              collapsed: _objectivesCollapsed,
-              onToggleCollapse: () => setStateHere(
-                () => _objectivesCollapsed = !_objectivesCollapsed,
-              ),
-              onOpenLedger: () => _openLedger(LedgerSection.tuzuk),
+            // Sürükleme/seçim sırasında künye susar (iki bilgi katmanı çakışır).
+            if (_draggedVillager != null) return const SizedBox.shrink();
+            final v = _hoverVillager;
+            final b = _hoverBuilding;
+            final g = _hoverGrave;
+            if (v == null && b == null && g == null) {
+              return const SizedBox.shrink();
+            }
+            // 140ms beliriş — anlık pat diye çıkmasın, gecikmeli de hissetmesin.
+            final fade = ((_time - _hoverSince) / 0.14).clamp(0.0, 1.0);
+            final center = Offset(_viewSize.width / 2, _viewSize.height / 2);
+            Offset toScreen(double gx, double gy) {
+              final world = gridToScreen(gx, gy, _viewSize, _camera);
+              return (world - center) * _zoom + center;
+            }
+
+            if (v != null) {
+              final sc = kCharScale * v.lifeStage.renderScale * _zoom;
+              final feet = toScreen(v.renderX, v.renderY);
+              // Fare sabitken köylü yürüyüp gidebilir. O zaman künye onun
+              // peşine takılıp ekranda gezmesin: gövde kutusundan çıktıysa
+              // sadece ÇİZME (state'i temizleme — geri gelirse yine belirir).
+              // Kutu geometrisi hit-test ile birebir (scene_world).
+              final probe = _hoverProbe;
+              if (probe != null) {
+                final dx = (probe.dx - feet.dx).abs();
+                final dy = (probe.dy - (feet.dy - 36 * sc)).abs();
+                if (dx > (16.0 * sc).clamp(15.0, 60.0) ||
+                    dy > (42.0 * sc).clamp(20.0, 90.0)) {
+                  return const SizedBox.shrink();
+                }
+              }
+              // Sprite tepesi ayak noktasından ~126 birim yukarıda (şapka
+              // dahil; ui_gallery world_tag karesinden ölçüldü). DİKKAT:
+              // _villagerAtScreen'deki 36/42 değerleri hit-test KUTUSUdur,
+              // sprite boyu değil — künyeyi ondan türetmek şapkanın içine
+              // yazar (ilk sürümün hatası).
+              final top = feet.dy - 126 * sc;
+              return Stack(
+                children: [
+                  WorldTagRing(
+                    feet: feet,
+                    radius: (14.0 * sc).clamp(11.0, 40.0),
+                    opacity: fade,
+                  ),
+                  WorldTag(
+                    anchor: Offset(
+                      _tagX(feet.dx),
+                      (top - 8).clamp(46.0, _viewSize.height),
+                    ),
+                    title: v.name,
+                    line2: _tagIdentity(v),
+                    line3: '${_tagDoing(v)} · ${_tagMood(v)}',
+                    opacity: fade,
+                  ),
+                ],
+              );
+            }
+            if (b != null) {
+              final feet = toScreen(
+                b.col + (b.cols - 1) / 2.0,
+                b.row + (b.rows - 1) / 2.0,
+              );
+              // Çatı yüksekliği kabaca satır sayısından türer (bina sprite'ları
+              // taban derinliğiyle birlikte uzar).
+              final top = feet.dy - (44 + 20 * b.rows) * _zoom;
+              return Stack(
+                children: [
+                  WorldTag(
+                    anchor: Offset(
+                      _tagX(feet.dx),
+                      (top - 6).clamp(46.0, _viewSize.height),
+                    ),
+                    title: kBuildingMeta[b.type]?.label ?? '—',
+                    line2: _buildingHoverSub(b),
+                    line3: '',
+                    opacity: fade,
+                  ),
+                ],
+              );
+            }
+            final feet = toScreen(g!.col, g.row);
+            return Stack(
+              children: [
+                WorldTag(
+                  anchor: Offset(
+                    _tagX(feet.dx),
+                    (feet.dy - 34 * _zoom).clamp(46.0, _viewSize.height),
+                  ),
+                  title: g.name,
+                  line2: 'huzur içinde yatıyor',
+                  line3: '',
+                  opacity: fade,
+                  accent: const Color(0xFF7E86A0),
+                ),
+              ],
             );
           },
         ),
@@ -1306,104 +1492,121 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
-  // ── Zümre nabzı tabelası (sağ kenar, daima görünür) ─────────────────────────
+  /// Künye ekran kenarından taşmasın — genişliği bilinmediği için kaba pay.
+  double _tagX(double x) =>
+      _viewSize.width < 220 ? x : x.clamp(96.0, _viewSize.width - 96.0);
 
-  /// Ekranın sağ kenarında sabit, canlı zümre moral göstergesi. Belediye
-  /// panelindeki nabzın ambient kardeşi — her kararın zümreleri nasıl oynattığı
-  /// her an görünür. [[EstateBanner]] kendi nefes animasyonunu yürütür.
-  Widget buildEstateBanner() {
-    return Positioned(
-      // Görevler paneliyle simetrik: aynı kenar boşluğu (14) + aynı top (190).
-      right: 14,
-      top: 190,
-      child: RepaintBoundary(
-        child: ListenableBuilder(
-          listenable: _frame,
-          builder: (_, _) => HouseBanner(
-            houses: _houses.snapshot(),
-            imperial: _imperialSnapshot(),
-            identity: _houses.identityName,
-            collapsed: _estateCollapsed,
-            onToggleCollapse: () =>
-                setStateHere(() => _estateCollapsed = !_estateCollapsed),
-            onOpenDivan: () => _openLedger(LedgerSection.divan),
-            agendaCount: _divanAgendaCount(),
-          ),
-        ),
-      ),
-    );
+  /// Künye 2. satırı: kim. Meslek + hangi hane (haneler sistemi ön planda —
+  /// "kim kimin adamı" bir bakışta okunmalı).
+  String _tagIdentity(VillagerEntity v) {
+    final craft = v.hasProfession ? v.type.displayName : 'köylü';
+    if (v.surname.isNotEmpty) return '$craft · ${v.surname} Hanesi';
+    return v.homeBuilding == null ? '$craft · evsiz' : craft;
   }
 
-  // ── Geçici bildirim balonu ─────────────────────────────────────────────────
+  /// Künye 3. satırı, ilk yarısı: şu an ne yapıyor. Durum bozucular (hasta/
+  /// yaralı/ceza) her şeyin önünde — oyuncunun görmesi gereken ilk şey o.
+  String _tagDoing(VillagerEntity v) {
+    if (v.activity == VillagerActivity.abducted) return 'kaçırıldı';
+    if (v.laborDays > 0) return 'kürek çekiyor';
+    if (v.sickDays > 0) return 'hasta';
+    if (v.injuryDays > 0) return 'yaralı';
+    switch (v.activity) {
+      case VillagerActivity.chat:
+        return 'sohbet ediyor';
+      case VillagerActivity.music:
+        return 'çalıyor';
+      case VillagerActivity.dance:
+        return 'oynuyor';
+      case VillagerActivity.warm:
+        return 'ısınıyor';
+      case VillagerActivity.storytelling:
+        return 'hikâye anlatıyor';
+      case VillagerActivity.listening:
+        return 'dinliyor';
+      case VillagerActivity.arguing:
+        return 'atışıyor';
+      case VillagerActivity.brawling:
+        return 'kavgada';
+      case VillagerActivity.prowling:
+        return 'sinsice dolaşıyor';
+      case VillagerActivity.committing:
+        return 'suçüstü';
+      case VillagerActivity.fleeing:
+        return 'kaçıyor';
+      case VillagerActivity.chasing:
+        return 'peşinde';
+      case VillagerActivity.playing:
+        return 'oyunda';
+      case VillagerActivity.none:
+      case VillagerActivity.abducted:
+        break;
+    }
+    if (v.isSleeping) return 'uyuyor';
+    if (v.isSeatedAtFire) return 'ateş başında';
+    if (v.isCarrying) return 'yük taşıyor';
+    switch (v.job?.role) {
+      case JobRole.builder:
+        return 'inşaatta';
+      case JobRole.farmer:
+        return 'tarlada';
+      case JobRole.miner:
+        return 'ocakta';
+      case JobRole.fisher:
+        return 'balıkta';
+      case JobRole.florist:
+        return 'çiçek topluyor';
+      case JobRole.shepherd:
+        return 'sürünün başında';
+      case JobRole.woodcutter:
+        return 'odun kesiyor';
+      case JobRole.forager:
+        return 'böğürtlen topluyor';
+      case JobRole.cook:
+        return 'yemek pişiriyor';
+      case JobRole.none:
+      case null:
+        break;
+    }
+    return v.isWalking ? 'yolda' : 'boşta';
+  }
 
-  // Bina/NPC hover etiketi — imleç yanında küçük kart. _frame'e bağlı (üst
-  // Stack tick'te rebuild olmaz). IgnorePointer: hover olaylarını yemez.
-  Widget buildHoverLabel() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: ListenableBuilder(
-          listenable: _frame,
-          builder: (_, _) {
-            final title = _hoverTitle;
-            final pos = _hoverPos;
-            if (title == null || pos == null) return const SizedBox.shrink();
-            final w = _viewSize.width;
-            // İmlecin sağ-üstüne yerleştir; sağ kenara taşarsa sola al.
-            final left = (pos.dx + 16).clamp(0.0, (w - 180).clamp(0.0, w));
-            final top = (pos.dy + 16).clamp(0.0, double.infinity);
-            return Stack(children: [
-              Positioned(
-                left: left,
-                top: top,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: const Color(0xF21A1B22),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0x33FFFFFF)),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: AppUi.body.copyWith(
-                              fontSize: 12.5,
-                              color: AppUi.textHi,
-                              fontWeight: FontWeight.w700)),
-                      if (_hoverSub != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(_hoverSub!,
-                              style: AppUi.body.copyWith(
-                                  fontSize: 10.5, color: AppUi.textMid)),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ]);
-          },
-        ),
-      ),
-    );
+  /// Künye 3. satırı, ikinci yarısı: ruh hâli. Sayı/yüzde YOK, tek kelime öbeği
+  /// (baş üstü sayısal refleksiyon oyunun dilini bozar).
+  String _tagMood(VillagerEntity v) {
+    final m = v.morale;
+    if (m >= 0.82) return 'neşesi yerinde';
+    if (m >= 0.62) return 'keyfi iyi';
+    if (m >= 0.45) return 'idare eder';
+    if (m >= 0.30) return 'keyifsiz';
+    if (m >= 0.16) return 'kırgın';
+    return 'bezgin';
   }
 
   Widget buildNotificationToast() {
-    return Positioned(
-      top: 70,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: AppReveal(
-          child: AppChip(
-            label: _notification!,
-            color: AppUi.accent,
-            solid: true,
-          ),
+    // Sabit `top: 70` masaüstü varsayımıydı. iPhone 11'de (414dp yükseklik) o
+    // hat tam olarak Köy Defteri'nin SEKME şeridine denk geliyor ve bildirim
+    // TÜZÜK sekmesinin üstüne oturuyordu — geçici bir bildirim, kalıcı bir
+    // gezinme öğesini örtmemeli. Telefonda toast alta iner (komuta çubuğunun
+    // üstüne): orada yalnız içeriğin üstünden geçer, hiçbir kontrolü kapatmaz.
+    final compact = useCompactGameUi(context);
+    final toast = Center(
+      child: AppReveal(
+        child: AppChip(
+          label: _notification!,
+          color: AppUi.accent,
+          solid: true,
         ),
       ),
+    );
+    if (!compact) {
+      return Positioned(top: 70, left: 0, right: 0, child: toast);
+    }
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap,
+      child: toast,
     );
   }
 
@@ -1422,7 +1625,10 @@ extension _SceneUi on _VillageSceneState {
           decoration: BoxDecoration(
             color: const Color(0xE60C1014),
             borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.08),
+              width: 1,
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1471,14 +1677,16 @@ extension _SceneUi on _VillageSceneState {
                         ),
                         Expanded(
                           child: Text.rich(
-                            TextSpan(children: [
-                              if (_devLog[i].tag.isNotEmpty)
-                                TextSpan(
-                                  text: '${_devLog[i].tag} ',
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                              TextSpan(text: _devLog[i].text),
-                            ]),
+                            TextSpan(
+                              children: [
+                                if (_devLog[i].tag.isNotEmpty)
+                                  TextSpan(
+                                    text: '${_devLog[i].tag} ',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                TextSpan(text: _devLog[i].text),
+                              ],
+                            ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1509,9 +1717,9 @@ extension _SceneUi on _VillageSceneState {
   // ListenableBuilder olmadan intro fade/slam-in tek bir yarı-saydam karede
   // donuyordu ve ancak oyuncu tıklayınca (setState) "netleşiyordu".
   Widget buildImperialAlert() => ListenableBuilder(
-        listenable: _frame,
-        builder: (_, _) => _imperialAlertBody(),
-      );
+    listenable: _frame,
+    builder: (_, _) => _imperialAlertBody(),
+  );
 
   Widget _imperialAlertBody() {
     const total = _VillageSceneState._kImperialAlertDur;
@@ -1535,23 +1743,23 @@ extension _SceneUi on _VillageSceneState {
     const blood = Color(0xFFC9351F);
 
     Widget bar(bool isTop) => Container(
-          height: barH,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
-              end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
-              colors: const [Color(0xF2090607), Color(0x00090607)],
-            ),
-            border: Border(
-              top: isTop
-                  ? BorderSide.none
-                  : BorderSide(color: blood.withValues(alpha: 0.45), width: 1.2),
-              bottom: isTop
-                  ? BorderSide(color: blood.withValues(alpha: 0.45), width: 1.2)
-                  : BorderSide.none,
-            ),
-          ),
-        );
+      height: barH,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: isTop ? Alignment.topCenter : Alignment.bottomCenter,
+          end: isTop ? Alignment.bottomCenter : Alignment.topCenter,
+          colors: const [Color(0xF2090607), Color(0x00090607)],
+        ),
+        border: Border(
+          top: isTop
+              ? BorderSide.none
+              : BorderSide(color: blood.withValues(alpha: 0.45), width: 1.2),
+          bottom: isTop
+              ? BorderSide(color: blood.withValues(alpha: 0.45), width: 1.2)
+              : BorderSide.none,
+        ),
+      ),
+    );
 
     return Positioned.fill(
       child: IgnorePointer(
@@ -1654,10 +1862,15 @@ extension _SceneUi on _VillageSceneState {
                             color: blood,
                             shadows: [
                               Shadow(
-                                  color:
-                                      blood.withValues(alpha: 0.35 + 0.35 * pulse),
-                                  blurRadius: 38),
-                              const Shadow(color: Colors.black54, blurRadius: 12),
+                                color: blood.withValues(
+                                  alpha: 0.35 + 0.35 * pulse,
+                                ),
+                                blurRadius: 38,
+                              ),
+                              const Shadow(
+                                color: Colors.black54,
+                                blurRadius: 12,
+                              ),
                             ],
                           ),
                         ),
@@ -1673,16 +1886,22 @@ extension _SceneUi on _VillageSceneState {
                             Container(
                               height: 1.5,
                               decoration: BoxDecoration(
-                                gradient: LinearGradient(colors: [
-                                  blood.withValues(alpha: 0),
-                                  blood.withValues(alpha: 0.85),
-                                  blood.withValues(alpha: 0),
-                                ]),
+                                gradient: LinearGradient(
+                                  colors: [
+                                    blood.withValues(alpha: 0),
+                                    blood.withValues(alpha: 0.85),
+                                    blood.withValues(alpha: 0),
+                                  ],
+                                ),
                               ),
                             ),
                             Transform.rotate(
                               angle: 0.7853981634,
-                              child: Container(width: 7, height: 7, color: blood),
+                              child: Container(
+                                width: 7,
+                                height: 7,
+                                color: blood,
+                              ),
                             ),
                           ],
                         ),
@@ -1728,7 +1947,7 @@ extension _SceneUi on _VillageSceneState {
               ? const Color(0xEE0A0A2A)
               : _lumberMode
               ? const Color(0xEE2A1A00)
-              : _placingRoad != null
+              : _roadMode
               ? const Color(0xEE2A1808)
               : const Color(0xEE1A3A1A),
           child: Text(
@@ -1738,15 +1957,15 @@ extension _SceneUi on _VillageSceneState {
                 ? 'Oduncu — sürükle seç, bırak ağaçları işaretle'
                 : _farmMode
                 ? 'Tarla — sürükle seç, bırak onayla'
-                : _placingRoad != null
-                ? '${_placingRoad!.label} — sürükle döşe'
+                : _roadMode
+                ? _roadHint()
                 : '${kBuildingMeta[_placing!]!.label} — tıkla (basılı tut: çoklu)',
             style: TextStyle(
               color: _mineMode
                   ? const Color(0xFFAABBFF)
                   : _lumberMode
                   ? const Color(0xFFFFAA44)
-                  : _placingRoad != null
+                  : _roadMode
                   ? const Color(0xFFDDB880)
                   : const Color(0xFF88FF88),
               fontSize: 11,
@@ -1757,6 +1976,30 @@ extension _SceneUi on _VillageSceneState {
         ),
       ),
     );
+  }
+
+  /// Yol modu ipucu — sürükleme sırasında CANLI bilanço: kaç tile döşenecek,
+  /// neye mal olacak. Oyuncu bırakmadan önce ne alacağını bilir; "yanlışlıkla
+  /// yol döşedim" için yer kalmaz.
+  String _roadHint() {
+    if (_roadPreview.isEmpty) {
+      return _roadErase
+          ? 'Yol Silgisi — sürükle, bırak kaldır'
+          : '${_placingRoad!.label} — sürükle, bırak döşe (dik güzergâh)';
+    }
+    final ok = _roadPreview.where((e) => e.$2).length;
+    if (_roadErase) {
+      return ok == 0
+          ? 'Yol Silgisi — güzergâhta yol yok'
+          : 'Yol Silgisi — $ok tile kaldırılacak (bırak onayla)';
+    }
+    if (ok == 0) return '${_placingRoad!.label} — güzergâh uygun değil';
+    final bill = [
+      for (final (kind, amt) in _placingRoad!.cost.entries)
+        '${amt * ok} ${kind.icon}',
+    ].join(' ');
+    return '${_placingRoad!.label} — $ok tile · '
+        '${bill.isEmpty ? 'bedava' : bill} (bırak onayla)';
   }
 
   /// Bir köylünün ev kademesi → Nüfus Defteri etiketi + sıralama katı.

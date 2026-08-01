@@ -169,6 +169,27 @@ extension _SceneDevConsole on _VillageSceneState {
               '(${Regime.unrestLabel(_unrest)}) · kriz ${r.crisis.name} · '
               'mürekkep ×${r.inkDryMul} · '
               'meclis ${r.councilDecides ? 'karar verir' : 'karar vermez'}');
+          // Çürüme (Faz 3) + iman (overlay mekaniği).
+          final fe = _faithEffect;
+          logDev('🕯 çürüme ${(_regimeRot * 100).round()}% '
+              '(${Regime.rotLabel(_regimeRot)})'
+              '${_isChronic ? ' · KRONİK: ${Regime.chronicText(r.crisis).$1}' : ''}'
+              '${_isFailing ? ' · ÇÖZÜLÜYOR' : ''} · '
+              'iş ×${_regimeWorkMul.toStringAsFixed(2)} · '
+              'mürekkep ×${_chronicInkMul.toStringAsFixed(2)}');
+          logDev('☾ iman ${(p.faith * 100).round()}% → sabır '
+              '+${fe.unrestRelief.toStringAsFixed(3)}/gün · direniş '
+              '+${(fe.resistBonus * 100).round()} · suç '
+              '×${fe.crimeDamp.toStringAsFixed(2)} · moral taban '
+              '+${fe.moraleFloor.toStringAsFixed(3)} · devşirme yarası '
+              '×${fe.conscriptSting.toStringAsFixed(2)}');
+          // Dış güç: rejimin imparatorluk masasını nasıl büktüğü.
+          final ip = _imperialPosture;
+          final cv = _imperialGoesToCouncil ? 'meclis seçer' : 'sen seçersin';
+          logDev('⚔ imparatorluk: itibar ${(_imperialFavor * 100).round()}% · '
+              'dikkat ×${ip.attentionMul.toStringAsFixed(2)} · '
+              'direniş +${(ip.resistBonus * 100).round()} · '
+              'pazarlık kolaylığı ${(ip.haggleEase * 100).round()} · $cv');
         },
       ),
       DevCommand(
@@ -185,6 +206,19 @@ extension _SceneDevConsole on _VillageSceneState {
         }),
       ),
       DevCommand(
+        id: 'regime.rot',
+        label: 'Çürüme Ayarla',
+        category: DevCat.yonetisim,
+        hint: 'Kronik hâli tetiklemek için (Faz 3)',
+        params: [
+          DevParam.integer('v', 'Değer (%)', intDefault: 65, intMax: 100),
+        ],
+        run: (a) => setStateHere(() {
+          _regimeRot = (a.getInt('v', 65) / 100).clamp(0.0, 1.0);
+          _chronicShown = false; // duyuru yeniden kurulabilsin
+        }),
+      ),
+      DevCommand(
         id: 'regime.oath',
         label: 'Köyün Yeminini Ettir',
         category: DevCat.yonetisim,
@@ -198,6 +232,75 @@ extension _SceneDevConsole on _VillageSceneState {
           setStateHere(() => _villageMemory.add(Regime.oathFlag(id.regime)));
           _lawCtxCache = null;
           logDev('⚑ ${id.title} yemini edildi (dev).');
+        },
+      ),
+      // KÖYÜN HÂLİ — mühürlerin aşağıda gerçekten neye dönüştüğü. "Yasa çıkardım
+      // ama bir şey değişmedi" şüphesinin tek cevabı: tabloyu göster.
+      DevCommand(
+        id: 'pressure.show',
+        label: 'Köyün Hâli',
+        category: DevCat.yonetisim,
+        hint: 'Yasa/rejim/mevsim → davranış tablosu (ne değişti)',
+        run: (a) {
+          _recomputePressure();
+          final p = _pressure;
+          final r = p.readout;
+          logDev('🌡️ KÖYÜN HÂLİ — ${_regimeIdentity.title} · ${_season.label} · '
+              'mühür ${_policies.sealed.length} · huzursuzluk '
+              '${(_unrest * 100).round()} · yoksunluk '
+              '${(_scarcity * 100).round()}');
+          logDev(r.isEmpty ? '   (taban — hiçbir basınç yok)' : '   ${r.join(' · ')}');
+          final duty = _villagers.where((v) => v.nightDuty).length;
+          final paused = _villagers.where((v) => v.workPause > 0).length;
+          logDev('   nöbetçi $duty · paydosta $paused · '
+              'gece eşiği ${(kNightThreshold + p.curfewBias).toStringAsFixed(2)}');
+        },
+      ),
+      // KÖYLÜLERİN AKLI — kim ne yapıyor ve NEDEN. "Köy rastgele davranıyor"
+      // şüphesinin cevabı: her köylünün niyeti + gerekçesi + baskın derdi.
+      DevCommand(
+        id: 'mind.show',
+        label: 'Köylülerin Aklı',
+        category: DevCat.yonetisim,
+        hint: 'Kim ne yapıyor, neden, derdi ne',
+        params: [
+          DevParam.integer('n', 'Kaç köylü', intDefault: 10, intMax: 40),
+        ],
+        run: (a) {
+          final n = a.getInt('n', 10);
+          // Telemetriyi ilk çağrıda açar; ikinci çağrıda aradaki hareket
+          // birikmiş olur. "Köy donmuş mu" sorusunun tek dürüst cevabı kat
+          // edilen yoldur — ekran görüntüsü donmuş köyü de pırıl pırıl çizer.
+          if (!kMindTelemetryOn) {
+            kMindTelemetryOn = true;
+            kMindDistance = 0;
+            logDev('🧠 Canlılık ölçümü açıldı — birazdan tekrar çalıştır.');
+          } else {
+            logDev('🧠 CANLILIK — kat edilen yol '
+                '${kMindDistance.toStringAsFixed(1)} tile · '
+                'farklı niyet $kMindDistinctIntents · '
+                'en eski niyet ${kMindOldestIntent.toStringAsFixed(0)} sn');
+          }
+          final tally = <IntentKind, int>{};
+          for (final v in _villagers) {
+            tally[v.mind.intent.kind] = (tally[v.mind.intent.kind] ?? 0) + 1;
+          }
+          final spread = tally.entries
+              .map((e) => '${intentLabel(e.key)}:${e.value}')
+              .join(' · ');
+          logDev('🧠 NİYET DAĞILIMI — $spread');
+          var shown = 0;
+          for (final v in _villagers) {
+            if (shown >= n) break;
+            shown++;
+            final m = v.mind;
+            final drives = m.readout;
+            final mem = v.memory.readout(max: 2);
+            logDev('   ${v.name}: ${intentLabel(m.intent.kind)} '
+                '— "${m.intent.reason}"'
+                '${drives.isEmpty ? '' : ' [${drives.join(', ')}]'}'
+                '${mem.isEmpty ? '' : ' 👁️ ${mem.join(' / ')}'}');
+          }
         },
       ),
       // Kademeli açılımı canlı denerken: hangi hüküm neden kapalı? Bildirim
@@ -235,6 +338,32 @@ extension _SceneDevConsole on _VillageSceneState {
       ),
 
       // ── OLAYLAR / AKTİVİTE ─────────────────────────────────────────────
+      // Belirli bir rastgele olayı sahnele — 9 olayın her birinin kendi NPC
+      // vinyeti var (bkz. scene_vignette) ve çekiliş ağırlıklı olduğu için
+      // hepsini gözlemek rastgeleliğe bırakılamaz.
+      DevCommand(
+        id: 'event.stage',
+        label: 'Olay Sahnele',
+        category: DevCat.olay,
+        hint: 'Seçilen olayı mayalandırır → vinyet sahneye çıkar',
+        params: const [
+          DevParam.choice('id', 'Olay', [
+            (EventIds.drought, '☀ Kuraklık — kuyu boş çıkar'),
+            (EventIds.plague, '🤒 Veba — sokakta çöken hasta'),
+            (EventIds.beastRaid, '🐺 Canavar — kenarda nöbet'),
+            (EventIds.storm, '⛈ Fırtına — malı içeri al'),
+            (EventIds.houseFire, '🔥 Yangın — kova zinciri'),
+            (EventIds.bard, '🎵 Ozan — karşılama'),
+            (EventIds.caravan, '🛒 Kervan — yük iniyor'),
+            (EventIds.bounty, '🌾 Bereket — hasat taşınıyor'),
+            (EventIds.accord, '🤝 Sulh — iki hane barışır'),
+          ], choiceDefault: EventIds.drought),
+        ],
+        run: (a) => setStateHere(() {
+          kForcedEventId = a.getStr('id', EventIds.drought);
+          _triggerRandomEvent();
+        }),
+      ),
       DevCommand(
         id: 'feud.ignite',
         label: 'Kan Davası Başlat',
@@ -245,6 +374,13 @@ extension _SceneDevConsole on _VillageSceneState {
             _showNotification('Kan davası için 2 uygun köylü bulunamadı');
           }
         }),
+      ),
+      DevCommand(
+        id: 'loot.plant',
+        label: 'Zula Göm (görülmüş)',
+        category: DevCat.olay,
+        hint: 'Köy meydanına görülmüş bir zula — bulunma/iade yolunu dener',
+        run: (a) => setStateHere(_devPlantLoot),
       ),
       DevCommand(
         id: 'crime.random',

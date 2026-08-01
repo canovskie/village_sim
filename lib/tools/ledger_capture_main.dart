@@ -15,6 +15,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../characters/life_stage.dart';
+import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
@@ -122,6 +124,51 @@ Future<void> main() async {
         ascendant: false,
         members: 2,
         tier: EstateMoodTier.uneasy),
+  ];
+
+  // MECLİS MASASI — dört hanenin reisleri (gerçek görsel kimlikle). Mood/ascendant
+  // yukarıdaki houses ile eşleşir; nüfuza göre Demirhan ortada olur.
+  final seats = <DivanSeat>[
+    DivanSeat(
+        visual: NpcVisual.fromSeed(31),
+        type: VillagerType.blacksmith,
+        stage: LifeStage.elder,
+        name: 'Kemal',
+        surname: 'Demirhan',
+        mood: 0.78,
+        ascendant: true,
+        members: 6,
+        swayShare: 0.44),
+    DivanSeat(
+        visual: NpcVisual.fromSeed(12),
+        type: VillagerType.farmer,
+        stage: LifeStage.adult,
+        name: 'Osman',
+        surname: 'Aksoy',
+        mood: 0.34,
+        ascendant: false,
+        members: 4,
+        swayShare: 0.19),
+    DivanSeat(
+        visual: NpcVisual.fromSeed(58),
+        type: VillagerType.merchant,
+        stage: LifeStage.adult,
+        name: 'Veli',
+        surname: 'Yıldız',
+        mood: 0.60,
+        ascendant: false,
+        members: 3,
+        swayShare: 0.22),
+    DivanSeat(
+        visual: NpcVisual.fromSeed(7),
+        type: VillagerType.hunter,
+        stage: LifeStage.adult,
+        name: 'Baran',
+        surname: 'Karaca',
+        mood: 0.48,
+        ascendant: false,
+        members: 2,
+        swayShare: 0.15),
   ];
 
   const laws = <DivanFact>[
@@ -251,6 +298,52 @@ Future<void> main() async {
                 gold: 18,
                 agenda: agenda,
                 houses: houses,
+                seats: seats,
+                openHouseCard: -1, // capture: kart kapalı (kamulaştırma kartı görünsün)
+                massSeizure: const HouseActionEntry(
+                    icon: '⚑',
+                    label: 'MÜLKİYETİ KALDIR',
+                    detail: 'Bu köy mülkü kutsal sayıyor. Ortak sofraya '
+                        'inanmayan bir düzen, mülkiyeti kendi eliyle kaldırmaz.',
+                    enabled: false),
+                houseActionsFor: (surname) => const [
+                  HouseActionEntry(
+                      icon: '🎁',
+                      label: 'Mülk bağışla',
+                      detail: 'Hane borçlanır ve güçlenir; ötekiler kayırmayı görür.',
+                      effects: ['−16 altın', 'hâl +0.18', 'nüfuz +0.5'],
+                      enabled: true),
+                  HouseActionEntry(
+                      icon: '⚖',
+                      label: 'Ceza kes',
+                      detail: 'Kan dökmeden hizaya getirir; köy sessizce ürperir.',
+                      effects: ['hâl −0.14', 'nüfuz −0.3', 'huzursuzluk +0.03'],
+                      enabled: true),
+                  HouseActionEntry(
+                      icon: '🏚',
+                      label: 'Mala el koy',
+                      detail: 'Hane defteri fermanı mühürlü değil — neyin kimde '
+                          'olduğu yazılı olmadan mala el konmaz.',
+                      enabled: false),
+                  HouseActionEntry(
+                      icon: '💍',
+                      label: 'Nikâh bağla',
+                      detail: 'İki haneye nikâh önerirsin; gönül rızası aranır.',
+                      effects: ['hâl −0.05'],
+                      enabled: true),
+                  HouseActionEntry(
+                      icon: '🚷',
+                      label: 'Sürgüne yolla',
+                      detail: 'Meclis buna razı olmaz. Bu yetki ancak sözün '
+                          'mutlaklaştığı bir köyde kullanılır.',
+                      enabled: false),
+                  HouseActionEntry(
+                      icon: '🕯',
+                      label: 'Gizli iş çevir',
+                      detail: 'Nüfuzlarını sessizce kırarsın — ifşa olursan bedeli ağır.',
+                      effects: ['−6 altın', 'nüfuz −0.5', 'ifşa riski %34'],
+                      enabled: true),
+                ],
                 laws: laws,
                 marks: marks,
                 crafts: crafts,

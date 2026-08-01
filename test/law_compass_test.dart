@@ -12,11 +12,38 @@ void main() {
       expect(LawCompass.identify(p).regime, VillageRegime.moderate);
     });
 
-    test('iki ilkel yasa henüz Merkez (teşekkül etmedi)', () {
-      // neighborliness(-1) + winterFodder(-1) = econ -2 → /8 = -0.25 < band(0.30)
-      final p = LawCompass.positionOf({'neighborliness', 'winterFodder'});
-      expect(p.economy, closeTo(-0.25, 1e-9));
+    test('sıradan köy hayatı hükümleri pusulayı hiç oynatmaz', () {
+      // İKTİSAT EKSENİ KURALI: bir hüküm iktisat eksenini ancak MÜLKİYET ya da
+      // PAYLAŞIM hakkında bir şey söylüyorsa oynatır. Selamlaşma, kışlık yem,
+      // sürü çoğaltma, nadas, beşik teşviki — hiçbiri bir iktisat düzeni
+      // kurmaz. (Eskiden hepsi "ortak/imece" gerekçesiyle −1 taşıyordu ve
+      // eksen daha oyunun ortasında −1.0'a yapışıyordu; bkz. kLawVectors.)
+      final p = LawCompass.positionOf({
+        'neighborliness',
+        'winterFodder',
+        'herdGrowth',
+        'cropRotation',
+        'familyEncouragement',
+        'familyReunion',
+      });
+      expect(p.economy, closeTo(0, 1e-9));
+      expect(p.authority, closeTo(0, 1e-9));
       expect(LawCompass.identify(p).regime, VillageRegime.moderate);
+    });
+
+    test('mülkçü kutup birkaç gerçek tercihle ERİŞİLEBİLİR', () {
+      // Denge düzeltmesinin asıl sınavı: Açık Pazar rejimi (ve ona bağlı
+      // rejim.mulkTapusu fermanı) oynanabilir olmalı. Eskiden mülkçü tarafta
+      // toplam yalnız +4 vardı ve ortakçı taraf −15'e kadar doyduğu için bu
+      // köşeye ancak defterin %80'ine hiç dokunmayarak varılabiliyordu.
+      final p = LawCompass.positionOf(
+          {'hospitality', 'apprenticeship', 'outsideMarriage', 'freeRange'});
+      expect(p.economy, greaterThan(LawCompass.kBand));
+      expect(p.authority.abs(), lessThan(LawCompass.kBand)); // hâlâ Hür
+      final id = LawCompass.identify(p);
+      expect(id.regime, VillageRegime.market);
+      // Yemin eşiğini de geçmeli — yoksa rejim fermanları yine ulaşılmaz kalır.
+      expect(p.intensity, greaterThanOrEqualTo(LawCompass.kConvictionBand));
     });
 
     test('kolektif çiftçi seti → Ortak Ocak (Hür + Ortakçı)', () {

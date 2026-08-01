@@ -114,4 +114,83 @@ class NatureRenderer {
     canvas.drawImageRect(img, src, dst, _pSprite);
     canvas.restore();
   }
+
+  // ── Böğürtlen çalısı ────────────────────────────────────────────────────────
+
+  static final Paint _pBerryFill = Paint()..isAntiAlias = true;
+
+  /// Çalı gövdesi — olgunlukla koyulaşan yeşil yapraklar + kırmızı meyveler.
+  ///
+  /// Prosedürel (PNG yok): erken oyunun ilk üretim kaynağı olduğu için
+  /// oyuncunun onu UZAKTAN tanıması gerekiyor — meyve varken belirgin kırmızı
+  /// noktalar, toplandıktan sonra çıplak/soluk bir öbek. Yani şekil değil RENK
+  /// okunur; 37px'te ayrıntı kaybolduğu için (bkz. char-shaded-system dersi)
+  /// silüet yerine kontrasta yaslanıyor.
+  ///
+  /// [cx, cy] = tile merkezi ekran koordinatı, [ripeness] 0..1.
+  static void drawBerryBush(
+    Canvas canvas,
+    double cx,
+    double cy, {
+    required double ripeness,
+    int variant = 0,
+    int seed = 0,
+    double time = 0,
+    double col = 0,
+    double row = 0,
+  }) {
+    final rnd = Random(seed);
+    final r = ripeness.clamp(0.0, 1.0);
+    // Rüzgâr — ağaç/sazla aynı alan, genlik küçük (çalı alçak ve sıkı).
+    final sway = Wind.swayAt(col, row, time, amp: 0.022, jitter: seed * 1.3);
+
+    canvas.save();
+    canvas.translate(cx, cy);
+    canvas.skew(sway, 0);
+    canvas.translate(-cx, -cy);
+
+    // Gövde öbekleri — 3 daire, varyanta göre hafif farklı diziliş.
+    // 20px taban: ilk capture'da 15'ti ve çalı mantar/dekorla aynı ağırlıkta
+    // okunuyordu. Bu köyün ilk yiyecek kaynağı; kalabalık bir çayırda gözle
+    // BULUNABİLİR olmak zorunda.
+    final baseW = 20.0 + variant * 1.8;
+    // Meyveliyken yapraklar daha koyu/dolgun; toplanınca soluklaşır.
+    final leaf = Color.lerp(
+        const Color(0xFF5C7A46), const Color(0xFF3F6234), r)!;
+    final leafHi = Color.lerp(
+        const Color(0xFF74915B), const Color(0xFF547B45), r)!;
+    final lumps = <(double, double, double)>[
+      (-baseW * 0.32, -4.0, baseW * 0.46),
+      (baseW * 0.30, -3.0, baseW * 0.42),
+      (0.0, -8.5, baseW * 0.50),
+    ];
+    // Taban gölgesi — çalıyı zemine oturtur (elips, karakter gölgesi diliyle).
+    _pBerryFill.color = const Color(0x33000000);
+    canvas.drawOval(
+        Rect.fromCenter(
+            center: Offset(cx, cy), width: baseW * 1.25, height: baseW * 0.42),
+        _pBerryFill);
+    for (final (dx, dy, rad) in lumps) {
+      _pBerryFill.color = leaf;
+      canvas.drawCircle(Offset(cx + dx, cy + dy), rad, _pBerryFill);
+      // Üst-sol highlight — shaded dil (ışık yukarıdan).
+      _pBerryFill.color = leafHi;
+      canvas.drawCircle(
+          Offset(cx + dx - rad * 0.28, cy + dy - rad * 0.30), rad * 0.42,
+          _pBerryFill);
+    }
+
+    // MEYVE — yalnız olgunlaşırken belirir; sayısı ripeness ile artar, böylece
+    // yeniden dolan çalı "yavaşça geri geliyor" diye okunur.
+    final berries = (r * 7).round();
+    for (int i = 0; i < berries; i++) {
+      final bx = cx + (rnd.nextDouble() - 0.5) * baseW * 1.05;
+      final by = cy - 2.0 - rnd.nextDouble() * 10.0;
+      _pBerryFill.color = const Color(0xFF8E2740);
+      canvas.drawCircle(Offset(bx, by), 2.4, _pBerryFill);
+      _pBerryFill.color = const Color(0xFFC2415E);
+      canvas.drawCircle(Offset(bx - 0.6, by - 0.6), 1.2, _pBerryFill);
+    }
+    canvas.restore();
+  }
 }

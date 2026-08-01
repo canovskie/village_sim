@@ -47,8 +47,24 @@ class LawCompassCard extends StatelessWidget {
   /// Köy yemin etmiş mi (etmişse hangi rejime).
   final VillageRegime? sworn;
 
+  /// ÇÜRÜME (Faz 3) — huzursuzluğun kalıcı izi 0..1. Eşiği aşınca rejime özgü
+  /// KRONİK hâl adı da yazılır (tek atımlık kriz değil, süregiden durum).
+  final double rot;
+
+  /// İmanın mekanik karşılığı — dinî boyanın ne yaptığı (boş not = bant altı).
+  final FaithEffect? faith;
+
   /// Yemin edilebiliyorsa çağrılır — null ise düğme çizilmez.
   final VoidCallback? onSwearOath;
+
+  /// TELEFON — kart tam hâlinde ~150dp yer yiyor. 414dp'lik yatay ekranda
+  /// defterin gövdesine ~300dp kalıyor; kart + idame + arama kutusu üst üste
+  /// binince Kanunname'nin ASIL içeriği (petek) fold altında kalıyor, oyuncu
+  /// kanun defterini açıp tek bir ferman göremiyordu. Kısa ekranda kart tek
+  /// satırlık künyeye iner, dokununca açılır.
+  final bool compact;
+  final bool expanded;
+  final VoidCallback? onToggleExpand;
 
   const LawCompassCard({
     super.key,
@@ -58,6 +74,11 @@ class LawCompassCard extends StatelessWidget {
     this.unrest = 0,
     this.sworn,
     this.onSwearOath,
+    this.rot = 0,
+    this.faith,
+    this.compact = false,
+    this.expanded = false,
+    this.onToggleExpand,
   });
 
   @override
@@ -65,6 +86,8 @@ class LawCompassCard extends StatelessWidget {
     final pos = LawCompass.positionOf(sealed);
     final id = LawCompass.identify(pos);
     final tint = regimeColor(id.regime);
+
+    if (compact && !expanded) return _summaryRow(id, pos, tint);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
@@ -133,6 +156,16 @@ class LawCompassCard extends StatelessWidget {
                 if (rule != null) ...[
                   const SizedBox(height: 9),
                   _unrestBar(tint),
+                  if (rot > 0.02) ...[
+                    const SizedBox(height: 7),
+                    _rotLine(rule!),
+                  ],
+                ],
+                if (faith != null && faith!.note.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('☾ ${faith!.note}',
+                      style: AppUi.body.copyWith(
+                          fontSize: 10, height: 1.4, color: AppUi.info)),
                 ],
                 if (onSwearOath != null) ...[
                   const SizedBox(height: 9),
@@ -142,6 +175,63 @@ class LawCompassCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// KISA EKRAN KÜNYESİ — tek satır: mini kadran + köyün adı + sayaç.
+  /// Kartın söylediği her şeyi taşımaz; "neredeyiz" sorusuna cevap verir ve
+  /// gerisini bir dokunuş arkasına koyar. Petek böylece ilk ekranda görünür.
+  Widget _summaryRow(RegimeIdentity id, CompassPosition pos, Color tint) {
+    return GestureDetector(
+      onTap: onToggleExpand,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+        decoration: BoxDecoration(
+          color: AppUi.surface0,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: AppUi.line),
+        ),
+        child: Row(
+          children: [
+            _CompassDial(pos: pos, tint: tint, size: 44),
+            const SizedBox(width: 11),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(children: [
+                    Text(id.icon, style: const TextStyle(fontSize: 13)),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(id.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.title
+                              .copyWith(fontSize: 14, color: AppUi.gold)),
+                    ),
+                  ]),
+                  const SizedBox(height: 2),
+                  Text(id.tagline,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.body.copyWith(
+                          fontSize: 10,
+                          color: AppUi.textLo,
+                          fontStyle: FontStyle.italic)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('${sealed.length}/$totalLaws',
+                style:
+                    AppUi.number.copyWith(fontSize: 10.5, color: AppUi.textLo)),
+            const SizedBox(width: 6),
+            Icon(Icons.expand_more, size: 18, color: AppUi.textLo),
+          ],
+        ),
       ),
     );
   }
@@ -186,6 +276,43 @@ class LawCompassCard extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// ÇÜRÜME satırı — huzursuzluğun bıraktığı kalıcı iz. Kronikleşmişse rejime
+  /// özgü hâlin ADI yazılır: oyuncu "bu köy artık şu köy" diye okusun.
+  Widget _rotLine(RegimeRule r) {
+    final chronic = rot >= Regime.kChronic && r.crisis != RegimeCrisis.none;
+    final failing = rot >= Regime.kFailing && r.crisis != RegimeCrisis.none;
+    final c = failing
+        ? AppUi.rust
+        : chronic
+            ? AppUi.accent
+            : AppUi.textLo;
+    final (title, _) = Regime.chronicText(r.crisis);
+    return Row(children: [
+      Text('İZ', 
+          style: AppUi.label.copyWith(
+              fontSize: 7.5, color: AppUi.textLo, letterSpacing: 1.4)),
+      const SizedBox(width: 7),
+      Expanded(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: SizedBox(
+            height: 4,
+            child: Stack(children: [
+              Container(color: AppUi.surface2),
+              FractionallySizedBox(
+                widthFactor: rot.clamp(0.0, 1.0),
+                child: Container(color: c.withValues(alpha: 0.8)),
+              ),
+            ]),
+          ),
+        ),
+      ),
+      const SizedBox(width: 7),
+      Text(chronic && title.isNotEmpty ? title : Regime.rotLabel(rot),
+          style: AppUi.body.copyWith(fontSize: 9.5, color: c)),
+    ]);
   }
 
   /// KÖYÜN YEMİNİ — opt-in radikal ilan. Sinsi kayma seni ele verir, yemin

@@ -53,7 +53,7 @@ class ImperialSoldier extends VillagerEntity {
       double speedMul = 1.0,
       double arriveD = 0.18}) {
     isWalking = true;
-    final arrived = moveTowards(tx, ty, dt * speedMul, arriveD: arriveD);
+    final arrived = moveTowards(tx, ty, dt, arriveD: arriveD, speedScale: speedMul);
     if (arrived) isWalking = false;
     smoothMotion(dt);
     // Gece gelirlerse meşale yansın (heyet meşaleli gelir). finished → söner.

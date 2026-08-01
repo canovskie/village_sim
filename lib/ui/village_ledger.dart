@@ -1,7 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
+import '../characters/life_stage.dart';
+import '../characters/npc_visual.dart';
+import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
+import '../rendering/character_renderer.dart';
 import '../systems/chronicle.dart';
 import '../systems/house_system.dart';
 import '../systems/petition_system.dart';
@@ -11,9 +16,13 @@ import '../systems/law_book.dart';
 import '../systems/law_compass.dart';
 import '../systems/regime.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 import 'law_book_panel.dart';
 import 'petition_scene_card.dart';
 import 'villager_roster_view.dart';
+
+part 'ledger_council.dart';
+part 'ledger_house_cards.dart';
 
 /// KÖY DEFTERİ — köy içi işlerin TEK kapısı.
 ///
@@ -90,6 +99,60 @@ class DivanFact {
   const DivanFact(this.icon, this.label, this.color);
 }
 
+/// Divan masasındaki bir sandalye — bir hanenin GERÇEK reisi. Sahne, her soyun
+/// canlı üyelerinden reisi seçer (en yaşlı yetişkin erkek; yoksa en yaşlı
+/// yetişkin) ve o köylünün görsel kimliğini buraya koyar. Rastgele DEĞİL:
+/// oyuncu masada tanıdığı yüzleri görür. [CouncilTable] bunları çizer.
+class DivanSeat {
+  final NpcVisual visual; // köylünün gerçek yüzü/kıyafeti
+  final VillagerType type;
+  final LifeStage stage;
+  final String name; // reisin adı (masada altına yazılır)
+  final String surname;
+  final double mood; // hanenin hâli 0..1 → duruş/ifade
+  final bool ascendant; // köyün gölgesine kaydığı hane mi (altın halka)
+  final int members; // canlı üye sayısı (eylem kartı başlığı)
+  final double swayShare; // köy içi nüfuz payı 0..1
+  const DivanSeat({
+    required this.visual,
+    required this.type,
+    required this.stage,
+    required this.name,
+    required this.surname,
+    required this.mood,
+    required this.ascendant,
+    this.members = 0,
+    this.swayShare = 0,
+  });
+}
+
+/// Meclis masasında bir reise dokununca açılan kartın TEK eylem satırı.
+/// Sahne üretir (kural/bedel `systems/house_action.dart`'ta); UI yalnız gösterir.
+/// Kapalı eylem GİZLENMEZ — gerekçesiyle sönük durur ki oyuncu neyin neden
+/// mümkün olmadığını (ferman mı, rejim mi, kese mi) görsün.
+class HouseActionEntry {
+  final String icon;
+  final String label;
+
+  /// Ne yapacağı — kapalıysa NEDEN kapalı olduğu.
+  final String detail;
+
+  /// Kısa sonuç rozetleri ("+18 altın", "hâl −0.30", "korku +").
+  final List<String> effects;
+
+  final bool enabled;
+  final VoidCallback? onTap;
+
+  const HouseActionEntry({
+    required this.icon,
+    required this.label,
+    required this.detail,
+    this.effects = const [],
+    required this.enabled,
+    this.onTap,
+  });
+}
+
 class VillageLedger extends StatelessWidget {
   /// Metin havuzlarının tohumu (sahne GÜN sayısını verir). Pano gün boyunca
   /// aynı kelimelerle konuşur; ertesi gün başka kelimelerle. Rebuild'de
@@ -113,6 +176,22 @@ class VillageLedger extends StatelessWidget {
 
   /// Köyün haneleri (salience sıralı) — her an görünür gerilim.
   final List<HouseSnapshot> houses;
+
+  /// Divan masasındaki reisler — her hanenin GERÇEK reisi (bkz. [DivanSeat]).
+  /// Boşsa masa çizilmez (henüz hane yok).
+  final List<DivanSeat> seats;
+
+  /// Bir haneye uygulanabilecek eylemler — masadaki reise dokununca açılan
+  /// kart bunu çağırır. null ise masa salt gösterimdir (dokunulamaz).
+  final List<HouseActionEntry> Function(String surname)? houseActionsFor;
+
+  /// ÖNİZLEME/CAPTURE: hane kartı açık başlasın (bkz. [CouncilTable]).
+  final int openHouseCard;
+
+  /// TOPYEKÛN EL KOYMA kartı — masanın altında, ayrı ve tehlikeli. Kapalıyken
+  /// de gösterilir (gerekçesiyle) ki oyuncu bu yolun var olduğunu bilsin.
+  /// null → hiç gösterilmez.
+  final HouseActionEntry? massSeizure;
 
   /// Yürürlükteki yasalar.
   final List<DivanFact> laws;
@@ -146,6 +225,10 @@ class VillageLedger extends StatelessWidget {
   final RegimeRule? regimeRule;
   final double unrest;
   final VillageRegime? swornRegime;
+
+  /// Çürüme (Faz 3) + imanın mekanik karşılığı.
+  final double regimeRot;
+  final FaithEffect? faithEffect;
 
   /// KÖYÜN YEMİNİ edilebiliyorsa çağrılır (null = kart düğmeyi çizmez).
   final VoidCallback? onSwearOath;
@@ -201,6 +284,10 @@ class VillageLedger extends StatelessWidget {
     required this.gold,
     required this.agenda,
     required this.houses,
+    this.seats = const [],
+    this.houseActionsFor,
+    this.openHouseCard = -1,
+    this.massSeizure,
     required this.laws,
     required this.marks,
     this.crafts = const [],
@@ -217,6 +304,8 @@ class VillageLedger extends StatelessWidget {
     this.swornRegime,
     this.onSwearOath,
     this.onRepealLaw,
+    this.regimeRot = 0,
+    this.faithEffect,
     this.rosterRows = const [],
     this.onSelectVillager,
     this.quests = const [],
@@ -249,14 +338,6 @@ class VillageLedger extends StatelessWidget {
       return Color.lerp(gold, AppUi.sage, ((m - 0.50) / 0.20).clamp(0.0, 1.0))!;
     }
     return AppUi.sage;
-  }
-
-  String get _moraleFace {
-    if (morale >= 0.72) return '😄';
-    if (morale >= 0.55) return '🙂';
-    if (morale >= 0.40) return '😐';
-    if (morale >= 0.28) return '😟';
-    return '😣';
   }
 
   /// Hero sahnesinin tonu — köyün moraline göre (mutlu=warm, orta=neutral,
@@ -308,10 +389,20 @@ class VillageLedger extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final compact = useCompactGameUi(context);
     // SABİT çerçeve (eskiden içeriğe göre büyüyen dar bir scroll sütunuydu):
     // defter beş bölüm taşıyor, bölüm değiştirince panel boyu zıplamamalı.
-    final w = math.min(size.width * 0.95, 1040.0);
-    final h = math.min(size.height * 0.93, 760.0);
+    //
+    // MOBİL: telefon YATAY'da 393dp yüksek. %93 almak 27dp'yi hiçe harcamak
+    // demekti — defterin dikey bütçesi zaten kritik (hero + raf + şerit üst
+    // üste binince listeye tek satır kalıyordu). Kenar ızgarasının gutter'ı
+    // dışında her pikseli al.
+    final w = compact
+        ? size.width - 2 * MobileUi.gutter
+        : math.min(size.width * 0.95, 1040.0);
+    final h = compact
+        ? size.height - 2 * MobileUi.gutter
+        : math.min(size.height * 0.93, 760.0);
     return Stack(
       children: [
         // Hafif karartma — defter bir gösterge, oyun durmaz; boşluğa dokun = kapat.
@@ -350,7 +441,7 @@ class VillageLedger extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _hero(),
+                      _hero(context),
                       Expanded(
                         child: _LedgerShell(
                           initial: initialSection,
@@ -400,10 +491,24 @@ class VillageLedger extends StatelessWidget {
 
   /// GÜNDEM sekmesi — köyün senden ne istediği + zümre gerilimleri.
   Widget _meclisTab() {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+    return Builder(builder: (context) {
+      // Meclis masası — hanelerin gerçek reisleri, yuvarlak masada karşıda.
+      final council = <Widget>[
+        if (seats.isNotEmpty) ...[
+          const AppSectionLabel('MECLİS HALKASI'),
+          const SizedBox(height: 6),
+          CouncilTable(
+              seats: seats,
+              actionsFor: houseActionsFor,
+              initiallySelected: openHouseCard),
+          if (massSeizure != null) ...[
+            const SizedBox(height: 10),
+            _MassSeizureCard(entry: massSeizure!),
+          ],
+          const SizedBox(height: 16),
+        ],
+      ];
+      final agenda = <Widget>[
         const AppSectionLabel('GÜNDEM'),
         _agendaSection(),
         const SizedBox(height: 16),
@@ -413,8 +518,19 @@ class VillageLedger extends StatelessWidget {
           const SizedBox(height: 8),
           _identityBonusRow(),
         ],
-      ],
-    );
+      ];
+      // TELEFON YATAY: defterin gövdesine ~300dp kalıyor; masa + künye ilk
+      // ekranı doldurunca Divan açıldığında YANIT BEKLEYEN İŞ görünmüyordu.
+      // Divan'ın işi gündemdir, halka atmosferdir — kısa ekranda sıra değişir.
+      final compact = useCompactGameUi(context);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: compact
+            ? [...agenda, const SizedBox(height: 16), ...council]
+            : [...council, ...agenda],
+      );
+    });
   }
 
   /// KANUNNAME sekmesi — yasa defteri + kararların köyde bıraktığı kalıcı iz.
@@ -437,6 +553,8 @@ class VillageLedger extends StatelessWidget {
           sworn: swornRegime,
           onSwearOath: onSwearOath,
           onRepeal: onRepealLaw,
+          rot: regimeRot,
+          faith: faithEffect,
         ),
         if (hasState) ...[
           const SizedBox(height: 16),
@@ -691,7 +809,95 @@ class VillageLedger extends StatelessWidget {
 
   // ── Hero — sinematik toplanma sahnesi + kimlik + kapat ─────────────────────
 
-  Widget _hero() {
+  /// MOBİL hero — TEK satır, 54dp.
+  ///
+  /// Telefon yatayda defterin bütün derdi dikey bütçe: 82dp'lik hero + 60dp'lik
+  /// bölüm rafı + 55dp'lik köy şeridi üst üste binince 365dp'lik çerçevede
+  /// içeriğe ~160dp kalıyordu — NÜFUS'u açan oyuncu tek bir köylü satırı bile
+  /// göremiyordu. Sahne kartı zemin olarak KALIR (defterin kimliği o), ama
+  /// künye · kimlik · nabız · kapat tek hatta iner; ikinci satır (köyün hâli
+  /// cümlesi) ve mühür madalyonu masaüstüne özel kalır.
+  Widget _compactHero() {
+    const h = 54.0;
+    return SizedBox(
+      height: h,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: PetitionSceneCard.custom(
+              scene: PetitionScene.gathering,
+              tone: _heroTone,
+              height: h,
+              drawBorder: false,
+            ),
+          ),
+          const Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x73100E0B), Color(0xE6100E0B)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12, right: 4),
+              child: Row(
+                children: [
+                  _kicker('KÖY DEFTERİ'),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      identity,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.title.copyWith(
+                        fontSize: 15,
+                        color: AppUi.gold,
+                        shadows: const [
+                          Shadow(color: Color(0xCC000000), blurRadius: 8)
+                        ],
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  GameIcon(GameIconData.heart, size: 14, color: _moraleTone),
+                  const SizedBox(width: 5),
+                  Text('${(morale * 100).round()}%',
+                      style: AppUi.number
+                          .copyWith(fontSize: 13, color: _moraleTone)),
+                  const SizedBox(width: 4),
+                  GestureDetector(
+                    onTap: onClose,
+                    behavior: HitTestBehavior.opaque,
+                    child: const SizedBox(
+                      width: MobileUi.tap,
+                      height: MobileUi.tap,
+                      child: Center(
+                        child: GameIcon(GameIconData.close,
+                            size: 17, color: AppUi.textMid),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hero(BuildContext context) {
+    // Kısa (yatay telefon) ekranda 132dp, 393dp'lik yüksekliğin üçte biriydi —
+    // asıl içerik ekran dışına taşıyordu. Sahne kartı kalıyor, sadece inceliyor.
+    final short = useCompactGameUi(context);
+    if (short) return _compactHero();
     const heroH = 132.0;
     return SizedBox(
       height: heroH,
@@ -707,12 +913,12 @@ class VillageLedger extends StatelessWidget {
             ),
           ),
           // Alt okunaklılık zemini.
-          const Positioned(
+          Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             height: 98,
-            child: IgnorePointer(
+            child: const IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -736,16 +942,25 @@ class VillageLedger extends StatelessWidget {
                 GestureDetector(
                   onTap: onClose,
                   behavior: HitTestBehavior.opaque,
-                  child: Container(
-                    padding: const EdgeInsets.all(5),
-                    decoration: BoxDecoration(
-                      color: const Color(0xB3100E0B),
-                      shape: BoxShape.circle,
-                      border:
-                          Border.all(color: AppUi.gold.withValues(alpha: 0.3)),
+                  // Kapat düğmesinin dokunma alanı 25×25dp'ydi — paneli
+                  // kapatan tek düğme için fazla küçük. Görsel daire aynı
+                  // kalıyor, hit alanı 44'e büyüyor.
+                  child: SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xB3100E0B),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: AppUi.gold.withValues(alpha: 0.3)),
+                        ),
+                        child: const GameIcon(GameIconData.close,
+                            size: 13, color: AppUi.textMid),
+                      ),
                     ),
-                    child: const GameIcon(GameIconData.close,
-                        size: 13, color: AppUi.textMid),
                   ),
                 ),
               ],
@@ -789,7 +1004,18 @@ class VillageLedger extends StatelessWidget {
                     ],
                   ),
                 ),
-                Text(_moraleFace, style: const TextStyle(fontSize: 22)),
+                // Emoji surat yerine köyün nabzı: aynı bilgi, oyunun ikon
+                // dilinde ve okunur bir sayıyla.
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GameIcon(GameIconData.heart, size: 15, color: _moraleTone),
+                    const SizedBox(width: 5),
+                    Text('${(morale * 100).round()}%',
+                        style: AppUi.number
+                            .copyWith(fontSize: 14, color: _moraleTone)),
+                  ],
+                ),
               ],
             ),
           ),
@@ -844,15 +1070,19 @@ class VillageLedger extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _stripCell(_moraleFace, '${(morale * 100).round()}%', 'moral',
-              AppUi.accent,
-              emoji: true),
+          // Emoji DEĞİL, Phosphor: bu şerit oyunun geri kalanıyla aynı ikon
+          // dilini konuşmalı. Emoji glyph'ler cihazdan cihaza değişiyor, kendi
+          // rengini/ağırlığını dayatıyor ve tam da altındaki nüfus KPI şeridi
+          // aynı veriyi düzgün ikonla gösterdiği için ekranda iki farklı görsel
+          // dil yan yana duruyordu.
+          _stripCell(GameIconData.heart, '${(morale * 100).round()}%', 'moral',
+              _moraleTone),
           _stripDiv(),
-          _stripCell('👥', '$population', 'nüfus', AppUi.textMid),
+          _stripCell(GameIconData.people, '$population', 'nüfus', AppUi.info),
           _stripDiv(),
-          _stripCell('🌾', '$food', 'yiyecek', AppUi.sage),
+          _stripCell(GameIconData.wheat, '$food', 'yiyecek', AppUi.sage),
           _stripDiv(),
-          _stripCell('🪙', '$gold', 'altın', AppUi.gold),
+          _stripCell(GameIconData.coin, '$gold', 'altın', AppUi.gold),
         ],
       ),
     );
@@ -860,22 +1090,28 @@ class VillageLedger extends StatelessWidget {
 
   Widget _stripDiv() => Container(width: 1, height: 24, color: AppUi.line);
 
-  Widget _stripCell(String glyph, String value, String label, Color color,
-      {bool emoji = false}) {
+  Color get _moraleTone => morale >= 0.6
+      ? AppUi.sage
+      : morale >= 0.4
+          ? AppUi.accentSoft
+          : AppUi.rust;
+
+  Widget _stripCell(
+      GameIconData icon, String value, String label, Color color) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(glyph, style: const TextStyle(fontSize: 12)),
-            const SizedBox(width: 4),
+            GameIcon(icon, size: 13, color: color),
+            const SizedBox(width: 5),
             Text(value, style: AppUi.number.copyWith(fontSize: 13)),
           ],
         ),
         const SizedBox(height: 2),
-        Text(label,
-            style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 0.8)),
+        Text(label.toUpperCase(),
+            style: AppUi.label.copyWith(fontSize: 8.5, letterSpacing: 0.8)),
       ],
     );
   }
@@ -1581,15 +1817,34 @@ class _LedgerShellState extends State<_LedgerShell> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
-        final wide = c.maxWidth >= 660;
+        // YÜKSEKLİK de şart. Eskiden yalnız genişliğe bakılıyordu: telefon
+        // YATAY modda 734dp geniş → "wide" sayılıp 186px'lik dikey rafa
+        // düşüyordu, ama ekran 393dp kısa olduğu için beş bölümden ancak
+        // dördü sığıyor, sonuncusu kesiliyordu. Kısa ekranda zaten hazır olan
+        // yatay raf (_rowRail) doğru cevap.
+        final wide = c.maxWidth >= 660 && c.maxHeight >= 430;
+        // Telefonda NÜFUS bölümü kendi KPI şeridini (nüfus/hane/moral/varlık)
+        // zaten taşıyor. Köy şeridini de üstüne koyunca 393dp'lik ekranda
+        // ART ARDA DÖRT yatay bant oluyordu (raf · köy şeridi · KPI şeridi ·
+        // sırala) ve listeye yer kalmıyordu — 16px'lik taşma buradan geliyordu.
+        // Kısa ekranda tekrar eden bandı düşür.
+        // Telefonda köy şeridi HİÇ çizilmez. Gösterdiği dört sayı
+        // (moral/nüfus/yiyecek/altın) üstteki HUD durum kapsülünde zaten
+        // sürekli duruyor — defterde tekrarı 55dp'lik bir bant karşılığında
+        // hiçbir yeni şey söylemiyor, üstelik NÜFUS bölümünün kendi KPI şeridi
+        // aynı sayıları bir kez daha yazıyordu. 393dp'lik ekranda listeye yer
+        // kalmamasının en büyük tek sebebi buydu.
+        final showStrip = !useCompactGameUi(context);
         final body = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
-              child: widget.strip,
-            ),
-            Container(height: 1, color: AppUi.line),
+            if (showStrip) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+                child: widget.strip,
+              ),
+              Container(height: 1, color: AppUi.line),
+            ],
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 190),
@@ -1767,6 +2022,8 @@ class _LedgerShellState extends State<_LedgerShell> {
       behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
+        // Yatay raf mobilde ANA gezinme — 37dp'de kalıyordu, 44 eşiğine çek.
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
         decoration: BoxDecoration(
           color: on
@@ -1796,3 +2053,24 @@ class _LedgerShellState extends State<_LedgerShell> {
     );
   }
 }
+
+// ── Meclis masası ─────────────────────────────────────────────────────────────
+
+/// Hane renk paleti — [_houseColor] ile aynı, masa katmanında da erişilebilsin.
+const List<Color> _kCouncilPalette = [
+  Color(0xFF8FB255), Color(0xFFE0954A), Color(0xFF9E86C9), Color(0xFFD8AE56),
+  Color(0xFF6FA9B8), Color(0xFFC57B6B), Color(0xFF8DA0C0), Color(0xFFB0A24E),
+];
+Color _councilHouseColor(String surname) {
+  var h = 0;
+  for (final c in surname.codeUnits) {
+    h = (h * 31 + c) & 0x7fffffff;
+  }
+  return _kCouncilPalette[h % _kCouncilPalette.length];
+}
+
+/// Divan'ın başındaki YUVARLAK MASA — hanelerin GERÇEK reisleri karşıda oturmuş,
+/// oyuncuya (sana) bakıyor. Aktörler [DivanSeat.visual] ile o köylünün gerçek
+/// yüzünü/kıyafetini taşır (rastgele değil). Reisler masanın uzak yayına
+/// yerleşir; masa yüzeyi bel altını örter → "masaya oturmuş" okunur. Kendi
+/// ticker'ı var (nefes/ışık); panel yeniden çizilmese de canlı durur.

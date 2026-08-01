@@ -63,6 +63,32 @@ class Personality {
 
   Trait get dominant => traits.first;
 
+  /// SOHBETE YATKINLIK (~0.5..1.5) — yalnızlık dürtüsünün ne hızla biriktiğini
+  /// renklendirir (bkz. scene_mind). Çekingen bir köylü günlerce kimseyle
+  /// konuşmadan durabilir, kıpır kıpır olan yarım günde meydana iner.
+  ///
+  /// Denge kırıcı değil, renk: uçlar bilerek dar tutulmuştur.
+  double get sociability {
+    var s = 1.0;
+    for (final t in traits) {
+      s += switch (t) {
+        Trait.cheerful => 0.20,
+        Trait.curious => 0.15,
+        Trait.restless => 0.15,
+        Trait.proud => 0.05,
+        Trait.brave => 0.05,
+        Trait.gentle => 0.0,
+        Trait.diligent => -0.10,
+        Trait.dreamer => -0.15,
+        Trait.grumpy => -0.20,
+        Trait.shy => -0.25,
+      };
+    }
+    if (likes == Likes.company) s += 0.20;
+    if (likes == Likes.solitude) s -= 0.25;
+    return s.clamp(0.5, 1.5);
+  }
+
   /// Seed + tip'ten kişilik üret. Tamamen deterministik.
   factory Personality.fromSeed(int seed, VillagerType type) {
     final r = Random(seed);

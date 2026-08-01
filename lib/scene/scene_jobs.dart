@@ -16,7 +16,10 @@ extension _SceneJobs on _VillageSceneState {
   static const double _kJobSyncInterval = 2.0;
 
   /// Bir köylü YENİ bir işe atanmaya uygun mu — boş, yetişkin, meşgul değil.
+  /// OYUNCU ELLE ATADIYSA havuz dışıdır ([VillagerEntity.assignedRole]): otomatik
+  /// kadro onu ne kapar ne de başka role çeker.
   bool _freeForJob(VillagerEntity v) =>
+      v.assignedRole == null &&
       !v.hasActiveJob &&
       v.jobReassignCd <= 0 &&
       v.canRunErrands &&
@@ -25,6 +28,7 @@ extension _SceneJobs on _VillageSceneState {
       !v.isSleeping &&
       !v.isCarrying &&
       !v.sitClaimed &&
+      v.mind.intent.priority < IntentPriority.ceremony && // sahnedekine iş verme
       v.activity == VillagerActivity.none;
 
   /// Atanmış bir köylünün iş state-machine'i BU FRAME çalışmalı mı — uyku/taşıma/
@@ -37,8 +41,18 @@ extension _SceneJobs on _VillageSceneState {
       !v.isSleeping &&
       !v.isCarrying &&
       !v.sitClaimed &&
+      // Dayatılmış sahne (olay vinyeti, tören) işi ASKIYA alır — tıpkı oturmak
+      // gibi. Bu kapı olmadan iş döngüsü her frame `goTo` verip koreografiyi
+      // ezerdi: `activity` ceremony altında none kalır, filtre onu yakalamaz.
+      // Claim korunur; sahne bitince iş kaldığı yerden sürer.
+      v.mind.intent.priority < IntentPriority.ceremony &&
       v.activity == VillagerActivity.none &&
       !identical(v, _draggedVillager);
+
+  /// Bu rolü ÜSTLENMİŞ köylü sayısı — HUD/panel sayaçlarının tek kaynağı.
+  /// (Eski anonim işçi listeleri kaldırıldı; onlar hep boştu, sayaçlar da 0.)
+  int _jobCount(JobRole role) =>
+      _villagers.where((v) => v.job?.role == role).length;
 
   // ── ATAMA (throttle) ────────────────────────────────────────────────────────
 
@@ -48,10 +62,21 @@ extension _SceneJobs on _VillageSceneState {
     if (_jobSyncCd > 0) return;
     _jobSyncCd = _kJobSyncInterval;
 
-    // BUILDER: bekleyen bina/yol siparişi varsa kadro; yoksa 0.
-    final pending = _orders.where((o) => !o.completed).length +
-        _roadOrders.where((o) => !o.completed).length;
-    final builderTarget = pending > 0 ? pending.clamp(1, kMaxBuilders) : 0;
+    // Oyuncunun eli önce — aksi halde `_reconcileRole` hedefi otomatik doldurur,
+    // hemen ardından elle atama gelir ve tarlada iki çiftçi belirir.
+    _applyPlayerAssignments();
+
+    // BUILDER: bekleyen bina/yol siparişi varsa kadro; yoksa 0. Bina, KADROSU
+    // TAM olmadan yükselmediği için hedef el sayısı sipariş sayısı değil
+    // siparişlerin istediği el toplamıdır.
+    var wantedHands = 0;
+    for (final o in _orders) {
+      if (!o.completed) wantedHands += o.requiredWorkers;
+    }
+    for (final o in _roadOrders) {
+      if (!o.completed) wantedHands++;
+    }
+    final builderTarget = wantedHands.clamp(0, kMaxBuilders);
     final firstOrder = _orders.where((o) => !o.completed).firstOrNull;
     _reconcileRole(JobRole.builder, builderTarget,
         matchType: null,
@@ -117,6 +142,18 @@ extension _SceneJobs on _VillageSceneState {
         matchType: null,
         near: nearBuilding(BuildingType.lumberCamp),
         blockMsg: '🪓 Kereste kampı var ama oduncu yok.');
+
+    // TOPLAYICI / AŞÇI — otomatik kadro hedefi 0 (bkz. aşağıdaki not).
+    // Bu iki iş bilinçli olarak KENDİLİĞİNDEN dağıtılmaz: erken oyunun tek
+    // amacı oyuncunun "kim ne yapsın" kararını vermesi. Otomatik atansalardı
+    // köy kendi kendini doyurur, oyuncunun ilk kararı da anlamsızlaşırdı.
+    // Elle atanmış köylüler `_reconcileRole`'ün fazlalık kapısından zaten muaf
+    // (bkz. `assignedRole` kontrolü), o yüzden burada hedefi 0 bırakmak onları
+    // işten ALMAZ — yalnız yenisini otomatik atamaz.
+    _reconcileRole(JobRole.forager, 0,
+        matchType: null, blockMsg: '');
+    _reconcileRole(JobRole.cook, 0,
+        matchType: null, blockMsg: '');
   }
 
   // ── KERESTE KAMPI BÖLGE YÖNETİMİ ────────────────────────────────────────────
@@ -235,6 +272,74 @@ extension _SceneJobs on _VillageSceneState {
     }
   }
 
+  // ── OYUNCUNUN ELİ ───────────────────────────────────────────────────────────
+  // Erken oyunun omurgası: köyün kimin ne yaptığına oyuncu karar verir. Otomatik
+  // kadro (`_reconcileRole`) yalnız GERİ KALANI dağıtır — elle atanmış köylüyü
+  // ne kapar ne bırakır (bkz. `_freeForJob` + aşağıdaki release kapısı).
+
+  /// Elle verilmiş işleri köylülerin üstüne geçir. `assignedRole == JobRole.none`
+  /// "boş dursun" demektir: köylü işten alınır ve otomatik havuza da dönmez.
+  void _applyPlayerAssignments() {
+    for (final v in _villagers) {
+      final want = v.assignedRole;
+      if (want == null) continue;
+      final cur = v.job?.role ?? JobRole.none;
+      if (cur == want) continue;
+      // Hasta/yaralı/çocuk köylüye iş GEÇİRİLMEZ ama kararı SİLİNMEZ: iyileşince
+      // kendi işine döner. (Kararı burada sıfırlasaydık oyuncu bir hastalıktan
+      // sonra kurduğu iş bölümünü sessizce kaybederdi.)
+      if (!v.canRunErrands || v.isDying) continue;
+      if (v.job != null) _releaseJob(v); // eski claim'ler salıverilsin
+      if (want != JobRole.none) v.job = VillagerJob(want);
+    }
+  }
+
+  /// Köyün BUGÜN verebileceği işler — panelin rozet listesi.
+  ///
+  /// Ölü rozet göstermeyiz: madeni olmayan köyde "Madenci" rozeti oyuncuyu
+  /// kandırır (atar, kimse bir şey yapmaz). Liste köyün elindeki iş yerlerinden
+  /// türer, böylece bina dikildikçe panel kendiliğinden zenginleşir — erken
+  /// oyunun "ilerliyorum" hissini taşıyan sessiz kanallardan biri.
+  List<JobRole> _assignableJobRoles() {
+    bool has(BuildingType t) => _buildings.any((b) => b.type == t);
+    return [
+      // TOPLAYICI en başta: bina istemeyen tek iş. Oyunun ilk saniyesinden
+      // itibaren verilebilir olması erken oyunun bütün mesele si — listenin
+      // başında durması da o yüzden.
+      if (_berryBushes.isNotEmpty) JobRole.forager,
+      if (has(BuildingType.firepit)) JobRole.cook,
+      // İnşaatçı her zaman: bekleyen sipariş yoksa köylü boşta bekler, sipariş
+      // çıkınca ilk o koşar (oyuncunun "bunu ustaya ayırdım" demesi mümkün).
+      JobRole.builder,
+      if (has(BuildingType.lumberCamp)) JobRole.woodcutter,
+      if (_farmTiles.isNotEmpty) JobRole.farmer,
+      if (has(BuildingType.mineBuilding)) JobRole.miner,
+      if (has(BuildingType.fisherCabin)) JobRole.fisher,
+      if (has(BuildingType.barn)) JobRole.shepherd,
+      if (has(BuildingType.floristCottage)) JobRole.florist,
+    ];
+  }
+
+  /// Oyuncu bir köylüye iş verdi/aldı — UI'ın tek giriş kapısı.
+  /// [role] `null` ise köylü otomatik iş gücüne GERİ DÖNER (kilit kalkar);
+  /// [JobRole.none] ise elle boşa alınır (otomatik de dokunmaz).
+  void _assignVillagerJob(VillagerEntity v, JobRole? role) {
+    v.assignedRole = role;
+    // Kilit kalkarken elindeki işi de bırak: aksi halde köylü "otomatik havuzda"
+    // görünür ama hâlâ eski rolde çalışır, sonraki sync'e kadar sayaçlar yalan söyler.
+    if (role == null) {
+      if (v.job != null) _releaseJob(v);
+    } else {
+      _applyPlayerAssignments();
+      // Âdete aykırıysa köy duysun — engellemez, yalnız tepki verir
+      // (bkz. scene_custom + systems/village_custom).
+      if (role != JobRole.none && VillageCustom.isAgainst(role, male: v.isMale)) {
+        _reactToCustomBreach(v, role);
+      }
+    }
+    _jobSyncCd = 0; // kadro dengesi bu tick yeniden kurulsun
+  }
+
   /// [role] için atanmış köylü sayısını [target]'a yaklaştır. Az ise boş uygun
   /// yetişkin ata ([matchType] varsa o mesleği tercih et — çoban/çiftçi/madenci
   /// gibi baz-meslek eşleşmesi), fazla ise bırak (önce çalışmayanı). Kadro
@@ -282,6 +387,9 @@ extension _SceneJobs on _VillageSceneState {
       });
       for (final v in assigned) {
         if (extra <= 0) break;
+        // Elle atanmışa DOKUNMA — oyuncu tek kereste kampına üç oduncu koyduysa
+        // bu bir hata değil, bir karar. Fazlalık sayısı hedefin üstünde kalır.
+        if (v.assignedRole != null) continue;
         _releaseJob(v);
         extra--;
       }
@@ -308,7 +416,10 @@ extension _SceneJobs on _VillageSceneState {
     if (job == null) return;
     switch (job.role) {
       case JobRole.builder:
-        if (job.claim is BuildOrder) (job.claim as BuildOrder).assigned = false;
+        if (job.claim is BuildOrder) {
+          final o = job.claim as BuildOrder;
+          if (o.crew > 0) o.crew--;
+        }
         if (job.claim is RoadOrder) (job.claim as RoadOrder).assigned = false;
       case JobRole.farmer:
         // Tuttuğu tile bayraklarını + kuyu slot'unu bırak (yoksa tarla
@@ -334,38 +445,92 @@ extension _SceneJobs on _VillageSceneState {
           (job.claim as TreeEntity).isBeingChopped = false;
           (job.claim as TreeEntity).chopPhase = -1;
         }
+      case JobRole.forager:
+        // Üstlendiği çalıyı SALIVER — yoksa o çalı kimsenin toplayamadığı
+        // sessiz bir ölü nokta olarak kalır.
+        if (job.claim is BerryBush) (job.claim as BerryBush).isBeingPicked = false;
       default:
         break;
     }
     v.job = null;
+    _setWorkPose(v, null); // işi bıraktı — iş duruşu/aleti de düşer
   }
 
   // ── YÜRÜTME (her frame) ─────────────────────────────────────────────────────
 
   void _tickJobs(double dt, Set<(int, int)> obstacles, Set<(int, int)> softObs) {
     final buildDt = dt * _fxBuilderMul;
+    // Şantiyede o an kaç el var — bu karede yeniden sayılır, kadro şartı
+    // (bkz. _runBuilder) bir önceki karenin sayısını okur. Kadro eksik kaldıkça
+    // sabır dolar; dolunca eldeki el tek başına başlar.
+    for (final o in _orders) {
+      o.workersAtSite = o.arrivals;
+      o.arrivals = 0;
+      if (o.crew < o.requiredWorkers) {
+        o.waited += dt;
+      } else {
+        o.waited = 0;
+      }
+    }
     for (final v in _villagers) {
       if (v.jobReassignCd > 0) v.jobReassignCd -= dt;
       if (!v.hasActiveJob) continue;
-      if (!_jobActiveNow(v)) continue;
+      if (!_jobActiveNow(v)) {
+        _setWorkPose(v, null); // paydos/gece/duraklama — iş duruşunu bırak
+        continue;
+      }
       final job = v.job!;
+      // ÂDET — köyün usulüne aykırı iş AĞIR ilerler (bkz. village_custom).
+      // Tek çarpan, tek yer: panelde yazan uyarı ile burada uygulanan yavaşlama
+      // aynı `judge()` çağrısından çıkar, iki liste yoktur.
+      final cm = VillageCustom.speedMul(job.role, male: v.isMale);
       switch (job.role) {
         case JobRole.builder:
-          _runBuilder(v, buildDt, obstacles);
+          _runBuilder(v, buildDt * cm, obstacles);
         case JobRole.farmer:
-          _runFarmer(v, dt * _fxFarmMul);
+          _runFarmer(v, dt * _fxFarmMul * cm);
         case JobRole.miner:
-          _runMiner(v, dt * _fxNpcSpeedMul);
+          _runMiner(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.fisher:
-          _runFisher(v, dt * _fxNpcSpeedMul);
+          _runFisher(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.florist:
-          _runFlorist(v, dt * _fxNpcSpeedMul);
+          _runFlorist(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.shepherd:
-          _runShepherd(v, dt * _fxNpcSpeedMul);
+          _runShepherd(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.woodcutter:
-          _runWoodcutter(v, dt * _fxNpcSpeedMul);
+          _runWoodcutter(v, dt * _fxNpcSpeedMul * cm);
+        case JobRole.forager:
+          _runForager(v, dt * _fxNpcSpeedMul * cm);
+        case JobRole.cook:
+          _runCook(v, dt * _fxNpcSpeedMul * cm);
         default:
           break;
+      }
+      // GÖVDE DİLİ — görev başında çalışan köylü ekranda da çalışsın (bkz.
+      // _setWorkPose). "Çalışıyor" sinyali rol-bağımsız: bina-işlerinde
+      // `job.working`, çiftçide durağan tarla eylemi bayrakları
+      // (`harvesting` ekim/biçme, `carryingWater` su taşıma/dökme). Yürürken/
+      // hedef ararken bunlar false → duruş temizlenir, köylü doğal yürür.
+      final working = job.working || job.harvesting || job.carryingWater;
+      if (working) {
+        // Eğilerek yapılan işler (ekim/biçme/su) STOOP; ritmik alet işleri
+        // (çekiç/kazma/balta/olta) LABOR. Çiftçi su taşırken elinde dolu kova
+        // görünür — mevcut prop çizimini yeniden kullanır (yeni sprite yok).
+        final (pose, prop) = switch (job.role) {
+          JobRole.farmer => (
+              ActPose.stoop,
+              job.carryingWater ? PropKind.bucketFull : PropKind.none
+            ),
+          JobRole.florist => (ActPose.stoop, PropKind.basket),
+          JobRole.shepherd => (ActPose.stoop, PropKind.none), // sağım için çömelir
+          JobRole.forager => (ActPose.stoop, PropKind.basket), // çalıdan sepete
+          JobRole.cook => (ActPose.stoop, PropKind.none),      // kazanı karıştırır
+          _ => (ActPose.labor, PropKind.none), // çekiç/kazma/balta/olta ritmi
+
+        };
+        _setWorkPose(v, pose, prop: prop);
+      } else {
+        _setWorkPose(v, null);
       }
       // Stuck-guard: çalışmıyorken (yürürken) yerinde donarsa (erişilemez
       // hedef → A* path yok → köylü "moving"de sabit) işi bırak, köye karışsın;
@@ -401,8 +566,12 @@ extension _SceneJobs on _VillageSceneState {
     var bo = job.claim is BuildOrder ? job.claim as BuildOrder : null;
     var ro = job.claim is RoadOrder ? job.claim as RoadOrder : null;
 
-    // Claim geçersizleştiyse (iptal/silme) bırak.
-    if (bo != null && bo.completed) { job.claim = null; bo = null; }
+    // Claim geçersizleştiyse (iptal/silme) bırak — ekip sayacı geri düşer.
+    if (bo != null && bo.completed) {
+      if (bo.crew > 0) bo.crew--;
+      job.claim = null;
+      bo = null;
+    }
     if (ro != null && ro.completed) { job.claim = null; ro = null; }
 
     // Claim yoksa bir sipariş kap (bina önce — büyük yatırım).
@@ -410,8 +579,10 @@ extension _SceneJobs on _VillageSceneState {
       job.working = false;
       job.progress = 0;
       for (final o in _orders) {
-        if (!o.assigned && !o.completed) {
-          o.assigned = true;
+        // Kadrosu dolmamış ilk şantiye — bina, gereken el sayısı başına
+        // toplanmadan yükselmez (bkz. BuildOrder.requiredWorkers).
+        if (!o.completed && o.crew < o.requiredWorkers) {
+          o.crew++;
           job.claim = o;
           bo = o;
           break;
@@ -472,23 +643,52 @@ extension _SceneJobs on _VillageSceneState {
     }
 
     // phase 1: inşa — per-frame süre + çekiç salınımı + ilerleme çubuğu.
-    job.working = true;
     v.idleTimer = 0.5; // wander'a düşmesin; yerinde çakılı kalsın
-    job.timer += dt;
-    job.phaseAnim = (job.phaseAnim + dt * 4.0) % (pi * 2);
-    final duration = bo != null
-        ? _buildDurationFor(bo.type)
-        : ro!.surface.buildDuration;
-    job.progress = (job.timer / duration).clamp(0.0, 1.0);
-    if (job.timer >= duration) {
-      if (bo != null) {
-        bo.completed = true;
-        _buildings.add(BuildingEntity(type: bo.type, col: bo.col, row: bo.row));
-      } else {
-        ro!.completed = true;
-        _roadSystem.add(
-            RoadTile(col: ro.col, row: ro.row, surface: ro.surface));
+
+    // BİNA YOL — malzemesiz, tek elle, eski akış.
+    if (bo == null) {
+      final r = ro!;
+      job.working = true;
+      job.timer += dt;
+      job.phaseAnim = (job.phaseAnim + dt * 4.0) % (pi * 2);
+      job.progress = (job.timer / r.surface.buildDuration).clamp(0.0, 1.0);
+      if (job.timer >= r.surface.buildDuration) {
+        r.completed = true;
+        _roadSystem.add(RoadTile(col: r.col, row: r.row, surface: r.surface));
+        job.claim = null;
+        job.phase = 0;
+        job.timer = 0;
+        job.working = false;
+        job.progress = 0;
       }
+      return;
+    }
+
+    // BİNA — KADRO ŞARTI: gereken el sayısı şantiyede toplanmadan gövde
+    // yükselmez. Gelen ilk usta bekler (çekiç sallamaz), ekip tamamlanınca
+    // inşaat eskisi gibi tek hızda aşağıdan yukarı çıkar.
+    bo.arrivals++; // bu karede şantiyedeyim (tick başında sayıya devredilir)
+    if (!bo.crewReady) {
+      job.working = false;
+      job.progress = bo.progress;
+      v.facingRight = (bo.col + 1.0) > v.gridX;
+      return;
+    }
+    job.working = true;
+    job.phaseAnim = (job.phaseAnim + dt * 4.0) % (pi * 2);
+    // İlerleme ŞANTİYEDE tutulur ve kare başına BİR kez yazılır — yoksa
+    // kadrodaki her el ayrı ayrı ilerletir, bina kişi sayısı kadar hızlı çıkardı.
+    if (bo.tickStamp != _time) {
+      bo.tickStamp = _time;
+      bo.progress =
+          (bo.progress + dt / _buildDurationFor(bo.type)).clamp(0.0, 1.0);
+    }
+    job.progress = bo.progress;
+    if (bo.progress >= 1.0) {
+      bo.completed = true;
+      AudioManager.instance.playSfx(Sfx.buildDone);
+      _buildings.add(BuildingEntity(type: bo.type, col: bo.col, row: bo.row));
+      if (bo.crew > 0) bo.crew--;
       job.claim = null;
       job.phase = 0;
       job.timer = 0;
@@ -782,8 +982,8 @@ extension _SceneJobs on _VillageSceneState {
       final tx = shore.$1.toDouble(), ty = shore.$2.toDouble();
       final dx = v.gridX - tx, dy = v.gridY - ty;
       if (dx * dx + dy * dy <= 0.4 * 0.4) {
-        v.gridX = tx;
-        v.gridY = ty;
+        // Konumu snap'leme — köylü zaten <0.4 tile'da; ani zıplama yerine
+        // bulunduğu yerde durur (renderX zaten hedefte). Bakış hedef kareye.
         v.state = VillagerState.idle;
         // Suya bak.
         final sc = tx.round(), sr = ty.round();
@@ -902,7 +1102,7 @@ extension _SceneJobs on _VillageSceneState {
       DecorEntity? best;
       double bestD = double.infinity;
       for (final d in _decor) {
-        if (!_isFlowerDecor(d.kind)) continue;
+        if (d.crushed || !_isFlowerDecor(d.kind)) continue;
         final dx = d.col + 0.5 - ox, dy = d.row + 0.5 - oy;
         final rr = dx * dx + dy * dy;
         if (rr > r2) continue;
@@ -919,8 +1119,7 @@ extension _SceneJobs on _VillageSceneState {
     if (job.phase == 0) {
       final dx = v.gridX - tx, dy = v.gridY - ty;
       if (dx * dx + dy * dy <= 0.35 * 0.35) {
-        v.gridX = tx;
-        v.gridY = ty;
+        // Konumu snap'leme — zaten <0.35 tile'da; ani zıplama yok.
         v.state = VillagerState.idle;
         v.facingRight = flower.col >= v.gridX;
         job.phase = 1;

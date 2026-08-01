@@ -41,6 +41,9 @@ extension _SceneDivan on _VillageSceneState {
           // ⚖ DİVAN
           agenda: _divanAgenda(),
           houses: _houses.snapshot(),
+          seats: _divanHeads(),
+          houseActionsFor: _houseActionEntries,
+          massSeizure: _massSeizureEntry(),
           laws: _divanLaws(),
           marks: _divanMarks(),
           crafts: _divanCrafts(),
@@ -63,6 +66,8 @@ extension _SceneDivan on _VillageSceneState {
           regimeRule: _regimeRule,
           unrest: _unrest,
           swornRegime: _oathRegime,
+          regimeRot: _regimeRot,
+          faithEffect: _faithEffect,
           onSwearOath: _oathAvailable ? _swearOath : null,
           onRepealLaw: _repealLaw,
           // 👥 NÜFUS
@@ -134,26 +139,107 @@ extension _SceneDivan on _VillageSceneState {
   /// Hane nabzı rozetindeki sayaç: bekleyen + mayalanan mesele toplamı.
   int _divanAgendaCount() => _divanAgenda().length;
 
-  /// KALICI defter mührü — köy içi işlerin her an görünür TEK kapısı (sol üst,
-  /// HUD şeridinin altında). Bir köylü/bina seçilince bile kaybolmaz.
-  /// PERF: gündem sayımı köylü/hane/tarla tarar → 60fps `_frame` yerine ~10Hz
-  /// `_hudFrame`'e bağlı.
-  Widget buildLedgerSeal() {
-    return Positioned(
-      left: 14,
-      top: 92,
-      child: RepaintBoundary(
-        child: ListenableBuilder(
-          listenable: _hudFrame,
-          builder: (_, _) => LedgerSeal(
-            onTap: _openLedger,
-            agendaCount: _divanAgendaCount(),
-            pendingPetition: _pendingPetition != null,
-            bookOpen: _inkDryRemaining() <= 0,
-          ),
-        ),
-      ),
-    );
+  // ── Meclis masası: hanelerin GERÇEK reisleri ─────────────────────────────────
+
+  /// Her hanenin (soyun) reisini seçer — masada oturacak gerçek köylüler.
+  /// Reis kuralı ve determinizmi [headOfHouse] içinde (regresyon testi var).
+  /// RASTGELE DEĞİL: masada oyuncunun tanıdığı yüzler oturur. En nüfuzlu haneler
+  /// önce (baskın hane masanın ortasına düşer); masa en çok 7 reis alır.
+  List<DivanSeat> _divanHeads() {
+    final byHouse = <String, List<VillagerEntity>>{};
+    for (final v in _villagers) {
+      if (v.isDying || v.surname.isEmpty) continue;
+      (byHouse[v.surname] ??= []).add(v);
+    }
+    if (byHouse.isEmpty) return const [];
+
+    // Nüfuz payına göre sırala (baskın hane ortada olsun); snapshot'tan oku.
+    final snaps = {for (final s in _houses.snapshot()) s.surname: s};
+    final entries = byHouse.entries.toList()
+      ..sort((a, b) {
+        final sa = snaps[a.key]?.swayShare ?? 0;
+        final sb = snaps[b.key]?.swayShare ?? 0;
+        return sb.compareTo(sa);
+      });
+
+    const maxSeats = 7;
+    return [
+      for (final e in entries.take(maxSeats))
+        () {
+          final head = headOfHouse(e.value)!;
+          final s = snaps[e.key];
+          return DivanSeat(
+            visual: head.visual,
+            type: head.type,
+            stage: head.lifeStage,
+            name: head.name,
+            surname: e.key,
+            mood: s?.mood ?? 0.55,
+            ascendant: s?.ascendant ?? false,
+            members: e.value.length,
+            swayShare: s?.swayShare ?? 0,
+          );
+        }(),
+    ];
+  }
+
+  /// Masadaki reise dokununca açılan kartın satırları. Kural ve bedeller SAF
+  /// katmandan (`house_action.dart`) gelir; burada yalnız okunur metne çevrilir.
+  /// Kapalı eylem GİZLENMEZ — gerekçesiyle sönük durur.
+  List<HouseActionEntry> _houseActionEntries(String surname) {
+    final out = <HouseActionEntry>[];
+    for (final kind in HouseActionKind.values) {
+      final gate = _houseActionGate(kind, surname);
+      final o = _houseActionOutcome(kind, surname);
+      out.add(HouseActionEntry(
+        icon: kind.icon,
+        label: kind.label,
+        detail: gate.open ? _houseActionBlurb(kind) : gate.reason!,
+        effects: gate.open ? _houseActionEffects(kind, o) : const [],
+        enabled: gate.open,
+        onTap: gate.open ? () => _applyHouseAction(kind, surname) : null,
+      ));
+    }
+    return out;
+  }
+
+  /// Eylemin bir cümlelik karşılığı — ne yaptığını oyuncu okusun.
+  String _houseActionBlurb(HouseActionKind kind) => switch (kind) {
+        HouseActionKind.grant =>
+          'Hane borçlanır ve güçlenir; ötekiler kayırmayı görür.',
+        HouseActionKind.punish =>
+          'Kan dökmeden hizaya getirir; köy sessizce ürperir.',
+        HouseActionKind.seize =>
+          'Ambarı mühürlersin. Kese dolar, meşruiyet azalır.',
+        HouseActionKind.betroth => _compassPos.authority >= 0.15
+            ? 'İki haneyi zorla kanla bağlarsın; kimse hayır diyemez.'
+            : 'İki haneye nikâh önerirsin; gönül rızası aranır.',
+        HouseActionKind.exile =>
+          'Hanenin reisini yola vurursun. Soy başsız kalır.',
+        HouseActionKind.scheme =>
+          'Nüfuzlarını sessizce kırarsın — ifşa olursan bedeli ağır.',
+      };
+
+  /// Sonuç rozetleri — oyuncu neyin karşılığında ne verdiğini ÖNCEDEN görsün.
+  List<String> _houseActionEffects(HouseActionKind kind, HouseActionOutcome o) {
+    String sign(double v) => v >= 0 ? '+' : '−';
+    final out = <String>[];
+    if (o.gold != 0) out.add('${o.gold > 0 ? '+' : '−'}${o.gold.abs()} altın');
+    if (o.food != 0) out.add('${o.food > 0 ? '+' : '−'}${o.food.abs()} erzak');
+    if (o.targetMood != 0) {
+      out.add('hâl ${sign(o.targetMood)}${o.targetMood.abs().toStringAsFixed(2)}');
+    }
+    if (o.targetSway != 0) {
+      out.add('nüfuz ${sign(o.targetSway)}${o.targetSway.abs().toStringAsFixed(1)}');
+    }
+    if (o.otherMood < 0) out.add('öteki haneler ${sign(o.otherMood)}');
+    if (o.unrest > 0) out.add('huzursuzluk +${o.unrest.toStringAsFixed(2)}');
+    if (kind == HouseActionKind.scheme) {
+      final r = schemeExposureChance(
+          authority: _compassPos.authority, targetSwayShare: 0.3);
+      out.add('ifşa riski %${(r * 100).round()}');
+    }
+    return out;
   }
 
   // ── Gündem türetme ──────────────────────────────────────────────────────────
@@ -272,7 +358,7 @@ extension _SceneDivan on _VillageSceneState {
     }
 
     // Ambar inceliyor — kıtlık baskısı (kış erzak / hasat dilekçelerinin zemini).
-    final mouths = _villagers.length + _farmers.length;
+    final mouths = _villagers.length;
     if (mouths > 0 && _stockpile.food < mouths * 2) {
       brewing.add(DivanMatter(
         icon: '🥖',
@@ -397,7 +483,9 @@ extension _SceneDivan on _VillageSceneState {
       'nizam.registry': DivanFact('📖', 'Her hane deftere yazıldı', rust),
       'nizam.labor': DivanFact('⛓', 'Suçlu taş kırıyor', rust),
       'nizam.exile': DivanFact('🚪', 'Sürgün yolu açıldı', rust),
+      'nizam.bloodPrice': DivanFact('🩸', 'Kanın bedeli keseden ödeniyor', rust),
       'nizam.sole': DivanFact('⚑', 'Tek söz sende', rust),
+      kMassSeizureFlag: DivanFact('⚑', 'Mülkiyet kaldırıldı', rust),
       'dergah.tithe': DivanFact('🍞', 'Öşür toplanıyor', accent),
       'dergah.penance': DivanFact('🙏', 'Günah meydanda söyleniyor', accent),
       'dergah.oneFaith': DivanFact('⚑', 'Köy bir dergâh oldu', accent),

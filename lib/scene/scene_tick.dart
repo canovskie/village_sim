@@ -32,7 +32,9 @@ extension _SceneTick on _VillageSceneState {
     // CAPTURE: sim'i durduran modalları bastır — harness'te onları kapatacak
     // oyuncu yok, açılan ilk sinematik/olay simülasyonu sonsuza dek dondurur
     // (iş döngüsü telemetrisi bu yüzden bir kez tamamen "donuk" okundu).
-    if (kCaptureShowcase) {
+    // Prova harness'i de (kProbeOn) bunları bastırır — köyü karar bekleyen bir
+    // modal sonsuza dek dondurmasın; harness'te tıklayacak oyuncu yok.
+    if (kCaptureShowcase || kProbeOn) {
       _activeCutscene = null;
       _pendingChoice = null;
       _imperialDemand = null;
@@ -55,7 +57,8 @@ extension _SceneTick on _VillageSceneState {
             // Mühlet dolup zorla açılan dilekçe — köy yanıt bekler, sim durur.
             (_petitionForced && _petitionModalOpen))
         ? 0.0
-        : _timeScale * _devSpeedBoost;
+        : _timeScale *
+            (kDevSpeedBoostOverride > 0 ? kDevSpeedBoostOverride : _devSpeedBoost);
     // dt clamp scaling: boost 1x ise 50ms hard cap (spiral koruma — render
     // yavaşlasa bile sim sıçramaz). Boost > 1.5x ise kullanıcı bilerek hızlı
     // sim istiyor, clamp gevşek (boost × 0.05) → hızlandırma çalışır.
@@ -81,8 +84,9 @@ extension _SceneTick on _VillageSceneState {
     _tickPostMotion(dt);
     _tickDerivedAndMeta(dt);
     _spontaneousLife(dt);         // sürekli baseline canlılık (rastgele refleks)
-    _tickPersonalMoments(dt);     // kişisel anlar (yıldönümü kutlamaları)
+    _tickPersonalMoments(dt);     // kişisel anlar (yıldönümü + çocuk→genç büyüme)
     _tickCallingMoments(dt);      // çağrısını buldu (genç→yetişkin meslek keşfi)
+    _tickFriendshipMoments(dt);   // dostluk (karşılıklı kanaat → can dostu)
     _tickCraftDiscovery(dt);      // birikim → yapı zanaatı köye doğar (marangozluk/taş)
     _tickComfort(dt);             // konfor talebi (surplus → şölen + moral)
     _frame.value = _frame.value + 1;
@@ -93,6 +97,13 @@ extension _SceneTick on _VillageSceneState {
   void _advanceWorldClock(double dt) {
     _time += dt;
     _cycle.update(dt);
+    // Harness: vakit dondurulduysa saati geri sabitle (bkz. kCaptureTimeOfDay).
+    // Gün sarma kontrolünden ÖNCE uygulanır, yoksa donmuş gece her karede
+    // "yeni gün" sanılıp _dayCount uçardı.
+    if (kCaptureTimeOfDay >= 0) {
+      _cycle.timeOfDay = kCaptureTimeOfDay;
+      _lastTimeOfDay = kCaptureTimeOfDay;
+    }
     // Gün sayacı — timeOfDay sarınca (örn. 0.98 → 0.02) yeni gün.
     if (_cycle.timeOfDay < _lastTimeOfDay) {
       _dayCount++;
@@ -185,13 +196,7 @@ extension _SceneTick on _VillageSceneState {
     final exemptElders = _policies.eldersExemptFromFood
         ? _villagers.where((v) => v.lifeStage == LifeStage.elder).length
         : 0;
-    final mouths =
-        _villagers.length - exemptElders +
-        _farmers.length +
-        _woodcutters.length +
-        _miners.length +
-        _fishers.length +
-        _builders.length;
+    final mouths = _villagers.length - exemptElders;
     if (!_godMode && mouths > 0) {
       // Kimlik bonusu: Köklü Yuva tutumlu sofra kurar (_identityFoodMul=0.85).
       _foodHunger += dt *
@@ -199,15 +204,27 @@ extension _SceneTick on _VillageSceneState {
           _identityFoodMul *
           (kFoodPerVillagerPerDay / kGameDaySeconds);
       if (_foodHunger >= 1.0) {
-        final eat = _foodHunger.floor();
+        var eat = _foodHunger.floor();
         _foodHunger -= eat;
-        _stockpile.food = (_stockpile.food - eat).clamp(0, 1 << 30);
+        // SICAK YEMEK ÖNCE — ocakta pişen yemek ham yiyeceğin yerine geçer.
+        // Aşçı 1 ham yiyecekten 2 yemek çıkardığı için köy, aynı hasadı
+        // pişirdiğinde iki katı süre idare eder. Erken oyunda oyuncunun
+        // "birini aşçı yapayım" kararının somut karşılığı bu satır.
+        if (_cookedMeals > 0 && eat > 0) {
+          final fromMeals = eat < _cookedMeals ? eat : _cookedMeals;
+          _cookedMeals -= fromMeals;
+          eat -= fromMeals;
+        }
+        if (eat > 0) {
+          _stockpile.food = (_stockpile.food - eat).clamp(0, 1 << 30);
+        }
       }
     }
-    // Açlık 0..1: stok kStarveRampFood altına inince devreye girer (moral düşer).
-    return _stockpile.food >= kStarveRampFood
+    // Açlık 0..1: stok [_starveRamp] altına inince devreye girer (moral düşer).
+    // Eşik sabit değil — Ortak Ambar fermanı onu yarıya indirir.
+    return _stockpile.food >= _starveRamp
         ? 0.0
-        : (1.0 - _stockpile.food / kStarveRampFood);
+        : (1.0 - _stockpile.food / _starveRamp);
   }
 
   // ── Olaylar & efektler ────────────────────────────────────────────────────
@@ -279,13 +296,12 @@ extension _SceneTick on _VillageSceneState {
     _morale += (moraleTarget - _morale) * (dt * kMoraleEaseRate).clamp(0.0, 1.0);
     _morale = _morale.clamp(0.0, 1.0);
 
-    // Üretim, ticaret, nüfus büyümesi, stok kapasitesi. Moral pasif geçer.
+    // Konut suyu, pazar geliri, stok kapasitesi, amenite morali. Köy morali
+    // (bireysel ortalama) pasif geçer.
     _stats = updateBuildings(
       dt: dt,
       buildings: _buildings,
       stockpile: _stockpile,
-      freeHousingSlots: _freeHousingSlots(),
-      onSpawnVillager: _spawnGrownVillager,
       enforceCapacity: !_godMode,
       morale: _morale,
     );
@@ -396,21 +412,19 @@ extension _SceneTick on _VillageSceneState {
     final dead = <(VillagerEntity, int)>[];
     final removed = <VillagerEntity>[];
     _villagers.removeWhere((v) {
-      if (!v.deathFinished) return false;
+      // Ölüm animasyonu bitti VEYA sürgün kenara vardı (leftVillage) → çıkar.
+      // Sürgün cenaze ALMAZ (deathHoldsFuneral false), ama zanaat kaybı + küslük
+      // temizliği (aşağıda) ikisi için de geçerli.
+      if (!v.deathFinished && !v.leftVillage) return false;
       final orphans = v.children.where((c) => c.parents.isEmpty).length;
       if (v.deathHoldsFuneral) dead.add((v, orphans));
       removed.add(v);
       return true;
     });
-    // Ölenleri başkalarının sosyal belleğinden temizle (küslük + kan davası) —
-    // stale referans kalmasın. Kan davası yaşayan akrabalar arasında sürer.
-    if (removed.isNotEmpty) {
-      for (final v in _villagers) {
-        for (final r in removed) {
-          v.grudges.remove(r);
-          v.bloodEnemies.remove(r);
-        }
-      }
+    // Ölenlere kalan tüm sahne referanslarını kopar (sosyal bellek + seçim/
+    // dilekçe/düğün işaretçileri) — tek kapı `_forgetVillager`.
+    for (final r in removed) {
+      _forgetVillager(r);
     }
     for (final (v, orphans) in dead) {
       _holdFuneral(v, orphans: orphans);
@@ -435,6 +449,7 @@ extension _SceneTick on _VillageSceneState {
     }
     _tickMigration(dt);
     _tickNeighborGreet(dt);
+    _tickChildPlay(dt);
     _tickFamilyReunion(dt);
     _tickSharedHarvest(dt);
     _tickSageEmergence(dt);
@@ -528,7 +543,7 @@ extension _SceneTick on _VillageSceneState {
       final r2 = meta.effectRadius * meta.effectRadius;
       int flowers = 0;
       for (final d in _decor) {
-        if (!_isFlowerDecor(d.kind)) continue;
+        if (d.crushed || !_isFlowerDecor(d.kind)) continue;
         final dx = (d.col + 0.5) - cx;
         final dy = (d.row + 0.5) - cy;
         if (dx * dx + dy * dy <= r2) flowers++;
@@ -570,12 +585,6 @@ extension _SceneTick on _VillageSceneState {
     applySeparation(
       dt: dt,
       villagers: _villagers,
-      farmers: _farmers,
-      woodcutters: _woodcutters,
-      miners: _miners,
-      fishers: _fishers,
-      builders: _builders,
-      shepherds: _shepherds,
       cows: _cows,
       // _obstacles: su + maden + solid bina. Separation NPC'leri buraya
       // itmesin (eski "waterTiles" param adı geçici; pratikte tüm engeller).
@@ -588,42 +597,13 @@ extension _SceneTick on _VillageSceneState {
     for (final v in _villagers) {
       v.smoothMotion(dt);
     }
-    for (final f in _farmers) {
-      f.smoothMotion(dt);
-    }
-    for (final w in _woodcutters) {
-      w.smoothMotion(dt);
-    }
-    for (final m in _miners) {
-      m.smoothMotion(dt);
-    }
-    for (final b in _builders) {
-      b.smoothMotion(dt);
-    }
-    for (final f in _fishers) {
-      f.smoothMotion(dt);
-    }
-    for (final fl in _florists) {
-      fl.smoothMotion(dt);
-    }
-    for (final sh in _shepherds) {
-      sh.smoothMotion(dt);
-    }
 
-    // Meşale fade — tüm WorkerEntity gece dışarıda dolaşırken torch yansın.
-    // dlFade/rainFade tek yerden hesaplanır (8 ayrı list de aynı sonuç verir);
-    // tek pass ile her worker'a uygulanır → branch + loop overhead azalır.
+    // Meşale fade — köylüler gece dışarıda dolaşırken torch yansın.
     final dl = _cycle.dayLight;
     final rain = _cycle.rainIntensity;
-    void doTorch(WorkerEntity e) => e.tickTorch(dt, dl, rain);
-    _villagers.forEach(doTorch);
-    _farmers.forEach(doTorch);
-    _woodcutters.forEach(doTorch);
-    _miners.forEach(doTorch);
-    _builders.forEach(doTorch);
-    _fishers.forEach(doTorch);
-    _florists.forEach(doTorch);
-    _shepherds.forEach(doTorch);
+    for (final v in _villagers) {
+      v.tickTorch(dt, dl, rain);
+    }
 
     // Ambient kuş sürüleri — gündüzleri 35-90s aralıkla bir kenardan girer,
     // karşıya uçar, off-grid olunca temizlenir. Etkileşim yok, pure atmosfer.
@@ -656,11 +636,51 @@ extension _SceneTick on _VillageSceneState {
       r.tickRegrow(dt, kReedRegrowSeconds);
     }
 
+    // Böğürtlen çalıları yeniden meyvelenir (kışın durur) — bkz. scene_forage.
+    _tickBerryRegrow(dt);
+
     // Arı sürüleri — her kovana bağlı, kovan etrafında orbit. Kovan yaşadığı
     // sürece yaşar (spawn/teardown completion hook + rebuild'de). Pure atmosfer.
     for (final sw in _beeSwarms) {
       sw.update(dt);
     }
+
+    _tickDecorCrush(dt); // üstüne basılan çiçek ezilip solar → popülasyon kendini seyreltir
+  }
+
+  /// Çiçek ezilme döngüsü — köylü/işçi bir çiçeğin üstünden geçince çiçek
+  /// görünür biçimde yassılaşıp solar (crush animasyonu), bitince listeden
+  /// çıkar. Çiçek popülasyonu böylece köyün yaşamıyla doğal olarak seyrelir;
+  /// florist + çiçek bahçesi yeniden serper → denge. Sadece çiçekler ezilir
+  /// (mantar/çalı/kütük değil). Hareket sonrası (post-motion) çalışır ki
+  /// köylü pozisyonları güncel olsun.
+  void _tickDecorCrush(double dt) {
+    if (_decor.isEmpty) return;
+
+    // Yeni ezilmeleri tetikle — her sağlam çiçeği tüm hareket eden köylülere
+    // karşı yakınlık testinden geçir (ilk isabet yeter → early break).
+    const double r2 = 0.40 * 0.40; // ~yarım tile: doğrudan basış
+    for (final d in _decor) {
+      if (d.crushed || !_isFlowerDecor(d.kind)) continue;
+      if (_moverOnTile(d.col + 0.5, d.row + 0.5, r2)) d.startCrush();
+    }
+
+    // Animasyonu ilerlet + biten çiçekleri temizle (tickCrush true dönerse bitti).
+    _decor.removeWhere((d) => d.tickCrush(dt));
+  }
+
+  /// Ekranda hareket eden herhangi bir köylü/işçi (cx,cy) merkezine r2
+  /// (kare mesafe) içinde mi — çiçek ezilme tetiği. Tüm meslek listelerini
+  /// tarar; ilk isabette döner.
+  bool _moverOnTile(double cx, double cy, double r2) {
+    bool near(double gx, double gy) {
+      final dx = gx - cx;
+      final dy = gy - cy;
+      return dx * dx + dy * dy <= r2;
+    }
+
+    for (final v in _villagers) { if (near(v.gridX, v.gridY)) return true; }
+    return false;
   }
 
   /// Ambient göktaşı yağmuru gösterisini başlatır — gökyüzü fx + uyumayan
@@ -794,12 +814,20 @@ extension _SceneTick on _VillageSceneState {
     _tickConflicts(dt);
     // Suç — sinsi yaklaşma / eylem / kaçış + muhafız müdahalesi (aynı anda tek).
     _tickCrime(dt);
+    // Gömülü zulalar — iz kapanır, üstüne basan bulur, mal ambara döner.
+    _tickLoot(dt);
+    // Kürek cezası — mahkûmları ocağa koşar, günlük taş ürettirir, salıverir.
+    _tickConvictLabor(dt);
+    // Hastalık & kırılganlık — nadir hastalık (çoğu iyileşir), yaşlı/kış ölüm riski.
+    _tickIllness(dt);
     // İmparatorluk vergi heyeti — koşullu (zengin köy dikkat çeker).
     _tickImperial(dt);
     _socialScanTimer += dt;
     if (_socialScanTimer >= _VillageSceneState._kSocialScanInterval) {
       _socialScanTimer = 0;
-      _tryStartChats();
+      // Sohbet/müzik/dans taraması KALDIRILDI — artık YALNIZLIK dürtüsünden
+      // doğan bir teklif ([_bidSocial], scene_mind). Eskiden bu tarama boştaki
+      // herkese zar atıyordu; şimdi konuşma ihtiyacı olan konuşuyor.
     }
     // Saz yatağı döngüsü — evsizler sazlık biçip ateş etrafına yatak kurar.
     // Rutinden ÖNCE: yatak peşindeki evsizi sahiplenip rutinden korur.
@@ -809,6 +837,25 @@ extension _SceneTick on _VillageSceneState {
     _tickLawGates(dt);
     // Rejim — huzursuzluk birikimi + rejime özgü kriz (kimliğin bedeli).
     _tickRegime(dt);
+    // KÖYÜN HÂLİ — yasa/rejim/mevsim/huzursuzluk tek davranış tablosuna iner,
+    // tablo köylülere işlenir. Rejimden SONRA gelmeli: aynı karede biriken
+    // huzursuzluk aynı karede sokağa yansısın.
+    _tickPressure(dt);
+    // ALGI — hafızalar söner, ölüm tanıklıkları yakalanır. Akıldan ÖNCE:
+    // gördüğü şey aynı karede kararına girsin.
+    _tickPerception(dt);
+    // KÖYLÜNÜN AKLI — dürtüler beslenir, teklifler tartılır, niyet seçilir.
+    // Basınçtan SONRA, yürütücü sistemlerden ÖNCE: kararı aynı karede
+    // yürütecek sistemler (iş/saz/suç) hemen görsün.
+    _tickMind(dt);
+    // İHBAR — muhafıza koşan tanık yolunu tamamlar.
+    _tickInforming(dt);
+    // EYLEMLER — varış noktalarındaki mikro-sahneler (kova doldur, sepetle
+    // dön, maşrapa kaldır). Akıldan SONRA: aynı karede kurulan sahne hemen
+    // ilk adımını atsın.
+    _tickActs(dt);
+    // PROVA — harness açıksa köyün davranış özetini periyodik üret.
+    if (kProbeOn) _tickProbe(dt);
     // Kilometre taşları — nüfus eşikleri (bir kez tatlı bildirim).
     _tickAchievements();
     // Bireysel yaşam öyküsü — evre geçişlerini (reşit oluş/yaşlanma) yakala.
@@ -822,6 +869,8 @@ extension _SceneTick on _VillageSceneState {
     _tickPetitions(dt);
     // Düğün yaşam döngüsü — gerçek çift kur yapar → çifte bağlı düğün dilekçesi.
     _tickWedding(dt);
+    _tickHousePressure(dt);
+    _tickHouseIntrigue(dt); // haneler karşılık verir (ittifak/gizleme/kışkırtma) // hane baskı sayacı sönümlenir (eylem bedeli normale döner)
     // Zümre dengesi — moral tabana süzülür + küskün zümre diegetik somurtma.
     _tickEstates(dt);
 
@@ -851,10 +900,34 @@ extension _SceneTick on _VillageSceneState {
       }
     }
 
+    // ── Olay vinyeti ────────────────────────────────────────────────────────
+    // Adımları _tickActs yürütür; burası sahnenin ÖMRÜNÜ ve kadronun
+    // salıverilmesini bekler (ceremony önceliği başka türlü düşmez).
+    _tickVignette(dt);
+
     // ── Kamera takibi ───────────────────────────────────────────────────────
     // Köylü kartından "Takip et" açılırsa kamera her tick NPC merkezine
     // yumuşak çekilir. NPC eve girince/uyuyunca/silinince takip otomatik düşer.
     _tickCameraFollow(dt);
+    // "İzle" — olay vinyetinin odağına yumuşak kayış (takipten AYRI kanal).
+    _tickWatchCamera(dt);
+  }
+
+  /// İZLE KAMERASI — vinyetin odağını kadraja alır.
+  ///
+  /// Takipten (`_followedVillager`) bilerek ayrı: takip bir GÖVDEYE demirler ve
+  /// süresizdir; izle bir SAHNEYE bakar ve kendiliğinden bırakır. Zoom'a
+  /// dokunmaz — oyuncunun kurduğu yakınlık onun kararıdır.
+  void _tickWatchCamera(double dt) {
+    if (_watchLeft <= 0) return;
+    _watchLeft -= dt;
+    if (_viewSize.width <= 0 || _viewSize.height <= 0) return;
+    final targetX = -(_watchX - _watchY) * kTileW / 2;
+    final targetY = _viewSize.height * 0.22 - (_watchX + _watchY) * kTileH / 2;
+    // Takipten daha yumuşak (3.0 vs 4.0): sahneye "atlamak" değil, kaymak.
+    final lerpT = (1.0 - 1.0 / (1.0 + 3.0 * dt)).clamp(0.0, 1.0);
+    _camera = Offset.lerp(_camera, Offset(targetX, targetY), lerpT) ?? _camera;
+    _clampCamera(_viewSize);
   }
 
   void _tickCameraFollow(double dt) {
@@ -881,12 +954,30 @@ extension _SceneTick on _VillageSceneState {
   // yetişkin erkek (yaşlı değil, kan bağı YOK — parent/child/sibling değil).
   void _tickReproduction() {
     if (_godMode == false && _villagers.isEmpty) return;
+
+    // PROVA: harness doğum yolunu zorluyorsa yatak + sayaç kapılarını bu tarama
+    // boyunca atla (bkz. [kProbeForceBirth]). Tek tüketimlik.
+    final forced = kProbeForceBirth;
+    if (forced) {
+      kProbeForceBirth = false;
+      for (final v in _villagers) {
+        if (!v.isMale && v.lifeStage == LifeStage.adult) v.fertilityDays = 0;
+      }
+    }
+
     // Köyde boş yatak var mı? Yoksa hiç doğum olmaz.
-    if (_freeHousingSlots() <= 0) return;
+    if (!forced && _freeHousingSlots() <= 0) return;
 
     // Ev → adult erkekler index (couple search için tek pass). Eski O(n²)
     // versiyon her hazır mother için tüm villager'ı tarıyordu.
     Map<Object, List<VillagerEntity>>? maleByHome;
+
+    // Doğanları BİRİKTİR, döngüden SONRA doğur — `_spawnBabyFromParents`
+    // `_villagers.add` yapıyor; liste üstünde iterasyon sürerken eklemek
+    // ConcurrentModificationError atar (hayvan tarafında aynı bug düzeltilmiş,
+    // bkz. `_tickAnimalReproduction`; köylü tarafı atlanmıştı → HER doğum
+    // tick'in geri kalanını -iş dağıtımı, tarla büyümesi, göç- düşürüyordu).
+    final pending = <(VillagerEntity, VillagerEntity)>[];
 
     // Mevcut adult kadınlar üzerinden geçiyoruz. Bir tick'te birden fazla
     // doğum mümkün ama her doğum housing slot tüketir → kapasite zinciri
@@ -936,14 +1027,21 @@ extension _SceneTick on _VillageSceneState {
         continue;
       }
 
-      // Free housing check tekrar (önceki doğumlar tüketmiş olabilir)
-      if (_freeHousingSlots() <= 0) return;
+      // Free housing check tekrar — bu tick'te SIRAYA GİREN doğumlar da yer
+      // tüketir. (`_freeHousingSlots` `b.occupants`'ı okur, o da yalnız tick
+      // başında tazelenir → `pending` düşülmezse aynı boş yatağa iki bebek
+      // doğardı. Eskiden de öyleydi; kuyruk bunu görünür kıldı.)
+      if (!forced && _freeHousingSlots() - pending.length <= 0) break;
 
-      _spawnBabyFromParents(mother, father);
+      pending.add((mother, father));
       // Post-partum cooldown: aile teşviki açıksa yarıya iner.
       final base = _policies.familyEncouragement ? 2.5 : 5.0;
       final span = _policies.familyEncouragement ? 1.5 : 4.0;
       mother.fertilityDays = base + _rng.nextDouble() * span;
+    }
+
+    for (final (mother, father) in pending) {
+      _spawnBabyFromParents(mother, father);
     }
   }
 
@@ -972,6 +1070,11 @@ extension _SceneTick on _VillageSceneState {
       if (a.isMale && a.isAdult) hasMale[key] = true;
     }
 
+    // Doğanları BİRİKTİR, döngüden SONRA ekle. `_cows` üstünde iterasyon
+    // yaparken `_cows.add` çağırmak ConcurrentModificationError atar —
+    // hızlandırılmış simülasyonda (birden çok doğum aynı tick'te) düzenli
+    // olarak çöktürüyordu (prova testi yakaladı).
+    final newborns = <AnimalEntity>[];
     for (final mother in _cows) {
       if (mother.isMale || mother.isDying) continue;
       if (mother.fertilityDays.isNaN || mother.fertilityDays > 0) continue;
@@ -992,7 +1095,7 @@ extension _SceneTick on _VillageSceneState {
       // Yavru doğar — annenin yanında, ageDays=0 (yavru evresi).
       final jx = (_rng.nextDouble() - 0.5) * 0.5;
       final jy = (_rng.nextDouble() - 0.5) * 0.5;
-      _cows.add(AnimalEntity(
+      newborns.add(AnimalEntity(
         kind: mother.kind,
         barnCol: mother.barnCol,
         barnRow: mother.barnRow,
@@ -1009,6 +1112,7 @@ extension _SceneTick on _VillageSceneState {
       final base = _policies.familyEncouragement ? 3.0 : 5.0;
       mother.fertilityDays = base + _rng.nextDouble() * 4.0;
     }
+    _cows.addAll(newborns);
   }
 
   // ── Yumurta döngüsü ─────────────────────────────────────────────────────────
@@ -1113,6 +1217,12 @@ extension _SceneTick on _VillageSceneState {
   /// gerekir. Timer 3-6 oyun günü randomize, spawn olunca yeniden roll.
   /// Policy kapalıyken timer dondurulur.
   void _tickMigration(double dt) {
+    // DIŞARIYA NİKÂH FERMANI — açık kapıdan bağımsız, kendi yavaş kanalı.
+    // Açık Kapı rastgele bir yabancı getirir; bu ferman YALNIZ kalmış birine eş
+    // getirir ve gelen kendi adıyla yeni bir hane kurar (bkz.
+    // _spawnMarriageMigrant). İki kanal ayrı çünkü iki farklı şey vaat ediyorlar.
+    _tickMarriageMigration(dt);
+
     if (!_policies.hospitality) {
       _migrationTimerSec = 0; // kapalıyken sıfırla, yeniden açılınca fresh roll
       return;
@@ -1131,6 +1241,25 @@ extension _SceneTick on _VillageSceneState {
     _migrationTimerSec = (3.0 + _rng.nextDouble() * 3.0) * kGameDaySeconds;
   }
 
+  /// Nikâh göçü — Açık Kapı'dan belirgin YAVAŞ (5-9 gün). Eş bulmak bir akın
+  /// değil, tek tek olan bir şey; ferman köyü göçmenle doldurmasın.
+  /// Uygun yalnız yoksa denemeden bekler (boşa timer yakmaz).
+  void _tickMarriageMigration(double dt) {
+    if (!_policies.outsideMarriage) {
+      _marriageMigrationSec = 0;
+      return;
+    }
+    if (_marriageMigrationSec <= 0) {
+      _marriageMigrationSec = (5.0 + _rng.nextDouble() * 4.0) * kGameDaySeconds;
+    }
+    _marriageMigrationSec -= dt;
+    if (_marriageMigrationSec > 0) return;
+    // Denedi; olmadıysa kısa retry (yalnız biri sonra ortaya çıkabilir).
+    _marriageMigrationSec = _spawnMarriageMigrant()
+        ? (5.0 + _rng.nextDouble() * 4.0) * kGameDaySeconds
+        : 1.0 * kGameDaySeconds;
+  }
+
   // ── Komşuluk: NPC'ler birbirine selam verir ──────────────────────────────
   // 1.2s aralıkla poll; her villager için yakındaki bir uygun komşu varsa
   // %25 ihtimal selam (👋 chat bubble + glance). Per-villager greet cooldown
@@ -1138,7 +1267,10 @@ extension _SceneTick on _VillageSceneState {
   // Spatial hash (2-tile bucket): O(n²) yerine O(n). Search radius 1.6 tile
   // → 3×3 komşu bucket araması yeterli. Bucket map reused across polls.
   void _tickNeighborGreet(double dt) {
-    if (!_policies.neighborliness) return;
+    // Selamlaşma HER ZAMAN açık (düşük taban) — sokakta yan yana geçen köylüler
+    // sessizce yürümesin. "Komşuluk" politikası bunu yalnız SICAKLAŞTIRIR
+    // (aşağıda oran), bir anahtar değil (eskiden politikasız hiç selam yoktu →
+    // köy ölü hissediyordu).
     _greetPollSec -= dt;
     if (_greetPollSec > 0) return;
     _greetPollSec = 1.2;
@@ -1147,7 +1279,7 @@ extension _SceneTick on _VillageSceneState {
     _greetBuckets.clear();
     for (int i = 0; i < _villagers.length; i++) {
       final v = _villagers[i];
-      if (v.lifeStage == LifeStage.child) continue;
+      // Çocuklar da selamlaşır (el sallar) — köyün sokakları çocuklu canlanır.
       if (v.chatBubbleTime > 0) continue;
       if (v.greetCooldown > 0) continue;
       final key = (v.gridX.floor() ~/ 2, v.gridY.floor() ~/ 2);
@@ -1155,13 +1287,14 @@ extension _SceneTick on _VillageSceneState {
     }
 
     for (final v in _villagers) {
-      if (v.lifeStage == LifeStage.child) continue;
       if (v.chatBubbleTime > 0) continue;
       if (v.greetCooldown > 0) {
         v.greetCooldown -= 1.2;
         continue;
       }
-      if (_rng.nextDouble() > 0.40) continue; // canlılık: daha sık selam
+      // Taban her zaman açık; komşuluk politikası selamı sıklaştırır.
+      final greetChance = _policies.neighborliness ? 0.40 : 0.18;
+      if (_rng.nextDouble() > greetChance) continue;
 
       // En yakın uygun komşu — 1.6 tile içinde, 3×3 komşu bucket'tan ara.
       VillagerEntity? near;
@@ -1203,6 +1336,61 @@ extension _SceneTick on _VillageSceneState {
       v.feel(NpcEmotion.content, 1.6, moodDelta: 0.03);
       near.feel(NpcEmotion.content, 1.6, moodDelta: 0.03);
     }
+  }
+
+  // ── Çocuk oyunu: yakın iki çocuk birlikte oynar ─────────────────────────────
+  // Çocuklar meslek/ateş/sohbet sistemlerinin dışındaydı — eskiden yalnız sessiz
+  // koşuşturuyorlardı (envanterin işaret ettiği "köyün en ölü noktası"). Burada
+  // iki çocuk yan yana geldiğinde kısa, neşeli bir oyun başlar: biri diğerine
+  // koşar (kovalamaca), ikisi de sevinçle zıplar. Kanıtlanmış selamlaşma
+  // deseninin çocuk sürümü; aktivite kilidi onları hakemden korur, süre bitince
+  // (scene_tick baloncuk decay) activity none'a döner, wander devam eder.
+  void _tickChildPlay(double dt) {
+    _childPlayPollSec -= dt;
+    if (_childPlayPollSec > 0) return;
+    _childPlayPollSec = 1.5;
+    if (_cycle.dayLight < 0.35) return;       // oyun gündüz olur
+    if (_cycle.rainIntensity > 0.4) return;   // yağmurda içeri
+
+    bool eligible(VillagerEntity c) =>
+        c.lifeStage == LifeStage.child &&
+        !c.isDying &&
+        !c.isSleeping &&
+        !c.isInsideBuilding &&
+        c.activity == VillagerActivity.none &&
+        c.chatBubbleTime <= 0 &&
+        c.socialCooldown <= 0;
+
+    // Çocuklar az → düz O(n²) yeterli (bucket grid'e gerek yok).
+    for (int i = 0; i < _villagers.length; i++) {
+      final a = _villagers[i];
+      if (!eligible(a)) continue;
+      for (int j = i + 1; j < _villagers.length; j++) {
+        final b = _villagers[j];
+        if (!eligible(b)) continue;
+        final dx = a.gridX - b.gridX, dy = a.gridY - b.gridY;
+        if (dx * dx + dy * dy > 2.2 * 2.2) continue; // yeterince yakın değil
+        _startChildPlay(a, b);
+        break; // a eşleşti → sonraki çocuğa geç
+      }
+    }
+  }
+
+  void _startChildPlay(VillagerEntity a, VillagerEntity b) {
+    final dur = 3.5 + _rng.nextDouble() * 2.5;
+    for (final c in [a, b]) {
+      c.activity       = VillagerActivity.playing;
+      c.chatBubbleTime = dur;
+      c.chatBubbleIcon = ''; // baş-üstü ikon YOK — oyun gövde diliyle okunur
+      c.socialCooldown = 12 + _rng.nextDouble() * 10;
+      c.feel(NpcEmotion.joy, dur, moodDelta: 0.05); // neşeli zıplama (emoBounce)
+    }
+    // Biri diğerine koşar (kovalamaca hissi); öteki yerinde neşeyle zıplar.
+    final chaser = _rng.nextBool() ? a : b;
+    final quarry = identical(chaser, a) ? b : a;
+    chaser.facingRight = quarry.gridX >= chaser.gridX;
+    quarry.facingRight = chaser.gridX >= quarry.gridX;
+    chaser.goTo(quarry.gridX, quarry.gridY, 0);
   }
 
   // ── Aile birleşimi: solo yetişkinleri eşleştir ──────────────────────────

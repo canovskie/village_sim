@@ -102,7 +102,7 @@ class MerchantEntity extends VillagerEntity {
       return;
     }
     isWalking = true;
-    if (moveTowards(_wanderX, _wanderY, dt * 0.55, arriveD: 0.25)) {
+    if (moveTowards(_wanderX, _wanderY, dt, arriveD: 0.25, speedScale: 0.55)) {
       _wanderDwell = 1.5 + rng.nextDouble() * 3.0; // varış → kısa oyalanma
       isWalking = false;
     }

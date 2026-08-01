@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 import 'settings_model.dart';
 
 /// Ses, görüntü ve dil seçeneklerini sunan modern koyu ayar ekranı.
@@ -31,14 +32,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Telefon YATAY: ekran geniş ama ALÇAK (iPhone 11 → 896×414). Tek sütunluk
+    // 460dp'lik masaüstü levhası buraya sığmıyordu — gövde 155px taşıp DİL
+    // bölümünü ve alttaki düğmeleri tamamen erişilemez bırakıyordu. İki cevap
+    // birlikte: gövde KAYAR (hangi yükseklikte olursa olsun taşma yok) ve
+    // alçak ekranda İKİ SÜTUNA açılır (boşta duran genişliği kullanır, böylece
+    // kaydırmaya hiç gerek kalmaz).
+    final compact = useCompactGameUi(context);
     return Scaffold(
       backgroundColor: AppUi.scrim,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
+            constraints: BoxConstraints(maxWidth: compact ? 720 : 460),
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(compact ? MobileUi.gutter : 20),
               child: AppReveal(
                 child: AppPanel(
                   accent: AppUi.accent,
@@ -63,50 +71,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ],
                       ),
                       const AppDivider(),
-
-                      const AppSectionLabel('SES'),
-                      _Slider(
-                        label: 'Müzik',
-                        value: _model.musicVolume,
-                        onChanged: (v) => _model.musicVolume = v,
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: compact ? _twoColumnBody() : _singleColumnBody(),
+                        ),
                       ),
-                      _Slider(
-                        label: 'Efekt',
-                        value: _model.sfxVolume,
-                        onChanged: (v) => _model.sfxVolume = v,
-                      ),
-
-                      const SizedBox(height: 12),
-                      const AppSectionLabel('GÖRÜNTÜ'),
-                      _Toggle(
-                        label: 'FPS Göster',
-                        value: _model.showFps,
-                        onChanged: (v) => _model.showFps = v,
-                      ),
-                      _Toggle(
-                        label: 'Olay Sarsıntısı',
-                        value: _model.shakeOnEvents,
-                        onChanged: (v) => _model.shakeOnEvents = v,
-                      ),
-
-                      const SizedBox(height: 12),
-                      const AppSectionLabel('DİL'),
-                      Row(
-                        children: [
-                          for (final lang in AppLanguage.values) ...[
-                            Expanded(
-                              child: _LangChip(
-                                language: lang,
-                                selected: _model.language == lang,
-                                onTap: () => _model.language = lang,
-                              ),
-                            ),
-                            if (lang != AppLanguage.values.last)
-                              const SizedBox(width: 8),
-                          ],
-                        ],
-                      ),
-
                       const SizedBox(height: 16),
                       const AppDivider(),
                       const SizedBox(height: 4),
@@ -143,6 +112,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+  /// Alçak ekran: SES solda, GÖRÜNTÜ + DİL sağda — hiçbiri fold altında kalmaz.
+  Widget _twoColumnBody() => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: _soundSection(),
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ..._displaySection(),
+                const SizedBox(height: 12),
+                ..._languageSection(),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _singleColumnBody() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ..._soundSection(),
+          const SizedBox(height: 12),
+          ..._displaySection(),
+          const SizedBox(height: 12),
+          ..._languageSection(),
+        ],
+      );
+
+  List<Widget> _soundSection() => [
+        const AppSectionLabel('SES'),
+        _Slider(
+          label: 'Müzik',
+          value: _model.musicVolume,
+          onChanged: (v) => _model.musicVolume = v,
+        ),
+        // ORTAM ayrı bir kaydırıcı: eskiden kuş/cırcır/yağmur döngüleri
+        // "Müzik"e bağlıydı, yani etiket yalan söylüyordu. Köyün doğa sesini
+        // kısmak isteyip müziği bırakmak (ya da tersi) artık mümkün.
+        _Slider(
+          label: 'Ortam',
+          value: _model.ambientVolume,
+          onChanged: (v) => _model.ambientVolume = v,
+        ),
+        _Slider(
+          label: 'Efekt',
+          value: _model.sfxVolume,
+          onChanged: (v) => _model.sfxVolume = v,
+        ),
+      ];
+
+  List<Widget> _displaySection() => [
+        const AppSectionLabel('GÖRÜNTÜ'),
+        _Toggle(
+          label: 'FPS Göster',
+          value: _model.showFps,
+          onChanged: (v) => _model.showFps = v,
+        ),
+        _Toggle(
+          label: 'Olay Sarsıntısı',
+          value: _model.shakeOnEvents,
+          onChanged: (v) => _model.shakeOnEvents = v,
+        ),
+      ];
+
+  List<Widget> _languageSection() => [
+        const AppSectionLabel('DİL'),
+        Row(
+          children: [
+            for (final lang in AppLanguage.values) ...[
+              Expanded(
+                child: _LangChip(
+                  language: lang,
+                  selected: _model.language == lang,
+                  onTap: () => _model.language = lang,
+                ),
+              ),
+              if (lang != AppLanguage.values.last) const SizedBox(width: 8),
+            ],
+          ],
+        ),
+      ];
 }
 
 // ── Yardımcı widget'lar ─────────────────────────────────────────────────────

@@ -66,7 +66,7 @@ extension _SceneEstates on _VillageSceneState {
 
       case Season.winter:
         // Kış kıtlık sınavı — ambar zayıfsa Emekçiler huzursuz, doluysa huzurlu.
-        final mouths = _villagers.length + _farmers.length;
+        final mouths = _villagers.length;
         final lean = _stockpile.food < mouths * 3;
         if (lean) {
           _showNotification('❄️ ${Voice.pick(_kWinterLeanLines, _stableSeed('winterL', _dayCount))}');
@@ -230,19 +230,10 @@ extension _SceneEstates on _VillageSceneState {
     final coldNight = _cycle.dayLight < 0.28 && !_hasFire;
     final elderPolicy = _policies.eldersExemptFromFood || _policies.peacefulEnd;
 
-    // Kültür mahallesi amenitesi: köyde kaç FARKLI kültür binası var
-    // (kütüphane/hamam/okul/anıt/şadırvan) — çeşitlilik morali besler.
-    const cultureTypes = {
-      BuildingType.library,
-      BuildingType.bathhouse,
-      BuildingType.monument,
-      BuildingType.fountain,
-      BuildingType.shrine,
-      BuildingType.belltower,
-    };
-    final cultureAmenities = cultureTypes
-        .where((t) => _buildings.any((b) => b.type == t))
-        .length;
+    // Amenite morali: civic binaların toplam katkısı. Sabit bir "kültür binası"
+    // listesi YOK — ağırlık bina tablosundaki civicValue'dan gelir, toplama +
+    // doyum computeVillageStats'ta yapılır (bkz. amenityMoraleFrom).
+    final amenityMorale = _stats.amenityMorale;
 
     // Hedefe süzme (tau ~0.5 oyun günü) — moral kalıcı, ani zıplamaz.
     final lerp = (dt / (0.5 * kGameDaySeconds)).clamp(0.0, 0.25);
@@ -288,7 +279,17 @@ extension _SceneEstates on _VillageSceneState {
                       : homeless
                           ? 0.7
                           : 1.0;
-          v.wealth += v.type.wealthDailyIncome * moraleFactor * houseMul * dayFrac;
+          // MÜLK TAPUSU — yazılı mülk kendi başına çalışır: serveti olan
+          // servetinden de kazanır, makas açılır. Tapusuz köyde gelir yalnız
+          // emeğin; tapulu köyde birikim de gelir getirir. "Bir hane iki dam
+          // birden yazdırdı; öbürü yazdıracak bir şey bulamadı."
+          // Bu ferman olmadan makas krizi (bkz. scene_regime) rejimden geliyordu
+          // ama hükmün kendisinin ona hiçbir katkısı yoktu.
+          final deedMul = _policies.sealed.contains('rejim.mulkTapusu')
+              ? 1.0 + (v.wealth / 400.0).clamp(0.0, 0.5)
+              : 1.0;
+          v.wealth +=
+              v.type.wealthDailyIncome * moraleFactor * houseMul * deedMul * dayFrac;
         }
         // Yaşam gideri — servetin %5'i/gün geri erir (asimptot + mesleksiz düşüş).
         v.wealth -= v.wealth * 0.05 * dayFrac;
@@ -311,11 +312,14 @@ extension _SceneEstates on _VillageSceneState {
         feudMember: v.inFeud,
         // Kavgada akut yaralı → ağrı/iş göremezlik.
         injured: v.injuryDays > 0,
-        // Meydan/kültür mahallesi binaları → "yaşanası köy" morali.
-        cultureAmenities: cultureAmenities,
+        // Civic binalar → "yaşanası köy" morali.
+        amenityMorale: amenityMorale,
       );
       // Kimlik bonusu: Kutsal Köy ise herkesin moral hedefi biraz yükselir.
-      final target = (ev.target + _identityMoraleBonus).clamp(0.0, 1.0);
+      // Kimlik bonusu + İMAN tesellisi (dinî köyde moral tabanı yükselir —
+      // pusuladaki ☾ boyanın mekanik karşılığı, bkz. Regime.faithEffectOf).
+      final target = (ev.target + _identityMoraleBonus + _faithEffect.moraleFloor)
+          .clamp(0.0, 1.0);
       v.morale = (v.morale + (target - v.morale) * lerp).clamp(0.0, 1.0);
       v.moraleReason = ev.reason;
       sum += v.morale;

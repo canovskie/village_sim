@@ -2,25 +2,24 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'character_renderer.dart';
+import '../characters/npc_visual.dart';
+import 'prop_renderer.dart';
+import '../systems/villager_act.dart';
 import '../entities/villager_entity.dart';
 import '../entities/villager_job.dart';
 import '../entities/worker_entity.dart';
-import '../characters/life_stage.dart';
-import '../entities/builder_entity.dart';
 import '../entities/build_order.dart';
 import '../entities/road_order.dart';
 import '../systems/road_system.dart';
+import '../world/road_surface.dart';
 import 'road_renderer.dart';
 import '../core/constants.dart';
 import 'tile_renderer.dart';
 import '../world/tree_entity.dart';
 import '../world/leaf_burst.dart';
 import 'tree_renderer.dart';
-import '../entities/woodcutter_entity.dart';
-import '../entities/lumber_camp_entity.dart';
 import '../world/mine_node.dart';
 import 'mine_renderer.dart';
-import '../entities/miner_entity.dart';
 import 'water_renderer.dart';
 import 'ocean_renderer.dart';
 import '../world/nature_entity.dart';
@@ -42,13 +41,10 @@ import 'particle_renderer.dart';
 import 'smoke_renderer.dart';
 import '../farm/farm_tile.dart';
 import '../world/season.dart';
-import '../entities/farm_farmer.dart';
 import '../farm/farm_renderer.dart';
-import '../entities/fisher_entity.dart';
-import '../entities/florist_entity.dart';
-import '../entities/shepherd_entity.dart';
 import '../world/animal_entity.dart';
 import '../world/egg_entity.dart';
+import '../world/loot_cache.dart';
 import '../world/bird_flock.dart';
 import '../world/bee_flock.dart';
 import '../world/resource_box.dart';
@@ -56,6 +52,10 @@ import '../world/hay_entity.dart';
 import '../world/resource_placement.dart';
 import 'resource_renderer.dart';
 import 'tool_renderer.dart';
+
+part 'game_drawables.dart';
+part 'game_fx.dart';
+part 'game_ambient.dart';
 
 // ── Static Paint havuzu (game_painter genelinde paylaşılır) ───────────────────
 // Progress bar
@@ -224,16 +224,6 @@ void _drawCharShadow(Canvas canvas, double sx, double sy,
   );
 }
 
-/// Worker / villager için meşale halo helper'ı — tüm character drawable'lar
-/// kullanır. torchLevel ≤ 0.02 ise no-op. Glow konumu sağ omuz + baş üstü.
-void _drawWorkerTorchGlow(Canvas canvas, double sx, double sy, WorkerEntity e) {
-  if (e.torchLevel <= 0.02) return;
-  final shoulderX = (e.effectiveFacingRight ? 1 : -1) * 5.0 * kCharScale;
-  final headY = -64 * kCharScale;
-  ToolRenderer.drawTorchGlow(canvas, sx + shoulderX, sy + headY,
-      _sceneTime, e.torchPhase, intensity: e.torchLevel);
-}
-
 /// Ağaç gövdesi tabanında elips — TreeType'a göre genişlik.
 /// growthScale fidan büyüme oranı.
 void _drawTreeShadow(Canvas canvas, double cx, double cy,
@@ -313,6 +303,14 @@ const double kOccProbeY = 46;
 // Örtülen aktörün üstte yeniden çizildiği yarı saydam katman (~%40 opaklık).
 final Paint _occFadePaint = Paint()..color = const Color(0x66FFFFFF);
 
+// ─── İnşaat şeffaflığı (reveal) ──────────────────────────────────────────────
+// Planlanan/yapılmakta olan bir şeyin önünde duran binalar bu opaklıkla çizilir.
+// %30: silueti hâlâ okunur (bina kayboldu sanılmaz) ama arkası net görünür.
+final Paint _revealFadePaint = Paint()..color = const Color(0x4DFFFFFF);
+// Frame başına yeniden kurulan çalışma tamponları — allocation yok.
+final Set<BuildingEntity> _fadedBuildings = {};
+final Map<BuildingEntity, Rect> _revealBounds = {};
+
 // ── Ground Picture cache ─────────────────────────────────────────────────────
 // Çim+kum+border katmanı statik — her map için bir kez Picture'a kaydedilir,
 // frame'lerde drawPicture ile replay edilir. Camera-bağımsız (Offset.zero ile
@@ -366,1331 +364,6 @@ class _LightInfo {
 }
 final List<_LightInfo> _lightBuffer = [];
 
-/// Scene buffer drawable'larından erişilen anlık zaman. VillageGamePainter.paint
-/// her frame başında set eder; drawable'lar idle anim (nefes/sway) için okur.
-double _sceneTime = 0;
-
-// ─── DRAWABLE ABSTRACTION ────────────────────────────────────────────────────
-
-abstract class _Drawable {
-  double get depth;
-  void draw(Canvas canvas, Size size, Offset camera);
-
-  /// Stabil sort tie-break — buffer'daki ekleme sırası (her frame atanır).
-  /// Eşit depth'te bu deterministik sıra kullanılır → titreme/rastgele örtme yok.
-  int sortIndex = 0;
-
-  /// Bu drawable bir "aktör" (NPC/işçi) ise wrapped entity; değilse null.
-  /// Occlusion silhouette pass'i aktörleri buradan bulur. Bina içindeyken null.
-  WorkerEntity? get actor => null;
-
-  /// Bu drawable bir bina ise wrapped entity; değilse null. Occlusion testinde
-  /// "önde çizilen örten" listesi buradan kurulur.
-  BuildingEntity? get building => null;
-}
-
-class _VillagerDrawable extends _Drawable {
-  final VillagerEntity e;
-  final double time;
-  final double dayLight;
-  _VillagerDrawable(this.e, this.time, this.dayLight);
-  @override double get depth => e.depth;
-  @override WorkerEntity? get actor => e.isInsideBuilding ? null : e;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    if (e.isInsideBuilding) return;
-
-    final s = gridToScreen(e.renderX, e.renderY, size, camera);
-
-    // Gölge — ayak altında, torch glow'un da altında.  Boyut karakter
-    // ölçeğiyle (yaşam-evresi dahil) orantılı. (Ölüm dalı kendi solan gölgesini
-    // çizer → burada atla.)
-    if (!e.isDying) {
-      _drawCharShadow(canvas, s.dx, s.dy, kCharScale * e.lifeStage.renderScale);
-    }
-
-    // Geçici vurgu halkası — HUD'dan "evsizleri göster" gibi tetiklenince
-    // ayak altında nabız atan kehribar halka (son saniyede solar).
-    if (e.highlightTimer > 0) {
-      final pulse = 0.5 + 0.5 * sin(time * 6.0);
-      final fade = e.highlightTimer.clamp(0.0, 1.0);
-      final rw = 30.0 + 4.0 * pulse;
-      final ring = Rect.fromCenter(
-          center: Offset(s.dx, s.dy), width: rw, height: rw * 0.46);
-      _pHighlightRing.color =
-          const Color(0xFFFFD25A).withValues(alpha: (0.45 + 0.4 * pulse) * fade);
-      canvas.drawOval(ring, _pHighlightRing);
-    }
-
-    // Lokal meşale glow + alev — sprite'tan ÖNCE çizilir ki karakter üstüne
-    // binsin. Entity.torchLevel tek karar noktası; 0..1 fade. Glow konumu
-    // meşalenin GERÇEK ucunda (sağ omuz +x, baş üstü -68 yüksekliği — char
-    // scale * lifeStage.renderScale ile ölçeklenmiş).
-    final torchLv = e.torchLevel;
-    final showTorch = torchLv > 0.02;
-    if (showTorch) {
-      final charScaleNow = kCharScale * e.lifeStage.renderScale;
-      final shoulderX = (e.effectiveFacingRight ? 1 : -1) * 5.0 * charScaleNow;
-      final headY = -64 * charScaleNow;
-      ToolRenderer.drawTorchGlow(canvas,
-          s.dx + shoulderX, s.dy + headY,
-          time, e.torchPhase, intensity: torchLv);
-    }
-
-    if (e.isSleeping && !e.isInsideBuilding && !e.isDying) {
-      // Yatay uyku pozu — yastık + battaniye + kapalı göz, hafif breath.
-      final sleepScale = kCharScale * e.lifeStage.renderScale;
-      canvas.save();
-      canvas.translate(s.dx, s.dy);
-      canvas.scale(sleepScale, sleepScale);
-      CharacterRenderer.drawSleeping(canvas, e.type,
-          walkPhase: e.walkPhase,
-          flipX: !e.facingRight);
-      canvas.restore();
-      _drawZzz(canvas, s);
-      return;
-    }
-
-    // Ölüm — collapse + fade. Anlık silinmek yerine ayakları kesilir gibi yana
-    // devrilip yere yığılır ve solar (ayak ucu pivot). Gölge de küçülüp söner.
-    if (e.isDying) {
-      final dp = e.dyingProgress;
-      final cs = kCharScale * e.lifeStage.renderScale;
-      final dir = e.effectiveFacingRight ? 1.0 : -1.0;
-      // İlk yarı: dizler çöker + yana devrilir. İkinci yarı: yerde solar.
-      final topple = dp * 1.4 * dir;      // ~80° yana yatış
-      final sink   = dp * 6.0 * cs;        // yere oturma
-      final squash = 1.0 - 0.18 * dp;      // dikeyde hafif ezilme
-      final alpha  = (dp < 0.5 ? 1.0 : 1.0 - (dp - 0.5) / 0.5).clamp(0.0, 1.0);
-      _drawCharShadow(canvas, s.dx, s.dy, cs * (1.0 - 0.45 * dp));
-      canvas.saveLayer(
-        Rect.fromCenter(center: s, width: 140 * cs, height: 180 * cs),
-        Paint()..color = Color.fromARGB((alpha * 255).round(), 255, 255, 255),
-      );
-      canvas.translate(s.dx, s.dy + sink);
-      canvas.rotate(topple);
-      canvas.scale(cs, cs * squash);
-      CharacterRenderer.draw(canvas, e.type,
-          flipX:         !e.effectiveFacingRight,
-          walkPhase:     e.walkPhase,
-          moveIntensity: 0,
-          carrying:      false,
-          torchLevel:    0,
-          torchPhase:    e.torchPhase,
-          visual:        e.visual,
-          time:          time,
-          stage:         e.lifeStage,
-          costume:       e.costume,
-          commander:     e.imperialCommander,
-          attacking:     e.imperialAttacking);
-      canvas.restore();
-      return;
-    }
-
-    // Üstlenilmiş iş (inşaat/tarla/maden…) — köylüyü baz meslek yerine iş
-    // sprite'ıyla (alet + aksiyon pozu) çiz. Kimlik (yüz/saç) e.visual'dan gelir,
-    // yani isimli köylü doğru yüzle görünür. Gölge/torch yukarıda çizildi.
-    if (e.job != null && _jobHasSprite(e.job!.role)) {
-      _drawJobVillager(canvas, e, s);
-      return;
-    }
-
-    // Yaşam evresine göre boy ölçeği — çocuk küçük, yetişkin tam, yaşlı hafif.
-    final charScale = kCharScale * e.lifeStage.renderScale;
-    // Dans → gerçek zıplama. NPC her vuruşta yere iner çıkar.
-    double danceBounce = 0;
-    double danceSway   = 0;
-    if (e.activity == VillagerActivity.dance) {
-      // 2 Hz beat — sin'in mutlak değeri ile sürekli pozitif zıplama.
-      danceBounce = sin(time * 6.0 + e.gridX * 1.1).abs() * 4.0;
-      danceSway   = sin(time * 3.0 + e.gridX * 0.7) * 0.20;
-    }
-    // Sohbet → konuşma jesti: konuşan sırasında belirgin baş-gövde "nod",
-    // dinlerken hafif. Karşılıklı sohbetin canlı görünmesini sağlar.
-    double talkBob  = 0;
-    double talkSway = 0;
-    if (e.activity == VillagerActivity.chat) {
-      final (speaking, _) = e.convoNow();
-      final amp = speaking ? 1.0 : 0.3;
-      talkBob  = sin(time * 9.0 + e.gridX * 1.3).abs() * 1.5 * amp;
-      talkSway = sin(time * 4.5 + e.gridX) * 0.05 * amp;
-    }
-    // Mood postürü — neşeli köylü dik + hafif yukarı, üzgün çökük + hafif aşağı.
-    // Tüm yürüyen/duran NPC'ye uygulanır (uyku erken return; etkilenmez).
-    double moodLift   = 0;
-    double moodScaleY = 1.0;
-    if (e.mood > 0.15) {
-      final m = e.mood.clamp(0.0, 1.0);
-      moodScaleY = 1.0 + 0.03 * m;
-      moodLift   = 0.9 * m;
-    } else if (e.mood < -0.15) {
-      final m = (-e.mood).clamp(0.0, 1.0);
-      moodScaleY = 1.0 - 0.06 * m;
-      moodLift   = -0.9 * m;
-    }
-    // Ateş başı oturma — sprite'ı dikeyde sıkıştırıp aşağı kaydırarak
-    // "çömelme" hissi. Anlatıcıda hafif öne-arka sallanma.
-    double sitYOff   = 0;
-    double sitYScale = 1.0;
-    double sitSway   = 0;
-    CharPose charPose = CharPose.normal;
-    final isSeated = e.isSeatedAtFire && (
-        e.activity == VillagerActivity.warm ||
-        e.activity == VillagerActivity.storytelling ||
-        e.activity == VillagerActivity.listening);
-    if (isSeated) {
-      // Gerçek oturma duruşu — kaba squash değil. Duruşa göre yere oturt
-      // (sprite'ı aşağı kaydır), uzuv pozunu CharacterRenderer halleder.
-      switch (e.firePose) {
-        case FirePose.sit:
-          charPose = CharPose.sit;   sitYOff = 9;
-        case FirePose.kneel:
-          charPose = CharPose.kneel; sitYOff = 7;
-        case FirePose.mourn:
-          charPose = CharPose.mourn; sitYOff = 10;
-      }
-      if (e.activity == VillagerActivity.storytelling) {
-        sitSway = sin(time * 2.0 + e.gridX) * 0.06;
-      }
-    }
-    // Duygu gövde dili — emoji DEĞİL, POSTÜR: sevinç sıçrar, yas çöküp öne
-    // eğilir, korku titreyip kaçınır, hayranlık doğrulur, sevgi yumuşak salınır.
-    // emotionIntensity ile başta zirve sonra söner (refleks gibi).
-    // Oturanlarda duygu firePose ile anlatılır (ayin/yas/otur) → emotion pozu
-    // yalnız ayaktakilere uygulanır.
-    double emoBounce = 0, emoLift = 0, emoRot = 0, emoScaleY = 1.0;
-    if (e.emotionTime > 0 &&
-        e.emotion != NpcEmotion.none &&
-        e.activity != VillagerActivity.dance &&
-        !isSeated) {
-      final k = e.emotionIntensity;
-      final fdir = e.effectiveFacingRight ? 1.0 : -1.0;
-      switch (e.emotion) {
-        case NpcEmotion.joy:
-          emoBounce = sin(time * 7.0 + e.gridX).abs() * 2.6 * k; // sevinç sıçraması
-          emoLift = 0.6 * k;
-        case NpcEmotion.love:
-          emoRot = sin(time * 3.0 + e.gridX) * 0.07 * k; // yumuşak salınım
-        case NpcEmotion.wonder:
-          emoLift = 1.3 * k; // doğrulup yukarı bakış
-          emoScaleY = 1.0 + 0.03 * k;
-        case NpcEmotion.content:
-          emoRot = sin(time * 1.6 + e.gridX) * 0.03 * k; // huzurlu hafif sallanış
-        case NpcEmotion.grief:
-          emoScaleY = 1.0 - 0.11 * k; // çöküş
-          emoLift = -1.4 * k;         // başı/gövdeyi aşağı
-          emoRot = 0.06 * k * fdir;   // öne eğilme
-        case NpcEmotion.fear:
-          emoBounce = sin(time * 22.0 + e.gridX) * 0.9 * k; // titreme
-          emoRot = -0.10 * k * fdir;  // geriye kaçınma
-        case NpcEmotion.anger:
-          emoBounce = sin(time * 18.0 + e.gridX) * 0.7 * k; // gerginlik
-          emoRot = 0.05 * k * fdir;   // öne yüklenme
-        case NpcEmotion.none:
-          break;
-      }
-    }
-    // Yumruklaşma — gövde rakibe doğru ileri-geri saldırır (gerçek hareket,
-    // emoji değil). Öfke postürüyle birleşince inandırıcı bir arbede olur.
-    double brawlShove = 0;
-    if (e.activity == VillagerActivity.brawling) {
-      final dir = e.effectiveFacingRight ? 1.0 : -1.0;
-      brawlShove = sin(time * 13.0 + e.gridX * 1.3) * 2.6 * dir;
-    }
-    // SUÇ gövde dili (scene_crime) — baş üstü "suçlu" ikonu YOK; suç yalnız
-    // POSTÜRDEN okunur: fail çömelip sinsice sokulur, eylem sırasında telaşla
-    // kıpırdar, sonra öne atılıp kaçar; muhafız üstüne yüklenerek koşar;
-    // kaçırılan kurban geriye direnip çırpınır. Ölçülü genlikler — "yukarıdan
-    // izleyen" oyuncu fark etsin ama sahne cambazlığa dönmesin.
-    double crimeShove = 0, crimeLift = 0, crimeRot = 0, crimeScaleY = 1.0;
-    if (e.activity == VillagerActivity.prowling ||
-        e.activity == VillagerActivity.committing ||
-        e.activity == VillagerActivity.fleeing ||
-        e.activity == VillagerActivity.chasing ||
-        e.activity == VillagerActivity.abducted) {
-      final cdir = e.effectiveFacingRight ? 1.0 : -1.0;
-      switch (e.activity) {
-        case VillagerActivity.prowling:
-          crimeScaleY = 0.90;        // çömelme
-          crimeLift = -1.6;          // alçalıp gölgeye sinme
-          crimeRot = 0.09 * cdir;    // öne eğik sinsi duruş
-        case VillagerActivity.committing:
-          crimeShove = sin(time * 17.0 + e.gridX * 1.7) * 1.5 * cdir; // telaş
-          crimeScaleY = 0.94;
-          crimeLift = -1.0;
-        case VillagerActivity.fleeing:
-          crimeLift = sin(time * 16.0 + e.gridX).abs() * 1.8; // telaşlı sıçrama
-          crimeRot = 0.11 * cdir;                             // öne atılma
-        case VillagerActivity.chasing:
-          crimeLift = sin(time * 14.0 + e.gridX).abs() * 1.2;
-          crimeRot = 0.09 * cdir;                             // öne yüklenme
-        case VillagerActivity.abducted:
-          crimeRot = -0.16 * cdir;                            // geriye direnme
-          crimeShove = sin(time * 20.0 + e.gridY) * 1.2;      // çırpınma
-        default:
-          break;
-      }
-    }
-    canvas.save();
-    canvas.translate(
-        s.dx + brawlShove + crimeShove,
-        s.dy -
-            danceBounce -
-            talkBob -
-            moodLift +
-            sitYOff -
-            emoBounce -
-            emoLift -
-            crimeLift);
-    if (danceSway != 0) canvas.rotate(danceSway);
-    if (sitSway != 0)   canvas.rotate(sitSway);
-    if (talkSway != 0)  canvas.rotate(talkSway);
-    if (emoRot != 0)    canvas.rotate(emoRot);
-    if (crimeRot != 0)  canvas.rotate(crimeRot);
-    // Idle micro-anim — nefes + sway, yalnız dans/oturma/sohbet yokken anlamlı
-    // (idle helper'ları walking/işteyken zaten 0/1 döner).
-    final calm = danceSway == 0 && sitSway == 0 && talkSway == 0;
-    if (calm) {
-      final swayR = e.idleSwayRotation(time);
-      if (swayR != 0) canvas.rotate(swayR);
-    }
-    final breathY = calm ? e.idleBreathScale(time) : 1.0;
-    canvas.scale(charScale,
-        charScale * sitYScale * breathY * moodScaleY * emoScaleY * crimeScaleY);
-    CharacterRenderer.draw(canvas, e.type,
-        flipX:         !e.effectiveFacingRight,
-        walkPhase:     e.walkPhase,
-        moveIntensity: e.moveIntensity,
-        carrying:      e.isCarrying && e.carriedItem != null,
-        pose:          charPose,
-        torchLevel:    torchLv,
-        torchPhase:    e.torchPhase,
-        visual:        e.visual,
-        time:          time,
-        stage:         e.lifeStage,
-        costume:       e.costume,
-        commander:     e.imperialCommander,
-        attacking:     e.imperialAttacking);
-    // Müzik aktivitesinde eline saz/bağlama çiz — sprite scale'inde, göğüs
-    // hizasında. Karakter sprite ile birlikte çizilir ki flip etse de doğru
-    // tarafta olsun.
-    if (e.activity == VillagerActivity.music && e.chatBubbleTime > 0) {
-      canvas.save();
-      // Göğüs hizası — yaklaşık y=-52 (origin ayakta), x=4 (sağ el).
-      canvas.translate(e.facingRight ? 6 : -6, -52);
-      // Hafif çalma animasyonu — el sağ-sol küçük titreşim
-      canvas.rotate(sin(time * 8 + e.gridX) * 0.08);
-      ToolRenderer.drawSaz(canvas);
-      canvas.restore();
-    }
-    canvas.restore();
-
-    // Draw carried item above the villager
-    if (e.carriedItem != null) {
-      final item = e.carriedItem!;
-      if (item is ResourceBox) {
-        ResourceRenderer.drawCarriedBox(canvas, item, s.dx, s.dy - danceBounce);
-      } else if (item is HayEntity) {
-        ResourceRenderer.drawCarriedHay(canvas, item, s.dx, s.dy - danceBounce);
-      }
-    }
-    // Sohbet baloncuğu.
-    final bubbleBase = Offset(s.dx, s.dy - danceBounce - talkBob - moodLift + sitYOff);
-    if (e.activity == VillagerActivity.chat) {
-      // Karşılıklı konuşma — yalnız sırası gelen konuşur (konuya bağlı replik).
-      final (speaking, cIcon) = e.convoNow();
-      if (speaking && cIcon.isNotEmpty) {
-        _drawChatBubble(canvas, bubbleBase, cIcon, e.chatBubbleTime);
-      }
-    } else if (e.chatBubbleTime > 0 &&
-        e.chatBubbleIcon.isNotEmpty &&
-        e.activity != VillagerActivity.music &&
-        e.activity != VillagerActivity.dance) {
-      // Statik baloncuk: hikaye 📖, selam 👋, göktaşı 🌠, oyuncu ❤️/👋.
-      _drawChatBubble(canvas, bubbleBase, e.chatBubbleIcon, e.chatBubbleTime);
-    }
-    // Müzik aktivitesinde sazın etrafında uçuşan notalar.
-    if (e.activity == VillagerActivity.music && e.chatBubbleTime > 0) {
-      _drawMusicNotes(canvas, Offset(s.dx, s.dy - danceBounce),
-          e.gridX, e.gridY, e.chatBubbleTime);
-    }
-    // (Baş üstü duygu emojisi KALDIRILDI — duygu artık yalnızca gövde diliyle
-    // anlatılır: yukarıdaki emoBounce/emoLift/emoRot/emoScaleY postürü.)
-  }
-
-  void _drawMusicNotes(Canvas canvas, Offset base, double gx, double gy,
-      double timeLeft) {
-    // 3 nota — farklı fazda yükselip yan kayarak solar.
-    const notes = ['♪', '♫', '♩'];
-    for (int i = 0; i < 3; i++) {
-      final phase = (time * 0.5 + i * 0.33 + gx * 0.1 + gy * 0.13) % 1.0;
-      final rise  = phase * 28;
-      final sway  = sin(time * 1.5 + i * 1.7 + gx) * 6 * phase;
-      double a;
-      if (phase < 0.15) {
-        a = phase / 0.15;
-      } else {
-        a = 1.0 - (phase - 0.15) / 0.85;
-      }
-      a = a.clamp(0.0, 1.0);
-      // Aktivite sönerken son 1.5 sn fade out.
-      final lifeFade = timeLeft < 1.5 ? (timeLeft / 1.5) : 1.0;
-      final alpha = (a * lifeFade * 220).round().clamp(0, 220);
-      if (alpha < 10) continue;
-      final tp = TextPainter(
-        text: TextSpan(
-          text: notes[i],
-          style: TextStyle(
-            fontSize: 10 + i * 1.5,
-            color: Color.fromARGB(alpha, 240, 220, 180),
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas,
-          Offset(base.dx + 8 + sway, base.dy - 20 - rise));
-    }
-  }
-
-  void _drawChatBubble(Canvas canvas, Offset base, String icon, double timeLeft) {
-    // Fade in (ilk 0.4 sn) + tut + fade out (son 0.6 sn).
-    // Kısa sohbet (≤5 sn) ve uzun hikaye (>5 sn) baloncukları için ortak.
-    double a;
-    if (timeLeft < 0.6) {
-      a = timeLeft / 0.6;            // Fade out
-    } else if (timeLeft > 4.6 && timeLeft < 5.0) {
-      a = (5.0 - timeLeft) / 0.4;    // Kısa baloncuk için fade in
-    } else {
-      a = 1.0;
-    }
-    a = a.clamp(0.0, 1.0);
-    if (a <= 0.02) return;
-    final alpha = (a * 255).round();
-
-    // Hafif yukarı float — yaşıyor hissi.
-    final yBob = sin(time * 2 + base.dx * 0.1) * 1.2;
-    final cx = base.dx;
-    final cy = base.dy - 26 + yBob;
-
-    // Baloncuk arka planı — yumuşak beyaz kart + ince koyu çerçeve.
-    final bgPaint = _pBubbleFill
-      ..color = Color.fromARGB((alpha * 0.92).round(), 250, 246, 232);
-    final borderPaint = _pBubbleBorder
-      ..color = Color.fromARGB((alpha * 0.78).round(), 70, 50, 30);
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(cx, cy), width: 18, height: 16),
-      const Radius.circular(4),
-    );
-    canvas.drawRRect(rect, bgPaint);
-    canvas.drawRRect(rect, borderPaint);
-    // Küçük "kuyruk" üçgeni (sprite'a doğru). Paylaşımlı scratch path (leaf draw).
-    final tail = _scratchPath
-      ..reset()
-      ..moveTo(cx - 2, cy + 7)
-      ..lineTo(cx + 2, cy + 7)
-      ..lineTo(cx, cy + 11)
-      ..close();
-    canvas.drawPath(tail, bgPaint);
-    canvas.drawPath(tail, borderPaint);
-    // İkon metni.
-    final tp = TextPainter(
-      text: TextSpan(
-        text: icon,
-        style: TextStyle(
-          fontSize: 11,
-          color: Color.fromARGB(alpha, 30, 24, 16),
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    tp.paint(canvas, Offset(cx - tp.width / 2, cy - tp.height / 2));
-  }
-
-  void _drawZzz(Canvas canvas, Offset base) {
-    // Pixel-art Z'ler — text yerine ParticleRenderer.drawSleepZzz.
-    // 3 farklı seed → 3 Z asenkron drift eder, doğal "Z Z Z" hissi.
-    final entitySeed = e.gridX.toInt() * 13 + e.gridY.toInt() * 7;
-    for (int i = 0; i < 3; i++) {
-      // Yatay offset yelpaze — uyuyan NPC baş çevresinde dağıt.
-      final ox = (i - 1) * 4.0;
-      ParticleRenderer.drawSleepZzz(
-          canvas, base.dx + ox, base.dy - 24, time, entitySeed + i * 17);
-    }
-  }
-
-  /// Bu iş rolünün kendine ait bir çalışma sprite'ı/pozu var mı — varsa köylü
-  /// baz meslek yerine iş görünümüyle (alet + aksiyon) çizilir.
-  bool _jobHasSprite(JobRole role) => role != JobRole.none;
-
-  /// Köylüyü ÜSTLENDİĞİ iş sprite'ıyla çiz (kimlik e.visual'dan). Gölge/torch
-  /// zaten çizilmiş olarak gelir; burada gövde + alet + ilerleme/partikül.
-  void _drawJobVillager(Canvas canvas, VillagerEntity e, Offset s) {
-    final job = e.job!;
-    final charScale = kCharScale * e.lifeStage.renderScale;
-    final working = job.working;
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    // Aksiyon sırasında idle sway/breath uygulama (aksi halde nefes + sway).
-    if (!working) {
-      final swayR = e.idleSwayRotation(time);
-      if (swayR != 0) canvas.rotate(swayR);
-    }
-    final breathY = working ? 1.0 : e.idleBreathScale(time);
-    canvas.scale(charScale, charScale * breathY);
-    final flip = !e.effectiveFacingRight;
-    // Aksiyon animasyonu köylünün duran walkPhase'i yerine job.phaseAnim'den.
-    final actPhase = working ? job.phaseAnim : e.walkPhase;
-    switch (job.role) {
-      case JobRole.builder:
-        CharacterRenderer.drawBuilder(canvas,
-            flipX: flip, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            working: working);
-      case JobRole.farmer:
-        CharacterRenderer.drawFarmer(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
-            carryingWater: job.carryingWater, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
-      case JobRole.miner:
-        CharacterRenderer.drawMiner(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            mining: working, chopPhase: job.phaseAnim, visual: e.visual,
-            time: time, torchLevel: e.torchLevel, torchPhase: e.torchPhase);
-      case JobRole.fisher:
-        CharacterRenderer.drawFisher(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            fishing: working, fishPhase: job.phaseAnim,
-            visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
-      case JobRole.shepherd:
-        CharacterRenderer.drawShepherd(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            milking: working, milkPhase: job.phaseAnim,
-            visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
-      case JobRole.florist:
-        CharacterRenderer.drawFarmer(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
-            carryingWater: job.carryingWater, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase);
-      case JobRole.woodcutter:
-        CharacterRenderer.drawWoodcutter(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            chopping: working, chopPhase: job.phaseAnim, visual: e.visual,
-            time: time, torchLevel: e.torchLevel, torchPhase: e.torchPhase);
-      case JobRole.none:
-        break;
-    }
-    canvas.restore();
-
-    // İş-özel overlay: ilerleme çubuğu + kıvılcım/talaş/splash.
-    if (job.role == JobRole.builder && working) {
-      _drawJobProgressBar(canvas, s, job.progress);
-      if (sin(job.phaseAnim).abs() > 0.92) {
-        _drawJobSpark(canvas, s.dx, s.dy, e.facingRight);
-      }
-    }
-    // Çiftçi kuyu/sulama anının ilk 0.4 sn'sinde su sıçraması.
-    if (job.role == JobRole.farmer &&
-        job.splashTimer >= 0 && job.splashTimer < 0.4) {
-      ParticleRenderer.drawSplash(canvas, s.dx, s.dy - 10, job.splashTimer / 0.4);
-    }
-    // Madenci kazma darbesinde taş chip'i (chopPhase döngü başı %30).
-    if (job.role == JobRole.miner && working) {
-      const chipWindow = 2 * pi * 0.30;
-      if (job.phaseAnim < chipWindow) {
-        final lt = job.phaseAnim / chipWindow;
-        final dir = e.facingRight ? 1.0 : -1.0;
-        final seed = e.gridX.toInt() * 7 + e.gridY.toInt() * 13;
-        ParticleRenderer.drawChip(canvas, s.dx + dir * 12, s.dy - 18, lt,
-            color: const Color(0xFFA8A4A0), shade: const Color(0xFF5A5450),
-            direction: dir, seed: seed);
-      }
-    }
-  }
-
-  void _drawJobProgressBar(Canvas canvas, Offset pos, double progress) {
-    const w = 34.0, h = 4.0;
-    final left = pos.dx - w / 2;
-    final top = pos.dy - 52;
-    canvas.drawRect(Rect.fromLTWH(left, top, w, h), _ppBg);
-    canvas.drawRect(Rect.fromLTWH(left, top, w * progress, h), _ppFill);
-    canvas.drawRect(Rect.fromLTWH(left, top, w, h), _ppBorder);
-  }
-
-  void _drawJobSpark(Canvas canvas, double sx, double sy, bool facingRight) {
-    final dir = facingRight ? 1.0 : -1.0;
-    final px = sx + dir * 14, py = sy - 38;
-    final paint = Paint()
-      ..color = const Color(0xFFFFFFB0)
-      ..isAntiAlias = false;
-    final dim = Paint()
-      ..color = const Color(0xCCFFD060)
-      ..isAntiAlias = false;
-    canvas.drawRect(Rect.fromLTWH(px, py, 2, 2), paint);
-    canvas.drawRect(Rect.fromLTWH(px + dir * 3, py - 2, 2, 2), paint);
-    canvas.drawRect(Rect.fromLTWH(px - dir * 2, py + 2, 1, 1), dim);
-    canvas.drawRect(Rect.fromLTWH(px + dir * 5, py + 1, 1, 1), dim);
-  }
-}
-
-class _BuilderDrawable extends _Drawable {
-  final BuilderEntity b;
-  _BuilderDrawable(this.b);
-  @override double get depth => b.depth;
-  @override WorkerEntity? get actor => b;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(b.renderX, b.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, b);
-    final working = b.state == BuilderState.building;
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    // Çekiç sallarken idle anim uygulama; aksi halde nefes + sway.
-    if (!working) {
-      final swayR = b.idleSwayRotation(_sceneTime);
-      if (swayR != 0) canvas.rotate(swayR);
-    }
-    final breathY = working ? 1.0 : b.idleBreathScale(_sceneTime);
-    canvas.scale(kCharScale, kCharScale * breathY);
-    CharacterRenderer.drawBuilder(canvas,
-        flipX:         !b.effectiveFacingRight,
-        visual:        b.visual,
-        time:          _sceneTime,
-        torchLevel:    b.torchLevel,
-        torchPhase:    b.torchPhase,
-        walkPhase:     b.walkPhase,
-        moveIntensity: b.moveIntensity,
-        working:       working);
-    canvas.restore();
-
-    if (working && b.currentBuildOrder != null) {
-      _drawProgressBar(canvas, s, b.currentBuildOrder!.progress);
-      // Çekiç vuruş anı: walkPhase'in sin tepe noktasında (sin > 0.92, ~%8 frame).
-      // Building state phaseRate 4.0 rad/sn → her ~1.57sn'de bir vuruş.
-      // Spark builder'ın çekiç-ucu civarında 2-3 küçük sarı-beyaz nokta.
-      final swing = sin(b.walkPhase).abs();
-      if (swing > 0.92) {
-        _drawHammerSpark(canvas, s.dx, s.dy, b.facingRight);
-      }
-    }
-  }
-
-  void _drawHammerSpark(Canvas canvas, double sx, double sy, bool facingRight) {
-    final dir = facingRight ? 1.0 : -1.0;
-    final px = sx + dir * 14;
-    final py = sy - 38; // builder kafa-omuz hizası
-    final paint = Paint()
-      ..color = const Color(0xFFFFFFB0)
-      ..isAntiAlias = false;
-    final paintDim = Paint()
-      ..color = const Color(0xCCFFD060)
-      ..isAntiAlias = false;
-    canvas.drawRect(Rect.fromLTWH(px, py, 2, 2), paint);
-    canvas.drawRect(Rect.fromLTWH(px + dir * 3, py - 2, 2, 2), paint);
-    canvas.drawRect(Rect.fromLTWH(px - dir * 2, py + 2, 1, 1), paintDim);
-    canvas.drawRect(Rect.fromLTWH(px + dir * 5, py + 1, 1, 1), paintDim);
-  }
-
-  void _drawProgressBar(Canvas canvas, Offset pos, double progress) {
-    const w = 34.0;
-    const h = 4.0;
-    final left = pos.dx - w / 2;
-    final top  = pos.dy - 52;
-    canvas.drawRect(Rect.fromLTWH(left, top, w, h),           _ppBg);
-    canvas.drawRect(Rect.fromLTWH(left, top, w * progress, h), _ppFill);
-    canvas.drawRect(Rect.fromLTWH(left, top, w, h),            _ppBorder);
-  }
-}
-
-class _FarmerDrawable extends _Drawable {
-  final FarmFarmer f;
-  _FarmerDrawable(this.f);
-  @override double get depth => f.depth;
-  @override WorkerEntity? get actor => f;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(f.renderX, f.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, f);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = f.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * f.idleBreathScale(_sceneTime));
-    CharacterRenderer.drawFarmer(canvas,
-        flipX:         !f.effectiveFacingRight,
-        walkPhase:     f.walkPhase,
-        moveIntensity: f.moveIntensity,
-        harvesting:    f.isWorkingField,
-        harvestPhase:  f.harvestPhase,
-        carryingWater: f.isHandlingWater,
-        visual:        f.visual,
-        time:          _sceneTime,
-        torchLevel:    f.torchLevel,
-        torchPhase:    f.torchPhase);
-    canvas.restore();
-
-    // Splash: kuyu su alımı + ekin sulama anlarının ilk 0.4 sn'sinde.
-    // _waterTimer state geçişinde 0'lanır → her aksiyonda bir kez splash.
-    if (f.state == FarmerState.fetchingWater ||
-        f.state == FarmerState.watering) {
-      final wt = f.waterTimerForSplash;
-      if (wt >= 0 && wt < 0.4) {
-        final lt = wt / 0.4;
-        ParticleRenderer.drawSplash(canvas, s.dx, s.dy - 10, lt);
-      }
-    }
-  }
-}
-
-class _MinerDrawable extends _Drawable {
-  final MinerEntity m;
-  _MinerDrawable(this.m);
-  @override double get depth => m.depth;
-  @override WorkerEntity? get actor => m;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(m.renderX, m.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, m);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = m.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * m.idleBreathScale(_sceneTime));
-    CharacterRenderer.drawMiner(canvas,
-        flipX:         !m.effectiveFacingRight,
-        walkPhase:     m.walkPhase,
-        moveIntensity: m.moveIntensity,
-        mining:        m.isMining,
-        chopPhase:     m.chopPhase,
-        visual:        m.visual,
-        time:          _sceneTime,
-        torchLevel:    m.torchLevel,
-        torchPhase:    m.torchPhase);
-    canvas.restore();
-
-    // Mining iken her chopPhase cycle başında taş chip uçur.
-    // Cycle 2π rad (~1.5sn). İlk %30'u chip lifetime.
-    if (m.isMining) {
-      const chipWindow = 2 * pi * 0.30;
-      if (m.chopPhase < chipWindow) {
-        final lt = m.chopPhase / chipWindow;
-        // Spawn point: kazma ucu civarı (kafa-omuz hizası, yüzü yöne)
-        final dir = m.facingRight ? 1.0 : -1.0;
-        final ox = dir * 12;
-        final oy = -18;
-        final seed = m.gridX.toInt() * 7 + m.gridY.toInt() * 13;
-        ParticleRenderer.drawChip(canvas,
-            s.dx + ox, s.dy + oy, lt,
-            color: const Color(0xFFA8A4A0),
-            shade: const Color(0xFF5A5450),
-            direction: dir, seed: seed);
-      }
-    }
-  }
-}
-
-class _MineDrawable extends _Drawable {
-  final MineNode n;
-  _MineDrawable(this.n);
-  @override double get depth => n.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(n.col.toDouble(), n.row.toDouble(), size, camera);
-    MineRenderer.draw(canvas, s.dx, s.dy,
-        type: n.type,
-        chopPhase: n.chopPhase,
-        seed: n.col * 13 + n.row * 29);
-  }
-}
-
-/// Oduncu kulübesinin otonom NPC'si. WoodcutterEntity'den ayrı bir tip
-/// (LumberCampEntity) ama davranış/sprite birebir aynı → woodcutter sprite'ı
-/// reuse. Önceden painter'a hiç geçirilmemişti — render edilmeden ağaç
-/// kesiyordu (ağaç "kendi kendine düşüyor" bug'ı).
-class _LumberCampDrawable extends _Drawable {
-  final LumberCampEntity lc;
-  _LumberCampDrawable(this.lc);
-  @override double get depth => lc.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(lc.renderX, lc.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, lc);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = lc.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * lc.idleBreathScale(_sceneTime));
-    CharacterRenderer.drawWoodcutter(canvas,
-        flipX:         !lc.effectiveFacingRight,
-        walkPhase:     lc.walkPhase,
-        moveIntensity: lc.moveIntensity,
-        chopping:      lc.isChopping,
-        chopPhase:     lc.chopPhase,
-        visual:        lc.visual,
-        time:          _sceneTime,
-        torchLevel:    lc.torchLevel,
-        torchPhase:    lc.torchPhase);
-    canvas.restore();
-
-    if (lc.isChopping) {
-      const chipWindow = 2 * pi * 0.30;
-      if (lc.chopPhase < chipWindow) {
-        final lt = lc.chopPhase / chipWindow;
-        final dir = lc.facingRight ? 1.0 : -1.0;
-        final seed = lc.gridX.toInt() * 7 + lc.gridY.toInt() * 13;
-        ParticleRenderer.drawChip(canvas,
-            s.dx + dir * 12, s.dy - 18, lt,
-            color: const Color(0xFFCFA060),
-            shade: const Color(0xFF8A6A40),
-            direction: dir, seed: seed);
-      }
-    }
-  }
-}
-
-class _WoodcutterDrawable extends _Drawable {
-  final WoodcutterEntity w;
-  _WoodcutterDrawable(this.w);
-  @override double get depth => w.depth;
-  @override WorkerEntity? get actor => w;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(w.renderX, w.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, w);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = w.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * w.idleBreathScale(_sceneTime));
-    CharacterRenderer.drawWoodcutter(canvas,
-        flipX:         !w.effectiveFacingRight,
-        walkPhase:     w.walkPhase,
-        moveIntensity: w.moveIntensity,
-        chopping:      w.isChopping,
-        chopPhase:     w.chopPhase,
-        visual:        w.visual,
-        time:          _sceneTime,
-        torchLevel:    w.torchLevel,
-        torchPhase:    w.torchPhase);
-    canvas.restore();
-
-    // Chopping iken her cycle başında sarı-kahve tahta yongası uçur.
-    if (w.isChopping) {
-      const chipWindow = 2 * pi * 0.30;
-      if (w.chopPhase < chipWindow) {
-        final lt = w.chopPhase / chipWindow;
-        final dir = w.facingRight ? 1.0 : -1.0;
-        final seed = w.gridX.toInt() * 7 + w.gridY.toInt() * 13;
-        ParticleRenderer.drawChip(canvas,
-            s.dx + dir * 12, s.dy - 18, lt,
-            color: const Color(0xFFCFA060),  // açık sarı-kahve tahta
-            shade: const Color(0xFF8A6A40),
-            direction: dir, seed: seed);
-      }
-    }
-  }
-}
-
-class _FisherDrawable extends _Drawable {
-  final FisherEntity f;
-  _FisherDrawable(this.f);
-  @override double get depth => f.depth;
-  @override WorkerEntity? get actor => f;
-  // Fisher splash wiring _FisherDrawable.draw içinde — fishPhase cycle başına
-  // tek splash (kıyıya doğru biraz öne).
-  void _maybeSplash(Canvas canvas, double sx, double sy) {
-    if (!f.isFishing) return;
-    // fishPhase 0..2π döngüde. İlk %25'i splash lifetime → ~0.3 sn.
-    const window = 2 * pi * 0.25;
-    if (f.fishPhase >= window) return;
-    final lt = f.fishPhase / window;
-    final dir = f.facingRight ? 1.0 : -1.0;
-    // Su olta uzantısında — fisher önünde ~14 px, biraz aşağıda.
-    ParticleRenderer.drawSplash(canvas, sx + dir * 14, sy - 4, lt);
-  }
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(f.renderX, f.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, f);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = f.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * f.idleBreathScale(_sceneTime));
-    CharacterRenderer.drawFisher(canvas,
-        flipX:         !f.effectiveFacingRight,
-        walkPhase:     f.walkPhase,
-        moveIntensity: f.moveIntensity,
-        fishing:       f.isFishing,
-        fishPhase:     f.fishPhase,
-        visual:        f.visual,
-        time:          _sceneTime,
-        torchLevel:    f.torchLevel,
-        torchPhase:    f.torchPhase);
-    canvas.restore();
-    _maybeSplash(canvas, s.dx, s.dy);
-  }
-}
-
-class _FloristDrawable extends _Drawable {
-  final FloristEntity fl;
-  _FloristDrawable(this.fl);
-  @override double get depth => fl.gridX + fl.gridY;
-  @override WorkerEntity? get actor => fl;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(fl.renderX, fl.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, fl);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = fl.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * fl.idleBreathScale(_sceneTime));
-    // Çiçekçi = farmer + watering can (carryingWater) + watering anında bend
-    // (harvesting motion'unu sulama hareketi olarak yeniden kullanırız).
-    CharacterRenderer.drawFarmer(canvas,
-        flipX:         !fl.effectiveFacingRight,
-        walkPhase:     fl.walkPhase,
-        moveIntensity: fl.moveIntensity,
-        harvesting:    fl.isWatering,
-        harvestPhase:  fl.waterPhase,
-        carryingWater: true,
-        visual:        fl.visual,
-        time:          _sceneTime,
-        torchLevel:    fl.torchLevel,
-        torchPhase:    fl.torchPhase);
-    canvas.restore();
-  }
-}
-
-class _ShepherdDrawable extends _Drawable {
-  final ShepherdEntity sh;
-  _ShepherdDrawable(this.sh);
-  @override double get depth => sh.depth;
-  @override WorkerEntity? get actor => sh;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(sh.renderX, sh.renderY, size, camera);
-    _drawCharShadow(canvas, s.dx, s.dy);
-    _drawWorkerTorchGlow(canvas, s.dx, s.dy, sh);
-    canvas.save();
-    canvas.translate(s.dx, s.dy);
-    final swayR = sh.idleSwayRotation(_sceneTime);
-    if (swayR != 0) canvas.rotate(swayR);
-    canvas.scale(kCharScale, kCharScale * sh.idleBreathScale(_sceneTime));
-    CharacterRenderer.drawShepherd(canvas,
-        flipX:         !sh.effectiveFacingRight,
-        visual:        sh.visual,
-        time:          _sceneTime,
-        torchLevel:    sh.torchLevel,
-        torchPhase:    sh.torchPhase,
-        walkPhase:     sh.walkPhase,
-        moveIntensity: sh.moveIntensity,
-        milking:       sh.isMilking,
-        milkPhase:     sh.milkPhase);
-    canvas.restore();
-  }
-}
-
-class _CowDrawable extends _Drawable {
-  final AnimalEntity a;
-  _CowDrawable(this.a);
-  @override double get depth => a.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(a.renderX, a.renderY, size, camera);
-    AnimalRenderer.drawCow(
-      canvas,
-      s,
-      facing:     a.facing4,
-      walkPhase:  a.walkPhase,
-      isWalking:  a.isWalking,
-      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
-      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
-    );
-  }
-}
-
-class _SheepDrawable extends _Drawable {
-  final AnimalEntity a;
-  _SheepDrawable(this.a);
-  @override double get depth => a.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(a.renderX, a.renderY, size, camera);
-    AnimalRenderer.drawSheep(
-      canvas,
-      s,
-      facing:     a.facing4,
-      walkPhase:  a.walkPhase,
-      isWalking:  a.isWalking,
-      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
-      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
-    );
-  }
-}
-
-class _ChickenDrawable extends _Drawable {
-  final AnimalEntity a;
-  _ChickenDrawable(this.a);
-  @override double get depth => a.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(a.renderX, a.renderY, size, camera);
-    AnimalRenderer.drawChicken(
-      canvas,
-      s,
-      facing:     a.facing4,
-      walkPhase:  a.walkPhase,
-      isWalking:  a.isWalking,
-      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
-      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
-    );
-  }
-}
-
-class _DecorDrawable extends _Drawable {
-  final DecorEntity d;
-  final double time;
-  _DecorDrawable(this.d, this.time);
-  @override double get depth => d.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final center = gridToScreen(d.col + 0.5 + d.jitterX, d.row + 0.5 + d.jitterY, size, camera);
-    DecorRenderer.draw(canvas, center, d, time: time);
-  }
-}
-
-class _GraveDrawable extends _Drawable {
-  final Grave g;
-  _GraveDrawable(this.g);
-  @override double get depth => g.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final center = gridToScreen(
-        g.col + 0.5 + g.jitterX, g.row + 0.5 + g.jitterY, size, camera);
-    GraveRenderer.draw(canvas, center, g);
-  }
-}
-
-class _ReedBedDrawable extends _Drawable {
-  final ReedBed b;
-  _ReedBedDrawable(this.b);
-  @override double get depth => b.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final center = gridToScreen(b.gridX, b.gridY, size, camera);
-    ReedBedRenderer.draw(canvas, center,
-        seed: (b.gridX * 13 + b.gridY * 7).round());
-  }
-}
-
-class _LotusDrawable extends _Drawable {
-  final LotusEntity l;
-  final double time;
-  _LotusDrawable(this.l, this.time);
-  @override double get depth => l.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final center = gridToScreen(l.col + 0.5, l.row + 0.5, size, camera);
-    NatureRenderer.drawLotus(canvas, center,
-        variant: l.variant, time: time, seed: l.col * 23 + l.row * 37);
-  }
-}
-
-class _ReedDrawable extends _Drawable {
-  final ReedClump r;
-  final double time;
-  _ReedDrawable(this.r, this.time);
-  @override double get depth => r.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    // İki tile'ın üst köşelerinin ortası
-    final s1 = gridToScreen(r.col.toDouble(),  r.row.toDouble(),  size, camera);
-    final s2 = gridToScreen(r.col2.toDouble(), r.row2.toDouble(), size, camera);
-    final cx = (s1.dx + s2.dx) / 2;
-    final cy = (s1.dy + s2.dy) / 2 + kTileH / 2; // tile orta yüksekliğine in
-    NatureRenderer.drawReeds(canvas, cx, cy,
-        time: time, seed: r.col * 19 + r.row * 41,
-        col: r.col.toDouble(), row: r.row.toDouble(),
-        growth: r.growth);
-  }
-}
-
-class _TreeDrawable extends _Drawable {
-  final TreeEntity t;
-  final double time;
-  _TreeDrawable(this.t, this.time);
-  @override double get depth => t.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final center = gridToScreen(t.col + 0.5, t.row + 0.5, size, camera);
-    // Çam gövdesi tabanında dar elips gölge
-    _drawTreeShadow(canvas, center.dx, center.dy, 28.0, t.growthScale);
-    TreeRenderer.draw(canvas, t.type, center,
-        time: time, seed: t.col * 17 + t.row * 31,
-        chopPhase: t.chopPhase,
-        growthScale: t.growthScale,
-        col: t.col + 0.5, row: t.row + 0.5,
-        fellProgress: t.fellProgress);
-  }
-}
-
-class _BuildingDrawable extends _Drawable {
-  final BuildingEntity b;
-  final double time;
-  final double dayLight;
-  final double rainIntensity;
-  /// fireOutbreak event'inde bu bina yanıyor mu — sprite üstüne alev + duman.
-  final bool burning;
-  final bool perfMode;
-  _BuildingDrawable(this.b, this.time, this.dayLight, this.rainIntensity,
-      this.burning, this.perfMode);
-  // Painter's algorithm: bina ön-en (frontmost) tile'ının diagonal sum'ı.
-  // (col+cols-1, row+rows-1) bina footprint'inin güney-doğu (ön) tile'ı.
-  // Eski formül (col+row + (cols+rows)/2 = orta) → bina arkasındaki NPC önde
-  // görünebiliyordu. Ön-tile sort'u izometride doğru z-order verir.
-  @override double get depth =>
-      (b.col + b.cols - 1.0) + (b.row + b.rows - 1.0);
-  @override BuildingEntity? get building => b;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final corners = _corners(b.col, b.row, b.cols, b.rows, size, camera);
-    // GÖLGE ARTIK BURADA ÇİZİLMEZ — ayrı pass'te (paint() başında, sahne
-    // sprite'larından önce). Bu sayede başka binaların gölgesi bu sprite'ın
-    // üstüne taşmaz, hep zemin seviyesinde kalır.
-
-    // Spawn pop: ilk 0.6 sn'de overshoot settle (scale 1.06 → 1.0). Anchor =
-    // front köşe → bina alttan büyür gibi durur. spawnTime == 0 (eski/init
-    // binalar) için 0..0.6 aralığı kapalı, hiç pop yok.
-    final age = b.spawnTime > 0 ? time - b.spawnTime : 999.0;
-    final popping = age >= 0 && age < 0.6;
-    if (popping) {
-      final t = age / 0.6;
-      final scale = 1.0 + 0.06 * (1.0 - t) * (1.0 - t);
-      final fx = corners.$4.dx;
-      final fy = corners.$4.dy;
-      canvas.save();
-      canvas.translate(fx, fy);
-      canvas.scale(scale, scale);
-      canvas.translate(-fx, -fy);
-      BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
-          time: time, seed: b.col * 17 + b.row * 31,
-          dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive, perfMode: perfMode, fireFuel: b.fireFuel);
-      canvas.restore();
-    } else {
-      BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
-          time: time, seed: b.col * 17 + b.row * 31,
-          dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive, perfMode: perfMode, fireFuel: b.fireFuel);
-    }
-
-    // Toz bulutu — ilk 0.4 sn footprint kenarlarında 3 partikül. Açık bej ton.
-    if (b.spawnTime > 0 && age >= 0 && age < 0.4) {
-      final dust = 1.0 - age / 0.4;
-      final midY = (corners.$2.dy + corners.$3.dy) * 0.5 + 2;
-      final fw = (corners.$3.dx - corners.$2.dx).abs();
-      final dustScale = 0.35 + fw / 200.0; // büyük bina ~ daha geniş toz
-      const dustTint = Color(0xFFE8DCC4);
-      SmokeRenderer.draw(canvas, corners.$2.dx + 4, midY,
-          dustScale, time, b.col * 31 + b.row * 7,
-          tint: dustTint, intensity: dust);
-      SmokeRenderer.draw(canvas, corners.$4.dx, corners.$4.dy - 1,
-          dustScale, time, b.col * 31 + b.row * 11,
-          tint: dustTint, intensity: dust);
-      SmokeRenderer.draw(canvas, corners.$3.dx - 4, midY,
-          dustScale, time, b.col * 31 + b.row * 13,
-          tint: dustTint, intensity: dust);
-    }
-
-    if (burning) {
-      _drawBurningOverlay(canvas, corners.$1, corners.$2, corners.$3, corners.$4);
-    }
-
-    // Pazar satış parıltısı — son satış üstünden < 1sn ise altın yukarı çıkar.
-    if (b.lastSaleTime > 0) {
-      final saleAge = time - b.lastSaleTime;
-      if (saleAge >= 0 && saleAge < 1.0) {
-        // Pazar üstü merkez — back ile front'un X ortası, back Y'den biraz aşağı.
-        final cx = (corners.$1.dx + corners.$4.dx) * 0.5;
-        final cy = corners.$1.dy + 4;
-        ParticleRenderer.drawGoldSparkle(canvas, cx, cy, saleAge);
-      }
-    }
-  }
-
-  // Yanan bina overlay'i — sprite çatısı/orta seviyesinde 2-3 alev + yukarı
-  // kalkan koyu duman partikülleri + sıcak halo. Footprint köşelerinden
-  // ortalanmış pozisyon hesabı.
-  static final Paint _pBurnGlow  = Paint()..isAntiAlias = true;
-
-  void _drawBurningOverlay(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front) {
-    // Sprite çatı orta noktası: footprint orta x, back y (sprite yukarı
-    // doğru uzar). Tile genişliğine göre alev ölçeği.
-    final cx = (back.dx + front.dx) * 0.5;
-    final roofY = (back.dy + left.dy) * 0.5 - 4; // back'ten biraz yukarı
-    final tileW = (right.dx - left.dx).abs();
-    final flameScale = tileW / 26.0;
-
-    // Sıcak halo (additive plus blend — gece sıcak parlama)
-    final pulse = sin(time * 4.7 + b.col * 0.3) * 0.15 + 0.85;
-    _pBurnGlow.blendMode = BlendMode.plus;
-    _pBurnGlow.color = Color.fromARGB(
-        (140 * pulse).round().clamp(0, 200), 0xFF, 0x60, 0x18);
-    canvas.drawCircle(Offset(cx, roofY), 30 * flameScale, _pBurnGlow);
-    _pBurnGlow.blendMode = BlendMode.srcOver;
-
-    // Birden fazla alev — çatıya yayılır
-    for (int i = 0; i < 3; i++) {
-      final fx = cx + (i - 1) * (10 * flameScale);
-      final fy = roofY - (i == 1 ? 4 * flameScale : 0);
-      FlameRenderer.draw(canvas, fx, fy, flameScale * 2.0,
-          time + i * 0.41, b.col * 7 + i,
-          intensity: 1.0, sparks: true);
-    }
-
-    // Yangın dumanı — sprite-based, koyu siyah-gri tint, yoğun yüksek scale.
-    // İki duman sütunu (çatının iki ucundan) → yangının büyüklüğünü vurgular.
-    SmokeRenderer.draw(canvas, cx - 4 * flameScale, roofY,
-        flameScale * 2.4, time, b.col * 17 + b.row * 31,
-        tint: const Color(0xFF504842), intensity: 1.0);
-    SmokeRenderer.draw(canvas, cx + 4 * flameScale, roofY - 2,
-        flameScale * 2.0, time + 0.7, b.col * 23 + b.row * 41 + 7,
-        tint: const Color(0xFF504842), intensity: 0.9);
-  }
-}
-
-class _ScaffoldDrawable extends _Drawable {
-  final BuildOrder order;
-  final double time;
-  _ScaffoldDrawable(this.order, this.time);
-  @override
-  double get depth {
-    // Ön köşe — _BuildingDrawable ile aynı kuralda kalmak için tutarlı.
-    final m = kBuildingMeta[order.type]!;
-    return (order.col + m.cols - 1.0) + (order.row + m.rows - 1.0);
-  }
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final m = kBuildingMeta[order.type]!;
-    final (back, left, right, front) = _corners(order.col, order.row, m.cols, m.rows, size, camera);
-
-    // ── 1) Zemin diamond — inşaat alanı (toprak/sıkıştırılmış renk) ──
-    _scratchPath
-      ..reset()
-      ..moveTo(back.dx,  back.dy)
-      ..lineTo(right.dx, right.dy)
-      ..lineTo(front.dx, front.dy)
-      ..lineTo(left.dx,  left.dy)
-      ..close();
-    canvas.drawPath(_scratchPath, _pScaffGround);
-    canvas.drawPath(_scratchPath, _pScaffBorder);
-
-    // ── 2) Bina sprite reveal (smoothstep + jitter + clip kenarı gölge) ──
-    BuildingRenderer.drawConstruction(
-        canvas, order.type, left, right, front, order.progress, time);
-  }
-}
-
-(Offset, Offset, Offset, Offset) _corners(int col, int row, int cols, int rows, Size size, Offset camera) {
-  final back  = gridToScreen(col.toDouble(),          row.toDouble(),          size, camera);
-  final left  = gridToScreen(col.toDouble(),          (row + rows).toDouble(), size, camera);
-  final right = gridToScreen((col + cols).toDouble(), row.toDouble(),          size, camera);
-  final front = gridToScreen((col + cols).toDouble(), (row + rows).toDouble(), size, camera);
-  return (back, left, right, front);
-}
-
-class _ResourceBoxDrawable extends _Drawable {
-  final ResourceBox b;
-  final double time;
-  _ResourceBoxDrawable(this.b, this.time);
-  @override double get depth {
-    // Stack içindeki ön-arka offset depth'e dahil — aynı tile'da öndeki
-    // kutu arkadakini sprite olarak kapatır.
-    final off = ResourcePlacement.offsetFor(b.slotIndex);
-    return (b.gridX + off.$1) + (b.gridY + off.$2);
-  }
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final off = ResourcePlacement.offsetFor(b.slotIndex);
-    final s = gridToScreen(b.gridX + off.$1, b.gridY + off.$2, size, camera);
-    ResourceRenderer.drawBox(canvas, b, s.dx, s.dy, time);
-  }
-}
-
-class _EggDrawable extends _Drawable {
-  final EggEntity e;
-  final double time;
-  _EggDrawable(this.e, this.time);
-  @override double get depth => e.depth;
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    final s = gridToScreen(e.gridX, e.gridY, size, camera);
-    // Drop animasyonu (ilk 0.4s yukarıdan iner).
-    double y = s.dy - 3;
-    final since = time - e.spawnTime;
-    if (since < 0.4) {
-      final t = since / 0.4;
-      y -= (1 - t) * (1 - t) * 9;
-    }
-    // Çatlamaya yakın hafif sallanma (willHatch).
-    double wob = 0;
-    if (e.willHatch && e.age > e.resolveAt - 2.0) {
-      wob = sin(time * 18 + e.gridX) * 1.3;
-    }
-    final c = Offset(s.dx + wob, y);
-    canvas.drawOval(
-        Rect.fromCenter(center: Offset(s.dx, s.dy - 0.5), width: 7, height: 3.5),
-        Paint()..color = const Color(0x33000000));
-    canvas.drawOval(Rect.fromCenter(center: c, width: 6.5, height: 8.5),
-        Paint()..color = const Color(0xFFF3E9D2));
-    canvas.drawOval(Rect.fromCenter(center: c.translate(-1, -1.6), width: 2.4, height: 3.4),
-        Paint()..color = const Color(0xFFFFFDF5));
-  }
-}
-
-class _HayDrawable extends _Drawable {
-  final HayEntity h;
-  final double time;
-  _HayDrawable(this.h, this.time);
-  @override double get depth {
-    if (h.isBale) return h.gridX + h.gridY + 1.0;
-    final off = ResourcePlacement.offsetFor(h.slotIndex);
-    return (h.gridX + off.$1) + (h.gridY + off.$2);
-  }
-  @override
-  void draw(Canvas canvas, Size size, Offset camera) {
-    if (h.isBale) {
-      const bs = 0.5;
-      final right = gridToScreen(h.gridX + bs, h.gridY,       size, camera);
-      final left  = gridToScreen(h.gridX,      h.gridY + bs,  size, camera);
-      final front = gridToScreen(h.gridX + bs, h.gridY + bs,  size, camera);
-      final spriteW = (right.dx - left.dx).abs();
-      ResourceRenderer.drawBale(canvas, front.dx, front.dy, spriteW, time, h);
-    } else {
-      final off = ResourcePlacement.offsetFor(h.slotIndex);
-      final s = gridToScreen(h.gridX + off.$1, h.gridY + off.$2, size, camera);
-      ResourceRenderer.drawHay(canvas, h, s.dx, s.dy, time);
-    }
-  }
-}
-
-// ─── PAINTER ─────────────────────────────────────────────────────────────────
-
 class VillageGamePainter extends CustomPainter {
   final List<VillagerEntity> villagers;
   /// Gezgin tüccarlar — sakin köylülerden ayrı listede çizilir ama görsel
@@ -1701,7 +374,6 @@ class VillageGamePainter extends CustomPainter {
   /// NpcCostume.imperial kostümü çizilir).
   final List<VillagerEntity> soldiers;
   final List<BuildingEntity> buildings;
-  final List<BuilderEntity>  builders;
   final List<BuildOrder>     pendingOrders;
   final RoadSystem           roadSystem;
   final List<RoadOrder>      pendingRoadOrders;
@@ -1710,6 +382,20 @@ class VillageGamePainter extends CustomPainter {
   final (int, int)?   ghostTile;
   final bool          ghostValid;
   final double        time;
+
+  /// YOL ÖNİZLEMESİ — sürüklenen (henüz döşenmemiş) güzergâh: (tile, geçerli mi).
+  /// Boş liste = önizleme yok. Kaynak harcanmadan önce ne olacağı burada görünür.
+  final List<((int, int), bool)> roadPreview;
+  /// Önizlenen yüzey; silgi modunda null (kırmızı "kaldırılacak" işareti çizilir).
+  final RoadSurface? roadPreviewSurface;
+  /// [roadPreview] yerinde mutate edilen tek bir liste olduğu için içerik
+  /// karşılaştırması işe yaramaz — repaint kararı bu sayaçtan verilir.
+  final int roadPreviewVersion;
+
+  /// ŞEFFAFLIK HEDEFLERİ — üzerinde inşaat/planlama olan tile'lar. Bunları ÖRTEN
+  /// binalar yarı saydam çizilir, böylece hayalet bina, şantiye ve yol emri
+  /// başka bir binanın arkasında kaybolmaz. Boşsa pass hiç çalışmaz (maliyetsiz).
+  final Set<(int, int)> revealTiles;
 
   /// Day/night overlay — sahnenin üstüne çizilen vertical gradient'in
   /// üst/alt renkleri. Şafak/gün batımında üst mor-pembe, alt sıcak turuncu;
@@ -1723,6 +409,10 @@ class VillageGamePainter extends CustomPainter {
   /// cycle getter'larından gelir.
   final double nightClarity;
 
+  /// ŞU ANKİ ADIMIN HEDEFİ (ızgara koordinatı) — yönlendirmenin görsel ayağı.
+  /// null ise işaret çizilmez (bkz. scene_flow `_refreshStepBeacon`).
+  final (double, double)? stepBeacon;
+
   /// Sahne sprite'larına BlendMode.modulate ile uygulanan "atmosfer rengi".
   /// Gece soğuk mavi mehtap, şafak şeftali, altın saat amber, öğle ~beyaz.
   /// _drawLightingPass içinde dark overlay'den önce çizilir → sprite'lar
@@ -1733,7 +423,6 @@ class VillageGamePainter extends CustomPainter {
   final double ambientStrength;
 
   final List<FarmTile>   farmTiles;
-  final List<FarmFarmer> farmers;
   /// Çoklu tarla seçim önizlemesi: (c1, r1, c2, r2)
   final (int, int, int, int)? farmSelection;
 
@@ -1747,14 +436,11 @@ class VillageGamePainter extends CustomPainter {
   final Set<(int, int)>        wildTreeTiles;
   /// Devrilen ön-hat ağacı yaprak patlamaları (kısa ömürlü fx).
   final List<LeafBurst>        leafBursts;
-  final List<WoodcutterEntity> woodcutters;
   /// Oduncu kulübesinin otonom NPC'leri — woodcutter'dan ayrı tip.
-  final List<LumberCampEntity> lumberCamps;
   /// Oduncu alan seçim önizlemesi: (c1, r1, c2, r2)
   final (int, int, int, int)? lumberSelection;
 
   final List<MineNode>    mineNodes;
-  final List<MinerEntity> miners;
   /// Madenci alan seçim önizlemesi
   final (int, int, int, int)? mineSelection;
 
@@ -1762,17 +448,19 @@ class VillageGamePainter extends CustomPainter {
   final double           dayLight;
   final List<LotusEntity> lotuses;
   final List<ReedClump>   reeds;
+  final List<BerryBush>   berryBushes;
   final List<DecorEntity> decor;
   final List<Grave>       graves;
   final List<ReedBed>     reedBeds;
-  final List<FisherEntity> fishers;
-  final List<FloristEntity> florists;
-  final List<ShepherdEntity> shepherds;
   final List<AnimalEntity>   cows;
   final double zoom;
   final List<ResourceBox> resourceBoxes;
   final List<HayEntity>   hayEntities;
   final List<EggEntity>   eggs;
+  /// Gömülü zulalar (Faz 4) — eşelenmiş toprak izi.
+  final List<LootCache>   lootCaches;
+  /// Zula izinin kapanma süresi (sn) — sahneden geçer, çizim tazeliği bundan.
+  final double            lootFade;
   /// Suya yansıtılan gökyüzü tonu — _cycle.skyMid'den geçer.
   final Color skyReflection;
   /// Adayı çevreleyen deniz (OceanRenderer) için zaman/güneş bilgisi.
@@ -1816,7 +504,6 @@ class VillageGamePainter extends CustomPainter {
     this.merchants = const [],
     this.soldiers = const [],
     required this.buildings,
-    required this.builders,
     required this.pendingOrders,
     required this.roadSystem,
     this.pendingRoadOrders = const [],
@@ -1824,42 +511,43 @@ class VillageGamePainter extends CustomPainter {
     this.ghostType,
     this.ghostTile,
     this.ghostValid    = false,
+    this.roadPreview   = const [],
+    this.roadPreviewSurface,
+    this.roadPreviewVersion = 0,
+    this.revealTiles   = const {},
     this.time          = 0,
     this.overlayTop    = const Color(0x00000000),
     this.overlayBottom = const Color(0x00000000),
     this.rainIntensity = 0.0,
     this.nightClarity  = 0.0,
+    this.stepBeacon,
     this.ambientTint     = const Color(0xFFFFFFFF),
     this.ambientStrength = 0.0,
     this.farmTiles     = const [],
-    this.farmers       = const [],
     this.farmSelection,
     this.trees         = const [],
     this.cleared       = const {},
     this.wilderness    = const {},
     this.leafBursts    = const [],
     this.wildTreeTiles = const {},
-    this.woodcutters   = const [],
-    this.lumberCamps   = const [],
     this.lumberSelection,
     this.mineNodes     = const [],
-    this.miners        = const [],
     this.mineSelection,
     this.waterTiles    = const {},
     this.dayLight      = 1.0,
     this.lotuses       = const [],
     this.reeds         = const [],
+    this.berryBushes   = const [],
     this.decor         = const [],
     this.graves        = const [],
     this.reedBeds      = const [],
-    this.fishers       = const [],
-    this.florists      = const [],
-    this.shepherds     = const [],
     this.cows          = const [],
     this.zoom          = 1.0,
     this.resourceBoxes = const [],
     this.hayEntities   = const [],
     this.eggs          = const [],
+    this.lootCaches    = const [],
+    this.lootFade      = 1.0,
     this.skyReflection = const Color(0xFFA0C0E0),
     this.timeOfDay     = 0.5,
     this.season        = Season.spring,
@@ -1879,7 +567,6 @@ class VillageGamePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    _sceneTime = time;
 
     // ── Deniz arka planı (ekran-uzayı, zoom'dan bağımsız) ────────────────────
     // Adayı çevreleyen suluboya deniz; eski düz gök boşluğunun yerini alır.
@@ -1934,6 +621,8 @@ class VillageGamePainter extends CustomPainter {
     if (ghostType != null && ghostTile != null) {
       _drawGhost(canvas, size);
     }
+    // Yol önizlemesi sahneden SONRA — bina arkasında kaybolmasın.
+    _drawRoadPreview(canvas, size);
 
     if (useGrade) canvas.restore();
     canvas.restore();
@@ -1955,316 +644,13 @@ class VillageGamePainter extends CustomPainter {
       _drawBeeSwarms(canvas, size);
     }
     _drawRain(canvas, size);
+    // ADIM İŞARETİ — ışıklandırmadan SONRA: bu bir dünya nesnesi değil, yol
+    // gösteren bir işaret. Gece karanlığının altında kalırsa tam da en çok
+    // gerektiği anda (ilk gece) görünmez olur.
+    _drawStepBeacon(canvas, size);
     // Event overlay — aktif olayların ekran toneu + olaya özel partiküller.
     _drawEventOverlay(canvas, size);
   }
-
-  // ── Çok hafif kenar tülü (reveal = zoom kısıtının atmosferik çerçevesi) ──────
-  static final Paint _pEdgeHaze = Paint()..isAntiAlias = true;
-
-  void _drawEdgeHaze(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
-    if (w <= 0 || h <= 0) return;
-    final band = min(w, h) * 0.17;      // tül bandı genişliği (ekran kenarı)
-    // İnci/şafak tonu — şafak/alacakaranlıkta hafif sıcak, gündüz nötr-parlak.
-    final warm = (1.0 - dayLight).clamp(0.0, 1.0);
-    final cr = (0xE4 + 0x14 * warm).round().clamp(0, 255);
-    final cg = (0xE8).clamp(0, 255);
-    final cb = (0xEC - 0x16 * warm).round().clamp(0, 255);
-    const maxA = 0.11;                   // tek kenar tepe opaklığı (çok hafif)
-    final edge  = Color.fromRGBO(cr, cg, cb, maxA);
-    final clear = Color.fromRGBO(cr, cg, cb, 0.0);
-
-    void side(Rect rect, Offset from, Offset to) {
-      _pEdgeHaze.shader =
-          ui.Gradient.linear(from, to, [edge, clear], const [0.0, 1.0]);
-      canvas.drawRect(rect, _pEdgeHaze);
-    }
-
-    side(Rect.fromLTWH(0, 0, w, band), Offset(0, 0), Offset(0, band));           // üst
-    side(Rect.fromLTWH(0, h - band, w, band), Offset(0, h), Offset(0, h - band)); // alt
-    side(Rect.fromLTWH(0, 0, band, h), Offset(0, 0), Offset(band, 0));           // sol
-    side(Rect.fromLTWH(w - band, 0, band, h), Offset(w, 0), Offset(w - band, 0)); // sağ
-  }
-
-  /// Dünya (grid) noktasını, paint()'teki zoom dönüşümüyle aynı biçimde ekran
-  /// koordinatına çevirir. Gece overlay'inin ÜSTÜNE çizilen efektler için.
-  Offset _worldToScreen(double gx, double gy, Size size) {
-    final s  = gridToScreen(gx, gy, size, camera);
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    return Offset(cx + (s.dx - cx) * zoom, cy + (s.dy - cy) * zoom);
-  }
-
-  // ── Gece ateş böcekleri ─────────────────────────────────────────────────────
-  // Geceleri kara üzerinde yavaşça süzülen, parıldayan sıcak ışık noktaları.
-  // Prosedürel (durumsuz): konum index + time'dan türer. Overlay sonrası çizilir
-  // ki parlasın; gündüz/yağmurda görünmez.
-  void _drawFireflies(Canvas canvas, Size size) {
-    final strength = ((0.42 - dayLight) / 0.42).clamp(0.0, 1.0);
-    if (strength <= 0.01 || rainIntensity > 0.3) return;
-    // Zoom çok küçükse particle'lar görünmez derecede ufalır — kısıt.
-    final count = zoom < 0.4 ? 18 : (zoom < 0.7 ? 28 : 38);
-    for (int i = 0; i < count; i++) {
-      final h     = i * 73856093;
-      final baseC = (h % 1000) / 1000.0 * kCols;
-      final baseR = ((h ~/ 1000) % 1000) / 1000.0 * kRows;
-      final gx    = baseC + sin(time * 0.18 + i * 1.3) * 1.4;
-      final gy    = baseR + cos(time * 0.15 + i * 2.1) * 1.1;
-      final p     = _worldToScreen(gx, gy, size);
-      if (p.dx < -20 || p.dx > size.width + 20 ||
-          p.dy < -20 || p.dy > size.height + 20) {
-        continue;
-      }
-      final tw = sin(time * 2.3 + i * 4.7) * 0.5 + 0.5;
-      final a  = (strength * tw * tw * 205).round().clamp(0, 220);
-      if (a < 8) continue;
-      final r = (1.6 + tw * 1.4) * zoom;
-      // Blur yerine 2 katman concentric: dış soluk geniş, iç parlak çekirdek.
-      _pFireflyGlow.color = Color.fromARGB((a * 0.20).round(), 0xC8, 0xFF, 0x9A);
-      canvas.drawCircle(p, r * 2.6, _pFireflyGlow);
-      _pFireflyGlow.color = Color.fromARGB((a * 0.40).round(), 0xC8, 0xFF, 0x9A);
-      canvas.drawCircle(p, r * 1.6, _pFireflyGlow);
-      _pFireflyCore.color = Color.fromARGB(a, 0xEC, 0xFF, 0xC0);
-      canvas.drawCircle(p, r, _pFireflyCore);
-    }
-  }
-
-  // ── Gündüz polen/toz zerreleri ──────────────────────────────────────────────
-  // Güneşte parıldayan, havada yumuşakça süzülen soluk parçacıklar — ateş
-  // böceklerinin gündüz karşılığı. Geceye doğru sönümlenir, yağmurda görünmez.
-  void _drawPollen(Canvas canvas, Size size) {
-    final strength = ((dayLight - 0.5) / 0.5).clamp(0.0, 1.0);
-    if (strength <= 0.02 || rainIntensity > 0.2) return;
-    // Zoom out'ta parçacıklar zaten görünmüyor — kısıt.
-    final count = zoom < 0.4 ? 0 : (zoom < 0.7 ? 24 : 46);
-    if (count == 0) return;
-    for (int i = 0; i < count; i++) {
-      final h  = i * 40503;
-      final bc = (h % 1000) / 1000.0 * kCols;
-      final br = (h ~/ 1000 % 1000) / 1000.0 * kRows;
-      final gx = bc + sin(time * 0.35 + i * 1.1) * 1.6 + sin(time * 0.13 + i) * 0.9;
-      final gy = br + cos(time * 0.30 + i * 1.7) * 1.1;
-      final p  = _worldToScreen(gx, gy, size);
-      if (p.dx < -10 || p.dx > size.width + 10 ||
-          p.dy < -10 || p.dy > size.height + 10) {
-        continue;
-      }
-      final tw = sin(time * 1.3 + i * 2.3) * 0.5 + 0.5;
-      final a  = (strength * (0.35 + tw * 0.65) * 95).round().clamp(0, 110);
-      if (a < 6) continue;
-      final r = (0.8 + tw * 0.9) * zoom;
-      _pPollen.color = Color.fromARGB(a, 0xFF, 0xF2, 0xC8);
-      canvas.drawCircle(p, r, _pPollen);
-    }
-  }
-
-  // ── Mevsim partikülleri (kar / yaprak) ─────────────────────────────────────
-  // Ekran uzayında, lighting pass üstünde çizilen prosedürel atmosfer. Kış:
-  // yavaşça süzülen kar; sonbahar: tumbling sürüklenen yaprak. Durumsuz —
-  // konum index + time'dan türer. Pure atmosfer, game state'i etkilemez.
-  void _drawSeasonParticles(Canvas canvas, Size size) {
-    switch (season) {
-      case Season.winter:
-        _drawSnow(canvas, size);
-      case Season.autumn:
-        _drawLeaves(canvas, size);
-      case Season.spring:
-      case Season.summer:
-        break;
-    }
-  }
-
-  void _drawSnow(Canvas canvas, Size size) {
-    if (zoom < 0.35) return;
-    final n = perfMode ? 24 : (zoom < 0.6 ? 38 : 60);
-    // 3 derinlik katmanı: uzak (küçük/yavaş/soluk) → yakın (büyük/hızlı/parlak).
-    _drawSnowLayer(canvas, size, count: n,        speed: 0.05,
-        rMin: 0.7, rMax: 1.3, alpha: 0.34, seed: 211,  sway: 12);
-    _drawSnowLayer(canvas, size, count: n * 2 ~/ 3, speed: 0.085,
-        rMin: 1.2, rMax: 1.9, alpha: 0.55, seed: 877,  sway: 18);
-    _drawSnowLayer(canvas, size, count: n ~/ 2,    speed: 0.13,
-        rMin: 1.7, rMax: 2.6, alpha: 0.78, seed: 1559, sway: 26);
-  }
-
-  void _drawSnowLayer(Canvas canvas, Size size, {
-    required int count,
-    required double speed,
-    required double rMin,
-    required double rMax,
-    required double alpha,
-    required int seed,
-    required double sway,
-  }) {
-    final yRange = size.height + 8;
-    for (int i = 0; i < count; i++) {
-      final baseX = ((i * 1733 + seed + 97) % 997) / 997.0 * size.width;
-      final yPhase = ((i * 619 + seed + 53) % 991) / 991.0;
-      final y = ((yPhase + time * speed) % 1.0) * yRange - 4;
-      final x = baseX + sin(time * 0.6 + i * 1.3) * sway;
-      if (x < -6 || x > size.width + 6) continue;
-      final tw = sin(time * 1.1 + i * 2.0) * 0.5 + 0.5;
-      final a = (alpha * (0.7 + tw * 0.3) * 255).round().clamp(0, 255);
-      final r = rMin + (rMax - rMin) * ((i % 7) / 6.0);
-      _pSnow.color = Color.fromARGB(a, 0xFA, 0xFC, 0xFF);
-      canvas.drawCircle(Offset(x, y), r, _pSnow);
-    }
-  }
-
-  // Sonbahar yaprakları — kardan az, daha geniş salınımlı + tumbling rotasyon.
-  static const List<int> _leafColors = [
-    0xFFD98A3D, // amber
-    0xFFC4602A, // turuncu-pas
-    0xFFB5471F, // kızıl
-    0xFFE0A53A, // altın
-    0xFF8A5A2B, // kahve
-  ];
-
-  void _drawLeaves(Canvas canvas, Size size) {
-    if (zoom < 0.35) return;
-    final count = perfMode ? 12 : (zoom < 0.6 ? 16 : 26);
-    final yRange = size.height + 16;
-    final lw = (5.5 * zoom).clamp(3.5, 8.0);
-    final lh = (3.2 * zoom).clamp(2.0, 5.0);
-    for (int i = 0; i < count; i++) {
-      final baseX = ((i * 1733 + 311) % 997) / 997.0 * size.width;
-      final yPhase = ((i * 619 + 131) % 991) / 991.0;
-      final speed = 0.045 + (i % 5) * 0.011;
-      final y = ((yPhase + time * speed) % 1.0) * yRange - 8;
-      final x = baseX + sin(time * 0.5 + i * 1.7) * (22 + (i % 4) * 8);
-      if (x < -12 || x > size.width + 12) continue;
-      final tw = sin(time * 0.9 + i * 1.4) * 0.5 + 0.5;
-      final a = (0.82 * (0.65 + tw * 0.35) * 255).round().clamp(0, 255);
-      _pLeaf.color = Color(_leafColors[i % _leafColors.length])
-          .withAlpha(a);
-      canvas.save();
-      canvas.translate(x, y);
-      // Tumbling — düşerken kendi ekseninde döner (yaprak hissi).
-      canvas.rotate(time * (1.0 + (i % 3) * 0.4) + i * 2.1);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: lw, height: lh),
-        _pLeaf,
-      );
-      canvas.restore();
-    }
-  }
-
-  // ── Ambient kuş sürüleri ───────────────────────────────────────────────────
-  // Sahnenin üstüne (son katman), ekran uzayında çizilir. Her kuş = küçük
-  // koyu silüet; kanatlar sinüs ile çırpınır. Geceleri / şiddetli yağmurda
-  // görünmez. Pure atmosfer — game state'i etkilemez.
-  void _drawBirdFlocks(Canvas canvas, Size size) {
-    if (birdFlocks.isEmpty) return;
-    final dayFade = ((dayLight - 0.2) / 0.3).clamp(0.0, 1.0);
-    final rainFade = (1.0 - (rainIntensity / 0.6)).clamp(0.0, 1.0);
-    final visibility = dayFade * rainFade;
-    if (visibility < 0.05) return;
-
-    final wingPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.6 * zoom;
-    final bodyPaint = Paint();
-
-    for (final flock in birdFlocks) {
-      final fadeIn = (flock.age * 1.3).clamp(0.0, 1.0);
-      final fa = (visibility * fadeIn * 200).round().clamp(0, 220);
-      if (fa < 10) continue;
-      for (final bird in flock.birds) {
-        final (wx, wy) = flock.birdWorldPos(bird);
-        final ground = _worldToScreen(wx, wy, size);
-        final p = Offset(ground.dx, ground.dy - flock.altitude * zoom);
-
-        if (p.dx < -30 || p.dx > size.width + 30 ||
-            p.dy < -30 || p.dy > size.height + 30) {
-          continue;
-        }
-
-        // Kanat çırpış — sin, ~4.5 Hz; her kuş kendi faz offset'iyle desync.
-        final wing = sin(time * 9.0 + bird.wingPhaseOffset);
-        final wingLen = 5.5 * zoom;
-        // Wing tip Y: aşağı (positive) ↔ yukarı (negative) salınımı.
-        final tipDy = wing * 2.2 * zoom;
-        final leftTip  = Offset(p.dx - wingLen, p.dy + tipDy);
-        final rightTip = Offset(p.dx + wingLen, p.dy + tipDy);
-
-        wingPaint.color = Color.fromARGB(fa, 0x33, 0x2E, 0x28);
-        canvas.drawLine(leftTip, p, wingPaint);
-        canvas.drawLine(p, rightTip, wingPaint);
-        bodyPaint.color = Color.fromARGB(fa, 0x22, 0x1E, 0x18);
-        canvas.drawCircle(p, 1.4 * zoom, bodyPaint);
-      }
-    }
-  }
-
-  // ── Ambient arı sürüleri ────────────────────────────────────────────────────
-  // Her arı kovanı etrafında orbit eden küçük arılar. Hızlı kanat çırpışı
-  // (buzz) + amber gövde. Gündüz görünür, gece kovana çekilip fade olur.
-  void _drawBeeSwarms(Canvas canvas, Size size) {
-    if (beeSwarms.isEmpty) return;
-    // Gündüz görünür, alacakaranlıkta da hafif görünür kalsın (0.15'ten başlar).
-    final dayFade  = ((dayLight - 0.15) / 0.35).clamp(0.0, 1.0);
-    final rainFade = (1.0 - (rainIntensity / 0.5)).clamp(0.0, 1.0);
-    final visibility = dayFade * rainFade;
-    if (visibility < 0.05) return;
-
-    final bodyPaint = Paint();
-    final wingPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 1.3 * zoom;
-
-    for (final sw in beeSwarms) {
-      for (final bee in sw.bees) {
-        final (wx, wy) = sw.beeWorldPos(bee);
-        final ground = _worldToScreen(wx, wy, size);
-        final p = Offset(ground.dx, ground.dy + sw.beeBob(bee) * zoom);
-
-        if (p.dx < -20 || p.dx > size.width + 20 ||
-            p.dy < -20 || p.dy > size.height + 20) {
-          continue;
-        }
-
-        final fa = (visibility * 255).round().clamp(0, 255);
-        // Çok hızlı kanat çırpışı — ~5 Hz görsel buzz, her arı desync.
-        final wing = sin(time * 30.0 + bee.wingPhase);
-        final wlen = 2.8 * zoom;
-        final tipDy = wing * 1.1 * zoom;
-        wingPaint.color = Color.fromARGB((fa * 0.55).round(), 0xF0, 0xF0, 0xD0);
-        canvas.drawLine(Offset(p.dx - wlen, p.dy - tipDy), p, wingPaint);
-        canvas.drawLine(p, Offset(p.dx + wlen, p.dy - tipDy), wingPaint);
-        // Gövde: koyu çekirdek + parlak amber halka — net okunur nokta.
-        bodyPaint.color = Color.fromARGB(fa, 0x2A, 0x1C, 0x08);
-        canvas.drawCircle(p, 2.6 * zoom, bodyPaint);
-        bodyPaint.color = Color.fromARGB(fa, 0xFF, 0xC8, 0x48);
-        canvas.drawCircle(p, 1.7 * zoom, bodyPaint);
-      }
-    }
-  }
-
-  // ── Görünür dünya-koordinat sınırları (zoom'a göre) ───────────────────────
-  //
-  // canvas.scale(zoom) ekran merkezine uygulandığı için,
-  // gridToScreen'in döndürdüğü dünya noktası (wx) ekranda görünür ↔
-  //   center + (wx - center) * zoom  ∈  [0, size]
-  // → wx  ∈  [center - center/zoom,  center + (size-center)/zoom]
-  //
-  // Hesaplanan aralık, kTileW/H kadarlık buffer ile döndürülür.
-  (double, double, double, double) _visBounds(Size size) {
-    final inv = 1.0 / zoom;
-    final hw  = size.width  / 2;
-    final hh  = size.height / 2;
-    return (
-      hw  * (1.0 - inv) - kTileW,        // minX
-      hw  * (1.0 + inv) + kTileW,        // maxX
-      hh  * (1.0 - inv) - kTileH * 2,   // minY
-      hh  * (1.0 + inv) + kTileH * 2,   // maxY
-    );
-  }
-
-  // ── Zemin ──────────────────────────────────────────────────────────────────
-  // 1) Çim + kum + border = static layer → Picture cache (camera-bağımsız).
-  // 2) Su tile'ları animasyonlu → her frame ayrı çizilir.
 
   void _drawGround(Canvas canvas, Size size) {
     if (_groundCache == null ||
@@ -2522,6 +908,50 @@ class VillageGamePainter extends CustomPainter {
         RoadRenderer.drawRoadTile(canvas, px, py, hw, hh,
             o.surface, 0, hash, zoom: zoom, opacity: opacity);
       }
+    }
+  }
+
+  /// YOL ÖNİZLEMESİ — sürüklenen güzergâh. Henüz hiçbir şey harcanmadı; bu
+  /// çizim oyuncunun bırakmadan önce gördüğü sözleşmedir.
+  ///
+  /// Döşemede: geçerli tile yeşil dolgu + yüzeyin soluk dokusu, geçersiz tile
+  /// kırmızı. Silgide: kaldırılacak tile kırmızı çapraz.
+  /// Sahne sprite'larından SONRA çizilir → bina arkasında kalmaz.
+  void _drawRoadPreview(Canvas canvas, Size size) {
+    if (roadPreview.isEmpty) return;
+    final hw = kTileW / 2;
+    final hh = kTileH / 2;
+    final erasing = roadPreviewSurface == null;
+
+    for (final (tile, ok) in roadPreview) {
+      final (c, r) = tile;
+      final s = gridToScreen(c.toDouble(), r.toDouble(), size, camera);
+      final px = s.dx.roundToDouble();
+      final py = s.dy.roundToDouble();
+
+      // Geçerli döşemede yüzeyin kendi dokusu soluk çizilir → oyuncu ne
+      // koyacağını (toprak mı taş mı) renginden anlar.
+      if (ok && !erasing) {
+        final hash = (c * 73856093) ^ (r * 19349663);
+        RoadRenderer.drawRoadTile(canvas, px, py, hw, hh,
+            roadPreviewSurface!, 0, hash, zoom: zoom, opacity: 0.42);
+      }
+
+      _scratchPath
+        ..reset()
+        ..moveTo(px, py - hh)
+        ..lineTo(px + hw, py)
+        ..lineTo(px, py + hh)
+        ..lineTo(px - hw, py)
+        ..close();
+      _pGhostFill.color = ok
+          ? (erasing ? const Color(0x55FF5544) : const Color(0x3300FF66))
+          : const Color(0x33FF4444);
+      _pGhostBorder.color = ok
+          ? (erasing ? const Color(0xCCFF6655) : const Color(0xCC33DD77))
+          : const Color(0x99CC4444);
+      canvas.drawPath(_scratchPath, _pGhostFill);
+      canvas.drawPath(_scratchPath, _pGhostBorder);
     }
   }
 
@@ -2792,6 +1222,15 @@ class VillageGamePainter extends CustomPainter {
         }
       }
     }
+    // Böğürtlen çalıları — sayı az (öbekler), bucket'a gerek yok. Ağaçlarla
+    // aynı derinlik hattında sıralanır (ikisi de tek tile, zemine oturur).
+    for (final bb in berryBushes) {
+      if (wilderness.contains((bb.col, bb.row))) continue;
+      if (inView(bb.col + 0.5, bb.row + 0.5, upSmall, sideS)) {
+        _sceneBuffer.add(_BerryBushDrawable(bb, time));
+      }
+    }
+
     for (final b in resourceBoxes) {
       if (b.isDelivered || b.isBeingCarried) continue;
       if (inView(b.gridX, b.gridY, upSmall, sideS)) {
@@ -2801,6 +1240,11 @@ class VillageGamePainter extends CustomPainter {
     for (final e in eggs) {
       if (inView(e.gridX, e.gridY, upSmall, sideS)) {
         _sceneBuffer.add(_EggDrawable(e, time));
+      }
+    }
+    for (final l in lootCaches) {
+      if (inView(l.gridX, l.gridY, upSmall, sideS)) {
+        _sceneBuffer.add(_LootCacheDrawable(l, lootFade));
       }
     }
     for (final h in hayEntities) {
@@ -2825,26 +1269,6 @@ class VillageGamePainter extends CustomPainter {
         _sceneBuffer.add(_VillagerDrawable(e, time, dayLight));
       }
     }
-    for (final f in farmers) {
-      if (inView(f.renderX, f.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_FarmerDrawable(f));
-      }
-    }
-    for (final b in builders) {
-      if (inView(b.renderX, b.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_BuilderDrawable(b));
-      }
-    }
-    for (final w in woodcutters) {
-      if (inView(w.renderX, w.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_WoodcutterDrawable(w));
-      }
-    }
-    for (final lc in lumberCamps) {
-      if (inView(lc.renderX, lc.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_LumberCampDrawable(lc));
-      }
-    }
     // Maden binası dikdörtgenlerini bir kez topla — aşağıdaki miner/mineNode
     // gizleme kontrolleri her entity için tüm bina listesini taramasın.
     _mineRects.clear();
@@ -2854,38 +1278,6 @@ class VillageGamePainter extends CustomPainter {
       _mineRects.add((b.col, b.row, meta.cols, meta.rows));
     }
 
-    // Madenci ocağın içindeyse gizlenir — daha önce drawable hiç yaratılmazdı,
-    // şimdi de viewport culling sonrası bina-içi kontrolü uygulanır.
-    for (final m in miners) {
-      if (m.isMining) {
-        bool inside = false;
-        for (final mr in _mineRects) {
-          if (m.gridX >= mr.$1 - 0.5 && m.gridX < mr.$1 + mr.$3 + 0.5 &&
-              m.gridY >= mr.$2 - 0.5 && m.gridY < mr.$2 + mr.$4 + 0.5) {
-            inside = true; break;
-          }
-        }
-        if (inside) continue;
-      }
-      if (inView(m.renderX, m.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_MinerDrawable(m));
-      }
-    }
-    for (final f in fishers) {
-      if (inView(f.renderX, f.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_FisherDrawable(f));
-      }
-    }
-    for (final fl in florists) {
-      if (inView(fl.renderX, fl.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_FloristDrawable(fl));
-      }
-    }
-    for (final sh in shepherds) {
-      if (inView(sh.renderX, sh.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_ShepherdDrawable(sh));
-      }
-    }
     for (final c in cows) {
       if (inView(c.renderX, c.renderY, upChar, sideM)) {
         switch (c.kind) {
@@ -2988,14 +1380,71 @@ class VillageGamePainter extends CustomPainter {
       final d = a.depth.compareTo(b.depth);
       return d != 0 ? d : a.sortIndex.compareTo(b.sortIndex);
     });
+
+    // İNŞAAT ŞEFFAFLIĞI — planlanan/yapılmakta olan bir şeyin önünde duran
+    // binaları yarı saydam çiz (aşağıda). Hedef yoksa hiç hesaplanmaz.
+    _computeRevealFades(size, camera);
+
     for (final d in _sceneBuffer) {
-      d.draw(canvas, size, camera);
+      final b = d.building;
+      if (b != null && _fadedBuildings.isNotEmpty && _fadedBuildings.contains(b)) {
+        final box = _revealBounds[b];
+        canvas.saveLayer(box, _revealFadePaint);
+        d.draw(canvas, size, camera);
+        canvas.restore();
+      } else {
+        d.draw(canvas, size, camera);
+      }
     }
 
     // (C) Occlusion silhouette — önde çizilen bir bina bir aktörü (NPC/işçi)
     // örtüyorsa, aktörü en üstte yarı saydam yeniden çiz → asla tamamen
     // kaybolmaz (Sims/Tropico tarzı "duvarın ardından hayalet").
     _drawOcclusionSilhouettes(canvas, size, camera);
+  }
+
+  /// İNŞAAT ŞEFFAFLIĞI — planlanan ya da yapılmakta olan bir şey (hayalet bina,
+  /// şantiye, yol emri, yol önizlemesi) başka bir binanın ARKASINA denk
+  /// geliyorsa, o binayı yarı saydam çizilecekler listesine alır.
+  ///
+  /// Oyuncunun derdi buydu: izometride önde duran bir bina, arkasındaki
+  /// şantiyeyi ve yolu tamamen yutuyordu — nereye ne kurduğunu göremiyordun.
+  ///
+  /// Örtme testi occlusion silüetiyle ([_drawOcclusionSilhouettes]) aynı iki
+  /// kuralı kullanır: (1) hedef binanın ARKASINDA mı (footprint kuralı — tek
+  /// skaler depth off-axis'te yanılır), (2) hedefin ekran noktası binanın gövde
+  /// kutusunun içinde mi.
+  void _computeRevealFades(Size size, Offset camera) {
+    _fadedBuildings.clear();
+    _revealBounds.clear();
+    if (revealTiles.isEmpty) return;
+
+    for (final d in _sceneBuffer) {
+      final b = d.building;
+      if (b == null) continue;
+      final (back, left, right, front) =
+          _corners(b.col, b.row, b.cols, b.rows, size, camera);
+      final minX = min(min(back.dx, left.dx), min(right.dx, front.dx));
+      final maxX = max(max(back.dx, left.dx), max(right.dx, front.dx));
+      final wallPx = (front.dy - back.dy) * kOccWallScale + kOccWallBase;
+      final box = Rect.fromLTRB(minX, back.dy - wallPx, maxX, front.dy);
+
+      for (final (tc, tr) in revealTiles) {
+        // Bina kendi tile'ını örtmüş sayılmaz (şantiye kendi yerinde).
+        if (tc >= b.col && tc < b.col + b.cols &&
+            tr >= b.row && tr < b.row + b.rows) {
+          continue;
+        }
+        // Hedef binanın ÖNÜNDEyse örtülemez.
+        if (tc >= b.col + b.cols || tr >= b.row + b.rows) continue;
+        // Tile'ın ekran merkezi bina gövdesinin içinde mi?
+        final s = gridToScreen(tc + 0.5, tr + 0.5, size, camera);
+        if (!box.contains(s)) continue;
+        _fadedBuildings.add(b);
+        _revealBounds[b] = box.inflate(8);
+        break;
+      }
+    }
   }
 
   /// Aktör, önünde çizilen bir binanın ekran gövdesi altında kalıyorsa üstüne
@@ -3330,6 +1779,92 @@ class VillageGamePainter extends CustomPainter {
     }
   }
 
+  /// ADIM İŞARETİ — "şuraya bak" der, bağırmaz.
+  ///
+  /// Tasarım kısıtları (bu projede üçü de daha önce öğrenildi):
+  ///   • Baş üstü emoji / dev ok YOK ([[feedback-event-animation]]) — işaret
+  ///     yere ait bir hâle, sahneye yapıştırılmış bir arayüz parçası değil.
+  ///   • Additive patlama YOK ([[feedback-lighting-restraint]]) — normal blend,
+  ///     düşük alfa, yavaş nefes. Göz almadan yakalanmalı.
+  ///   • İZOMETRİK: halka daire değil OVAL (kTileH/kTileW oranı), yoksa zemine
+  ///     oturmaz, üstünde yüzer.
+  ///
+  /// Nabız yavaş (≈0.55 Hz): hızlı yanıp sönen bir işaret "acele et" der ve
+  /// oyunun sakin temposuyla kavga eder.
+  void _drawStepBeacon(Canvas canvas, Size size) {
+    final b = stepBeacon;
+    if (b == null) return;
+    final s = gridToScreen(b.$1, b.$2, size, camera);
+    // Ekran dışındaysa çizme (kenarda ok göstermek ayrı bir iş; yanlış yerde
+    // duran bir hâle yol göstermez, kafa karıştırır).
+    if (s.dx < -80 || s.dx > size.width + 80) return;
+    if (s.dy < -80 || s.dy > size.height + 80) return;
+
+    final pulse = 0.5 + 0.5 * sin(time * 3.4);
+    const accent = Color(0xFFE9A23B); // HUD kehribarı — arayüzle aynı dil
+
+    // 1) Zemin halkası — nefes alan izometrik oval.
+    //    ÖLÇEK DERSİ: ilk sürüm 44px genişti ve açılış karesinde kayboldu.
+    //    Bu işaret bir süs değil, oyuncunun ilk dakikada aradığı TEK şey;
+    //    "abartısız" olması "görünmez" olması demek değil. Bir tile'dan geniş
+    //    (kTileW=64) olmalı ki zemindeki desenden ayrışsın.
+    final rw = 92.0 + 16.0 * pulse;
+    // En dıştaki geniş ve çok soluk halka — gözü uzaktan çeker.
+    canvas.drawOval(
+      Rect.fromCenter(center: s, width: rw, height: rw * kTileH / kTileW),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..isAntiAlias = true
+        ..color = accent.withValues(alpha: 0.14 + 0.14 * pulse),
+    );
+    // Orta halka — asıl okunan çember.
+    canvas.drawOval(
+      Rect.fromCenter(center: s, width: 62, height: 62 * kTileH / kTileW),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..isAntiAlias = true
+        ..color = accent.withValues(alpha: 0.50),
+    );
+    // İçteki dolgu — çok hafif, zemini "sıcak" yapar (nokta belli olsun).
+    canvas.drawOval(
+      Rect.fromCenter(center: s, width: 62, height: 62 * kTileH / kTileW),
+      Paint()
+        ..isAntiAlias = true
+        ..color = accent.withValues(alpha: 0.08 + 0.05 * pulse),
+    );
+
+    // 2) Yukarıda çengel (chevron) — yön verir, "burası" der. Hedefin
+    //    ÜSTÜNDE durur ki sprite'ı kapatmasın; hafifçe inip kalkar.
+    final bob = sin(time * 2.6) * 3.5;
+    final ty = s.dy - 58 + bob;
+    // Çengelden zemine inen ince bağ — işaretin havada asılı kalmasını önler,
+    // "şu nokta" ile "şu ok" arasındaki ilişkiyi kurar.
+    canvas.drawLine(
+      Offset(s.dx, ty + 12),
+      Offset(s.dx, s.dy - 10),
+      Paint()
+        ..strokeWidth = 1.2
+        ..isAntiAlias = true
+        ..color = accent.withValues(alpha: 0.20),
+    );
+    final chevron = Path()
+      ..moveTo(s.dx - 10, ty)
+      ..lineTo(s.dx, ty + 12)
+      ..lineTo(s.dx + 10, ty);
+    canvas.drawPath(
+      chevron,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true
+        ..color = accent.withValues(alpha: 0.55 + 0.25 * pulse),
+    );
+  }
+
   /// Tüm binaların gölgesini tek pass'te çizer (sahne sprite'larından önce).
   /// Her bina için light vector aggregation ile yumuşak yön + drop-shadow.
   void _drawBuildingShadows(Canvas canvas, Size size) {
@@ -3515,781 +2050,6 @@ class VillageGamePainter extends CustomPainter {
   //
   // Aggregate tint, lighting pass üstüne yumuşak alpha çekilir. Sonra her
   // aktif EventFx için özelleştirilmiş partikül/animasyon pass'i.
-  static final _pEventOverlay = Paint()..isAntiAlias = false;
-  static final _pFxParticle   = Paint()..isAntiAlias = true;
-
-  void _drawEventOverlay(Canvas canvas, Size size) {
-    // Ekran tonu — gece overlay ve lighting üstüne hafif renk filmi.
-    if (eventTint.a > 0) {
-      _pEventOverlay.color = eventTint;
-      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height),
-          _pEventOverlay);
-    }
-    if (activeFx.isEmpty) return;
-    // Sahnenin yapısına bağlı partikül pass'leri.
-    if (activeFx.contains(EventFx.festival)) _fxFestival(canvas, size);
-    if (activeFx.contains(EventFx.cropBlight)) _fxCropBlight(canvas, size);
-    if (activeFx.contains(EventFx.vigil)) _fxVigil(canvas, size);
-    if (activeFx.contains(EventFx.cultRite)) _fxCultRite(canvas, size);
-    if (activeFx.contains(EventFx.meteorShower)) _fxMeteorShower(canvas, size);
-    if (activeFx.contains(EventFx.wedding)) _fxWedding(canvas, size);
-    if (activeFx.contains(EventFx.harvestBounty)) _fxHarvestBounty(canvas, size);
-    if (activeFx.contains(EventFx.plagueAura)) _fxPlagueAura(canvas, size);
-    // fireOutbreak artık sahne overlay'inde değil — gerçek bina drawable'da
-    // sprite üstüne alev + duman çiziyor (_BuildingDrawable._drawBurningOverlay).
-    if (activeFx.contains(EventFx.beastEyes)) _fxBeastEyes(canvas, size);
-    if (activeFx.contains(EventFx.thiefDash)) _fxThiefDash(canvas, size);
-  }
-
-  // ── BESPOKE Şenlik ──────────────────────────────────────────────────────────
-  // Üç imza katman: (1) ateşten komşu binalara gerilen, sarkan + sallanan flama
-  // ipleri (üçgen bayraklar), (2) köy üstüne süzülen renkli konfeti, (3) ateşten
-  // yükselen sıcak fenerler. Dilekçeyle "Hasat Şenliği" onaylanınca tetiklenir;
-  // NPC'ler de ateşe toplanır + dans eder (sahne tarafı). Gerçek bir bayram.
-  void _fxFestival(Canvas canvas, Size size) {
-    const palette = [
-      Color(0xFFE8554E), // kırmızı
-      Color(0xFFF2A93B), // turuncu
-      Color(0xFFF4D03F), // sarı
-      Color(0xFF6FBE4A), // yeşil
-      Color(0xFF4FA8D8), // mavi
-      Color(0xFFB07BD0), // mor
-    ];
-
-    BuildingEntity? fire;
-    for (final b in buildings) {
-      if (b.type == BuildingType.firepit) {
-        fire = b;
-        break;
-      }
-    }
-
-    if (fire != null) {
-      final fireB = fire; // closure'larda non-null kullanım için
-      final fx0 = _worldToScreen(fireB.col + 0.5, fireB.row + 0.5, size);
-      final anchorTop = fx0 + Offset(0, -34 * zoom); // direk tepesi gibi yüksek nokta
-
-      // (1) FLAMA İPLERİ — ateşten en yakın ~5 binaya.
-      final others = buildings
-          .where((b) => !identical(b, fireB) && b.type != BuildingType.firepit)
-          .toList()
-        ..sort((a, b) {
-          int d2(BuildingEntity x) =>
-              (x.col - fireB.col) * (x.col - fireB.col) +
-              (x.row - fireB.row) * (x.row - fireB.row);
-          return d2(a).compareTo(d2(b));
-        });
-      final cordPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4 * zoom
-        ..isAntiAlias = true
-        ..color = const Color(0xCC4A3520);
-      final flagPaint = Paint()..isAntiAlias = true;
-      final n = others.length < 5 ? others.length : 5;
-      for (int k = 0; k < n; k++) {
-        final b = others[k];
-        final end = _worldToScreen(b.col + b.cols / 2.0, b.row + 0.1, size) +
-            Offset(0, -26 * zoom);
-        final mid =
-            Offset((anchorTop.dx + end.dx) / 2, (anchorTop.dy + end.dy) / 2);
-        final sag = (24 + sin(time * 1.3 + k) * 4) * zoom; // sallanan sarkma
-        final ctrl = Offset(mid.dx, mid.dy + sag);
-        canvas.drawPath(
-          Path()
-            ..moveTo(anchorTop.dx, anchorTop.dy)
-            ..quadraticBezierTo(ctrl.dx, ctrl.dy, end.dx, end.dy),
-          cordPaint,
-        );
-        // İp boyunca üçgen bayraklar.
-        const flags = 6;
-        for (int f = 1; f <= flags; f++) {
-          final t = f / (flags + 1);
-          final omt = 1 - t;
-          final px = omt * omt * anchorTop.dx +
-              2 * omt * t * ctrl.dx +
-              t * t * end.dx;
-          final py = omt * omt * anchorTop.dy +
-              2 * omt * t * ctrl.dy +
-              t * t * end.dy;
-          final sway = sin(time * 3.0 + f * 0.7 + k) * 1.6 * zoom;
-          final w = 3.6 * zoom, h = 7.0 * zoom;
-          flagPaint.color = palette[(f + k) % palette.length];
-          canvas.drawPath(
-            Path()
-              ..moveTo(px - w, py)
-              ..lineTo(px + w, py)
-              ..lineTo(px + sway, py + h)
-              ..close(),
-            flagPaint,
-          );
-        }
-      }
-
-      // (3) YÜKSELEN FENERLER — ateşten 4 sıcak küre, yavaş yükselir + flicker.
-      for (int i = 0; i < 4; i++) {
-        final phase = (time * 0.13 + i * 0.27) % 1.0;
-        final ly = fx0.dy - phase * 200 * zoom - 6 * zoom;
-        final lx = fx0.dx +
-            sin(time * 0.6 + i * 1.7) * 16 * zoom +
-            (i - 1.5) * 9 * zoom;
-        final flick = 0.8 + sin(time * 9 + i) * 0.2;
-        final a = ((1 - phase).clamp(0.0, 1.0) * flick * 220).round().clamp(0, 220);
-        canvas.drawCircle(
-            Offset(lx, ly),
-            7 * zoom,
-            Paint()
-              ..blendMode = BlendMode.plus
-              ..color = Color.fromARGB((a * 0.5).round(), 0xFF, 0x9E, 0x3C));
-        canvas.drawCircle(Offset(lx, ly), 3.3 * zoom,
-            Paint()..color = Color.fromARGB(a, 0xFF, 0xE4, 0x9E));
-      }
-    }
-
-    // (2) KONFETİ — köy üstüne süzülen renkli kağıtlar (ekran-uzayı, döner).
-    const confettiCount = 54;
-    final confPaint = Paint()..isAntiAlias = true;
-    for (int i = 0; i < confettiCount; i++) {
-      final seedX = ((i * 73) % 100) / 100.0;
-      final fall = (time * (0.10 + (i % 5) * 0.015) + i * 0.13) % 1.0;
-      final x = seedX * size.width + sin(time * 1.6 + i) * 12;
-      final y = fall * (size.height + 40) - 20;
-      canvas.save();
-      canvas.translate(x, y);
-      canvas.rotate(time * 2.2 + i);
-      confPaint.color = palette[i % palette.length].withValues(alpha: 0.85);
-      canvas.drawRect(
-        Rect.fromCenter(
-            center: Offset.zero, width: 3.2 * zoom, height: 5.4 * zoom),
-        confPaint,
-      );
-      canvas.restore();
-    }
-  }
-
-  // ── BESPOKE Hasat Mantarı (blight) ──────────────────────────────────────────
-  // Tarlalara yayılan hastalık: sırayla enfekte olan tile'larda hastalıklı
-  // mor-gri leke + pörtleyip büyüyen mantar şapkaları + yukarı süzülen yeşil
-  // sporlar. Şenlikten tamamen farklı görünüm + farklı etki (ürün çürür).
-  void _fxCropBlight(Canvas canvas, Size size) {
-    if (farmTiles.isEmpty) return;
-    final p = Paint()..isAntiAlias = true;
-    for (int i = 0; i < farmTiles.length; i++) {
-      final t = farmTiles[i];
-      // Yayılma: tile'lar index sırasına göre kademeli enfekte olur.
-      final infect = ((time * 0.22) - i * 0.07).clamp(0.0, 1.0);
-      if (infect <= 0) continue;
-      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
-
-      // 1) Hastalıklı leke — tile üstünde mor-gri oval (büyüyerek koyulaşır).
-      final blotchA = (infect * 95).round().clamp(0, 95);
-      p.color = Color.fromARGB(blotchA, 0x5E, 0x42, 0x66);
-      canvas.drawOval(
-        Rect.fromCenter(
-            center: base,
-            width: 26 * zoom * (0.5 + infect * 0.5),
-            height: 14 * zoom * (0.5 + infect * 0.5)),
-        p,
-      );
-
-      // 2) Mantar şapkaları — büyüdükçe daha çok kapak (max 4).
-      final caps = (infect * 4).round();
-      for (int c = 0; c < caps; c++) {
-        final ang = i * 1.3 + c * 1.7;
-        final grow = ((infect - c * 0.2).clamp(0.0, 1.0));
-        final mx = base.dx + cos(ang) * 8 * zoom;
-        final my = base.dy + sin(ang) * 4.5 * zoom;
-        // sap
-        p.color = const Color(0xFFCDBFA0);
-        canvas.drawRect(
-          Rect.fromCenter(
-              center: Offset(mx, my),
-              width: 1.5 * zoom,
-              height: 3.0 * zoom * grow),
-          p,
-        );
-        // şapka
-        p.color = const Color(0xFF7E5A3C);
-        canvas.drawCircle(
-            Offset(mx, my - 2.2 * zoom * grow), 2.6 * zoom * grow, p);
-        p.color = const Color(0xFF9A7350);
-        canvas.drawCircle(
-            Offset(mx - 0.6 * zoom, my - 2.6 * zoom * grow),
-            1.1 * zoom * grow, p);
-      }
-
-      // 3) Spor — yukarı süzülen yeşilimsi nokta (hastalık havada).
-      final sp = (time * 0.65 + i * 0.33) % 1.0;
-      final spA = ((1 - sp) * infect * 130).round().clamp(0, 130);
-      p.color = Color.fromARGB(spA, 0x9C, 0xBA, 0x58);
-      canvas.drawCircle(
-          Offset(base.dx + sin(time * 2 + i) * 5 * zoom, base.dy - sp * 22 * zoom),
-          1.5 * zoom, p);
-    }
-  }
-
-  // ── BESPOKE Bereketli Hasat (harvestBounty) ─────────────────────────────────
-  // Mantarın pozitif karşıtı: tarlalar kademeli olarak altın bir ışıltıyla
-  // olgunlaşır — sıcak hale + dalgalanan başak demetleri + yukarı süzülen
-  // bereket zerreleri (altın toz). Cömert, ferah, hasat sevinci.
-  void _fxHarvestBounty(Canvas canvas, Size size) {
-    if (farmTiles.isEmpty) return;
-    final p = Paint()..isAntiAlias = true;
-    for (int i = 0; i < farmTiles.length; i++) {
-      final t = farmTiles[i];
-      // Olgunlaşma dalgası — tile'lar sırayla "altına döner".
-      final ripe = ((time * 0.30) - i * 0.06).clamp(0.0, 1.0);
-      if (ripe <= 0) continue;
-      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
-
-      // 1) Sıcak altın hale — tile üstünde yumuşak nabız atan ışıltı (additive).
-      final pulse = 0.7 + sin(time * 2.2 + i * 0.5) * 0.3;
-      final haloA = (ripe * pulse * 70).round().clamp(0, 70);
-      p
-        ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB(haloA, 0xF6, 0xC8, 0x4A);
-      canvas.drawOval(
-        Rect.fromCenter(
-            center: base,
-            width: 30 * zoom * (0.6 + ripe * 0.4),
-            height: 16 * zoom * (0.6 + ripe * 0.4)),
-        p,
-      );
-      p.blendMode = BlendMode.srcOver;
-
-      // 2) Olgun başak demetleri — büyüdükçe daha çok sap, hafifçe rüzgârda sallanır.
-      final stalks = (ripe * 4).round();
-      for (int s = 0; s < stalks; s++) {
-        final ang = i * 1.1 + s * 1.6;
-        final grow = ((ripe - s * 0.18).clamp(0.0, 1.0));
-        if (grow <= 0) continue;
-        final sway = sin(time * 1.8 + i + s) * 1.4 * zoom;
-        final sx = base.dx + cos(ang) * 8 * zoom;
-        final sy = base.dy + sin(ang) * 4.5 * zoom;
-        final topY = sy - 7.0 * zoom * grow;
-        // sap
-        p
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2 * zoom
-          ..color = const Color(0xFFB98C3A);
-        canvas.drawLine(
-            Offset(sx, sy), Offset(sx + sway, topY), p);
-        // başak başı — altın damla
-        p
-          ..style = PaintingStyle.fill
-          ..color = const Color(0xFFF2CE5C);
-        canvas.drawCircle(Offset(sx + sway, topY), 2.0 * zoom * grow, p);
-        p.color = const Color(0xFFFCEBA0);
-        canvas.drawCircle(
-            Offset(sx + sway - 0.5 * zoom, topY - 0.5 * zoom),
-            0.9 * zoom * grow, p);
-      }
-
-      // 3) Bereket zerresi — yukarı süzülen altın toz (havada ışıldayan bolluk).
-      final mt = (time * 0.5 + i * 0.4) % 1.0;
-      final mA = ((1 - mt) * ripe * 150).round().clamp(0, 150);
-      p
-        ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB(mA, 0xFF, 0xE6, 0x9C);
-      canvas.drawCircle(
-          Offset(base.dx + sin(time * 1.6 + i) * 6 * zoom, base.dy - mt * 24 * zoom),
-          1.4 * zoom, p);
-      p.blendMode = BlendMode.srcOver;
-    }
-  }
-
-  // ── BESPOKE Matem (vigil) ───────────────────────────────────────────────────
-  // Ateş çevresinde yere dizilmiş, tek tek titreyen mum halkası + her mumdan
-  // yavaşça yükselen soluk "ruh" kıvılcımı. Dingin, hüzünlü — şenliğin tersi.
-  void _fxVigil(Canvas canvas, Size size) {
-    BuildingEntity? fire;
-    for (final b in buildings) {
-      if (b.type == BuildingType.firepit) {
-        fire = b;
-        break;
-      }
-    }
-    if (fire == null) return;
-    final c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
-    final glow = Paint()..blendMode = BlendMode.plus;
-    final core = Paint()..isAntiAlias = true;
-    const candles = 12;
-    for (int i = 0; i < candles; i++) {
-      final ang = i * (2 * pi / candles);
-      // İzometrik yassı halka (y ekseni 0.55).
-      final cx = c0.dx + cos(ang) * 40 * zoom;
-      final cy = c0.dy + sin(ang) * 22 * zoom;
-      final flick = 0.75 + sin(time * 7.0 + i * 1.7) * 0.25;
-      // Mum tabanı (küçük koyu çubuk)
-      core.color = const Color(0xFF2A2018);
-      canvas.drawRect(
-        Rect.fromCenter(
-            center: Offset(cx, cy), width: 1.6 * zoom, height: 3.2 * zoom),
-        core);
-      // Alev halesi + çekirdek
-      glow.color = Color.fromARGB((flick * 90).round(), 0xFF, 0x9A, 0x3A);
-      canvas.drawCircle(Offset(cx, cy - 3 * zoom), 5.5 * zoom * flick, glow);
-      core.color = Color.fromARGB((flick * 235).round(), 0xFF, 0xE6, 0xB0);
-      canvas.drawCircle(Offset(cx, cy - 3 * zoom), 1.5 * zoom, core);
-      // Yükselen soluk ruh kıvılcımı
-      final sp = (time * 0.4 + i * 0.5) % 1.0;
-      final a = ((1 - sp) * 90).round().clamp(0, 90);
-      core.color = Color.fromARGB(a, 0xCF, 0xD8, 0xE6);
-      canvas.drawCircle(
-          Offset(cx, cy - 4 * zoom - sp * 34 * zoom), 1.3 * zoom, core);
-    }
-  }
-
-  // ── BESPOKE Ayin / Din (cultRite) ───────────────────────────────────────────
-  // Ateş çevresinde yere çizilmiş, nabız atan parlak çember + üstünde dönen
-  // okült rünler (küçük geometrik glifler) + merkezde tuhaf mor-teal ışıltı.
-  void _fxCultRite(Canvas canvas, Size size) {
-    BuildingEntity? fire;
-    for (final b in buildings) {
-      if (b.type == BuildingType.firepit) {
-        fire = b;
-        break;
-      }
-    }
-    Offset c0 = Offset(size.width / 2, size.height / 2);
-    if (fire != null) c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
-
-    final pulse = sin(time * 1.6) * 0.5 + 0.5;
-    final ringR = 46 * zoom;
-
-    // Yere çizilmiş izometrik çember (nabız atan teal-mor).
-    final ring = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = (1.4 + pulse * 1.2) * zoom
-      ..blendMode = BlendMode.plus
-      ..color = Color.fromARGB((70 + pulse * 90).round(), 0x9A, 0x6C, 0xE0);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: c0, width: ringR * 2, height: ringR * 1.1),
-        ring);
-    // İkinci iç çember (teal).
-    ring.color = Color.fromARGB((50 + pulse * 70).round(), 0x4C, 0xC8, 0xC0);
-    canvas.drawOval(
-        Rect.fromCenter(
-            center: c0, width: ringR * 1.3, height: ringR * 0.72),
-        ring);
-
-    // Merkez okült ışıltı.
-    canvas.drawCircle(c0, (10 + pulse * 8) * zoom,
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..color = Color.fromARGB((60 + pulse * 70).round(), 0x8A, 0x60, 0xD8));
-
-    // Dönen rünler — 6 küçük geometrik glif çember üstünde.
-    final rune = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.3 * zoom
-      ..blendMode = BlendMode.plus
-      ..isAntiAlias = true;
-    const runes = 6;
-    for (int i = 0; i < runes; i++) {
-      final ang = time * 0.6 + i * (2 * pi / runes);
-      final rx = c0.dx + cos(ang) * ringR * 0.92;
-      final ry = c0.dy + sin(ang) * ringR * 0.5;
-      final bob = sin(time * 3 + i) * 2 * zoom;
-      final p = Offset(rx, ry + bob);
-      final a = (150 + sin(time * 4 + i) * 60).round().clamp(0, 230);
-      rune.color = Color.fromARGB(a, 0xC8, 0xB0, 0xF0);
-      final s = 3.2 * zoom;
-      // Glif türü i'ye göre: üçgen / artı / baklava.
-      switch (i % 3) {
-        case 0:
-          canvas.drawPath(
-            Path()
-              ..moveTo(p.dx, p.dy - s)
-              ..lineTo(p.dx + s, p.dy + s)
-              ..lineTo(p.dx - s, p.dy + s)
-              ..close(),
-            rune);
-        case 1:
-          canvas.drawLine(Offset(p.dx - s, p.dy), Offset(p.dx + s, p.dy), rune);
-          canvas.drawLine(Offset(p.dx, p.dy - s), Offset(p.dx, p.dy + s), rune);
-        default:
-          canvas.drawPath(
-            Path()
-              ..moveTo(p.dx, p.dy - s)
-              ..lineTo(p.dx + s, p.dy)
-              ..lineTo(p.dx, p.dy + s)
-              ..lineTo(p.dx - s, p.dy)
-              ..close(),
-            rune);
-      }
-    }
-  }
-
-  // ── BESPOKE Göktaşı yağmuru (meteorShower) ──────────────────────────────────
-  // Ekran-uzayında gökyüzünü çaprazlama geçen küçük kayan yıldızlar (parlak baş
-  // + sönen kuyruk) + periyodik olarak kratere doğru süzülen büyük bir meteor ve
-  // ardından çarpma flaşı. Additive — gece göz alıcı, gündüz daha hafif.
-  void _fxMeteorShower(Canvas canvas, Size size) {
-    final glow = Paint()
-      ..isAntiAlias = true
-      ..blendMode = BlendMode.plus;
-    final night = (1 - dayLight).clamp(0.0, 1.0);
-    final vis = 0.45 + night * 0.55; // gece daha parlak
-
-    const dirx = 0.82, diry = 0.57; // çapraz yön (sağ-aşağı)
-
-    // Küçük kayan yıldızlar — üst gökyüzü bandında akar.
-    const stars = 16;
-    for (int i = 0; i < stars; i++) {
-      final speed = 0.5 + (i % 5) * 0.12;
-      final ph = (time * speed + i * 0.137) % 1.0;
-      final sx = ((i * 137.0) % size.width) - size.width * 0.15;
-      final sy = (i * 53.0) % (size.height * 0.55) - size.height * 0.1;
-      final travel = size.width * 0.5;
-      final hx = sx + dirx * travel * ph;
-      final hy = sy + diry * travel * ph;
-      final fade = sin(ph * pi).clamp(0.0, 1.0); // uçlarda doğal fade
-      final a = (fade * 200 * vis).round().clamp(0, 230);
-      if (a <= 0) continue;
-      final tailLen = 26.0 * zoom;
-      final tx = hx - dirx * tailLen, ty = hy - diry * tailLen;
-      canvas.drawLine(
-        Offset(tx, ty),
-        Offset(hx, hy),
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..strokeWidth = 1.6 * zoom
-          ..strokeCap = StrokeCap.round
-          ..shader = ui.Gradient.linear(
-            Offset(tx, ty), Offset(hx, hy),
-            [const Color(0x00FFFFFF), Color.fromARGB(a, 0xCF, 0xE4, 0xFF)],
-          ),
-      );
-      glow.color = Color.fromARGB(a, 0xFF, 0xFF, 0xF2);
-      canvas.drawCircle(Offset(hx, hy), 1.8 * zoom, glow);
-    }
-
-    // Büyük bolid — ara sıra gökyüzünü baştan başa geçen parlak, yavaş meteor.
-    // Düşme/çarpma yok: sadece göz alıcı, uzun kuyruklu bir geçiş (cozy).
-    final bp = (time * 0.16) % 1.0;
-    if (bp < 0.6) {
-      final t = bp / 0.6;
-      final hx = -size.width * 0.1 + dirx * size.width * 1.2 * t;
-      final hy = size.height * 0.06 + diry * size.width * 1.2 * t;
-      final fade = sin(t * pi).clamp(0.0, 1.0);
-      final a = (fade * 235 * vis).round().clamp(0, 245);
-      const tailLen = 70.0;
-      final tx = hx - dirx * tailLen * zoom, ty = hy - diry * tailLen * zoom;
-      canvas.drawLine(
-        Offset(tx, ty),
-        Offset(hx, hy),
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..strokeWidth = 2.8 * zoom
-          ..strokeCap = StrokeCap.round
-          ..shader = ui.Gradient.linear(
-            Offset(tx, ty), Offset(hx, hy),
-            [const Color(0x00FFD9A0), Color.fromARGB(a, 0xFF, 0xE0, 0xB0)],
-          ),
-      );
-      glow.color = Color.fromARGB(a, 0xFF, 0xF4, 0xDC);
-      canvas.drawCircle(Offset(hx, hy), 3.2 * zoom, glow);
-    }
-  }
-
-  // ── BESPOKE Düğün (wedding) ─────────────────────────────────────────────────
-  // Ateş başında yükselen kalpler + tepeden süzülen renkli yaprak/konfeti + sıcak
-  // bir taban parıltısı. Şenliğin küçük, sıcak kardeşi (çift dansı NPC tarafında).
-  void _fxWedding(Canvas canvas, Size size) {
-    BuildingEntity? fire;
-    for (final b in buildings) {
-      if (b.type == BuildingType.firepit) {
-        fire = b;
-        break;
-      }
-    }
-    if (fire == null) return;
-    final c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
-    final fill = Paint()..isAntiAlias = true;
-
-    // 1) Sıcak taban parıltısı (nabız atan).
-    final pulse = 0.7 + sin(time * 2.2) * 0.3;
-    canvas.drawCircle(
-      Offset(c0.dx, c0.dy),
-      30 * zoom * pulse,
-      Paint()
-        ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB((26 * pulse).round(), 0xFF, 0xC8, 0xD8),
-    );
-
-    // 2) Yükselen kalpler — ateş çevresinden çıkıp süzülerek yukarı kaybolur.
-    const hearts = 10;
-    for (int i = 0; i < hearts; i++) {
-      final sp = (time * 0.5 + i * 0.617) % 1.0;
-      final baseAng = i * (2 * pi / hearts);
-      final spreadX = cos(baseAng) * 30 * zoom;
-      final hx = c0.dx + spreadX + sin(time * 2 + i) * 5 * zoom;
-      final hy = c0.dy + 4 * zoom - sp * 60 * zoom;
-      final a = (sin(sp * pi) * 220).round().clamp(0, 220);
-      if (a <= 0) continue;
-      final s = (2.0 + (i % 3) * 0.7) * zoom * (0.7 + sp * 0.5);
-      fill.color = Color.fromARGB(a, 0xFF, 0x6E, 0x8C);
-      _drawHeart(canvas, Offset(hx, hy), s, fill);
-    }
-
-    // 3) Süzülen yaprak/konfeti — tepeden ateş çevresine yavaşça düşer.
-    const petals = 16;
-    const cols = [
-      Color(0xFFF6C5D8), Color(0xFFF7E59B), Color(0xFFBFE3C0),
-      Color(0xFFBFD4F2), Color(0xFFF2B6A0),
-    ];
-    for (int i = 0; i < petals; i++) {
-      final sp = (time * 0.35 + i * 0.41) % 1.0;
-      final px = c0.dx + cos(i * 1.7) * 46 * zoom + sin(time * 1.6 + i) * 9 * zoom;
-      final py = c0.dy - 46 * zoom + sp * 70 * zoom;
-      final a = (sin(sp * pi) * 200).round().clamp(0, 200);
-      if (a <= 0) continue;
-      fill.color = cols[i % cols.length].withValues(alpha: a / 255);
-      // ince eğik oval yaprak
-      canvas.save();
-      canvas.translate(px, py);
-      canvas.rotate(sin(time * 2 + i) * 0.9);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset.zero, width: 3.4 * zoom, height: 1.6 * zoom),
-        fill);
-      canvas.restore();
-    }
-  }
-
-  /// Küçük dolu kalp — [c] merkez, [s] yarı-genişlik. _fxWedding için.
-  void _drawHeart(Canvas canvas, Offset c, double s, Paint p) {
-    canvas.drawCircle(Offset(c.dx - s * 0.5, c.dy - s * 0.3), s * 0.55, p);
-    canvas.drawCircle(Offset(c.dx + s * 0.5, c.dy - s * 0.3), s * 0.55, p);
-    canvas.drawPath(
-      Path()
-        ..moveTo(c.dx - s, c.dy - s * 0.1)
-        ..lineTo(c.dx, c.dy + s)
-        ..lineTo(c.dx + s, c.dy - s * 0.1)
-        ..close(),
-      p,
-    );
-  }
-
-  // Salgın — NPC'lerin üstünde küçük yeşil bulut partikülü.
-  void _fxPlagueAura(Canvas canvas, Size size) {
-    for (final v in villagers) {
-      if (v.isInsideBuilding) continue;
-      final p = _worldToScreen(v.renderX, v.renderY, size);
-      final phase = (time * 0.8 + v.gridX * 0.31 + v.gridY * 0.17) % 1.0;
-      final yOff = -16 - phase * 12;
-      final a = ((1 - phase) * 180).round().clamp(0, 180);
-      _pFxParticle.color = Color.fromARGB(a, 0x88, 0xC0, 0x60);
-      canvas.drawCircle(p + Offset(0, yOff * zoom), 2.5 * zoom, _pFxParticle);
-    }
-  }
-
-  // Hayvan baskını — gece firepit etrafında ağaç hattında kırmızı göz çiftleri.
-  void _fxBeastEyes(Canvas canvas, Size size) {
-    if (dayLight > 0.4) return;
-    for (int i = 0; i < 4; i++) {
-      // Stabil pozisyonlar — time/3 ile yavaşça kayar (kurtlar dolaşıyor).
-      final seed = i * 41 + (time / 4).floor();
-      final ang  = (seed * 1.234) % (2 * pi);
-      final dist = 12.0 + (seed % 4) * 2.0;
-      final gx   = kCols / 2 + cos(ang) * dist;
-      final gy   = kRows / 2 + sin(ang) * dist;
-      final p    = _worldToScreen(gx, gy, size);
-      final blink = (sin(time * 3 + i) > 0.7) ? 0 : 1;
-      if (blink == 0) continue;
-      _pFxParticle.color = const Color(0xCCFF3020);
-      canvas.drawCircle(p + Offset(-3 * zoom, 0), 1.6 * zoom, _pFxParticle);
-      canvas.drawCircle(p + Offset(3 * zoom, 0), 1.6 * zoom, _pFxParticle);
-    }
-  }
-
-  // Hırsız — ekran sağından sola koşan koyu silüet (kısa süre).
-  void _fxThiefDash(Canvas canvas, Size size) {
-    // 8 sn boyunca tek geçiş — time mod 8 (efekt duration ile uyumlu).
-    final t = (time % 8) / 8;
-    final x = size.width * (1.0 - t * 1.2) + 100;
-    final y = size.height * 0.55 + sin(time * 8) * 4;
-    _pFxParticle.color = const Color(0xDD181018);
-    // Gövde
-    canvas.drawRect(Rect.fromLTWH(x, y, 8 * zoom, 14 * zoom), _pFxParticle);
-    // Kafa
-    canvas.drawRect(
-        Rect.fromLTWH(x + 1, y - 6 * zoom, 6 * zoom, 6 * zoom), _pFxParticle);
-    // Altın torba
-    _pFxParticle.color = const Color(0xCCC09020);
-    canvas.drawRect(
-        Rect.fromLTWH(x + 6 * zoom, y + 4 * zoom, 5 * zoom, 5 * zoom),
-        _pFxParticle);
-  }
-
-  // ── Yağmur ────────────────────────────────────────────────────────────────
-  // 3 parallax katman + ön katmanda motion-trail + sahnede dağıtık ground
-  // splash + yoğun yağmurda hafif blue-grey atmosfer perdesi.
-  //
-  // Tasarım kararları:
-  //  • Katmanlar: uzak (kısa/soluk/yavaş), orta (normal), ön (uzun/parlak/hızlı
-  //    + soluk tail). Her katman kendi X/Y hash'i (örtüşmesin) ve scroll
-  //    hızıyla → derinlik hissi.
-  //  • Wind sway: tek global sin() — tüm katmanlara aynı oranda uygulanır
-  //    ki yağmur "bir bütün" hissetsin, salınımlar farklı yöne gitmesin.
-  //  • Ground splash: ekran uzayında sabit slot'lar, her slot kendi faz +
-  //    periyoduyla tek-shot animasyon (crown + 2 droplet + iso ring). Yer
-  //    sınırı yok (bazıları su tile üstüne düşer ama orada renderer'ın halkası
-  //    zaten var, çakışma fark edilmez).
-
-  void _drawRain(Canvas canvas, Size size) {
-    if (rainIntensity <= 0) return;
-    final intensity = rainIntensity.clamp(0.0, 1.0);
-
-    // Wind salınımı — yavaş sin(), tüm katmanlara aynı oran. Damla uzunluğu
-    // ile çarpılarak slant (x kayması) verir.
-    final wind = sin(time * 0.35) * 0.10 + 0.06; // -0.04..0.16 (eğim oranı)
-
-    // PERF: damla sayıları düşürüldü (AA kapalı arka/orta + kısılmış sayı →
-    // per-frame drawLine maliyeti ~3× azaldı). perfMode'da daha da agresif.
-    // Arka katman — kısa, soluk, yavaş; çok damla → sürekli "perde" hissi
-    _drawRainLayer(canvas, size,
-        count: perfMode ? 0 : 70, speed: 0.34, length: 8.0,
-        slant: wind * 8.0,
-        r: 130, g: 165, b: 200, alpha: 0.22 * intensity,
-        seed: 1731, bold: false);
-    // Orta katman — yoğunluk asıl katman
-    _drawRainLayer(canvas, size,
-        count: perfMode ? 60 : 110, speed: 0.52, length: 14.0,
-        slant: wind * 14.0,
-        r: 190, g: 220, b: 245, alpha: 0.38 * intensity,
-        seed: 4221, bold: false);
-    // Ön katman — uzun, parlak + soluk arka iz; sayısı az tutulur ki
-    // bireysel damlalar okunsun, perde değil hareket hissi versin.
-    _drawRainLayer(canvas, size,
-        count: perfMode ? 30 : 50, speed: 0.78, length: 22.0,
-        slant: wind * 22.0,
-        r: 225, g: 242, b: 255, alpha: 0.50 * intensity,
-        seed: 8917, bold: true, withTail: !perfMode);
-
-    // Yere çarpma — sahnede dağıtık periyodik splash slot'ları. perfMode'da atla.
-    if (!perfMode) _drawGroundSplashes(canvas, size, intensity);
-
-    // Yoğun yağmurda hafif mavi-gri perde (atmosfer derinliği).
-    if (intensity > 0.5) {
-      final tintA = ((intensity - 0.5) * 0.30).clamp(0.0, 0.14);
-      _pRainMist.color = Color.fromRGBO(150, 175, 200, tintA);
-      canvas.drawRect(Offset.zero & size, _pRainMist);
-    }
-  }
-
-  void _drawRainLayer(Canvas canvas, Size size, {
-    required int count,
-    required double speed,
-    required double length,
-    required double slant,
-    required int r, required int g, required int b,
-    required double alpha,
-    required int seed,
-    required bool bold,
-    bool withTail = false,
-  }) {
-    final visible = (count * rainIntensity).round();
-    if (visible == 0 || alpha < 0.01) return;
-
-    final paint = bold ? _pRainBold : _pRain;
-    paint.color = Color.fromRGBO(r, g, b, alpha.clamp(0.0, 1.0));
-
-    // Y aralığı ekran dışına biraz uzar → kenarlarda damla "pop" etmez.
-    final yRange = size.height + length * 2;
-
-    for (int i = 0; i < visible; i++) {
-      // Asal mod'lar → katmanlar arası örtüşmesiz dağıtım.
-      final x = ((i * 1733 + seed + 97) % 997) / 997.0 * size.width;
-      final yPhase = ((i * 619 + seed + 53) % 991) / 991.0;
-      final y = ((yPhase + time * speed) % 1.0) * yRange - length;
-
-      canvas.drawLine(
-        Offset(x,         y),
-        Offset(x + slant, y + length),
-        paint,
-      );
-
-      if (withTail) {
-        // Motion trail — damlanın arkasında yarım boy, ~%35 alpha çizgi.
-        // Hızı görsel olarak çoğaltır; "damla şu an yağıyor" hissi verir.
-        _pRainTail.color = Color.fromRGBO(r, g, b,
-            (alpha * 0.38).clamp(0.0, 1.0));
-        canvas.drawLine(
-          Offset(x - slant * 0.55, y - length * 0.55),
-          Offset(x,                y),
-          _pRainTail,
-        );
-      }
-    }
-  }
-
-  void _drawGroundSplashes(Canvas canvas, Size size, double intensity) {
-    // Sahne genelinde sabit slot pozisyonları + her slot kendi faz/periyod.
-    // count yoğunluğa lineer ölçek — zayıf yağmurda az splash, kuvvetlide çok.
-    // PERF: 55→38 (her splash ~4 AA op; toplam çarpan).
-    final count = (38 * intensity).round();
-    if (count == 0) return;
-
-    for (int i = 0; i < count; i++) {
-      final px = ((i * 7919 + 137) % 997) / 997.0 * size.width;
-      final py = ((i * 5717 + 281) % 991) / 991.0 * size.height;
-      // Her slot 1.4–2.0 sn'de bir splash (period kişiye özel).
-      final period = 1.4 + ((i * 41) % 100) / 100.0 * 0.6;
-      final phaseOff = ((i * 3413 + 89) % 983) / 983.0 * period;
-      final cycT = ((time + phaseOff) % period) / period;
-      // İlk %22'lik dilim splash visible — uzun ömür ⇒ frame'ler arasında
-      // damla sürekli hareket halindeymiş gibi okunur (pop yerine akış).
-      if (cycT > 0.22) continue;
-      final life = cycT / 0.22; // 0..1 splash içinde
-      final invLife = 1.0 - life;
-      // Görsel zarflama — ortada parlak, başta/sonda yumuşak yok ol.
-      final envelope = (life < 0.18)
-          ? life / 0.18                       // ease-in (pop yumuşatılır)
-          : invLife * invLife;                // ease-out
-
-      // Crown — kısa AA çizgi (yuvarlak cap), aniden patlamaz.
-      if (life < 0.5) {
-        final crownH = 3.2 * (1.0 - life * 1.8).clamp(0.0, 1.0);
-        final cA = (envelope * 220 * intensity).toInt().clamp(0, 220);
-        if (cA > 5 && crownH > 0.4) {
-          _pSplash.color = Color.fromARGB(cA, 220, 240, 255);
-          canvas.drawLine(
-            Offset(px, py + 0.3),
-            Offset(px, py - crownH),
-            _pSplash..strokeWidth = 1.1..strokeCap = StrokeCap.round,
-          );
-          // _pSplash'ı sonraki droplet fill'i için fill moda döndür
-          // (drawLine PaintingStyle değiştirmez ama strokeWidth state kalır).
-        }
-      }
-
-      // 2 sıçrayan damlacık — yana uçar, hafif yukarı sonra düşer (arc).
-      // AA daireler, rectangle yerine — kenar yumuşak, sub-pixel akar.
-      final fly = life * 4.8;
-      final arcY = -1.6 + life * 2.6;
-      final dA = (envelope * 200 * intensity).toInt().clamp(0, 200);
-      if (dA > 5) {
-        _pSplash.color = Color.fromARGB(dA, 215, 235, 252);
-        canvas.drawCircle(Offset(px - fly, py + arcY), 0.85, _pSplash);
-        canvas.drawCircle(Offset(px + fly, py + arcY), 0.85, _pSplash);
-      }
-
-      // Genişleyen iso oval ring (2:1 squash — yer hissi).
-      // Ring life boyu yaşar (en uzun ömürlü katman), envelope yerine
-      // smooth invLife² → smooth fade.
-      final ringW = 1.0 + life * 8.0;
-      final ringH = ringW * 0.42;
-      final rA = (invLife * invLife * 160 * intensity).toInt().clamp(0, 160);
-      if (rA > 4) {
-        _pSplashRing.color = Color.fromARGB(rA, 200, 225, 245);
-        canvas.drawOval(
-          Rect.fromCenter(center: Offset(px, py + 1), width: ringW, height: ringH),
-          _pSplashRing,
-        );
-      }
-    }
-  }
 
   @override
   bool shouldRepaint(VillageGamePainter old) =>
@@ -4298,38 +2058,41 @@ class VillageGamePainter extends CustomPainter {
       old.ghostTile       != ghostTile       ||
       old.ghostType       != ghostType       ||
       old.ghostValid      != ghostValid      ||
+      // Yol önizlemesi/şeffaflık hedefleri her sürükleme karesinde değişebilir.
+      // TUZAK: roadPreview state'te YERİNDE mutate edilen tek bir liste — `old`
+      // ile aynı nesne, uzunluk/içerik karşılaştırması hep eşit çıkar. Bu yüzden
+      // ayrı bir sürüm sayacı taşınıyor.
+      old.roadPreviewVersion != roadPreviewVersion ||
+      old.roadPreviewSurface != roadPreviewSurface ||
+      old.revealTiles.length != revealTiles.length ||
       old.overlayTop      != overlayTop      ||
       old.overlayBottom   != overlayBottom   ||
       old.rainIntensity   != rainIntensity   ||
       old.nightClarity    != nightClarity    ||
+      old.stepBeacon      != stepBeacon      ||
       old.farmTiles       != farmTiles       ||
-      old.farmers         != farmers         ||
       old.farmSelection   != farmSelection   ||
       old.lumberSelection != lumberSelection ||
       old.villagers       != villagers       ||
       old.merchants       != merchants       ||
       old.buildings       != buildings       ||
-      old.builders        != builders        ||
       old.pendingOrders   != pendingOrders   ||
       old.roadSystem      != roadSystem      ||
       old.pendingRoadOrders != pendingRoadOrders ||
       old.trees           != trees           ||
-      old.woodcutters     != woodcutters     ||
       old.mineNodes       != mineNodes       ||
-      old.miners          != miners          ||
       old.mineSelection   != mineSelection   ||
       old.waterTiles      != waterTiles      ||
       old.dayLight        != dayLight        ||
       old.lotuses         != lotuses         ||
       old.reeds           != reeds           ||
+      old.berryBushes     != berryBushes     ||
       old.decor           != decor           ||
-      old.fishers         != fishers         ||
-      old.florists        != florists        ||
-      old.shepherds       != shepherds       ||
       old.cows            != cows            ||
       old.zoom            != zoom            ||
       old.resourceBoxes   != resourceBoxes   ||
       old.eggs            != eggs            ||
+      old.lootCaches      != lootCaches      ||
       old.hayEntities     != hayEntities     ||
       old.groundVersion   != groundVersion   ||
       old.forestVersion   != forestVersion   ||

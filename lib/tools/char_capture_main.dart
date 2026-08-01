@@ -1,5 +1,7 @@
-// Karakter render karşılaştırma harness'ı — meslek NPC'lerini büyütülmüş,
-// yan yana çizer (İnşaatçı'yı diğerleriyle kıyaslamak için). PNG'ye çeker.
+// Karakter render karşılaştırma harness'ı — NPC'leri İKİ ölçekte yan yana
+// çizer:  üst sıra gerçek oyun ölçeği (kCharScale, zoom 1), alt sıra yakın
+// zoom.  Asıl soru "yakında güzel mi" değil, "OYNANAN ölçekte okunuyor mu";
+// harness bu yüzden ikisini birden gösteriyor.
 //
 // Çalıştır:  flutter run -d macos -t lib/tools/char_capture_main.dart
 // Çıktı:     /tmp/chars.png
@@ -10,6 +12,7 @@ import 'package:flutter/rendering.dart';
 
 import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
+import '../core/constants.dart';
 import '../rendering/character_renderer.dart';
 import '../rendering/tool_renderer.dart';
 
@@ -23,7 +26,7 @@ Future<void> main() async {
     home: RepaintBoundary(
       key: _boundaryKey,
       child: const Scaffold(
-        backgroundColor: Color(0xFF3A5A70),
+        backgroundColor: Color(0xFF6B5A3E),
         body: Center(child: _CharRow()),
       ),
     ),
@@ -37,46 +40,76 @@ class _CharRow extends StatelessWidget {
   const _CharRow();
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(size: const Size(1600, 400), painter: _CharPainter());
+    return CustomPaint(size: const Size(1560, 780), painter: _CharPainter());
   }
 }
+
+const _types = [
+  VillagerType.farmer,
+  VillagerType.merchant,
+  VillagerType.blacksmith,
+  VillagerType.guard,
+  VillagerType.priest,
+  VillagerType.shepherd,
+  VillagerType.hunter,
+  VillagerType.miller,
+];
+const _labels = [
+  'ÇİFTÇİ', 'TÜCCAR', 'DEMİRCİ', 'MUHAFIZ',
+  'RAHİP', 'ÇOBAN', 'AVCI', 'DEĞİRMENCİ',
+];
+// Farklı haneler — kuşak renginin gerçekten ayrıştığını görmek için.
+const _houses = [
+  'Karaoğlu', 'Demirci', 'Yıldız', 'Akbaş',
+  'Çelebi', 'Toprak', 'Ergin', 'Sarıkaya',
+];
 
 class _CharPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // Yeni meslekler + kıyas için birkaç mevcut meslek (gerçek oyun yolu:
-    // draw dispatch → shaded varyant).
-    const types = [
-      VillagerType.priest,
-      VillagerType.shepherd,
-      VillagerType.hunter,
-      VillagerType.miller,
-      VillagerType.innkeeper,
-    ];
-    const labels = [
-      'RAHİP', 'ÇOBAN', 'AVCI', 'DEĞİRMENCİ', 'HANCI'
-    ];
-    const scale = 3.4;
-    for (int i = 0; i < types.length; i++) {
-      final cx = 150.0 + i * 300.0;
-      final v = NpcVisual.fromSeed(7 + i * 5, forceMale: true);
+    // Zemin şeridi — NPC'ler boşlukta değil, oyun zemininin değerine yakın bir
+    // fonda değerlendirilmeli (kontrast testi).
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, 190),
+        Paint()..color = const Color(0xFF7A6846));
+
+    _row(canvas, y: 150, scale: kCharScale, label: 'OYNANAN ÖLÇEK (kCharScale)',
+        labelY: 30);
+    _row(canvas, y: 740, scale: 3.0, label: 'YAKIN ZOOM (3×)', labelY: 380);
+  }
+
+  void _row(Canvas canvas,
+      {required double y,
+      required double scale,
+      required String label,
+      required double labelY}) {
+    for (int i = 0; i < _types.length; i++) {
+      final cx = 100.0 + i * 185.0;
+      final v = NpcVisual.fromSeed(7 + i * 5, forceMale: i.isEven);
       canvas.save();
-      canvas.translate(cx, 330);
+      canvas.translate(cx, y);
       canvas.scale(scale);
-      CharacterRenderer.draw(canvas, types[i], visual: v);
+      CharacterRenderer.draw(canvas, _types[i],
+          visual: v, houseAccent: houseAccentColor(_houses[i]));
       canvas.restore();
-      final tp = TextPainter(
-        text: TextSpan(
-            text: labels[i],
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.4)),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tp.paint(canvas, Offset(cx - tp.width / 2, 345));
+      _text(canvas, _labels[i], cx, y + 8, 11);
+      _text(canvas, _houses[i], cx, y + 22, 9, const Color(0xB0FFFFFF));
     }
+    _text(canvas, label, 780, labelY, 13);
+  }
+
+  void _text(Canvas canvas, String s, double cx, double y, double size,
+      [Color color = Colors.white]) {
+    final tp = TextPainter(
+      text: TextSpan(
+          text: s,
+          style: TextStyle(
+              color: color,
+              fontSize: size,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(canvas, Offset(cx - tp.width / 2, y));
   }
 
   @override

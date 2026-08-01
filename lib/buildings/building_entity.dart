@@ -1,6 +1,10 @@
 import 'building_type.dart';
 import 'building_function.dart';
 
+/// [BuildingEntity.ownerSurname] için özel değer: mülk artık kimsenin değil,
+/// KÖYÜN (topyekûn el koyma / kamulaştırma sonrası).
+const String kPublicOwner = '\u0000köy';
+
 class BuildingEntity {
   final BuildingType type;
   final int col;
@@ -15,9 +19,6 @@ class BuildingEntity {
 
   // ── İşlevsel durum (building_system tarafından yönetilir) ──────────────────
 
-  /// Nüfus büyüme ilerlemesi 0..1 (yalnızca belediye).
-  double growthProgress = 0.0;
-
   /// Pazar pasif gelir zamanlayıcısı (saniye).
   double incomeTimer = 0.0;
 
@@ -27,6 +28,11 @@ class BuildingEntity {
 
   /// Bu evde yaşayan köylü sayısı — main her tick günceller (su tüketimi için).
   int occupants = 0;
+
+  /// MÜLK SAHİBİ hane (soyad). Boş = sahibi sakinlerden TÜRETİLİR (kimin evinde
+  /// kim oturuyorsa onun sayılır). Bağışlanan mülkte açıkça yazılır; topyekûn
+  /// el koymadan sonra [kPublicOwner] olur (mülk köyün).
+  String ownerSurname = '';
 
   /// İnşa tamamlanma anındaki sahne zamanı. _BuildingDrawable ilk birkaç
   /// saniyede scale pop + toz bulutu çizer ("yeni doğmuş" hissi).
@@ -49,6 +55,11 @@ class BuildingEntity {
   /// tükenir; ateşçi odun taşıyıp doldurur. 0 olunca ateş söner (alev+ışık
   /// gider, köy çapı huzursuzluk). scene_fire yönetir.
   double fireFuel = 1.0;
+
+  /// Bu binanın BAŞINDA görevli bir köylü duruyor mu (yalnız post-işi olan
+  /// binalar: değirmen…). scene_work her taramada tazeler; verim/panel buradan
+  /// okur — "işçi orada mı" sorusunun tek doğruluğu. Geçici, kaydedilmez.
+  bool staffed = false;
 
   /// Değirmen öğütme sayacı (saniye, yalnız mill). Balya teslim edilince
   /// [kMillGrindSeconds] olur, scene_tick her tick azaltır; >0 iken değirmen

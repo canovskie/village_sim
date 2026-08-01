@@ -17,6 +17,7 @@ enum OptionScene {
   exile, // köyden sür
   execute, // idam
   labor, // kürek cezası (NİZAM)
+  penance, // tövbe meydanı (DERGÂH)
   accept, // genel olumlu karar (kabul/ver/kur)
   refuse, // genel ret/geçiştir
   generic, // eşlenemeyen karar
@@ -39,6 +40,8 @@ OptionScene optionSceneFor(PetitionOption o) {
       return OptionScene.execute;
     case PetitionFx.crimeLabor:
       return OptionScene.labor;
+    case PetitionFx.crimePenance:
+      return OptionScene.penance;
     default:
       break;
   }
@@ -62,6 +65,8 @@ PetitionTone _toneOf(OptionScene s) => switch (s) {
       OptionScene.refuse => PetitionTone.solemn,
       OptionScene.execute => PetitionTone.ominous,
       OptionScene.labor => PetitionTone.ominous,
+      // Tövbe ne merhamet kadar ılık ne idam kadar kara: ağırbaşlı bir an.
+      OptionScene.penance => PetitionTone.solemn,
       OptionScene.generic => PetitionTone.neutral,
     };
 
@@ -198,6 +203,14 @@ class _OptionScenePainter extends CustomPainter {
         _chain(canvas, Offset(w * 0.46, gy - h * 0.16), Offset(w * 0.56, gy));
         _rock(canvas, Offset(w * 0.62, gy), h * 0.20);
         _rock(canvas, Offset(w * 0.76, gy + h * 0.01), h * 0.14);
+      case OptionScene.penance:
+        // Tövbe: kandilin önünde diz çökmüş fail, çevresinde onu izleyen köy.
+        // Direk/zincir yok; bu hükmün aleti utançtır, demir değil.
+        _fire(canvas, Offset(w * 0.46, gy - h * 0.01), h * 0.18);
+        _figure(canvas, Offset(w * 0.46, gy), h * 0.24, kneel: true);
+        _figure(canvas, Offset(w * 0.22, gy), h * 0.30);
+        _figure(canvas, Offset(w * 0.70, gy), h * 0.30);
+        _figure(canvas, Offset(w * 0.84, gy + h * 0.01), h * 0.26);
       case OptionScene.accept:
         // Kabul: ateş etrafında iki figür (sıcak, bereketli karar).
         _fire(canvas, Offset(w * 0.5, gy), h * 0.30);

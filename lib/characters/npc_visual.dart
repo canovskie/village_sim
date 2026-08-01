@@ -19,6 +19,13 @@ class NpcVisual {
   /// Cinsiyete bağlı saç stili kararı için saklanır (sakal kararı, vb).
   final bool isMale;
 
+  /// Beden ölçeği (~0.94..1.06) — boy + gövde genişliği birlikte. Herkesin
+  /// tıpatıp aynı boyda olması, oynanan zoom'da "klon ordusu" hissinin en büyük
+  /// sebebiydi; ufak bir boy farkı o mesafede detaydan çok daha fazla iş görür.
+  /// Dar tutuldu: renderer bunu canvas'a uyguluyor, tıklama hit-test'i ise
+  /// kCharScale üzerinden hesaplanıyor — büyük sapma ikisini ayırırdı.
+  final double build;
+
   const NpcVisual({
     required this.skin,
     required this.hair,
@@ -29,6 +36,7 @@ class NpcVisual {
     required this.clothingShift,
     required this.blinkPhase,
     required this.isMale,
+    this.build = 1.0,
   });
 
   NpcVisual copyWith({
@@ -41,6 +49,7 @@ class NpcVisual {
     double? clothingShift,
     double? blinkPhase,
     bool? isMale,
+    double? build,
   }) =>
       NpcVisual(
         skin: skin ?? this.skin,
@@ -52,6 +61,7 @@ class NpcVisual {
         clothingShift: clothingShift ?? this.clothingShift,
         blinkPhase: blinkPhase ?? this.blinkPhase,
         isMale: isMale ?? this.isMale,
+        build: build ?? this.build,
       );
 
   /// Yaşlı varyantı — saç/sakal kıra döner. Sprite ölçeği [LifeStage] ile
@@ -104,6 +114,9 @@ class NpcVisual {
       clothingShift: (r.nextDouble() * 2 - 1) * 0.18,
       blinkPhase:    r.nextDouble() * 2 * pi,
       isMale:        isMale,
+      // Cinsiyete göre merkez hafif kayar (ortalama boy farkı), üstüne per-NPC
+      // sapma. Aralık dar: karikatür dev/cüce değil, "aynı kalıptan değiller".
+      build:         (isMale ? 1.005 : 0.975) + (r.nextDouble() * 2 - 1) * 0.045,
     );
   }
 }
@@ -145,6 +158,37 @@ const List<Color> _eyeColors = [
   Color(0xFF3A5570), // mavi
   Color(0xFF707880), // gri
 ];
+
+// ─── HANE AKSANI ─────────────────────────────────────────────────────────────
+
+/// Hane renkleri — köylünün göğsündeki kuşak bu paletten. Doygun ve
+/// birbirinden UZAK değerlerde: kCharScale (0.34) ölçeğinde bir NPC ekranda
+/// ~37px; o boyutta okunan tek şey renk/değer kontrastıdır, ince desen değil.
+/// Zeminin orta-kahve tonundan ayrışsınlar diye biri açık (kemik) tutuldu.
+const List<Color> _houseAccents = [
+  Color(0xFF2E4A7D), // indigo
+  Color(0xFFA63A22), // kor kızılı
+  Color(0xFF3F6B3A), // koyu yeşil
+  Color(0xFFD9A227), // safran
+  Color(0xFF6B3A63), // erguvan
+  Color(0xFF2B6E6A), // çamurlu turkuaz
+  Color(0xFF7A1F2B), // vişne
+  Color(0xFFD8CFB4), // kemik
+];
+
+/// Hanenin aksan rengi — soyaddan deterministik. Boş soyad (hanesiz/yabancı)
+/// → null, kuşak çizilmez.
+///
+/// Renk doğuşta NpcVisual'a GÖMÜLMEZ: soyad evlilikle/evlatlıkla değişebiliyor,
+/// gömülü renk o an yalan söylerdi. Her karede soyaddan türetmek ucuz ve doğru.
+Color? houseAccentColor(String surname) {
+  if (surname.isEmpty) return null;
+  var h = 0;
+  for (final u in surname.codeUnits) {
+    h = (h * 31 + u) & 0x7FFFFFFF;
+  }
+  return _houseAccents[h % _houseAccents.length];
+}
 
 /// Bir baz rengi NpcVisual.clothingShift'ine göre kaydır.
 /// shift > 0 → daha aydınlık + sıcak; < 0 → daha koyu + soğuk.

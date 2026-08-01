@@ -162,55 +162,147 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     return best;
   }
 
+  /// Kurucu kadro — İKİ ÇİFT + BİR YAŞLI.
+  ///
+  /// Eskiden beş kurucu meslek listesinden sırayla doğar, cinsiyetleri
+  /// `i.isEven` ile serpiştirilirdi: kimse kimsenin nesi olmazdı. Oyuncunun ilk
+  /// on dakikada bağlanacağı bir ilişki yoktu, sadece beş çalışan vardı.
+  ///
+  /// Şimdi kadro bir AİLE: iki evli çift ve bir dul yaşlı. Bu, üç sistemi ilk
+  /// günden çalıştırır — doğum (aynı evde kan bağı olmayan çift arar), hane
+  /// (tek soyad = tek ocak) ve ateş başı hikâye saati (yaşlı = anlatıcı).
+  ///
+  /// Sıra ÖNEMLİ: barınak atama listeyi baştan tarar (bkz. housing dalı), yani
+  /// çiftler yan yana dizildiği için ilk iki kapasiteli ev onları eş olarak
+  /// içine alır. Sırayı bozmak çiftleri ayrı evlere düşürür ve doğumu susturur.
+  static const List<(VillagerType, bool)> _kFounderRoster = [
+    (VillagerType.farmer, true),    // reis — köyün ekmeği
+    (VillagerType.shepherd, false), // eşi
+    (VillagerType.hunter, true),    // genç adam
+    (VillagerType.miller, false),   // eşi
+    (VillagerType.priest, true),    // dul yaşlı — ateşin başındaki ses
+  ];
+
+  /// KÖYÜN KURULUŞU — kafile yürüyerek gelir.
+  ///
+  /// Kurucular artık ateş yakılınca yoktan var olmuyor; oyun BAŞLADIĞI anda
+  /// haritanın bir kenarından çıkıp köyün kurulacağı yere doğru yürüyorlar.
+  /// Sebebi doğrudan şikâyetin kendisi: eski açılışta ekranda hiç kimse yoktu,
+  /// oyuncu boş bir çayıra bakıp "şimdi ne yapacağım" diyordu. Artık ilk saniyede
+  /// sahnede beş insan var ve bir yere gidiyorlar.
+  ///
+  /// [_generateWorld] sonunda çağrılır (ateş yeri henüz YOK).
+  void _spawnFoundingCaravan() {
+    final cx = kCols / 2.0, cy = kRows / 2.0;
+    // Giriş yönü — kafile haritanın rastgele bir yanından girer, hep aynı
+    // yerden gelmesin. Mesafe kısa tutuldu (~16 tile): açılış kamerasının
+    // içinde kalsın, yürüyüş dakikalar değil saniyeler sürsün.
+    // GİRİŞ NOKTASI EKRAN EKSENLERİNDE SEÇİLİR (u = c−r, v = c+r).
+    //
+    // Eskiden dünya-uzayında "rastgele açı × 12 tile" idi ve yorumu "açılış
+    // kadrajının içinde kalır" diyordu. TUTMUYORDU: 12 tile'lık dünya mesafesi
+    // ekran-X'inde 12·|cosθ−sinθ| = 17 tile'a kadar çıkar. Ölçtüm — bir koşuda
+    // kalp u=−17.2'ye düştü, yani merkezden 550px yana.
+    //
+    // Bu yalnız "kenarda durur" meselesi değil: 1. günde reach kutusu tam
+    // viewport genişliğinde olduğu için kameranın YATAY serbestliği sıfırdır
+    // (bkz. scene_input `_clampCamera`). Kamera köye ortalanır, clamp onu
+    // anında geri çeker ve oyuncu insanlarını kadrajın köşesinde bulur.
+    // Dünya "zoom-out ile büyüdüğü" için erken oyunda kadraj pazarlığa kapalı;
+    // o hâlde kafile kadrajın içine DOĞMALI.
+    //
+    // ±7 tile: iki ekran ekseninde de rahat pay. Yön yine rastgele — kafile
+    // hep aynı yandan girmez, sadece görünmeyen bir yandan girmez.
+    final u0 = (_rng.nextDouble() * 2 - 1) * 7.0;
+    final v0 = (_rng.nextDouble() * 2 - 1) * 7.0;
+    final ex = cx + (v0 + u0) / 2;
+    final ey = cy + (v0 - u0) / 2;
+    // Yürüyüş yönü seçilen noktadan türer (kafile merkeze doğru dizilir).
+    final angle = atan2(ey - cy, ex - cx);
+
+    // TEK SOYAD — köy tek hane ile kurulur; kurucular birbirinin kan bağı
+    // DEĞİL (parents boş), o yüzden aralarında çift olabilirler.
+    final lineage = randomVillagerSurname(_rng);
+    final founders = <VillagerEntity>[];
+
+    for (int i = 0; i < _kFounderRoster.length; i++) {
+      final (type, male) = _kFounderRoster[i];
+      final elder = i == 4;
+      // Çiftler yaşça yakın, yaşlı belirgin biçimde ileri yaşta — köy ilk
+      // günden bir kuşak farkı taşısın (hikâye saati bundan besleniyor).
+      final age = elder
+          ? kElderStartDay + _rng.nextDouble() * 6
+          : kAdultStartDay + (i < 2 ? 12 : 2) + _rng.nextDouble() * 5;
+      // Kafile TEK SIRA yürür: arkadakiler öndekinin izinde, hafif yalpayla.
+      final back = i * 1.15;
+      final v = VillagerEntity(
+        type: type,
+        name: randomVillagerName(_rng, male: male),
+        surname: lineage,
+        male: male,
+        // Kişilik mesleğiyle uyumlu — çağrı sistemiyle tutarlı köy.
+        personalitySeed: _seedForCalling(type),
+        startCol: ex + cos(angle) * back + (_rng.nextDouble() - 0.5) * 0.9,
+        startRow: ey + sin(angle) * back + (_rng.nextDouble() - 0.5) * 0.9,
+        ageDays: age,
+        lifespanDays: _rollLifespan(),
+      );
+      // Evli sayılırlar — düğün adayı havuzuna düşmesinler (yaşlı dul, o da
+      // `wed` kalır: cozy kural gereği kimse zorla yeniden evlendirilmez).
+      v.wed = true;
+      v.lastStageSeen = v.lifeStage;
+      founders.add(v);
+      _villagers.add(v);
+      _lifeEvent(v, elder ? 'Kafileyle bu topraklara geldi' : 'Köyü kurmaya geldi',
+          icon: '🧭', milestone: true);
+    }
+
+    // Hepsi merkeze doğru yürüsün — varışta oyalanırlar (dwell), oyuncu ateş
+    // yerini seçene kadar orada dolanırlar.
+    for (int i = 0; i < founders.length; i++) {
+      final v = founders[i];
+      final a = _rng.nextDouble() * 2 * pi;
+      final r = 1.0 + _rng.nextDouble() * 2.2;
+      final (tx, ty) = _nearestLand(cx + cos(a) * r, cy + sin(a) * r);
+      v.goTo(tx, ty, 6.0 + _rng.nextDouble() * 4.0);
+    }
+
+    _fixNpcSpawns();
+  }
+
+  /// Ateş yakıldı — kurucular ocağın başına toplanır.
+  ///
+  /// Kafile zaten sahnede olduğu için burada artık kimse DOĞMAZ: köylüler
+  /// ateşin çevresine yürütülür. (Eski davranış — ışınlanarak beliren beş
+  /// kurucu — yalnız showcase/referans köy gibi kafilesiz kurulumlar için
+  /// yedekte duruyor.)
   void _spawnStartingNPCs(BuildingEntity firepit) {
     final cx = firepit.col + 0.5;
     final cy = firepit.row + 0.5;
 
-    final types = [
-      VillagerType.farmer,
-      VillagerType.merchant,
-      VillagerType.blacksmith,
-      VillagerType.guard,
-      VillagerType.priest,
-    ];
-    // KÖY TEK AİLEYLE KURULUR (kullanıcı kararı): beş kurucu da aynı soyadı
-    // taşır → tek hane. Eskiden beş AYRI soyad vardı ve oyun daha ilk günden
-    // "aileler arası denge" oyununa zorluyordu. Kurucular birbirinin kan bağı
-    // DEĞİL (parents boş) → aralarında çift kurulabilir; kur/üreme sistemleri
-    // zaten ebeveyn/çocuk/kardeş engelini soyada değil KAN BAĞINA bakarak koyar.
-    final lineage = randomVillagerSurname(_rng);
-    for (int i = 0; i < types.length; i++) {
-      final angle = i * (2 * pi / types.length);
-      final dist = 1.2 + _rng.nextDouble() * 0.6;
-      // Kurucular yetişkin/yaşlı yaşıyla doğar — köy ilk günden işlevsel.
-      final founderAge =
-          kAdultStartDay + _rng.nextDouble() * (kElderStartDay - kAdultStartDay + 5);
-      // Cinsiyet GARANTİLİ karışık (3 erkek / 2 kadın) — rastgele bırakılsaydı
-      // kurucu aile tek cinsiyete düşüp soyu hiç devam ettiremeyebilirdi.
-      final male = i.isEven;
-      final founder = VillagerEntity(
-        type: types[i],
-        name: randomVillagerName(_rng, male: male),
-        surname: lineage,
-        male: male,
-        // Kurucu kişiliği mesleğiyle uyumlu — çağrı sistemiyle tutarlı köy.
-        personalitySeed: _seedForCalling(types[i]),
-        startCol: cx + cos(angle) * dist,
-        startRow: cy + sin(angle) * dist,
-        ageDays: founderAge,
-        lifespanDays: _rollLifespan(),
-      );
-      _villagers.add(founder);
-      // Yaşam öyküsü — köyün kuruluş kuşağı (evre geçiş taramasına da kalibre).
-      _lifeEvent(founder, 'Köyün kurucularından oldu', icon: '🔥',
-          milestone: true);
-      founder.lastStageSeen = founder.lifeStage;
+    if (_villagers.isEmpty) {
+      _spawnFoundingCaravan();
+      // Kafilesiz kurulum (test/showcase): kurucuları doğrudan ateşin dibine al.
+      for (int i = 0; i < _villagers.length; i++) {
+        final angle = i * (2 * pi / _villagers.length);
+        final dist = 1.2 + _rng.nextDouble() * 0.6;
+        _villagers[i].gridX = cx + cos(angle) * dist;
+        _villagers[i].gridY = cy + sin(angle) * dist;
+      }
+      _fixNpcSpawns();
+      return;
     }
 
-    // (İnşaatçı artık ayrı avatar değil — bekleyen sipariş çıkınca boş bir
-    // köylü _syncJobWorkforce ile inşaatçı olarak atanır; bkz. scene_jobs.)
-
-    _fixNpcSpawns();
+    // Kafile geldi: ocağın çevresine dizil. Işınlanma yok — yürüyerek.
+    for (int i = 0; i < _villagers.length; i++) {
+      final v = _villagers[i];
+      final angle = i * (2 * pi / _villagers.length);
+      final dist = 1.6 + _rng.nextDouble() * 0.8;
+      final (tx, ty) = _nearestLand(cx + cos(angle) * dist, cy + sin(angle) * dist);
+      v.goTo(tx, ty, 8.0);
+      _lifeEvent(v, 'Köyün ocağı yakıldığında oradaydı', icon: '🔥',
+          milestone: true);
+    }
   }
 
   /// Gece: uyku hedeflerini ata. Ev varsa ev merkezi, yoksa ateş etrafı.
@@ -278,6 +370,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       startCol: sx,
       startRow: sy,
       lifespanDays: _rollLifespan(),
+      // "Yetişkin köylü katıldı" — ageDays set edilmezse 0 kalıp BEBEK olarak
+      // beliriyordu (çocuk ölçeği + meslek edinemez): niyetle çelişki. Genç bir
+      // yetişkin olarak gelsin.
+      ageDays: kAdultStartDay + _rng.nextDouble() * 1.5,
     );
     if (house != null) {
       v.homeBuilding = house;
@@ -295,6 +391,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     // o da yoksa köyün soyu. Böylece köyde doğan herkes mevcut aileye katılır —
     // yeni haneler yalnız DIŞARIDAN gelenlerle (tüccar/mülteci) kurulur.
     v.surname = _patrilinealSurname(v.parents);
+    v.appearScaleIn(0.4); // pat belirme yerine yumuşak "belirme"
     _villagers.add(v);
 
     final kin = v.parents.map((p) => p.name).join(' & ');
@@ -362,17 +459,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       e.bloodEnemies.add(baby);
     }
     _villagers.add(baby);
+    kProbeBirths++; // prova sayacı — doğum yolunun gerçekten koştuğunun kanıtı
 
-    // Doğum sevinci — gövde dili: anne/baba kutlar, komşular dönüp bakar.
+    // Doğum sevinci — GÖVDE DİLİ (baş-üstü ✨/🎉/❤️ ikonları YOK): anne/baba
+    // kutlar, komşular dönüp bakar, bebek yumuşakça "belirir" (appearScaleIn).
+    baby.appearScaleIn(); // tek karede pat belirme yerine küçükten süzülerek gelir
     mother.feel(NpcEmotion.joy, 5, moodDelta: 0.15);
     father.feel(NpcEmotion.love, 5, moodDelta: 0.12);
-    // Görünür doğum şenliği — parıltı/kutlama baloncukları (juice).
-    baby.chatBubbleIcon = '✨';
-    baby.chatBubbleTime = 5.0;
-    mother.chatBubbleIcon = '🎉';
-    mother.chatBubbleTime = 4.0;
-    father.chatBubbleIcon = '❤️';
-    father.chatBubbleTime = 4.0;
     _reactNearby(sx, sy, 5.0, NpcEmotion.joy, 4.0, moodDelta: 0.05);
     nudgeMorale(0.05); // görünür mutlu olay → moral göstergesini hafif iter
 
@@ -381,6 +474,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         seed: _stableSeed('doğum${baby.name}', _dayCount),
         extra: {'bebek': baby.name});
     _showNotification(Voice.say(_kBirthPool, ctx));
+    AudioManager.instance.playSfx(Sfx.birthJoy);
     _award('first_birth', 'Köyün ilk bebeği dünyaya geldi', '👶');
     // Yaşam öyküsü — bebeğin doğumu + ebeveynlerin yeni çocuğu (kuru, kısa).
     _lifeEvent(baby, 'Dünyaya geldi', icon: '👶', milestone: true);
@@ -456,6 +550,89 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _discoverCallingCraft(migrant, _CraftSource.migrant);
   }
 
+  /// DIŞARIYA NİKÂH — yalnız kalmış bir yetişkine dışarıdan eş çağırır.
+  ///
+  /// Köy TEK SOYLA kurulur ve soy erkek üzerinden taşınır; yeni hane yalnız
+  /// dışarıdan gelir. [_spawnMigrant] rastgele bir yabancıyı boş bir eve
+  /// yerleştirir — bu ise BELİRLİ bir yalnızın damına, karşı cinsten ve kendi
+  /// soyadıyla birini getirir. Yönetişim makinesi N-hane üstünde döndüğü için
+  /// fermanın asıl kazancı budur: defterde yeni bir ad, masada yeni bir reis.
+  ///
+  /// Uygun yalnız yoksa (herkes eşli ya da yatak yok) sessizce vazgeçer.
+  bool _spawnMarriageMigrant() {
+    // Ev → yetişkin sakinler (tek pass) — "yalnız mı" bunun üstünden okunur.
+    final adultsByHome = <Object, List<VillagerEntity>>{};
+    for (final v in _villagers) {
+      if (v.lifeStage != LifeStage.adult) continue;
+      final h = v.homeBuilding;
+      if (h == null) continue;
+      (adultsByHome[h] ??= []).add(v);
+    }
+
+    VillagerEntity? lonely;
+    BuildingEntity? home;
+    for (final v in _villagers) {
+      if (v.lifeStage != LifeStage.adult || v.isDying) continue;
+      final h = v.homeBuilding as BuildingEntity?;
+      if (h == null) continue;
+      final f = h.fn;
+      if (f == null) continue;
+      final mates = adultsByHome[h] ?? const <VillagerEntity>[];
+      // Evinde uygun (karşı cins + kan bağı yok) bir eş var mı?
+      final paired = mates.any((c) =>
+          !identical(c, v) &&
+          c.isMale != v.isMale &&
+          !v.parents.contains(c) &&
+          !v.children.contains(c) &&
+          !c.parents.any(v.parents.toSet().contains));
+      if (paired) continue;
+      if (mates.length >= f.housingCapacity) continue; // gelinin yatağı yok
+      lonely = v;
+      home = h;
+      break;
+    }
+    if (lonely == null || home == null) return false;
+
+    final (lx, ly) = _nearestLand(
+        home.col + home.cols / 2.0, home.row + home.rows / 2.0);
+    final pseed = _rng.nextInt(0x7FFFFFFF);
+    final male = !lonely.isMale; // eş karşı cinsten gelir
+    final spouse = VillagerEntity(
+      type: _callingForSeed(pseed),
+      name: randomVillagerName(_rng, male: male),
+      // Kendi soyadıyla gelir — köye yeni bir hane girsin (tek soy kırılır).
+      surname: randomVillagerSurname(_rng),
+      male: male,
+      personalitySeed: pseed,
+      startCol: lx,
+      startRow: ly,
+      lifespanDays: _rollLifespan(),
+      ageDays: 20.0 + _rng.nextDouble() * 22.0,
+    );
+    spouse.homeBuilding = home;
+    _villagers.add(spouse);
+    // Nikâh göçü uyum bedeli ödemez — bu bir yabancının sızması değil, köyün
+    // kendi çağırdığı bir gelin/damat. Karşılığı ılık bir moral.
+    pushPolicyMorale(0.04, 3.0);
+    lonely.feel(NpcEmotion.joy, 6.0, moodDelta: 0.16);
+    spouse.feel(NpcEmotion.content, 5.0, moodDelta: 0.10);
+    final ctx = _voice(spouse,
+        other: lonely, seed: _stableSeed('nikâh${spouse.name}', _dayCount));
+    _showNotification(Voice.say(const [
+      '👰 {ad} dışarıdan geldi; {öteki-in} ocağına gelin/damat oldu.',
+      '👰 {öteki} artık yalnız değil — {ad} kendi adıyla köye yerleşti.',
+    ], ctx));
+    _chronicle(
+        Voice.say(const [
+          '{ad} dışarıdan gelip {öteki} ile yuva kurdu; köye yeni bir ad girdi.',
+          '{öteki-in} ocağına dışarıdan bir eş geldi: {ad}.',
+        ], ctx),
+        icon: '👰',
+        milestone: true);
+    _discoverCallingCraft(spouse, _CraftSource.migrant);
+    return true;
+  }
+
   /// Doğa dostu politikası: kesilen ağacın yakınına bir fidan dik.
   /// 1-3 tile yarıçaplı candidate ara, ilk uygun tile'a fidan kondur.
   /// Uygun = grid içinde, su/bina/maden/ağaç/yol değil.
@@ -479,6 +656,39 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   }
 
   /// İnşaat tamamlandığında çalışır — bina tipine özel aksiyonlar.
+  /// FERMANLA DİKİLEN YAPI — bir hüküm "kurula" diyorsa köy onu diker.
+  ///
+  /// Oyuncu menüsünden geçmez, zanaat beklemez (buyruk zanaat sormaz) ve kaynak
+  /// da istemez: hükmün bedeli kendi `seal`'inde yazılıdır. Bunun olmadığı
+  /// sürece "köyün ortasına bir dergâh kurula" diyen ferman dünyada hiçbir şey
+  /// değiştirmiyordu — hüküm metniyle sahne arasındaki boşluğu bu kapatır.
+  ///
+  /// Merkezden dışa doğru halka halka ilk uygun yeri arar; yer bulunamazsa null
+  /// döner (köy sıkışmışsa hüküm binasız kalır, çağıran sessizce geçer).
+  BuildingEntity? _raiseDecreedBuilding(BuildingType type, {int maxRing = 14}) {
+    final (cc, cr) = _villageCenter();
+    for (int ring = 0; ring <= maxRing; ring++) {
+      for (int dc = -ring; dc <= ring; dc++) {
+        for (int dr = -ring; dr <= ring; dr++) {
+          // Yalnız halkanın KENARI — içi önceki turlarda zaten tarandı.
+          if (ring > 0 && dc.abs() != ring && dr.abs() != ring) continue;
+          final c = cc + dc, r = cr + dr;
+          if (!_isValidPlacement(c, r, type, ignoreCraft: true)) continue;
+          final b = BuildingEntity(type: type, col: c, row: r);
+          _buildings.add(b);
+          _onBuildingCompleted(
+            BuildOrder(type: type, col: c, row: r)..completed = true,
+          );
+          // Doğrudan yerleştirmede topology hook tetiklenmez (bkz.
+          // _buildLivingVillage) — anchor slot'larını elle tazele.
+          _anchorSystem.rebuild(_buildings);
+          return b;
+        }
+      }
+    }
+    return null;
+  }
+
   void _onBuildingCompleted(BuildOrder o) {
     final building = _buildings.firstWhere(
       (b) => b.col == o.col && b.row == o.row && b.type == o.type,
@@ -702,21 +912,6 @@ extension _SceneBuildingSpawn on _VillageSceneState {
 
     for (final v in _villagers) {
       fix(v.gridX, v.gridY, (x, y) { v.gridX = x; v.gridY = y; });
-    }
-    for (final f in _farmers) {
-      fix(f.gridX, f.gridY, (x, y) { f.gridX = x; f.gridY = y; });
-    }
-    for (final w in _woodcutters) {
-      fix(w.gridX, w.gridY, (x, y) { w.gridX = x; w.gridY = y; });
-    }
-    for (final m in _miners) {
-      fix(m.gridX, m.gridY, (x, y) { m.gridX = x; m.gridY = y; });
-    }
-    for (final b in _builders) {
-      fix(b.gridX, b.gridY, (x, y) { b.gridX = x; b.gridY = y; });
-    }
-    for (final f in _fishers) {
-      fix(f.gridX, f.gridY, (x, y) { f.gridX = x; f.gridY = y; });
     }
   }
 

@@ -14,7 +14,7 @@ import 'package:village_sim/main.dart';
 void main() {
   testWidgets('App boots without crashing', (WidgetTester tester) async {
     await tester.pumpWidget(const VillageSimApp());
-    // Ana menü "VILLAGE SIM" başlığını gösterir (gölge + ön plan = 2 widget).
-    expect(find.text('VILLAGE SIM'), findsWidgets);
+    // Ana menü kelime işaretini gösterir (başlık 'VILLAGE SIM' değil 'LUW').
+    expect(find.text('LUW'), findsWidgets);
   });
 }

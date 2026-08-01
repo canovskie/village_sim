@@ -70,12 +70,18 @@ const int kTilesPerFarmer = 7;
 const int kMaxFarmers     = 8;
 /// Aynı anda en fazla kaç köylü inşaatçı olarak atanır (bekleyen sipariş varsa).
 /// İşçiler artık gerçek köylü olduğundan kadro nüfusla da sınırlı — bu yalnız
-/// üst sınır; küçük köy tüm boşları inşaata koymasın diye.
-const int kMaxBuilders = 3;
+/// üst sınır; küçük köy tüm boşları inşaata koymasın diye. Büyük yapı 3 el
+/// istediğinden (bkz. BuildOrder.requiredWorkers) tavan 4.
+const int kMaxBuilders = 4;
 /// "İşgücü Tahsisi" fermanı yürürlükteyken tarım işgücüne eklenen saha eli
 /// sayısı — köy boşta kalan emeğini tarlaya kaydırır (çiftçi çağrısı olmasa
 /// bile kadro kurulabilir). Yine de tarla ihtiyacıyla (kTilesPerFarmer) sınırlı.
 const int kFarmLaborPolicyBonus = 3;
+
+/// Şantiye kadrosu eksikken kaç saniye beklenir — köy o kadar el veremiyorsa
+/// (küçük nüfus / herkes meşgul) eldeki usta işe tek başına başlar, bina
+/// sonsuza dek yarım kalmaz.
+const double kBuildCrewPatience = 25.0;
 
 // ─── Ev su deposu (kuyu → ev) ─────────────────────────────────────────────────
 // Her evin 0..1 su deposu var. Sakinler tüketir, kuyular doldurur. Susuz evler
@@ -114,6 +120,27 @@ const double kReedRegrowSeconds = 1.5 * 240.0; // biçilen küme regrow (~1.5 g�
 const int    kReedYieldPerHarvest = 3;  // bir küme biçince stoğa eklenen saz
 const int    kReedBedCost          = 2; // bir saz yatağının saz maliyeti
 const double kReedCutDuration      = 2.5; // sazlık başında biçme süresi (sn)
+
+// ─── Böğürtlen / ocak yemeği ─────────────────────────────────────────────────
+// Köyün BİNASIZ ilk üretim zinciri: toplayıcı çalıdan yiyecek getirir, aşçı o
+// yiyeceği ocakta pişirip DAHA ÇOK ağız doyurur. Erken oyunun omurgası bu —
+// tarla ve oduncu gelene kadar köyü ayakta tutan tek şey.
+//
+// Denge notu (sahiplenilmiş karar): bir köylü ~8 yiyecek/gün yer. Toplayıcı
+// ~40 sn'de 3 yiyecek → günde ~18; yani BİR toplayıcı iki ağzı zar zor
+// doyurur. Bu bilinçli: böğürtlen köyü kurtarmaz, ilk günleri kurtarır ve
+// oyuncuyu tarlaya iter.
+const double kBerryRegrowSeconds  = 2.0 * 240.0; // toplanan çalı ~2 günde dolar
+const int    kBerryYield          = 3;   // bir çalıdan gelen yiyecek
+const double kBerryPickDuration   = 6.0; // çalı başında toplama süresi (sn)
+
+// Aşçı: 1 yiyecek harcar → 2 "sıcak yemek". Yemek, açlık tüketiminde ham
+// yiyeceğin yerine geçer (yani aynı hasat iki katı ağız doyurur) ve sofraya
+// oturan köye küçük bir moral verir. Ocak yoksa aşçılık yapılamaz.
+const double kCookDuration        = 14.0; // ocak başında bir pişirim (sn)
+const int    kCookFoodCost        = 1;    // pişirim başına harcanan ham yiyecek
+const int    kCookMealsPerBatch   = 2;    // pişirim başına üretilen sıcak yemek
+const int    kCookMealsPerMouth   = 2;    // kişi başı yemek tavanı (aşçı durur)
 
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────
 // dayLight bu eşiklerin altına düşünce "gece"; üstüne çıkınca "gündüz".

@@ -30,7 +30,10 @@ MoraleEval evaluateVillagerMorale({
   bool poorHousing = false, // evi var ama çadır gibi derme çatma (düşük konfor)
   bool comfortHousing = false, // taş konut: Köy Evi'nden konforlu (hafif moral+)
   bool luxuryHousing = false, // konak: en lüks yuva (güçlü moral+)
-  int cultureAmenities = 0, // köydeki farklı kültür binası sayısı (kütüphane/hamam/okul/anıt/şadırvan)
+  // Köyün AMENİTE morali — civic binaların (taverna/kilise/kuyu/kütüphane…)
+  // toplam katkısı, doyuma sokulmuş hâlde. Tek kaynak: VillageStats.amenityMorale
+  // (bkz. building_system.amenityMoraleFrom). Burada tekrar bina sayılmaz.
+  double amenityMorale = 0.0,
 }) {
   const base = 0.62;
   double t = base;
@@ -88,12 +91,11 @@ MoraleEval evaluateVillagerMorale({
   // Yaşlıya saygı politikası.
   if (elderRespected) t += 0.08;
 
-  // Kültür amenitesi: meydan/kültür mahallesi binaları (kütüphane/hamam/okul/
-  // anıt/şadırvan) köylüyü hafifçe mutlu eder — her farklı bina +0.02, tavan
-  // +0.08. Köy "yaşanası" hissi; tek bina küçük, çeşitlilik ödüllü.
-  if (cultureAmenities > 0) {
-    t += (cultureAmenities * 0.02).clamp(0.0, 0.08);
-  }
+  // Amenite: köyün civic binaları (taverna, kilise, kuyu, çiçekçi, kütüphane,
+  // hamam, anıt, şadırvan, türbe, çan) köylüyü "yaşanası bir yerde" hissettirir.
+  // Ağırlıklar bina tablosundan gelir, doyum çağıran tarafta uygulanmıştır —
+  // burası yalnız toplar.
+  t += amenityMorale;
 
   t = t.clamp(0.0, 1.0);
 

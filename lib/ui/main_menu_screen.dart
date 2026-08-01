@@ -2,11 +2,14 @@ import 'dart:math';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import '../main.dart' show kCaptureMode;
 import '../save/save_manager.dart';
+import '../systems/audio_manager.dart';
 import '../tools/light_editor_main.dart';
 import '../tools/placement_editor_main.dart';
 import 'about_screen.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 import 'save_slots_screen.dart';
 import 'settings_screen.dart';
 import 'sky_widgets.dart';
@@ -18,10 +21,22 @@ import '../dev/animation_room.dart';
 class MainMenuScreen extends StatefulWidget {
   final VoidCallback onNewGame;
   final void Function(SaveSlotMeta) onContinue;
+
+  /// İSTİSNAİ giriş — testlerin ortak zemini olan sabit "Referans Köy"ü kurar.
+  /// Normal oyuncu akışının parçası değil; kasten menüde durur ki her testte
+  /// aynı köyden başlanabilsin (bkz. scene_reference_village.dart).
+  final VoidCallback onReferenceVillage;
+
+  /// Önizleme/test seam'i: kayıt durumunu diske sormadan zorlar
+  /// (true → "DEVAM ET"li hâl, false → tek kartlı ilk açılış).
+  /// Oyunda hep null.
+  static bool? debugSavesOverride;
+
   const MainMenuScreen({
     super.key,
     required this.onNewGame,
     required this.onContinue,
+    required this.onReferenceVillage,
   });
 
   @override
@@ -43,6 +58,13 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   @override
   void initState() {
     super.initState();
+    // MENÜ MÜZİĞİ — şafak sahnesinin parçası. Ses motoru burada da ayağa
+    // kaldırılır: menü oyundan önce gelir, oyuna hiç girmeyen oyuncu da
+    // (ayarlar/kayıtlar) sessiz bir uygulama görmemeli. Dosya yoksa sessiz.
+    if (!kCaptureMode) {
+      AudioManager.instance.start();
+      AudioManager.instance.playMusic(MusicTrack.menu);
+    }
     _refreshHasSaves();
     _ticker = createTicker((elapsed) {
       final dt = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
@@ -52,7 +74,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   }
 
   Future<void> _refreshHasSaves() async {
-    final has = await SaveManager.instance.hasAnySave();
+    final has =
+        MainMenuScreen.debugSavesOverride ??
+        await SaveManager.instance.hasAnySave();
     if (mounted) setState(() => _hasSaves = has);
   }
 
@@ -86,9 +110,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           // Uyanan kuşlar — yüksekte gevşek V, yavaş süzülür.
           Positioned.fill(
             child: IgnorePointer(
-              child: CustomPaint(
-                painter: _WakingBirdsPainter(time: _time),
-              ),
+              child: CustomPaint(painter: _WakingBirdsPainter(time: _time)),
             ),
           ),
           // Yükselen güneş (tepelerin ardından doğar — horizon onu kısmen örter).
@@ -107,7 +129,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           ),
           _DriftingClouds(time: _time, screenWidth: size.width),
           Positioned(
-            left: 0, right: 0, bottom: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: CustomPaint(
               size: Size(size.width, size.height * 0.46),
               painter: _HorizonPainter(time: _time),
@@ -115,7 +139,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           ),
           // Tepelerin eteğinde sürüklenen sabah sisi.
           Positioned(
-            left: 0, right: 0, bottom: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: IgnorePointer(
               child: CustomPaint(
                 size: Size(size.width, size.height * 0.42),
@@ -125,7 +151,9 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           ),
           // Güneşe doğru yoğunlaşan alt sıcak parıltı (şafak altını).
           Positioned(
-            left: 0, right: 0, bottom: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
             child: IgnorePointer(
               child: Container(
                 height: size.height * 0.5,
@@ -143,9 +171,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
           Positioned(
             left: size.width * 0.05,
             bottom: -4,
-            child: IgnorePointer(
-              child: _WelcomerVillager(time: _time),
-            ),
+            child: IgnorePointer(child: _WelcomerVillager(time: _time)),
           ),
           const Positioned.fill(
             child: IgnorePointer(
@@ -164,56 +190,10 @@ class _MainMenuScreenState extends State<MainMenuScreen>
 
           // ── İçerik ────────────────────────────────────────────────────────
           SafeArea(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 380),
-                // Menü kısa ekranda TAŞIYORDU (dar pencerede alt satırlar
-                // kırpılıyor, testte RenderFlex overflow atıyordu). Kaydırılabilir
-                // olunca yükseklik ne olursa olsun tüm satırlara ulaşılır;
-                // sığdığında görünüm değişmez (içerik yüksekliği kadar yer kaplar).
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(height: size.height * 0.06),
-                      const AppReveal(child: _TitleBlock()),
-                      SizedBox(height: size.height * 0.10),
-                      AppReveal(
-                        delay: const Duration(milliseconds: 120),
-                        child: _MenuCard(
-                          onNewGame: widget.onNewGame,
-                          hasSaves: _hasSaves,
-                          onContinue: _openSlots,
-                          onSettings: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const SettingsScreen()),
-                          ),
-                          onAbout: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const AboutScreen()),
-                          ),
-                          onLightEditor: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const LightEditorScreen()),
-                          ),
-                          onAnimationRoom: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                  builder: (_) => const AnimationRoomScreen())),
-                          onPlacementEditor: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                                builder: (_) => const PlacementEditorScreen()),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      Text('sürüm 0.1.0',
-                          style: AppUi.label.copyWith(
-                              color: AppUi.textLo, letterSpacing: 2.2)),
-                    ],
-                  ),
-                ),
-              ),
+            child: LayoutBuilder(
+              builder: (context, box) => useTouchUi(context)
+                  ? _touchLayout(context, box)
+                  : _wideLayout(context, box),
             ),
           ),
 
@@ -230,6 +210,160 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       ),
     );
   }
+
+  // ── Yerleşimler ───────────────────────────────────────────────────────────
+
+  /// Masaüstü: klasik dikey sütun. KAYDIRMA YOK — satır yüksekliği kalan
+  /// boşluktan türetilir, sığmayan uçta bütün blok birlikte küçülür
+  /// (FittedBox). Sığdığında görünüm birebir aynı kalır.
+  Widget _wideLayout(BuildContext context, BoxConstraints box) {
+    final h = box.maxHeight;
+    // Başlık bloğu + kart iç boşluğu + satır araları sabit; kalan yükseklik
+    // satırlara bölünür. Alçak pencerede satır 54 → 40'a iner, daha da alçakta
+    // FittedBox devreye girer.
+    const titleH = 258.0, cardPad = 28.0, rowGap = 9.0, versionBlock = 40.0;
+    final n = _menuItemCount;
+    final fixed = titleH + cardPad + (n - 1) * rowGap + versionBlock;
+    final rowH = ((h - fixed - 10) / n).clamp(40.0, 54.0);
+    final gapTop = (h - fixed - n * rowH).clamp(10.0, 90.0);
+
+    return Center(
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const AppReveal(child: _TitleBlock()),
+                SizedBox(height: gapTop),
+                AppReveal(
+                  delay: const Duration(milliseconds: 120),
+                  child: _MenuCard(
+                    rowH: rowH,
+                    hasSaves: _hasSaves,
+                    onNewGame: widget.onNewGame,
+                    onContinue: _openSlots,
+                    onReferenceVillage: widget.onReferenceVillage,
+                    onSettings: () => _open(context, const SettingsScreen()),
+                    onAbout: () => _open(context, const AboutScreen()),
+                    onLightEditor: () =>
+                        _open(context, const LightEditorScreen()),
+                    onPlacementEditor: () =>
+                        _open(context, const PlacementEditorScreen()),
+                    onAnimationRoom: () =>
+                        _open(context, const AnimationRoomScreen()),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Text(
+                  'sürüm 0.1.0',
+                  style: AppUi.label.copyWith(
+                    color: AppUi.textLo,
+                    letterSpacing: 2.2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// TELEFON + TABLET: kademeli hiyerarşi, üç bant, KAYDIRMA YOK.
+  ///
+  /// Eski hâl iki ayrı sorunla geliyordu: telefonda 8 eşit satır 2 sütuna
+  /// diziliyor (hiyerarşi yok, uzun etiketler "REFERANS K…" diye kırpılıyor),
+  /// tablet ise yükseklik eşiğini geçtiği için masaüstü sütununu alıp ekranın
+  /// altından taşıyordu. Çözüm tek yerleşim:
+  ///
+  ///   1. KİMLİK ŞERİDİ — madalyon + kelime işareti + slogan yan yana (dikey
+  ///      kompozisyon burada yükseklik yiyor, yatayda bedava).
+  ///   2. BİRİNCİL KARTLAR — oyuncunun %95 dokunduğu iki eylem, büyük.
+  ///   3. ALT BANT — ikincil çipler solda, geliştirici rozetleri sağda.
+  ///
+  /// Bütün yükseklikler KALAN boşluktan türetilir ve sonunda bir FittedBox
+  /// güvencesi vardır → hiçbir ekranda taşma/kaydırma olamaz.
+  Widget _touchLayout(BuildContext context, BoxConstraints box) {
+    final w = box.maxWidth, h = box.maxHeight;
+    // Alçak ekran = telefon yatay. Tablet bu eşiğin üstünde, aynı yerleşimi
+    // daha ferah ölçülerle kullanır.
+    final short = h < 560;
+
+    // Karşılayıcı köylü (172px silüet) sol altta duruyor — kart onun üstüne
+    // binmesin diye alçak ekranda sol pay bırakılır. Tablette ekran zaten
+    // geniş, ortalanan sütun silüete değmiyor.
+    final leftReserve = short ? min(196.0, w * 0.22) : 0.0;
+    final contentW = min(short ? 640.0 : 700.0, w - leftReserve - 28);
+
+    final gap = short ? 10.0 : 14.0;
+    final heroH = (h * (short ? 0.21 : 0.15)).clamp(54.0, short ? 84.0 : 118.0);
+    const bottomH = 52.0;
+    final primaryH = (h - heroH - bottomH - gap * 2 - 12).clamp(
+      72.0,
+      short ? 176.0 : 232.0,
+    );
+
+    final column = SizedBox(
+      width: contentW,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppReveal(
+            child: _HeroBand(height: heroH, short: short),
+          ),
+          SizedBox(height: gap),
+          AppReveal(
+            delay: const Duration(milliseconds: 90),
+            child: _PrimaryRow(
+              height: primaryH,
+              short: short,
+              hasSaves: _hasSaves,
+              onContinue: _openSlots,
+              onNewGame: widget.onNewGame,
+            ),
+          ),
+          SizedBox(height: gap),
+          AppReveal(
+            delay: const Duration(milliseconds: 160),
+            child: _BottomBand(
+              height: bottomH,
+              width: contentW,
+              onSettings: () => _open(context, const SettingsScreen()),
+              onAbout: () => _open(context, const AboutScreen()),
+              onReferenceVillage: widget.onReferenceVillage,
+              onLightEditor: () => _open(context, const LightEditorScreen()),
+              onPlacementEditor: () =>
+                  _open(context, const PlacementEditorScreen()),
+              onAnimationRoom: () =>
+                  _open(context, const AnimationRoomScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    // Mobil temanın 3. kuralı: 11px altı yazı yok.
+    return MobileTextFloor(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(leftReserve + 14, 6, 14, 6),
+        child: Align(
+          alignment: Alignment.center,
+          // Son güvence: uç bir ekranda (çok alçak/çok dar) blok taşmak yerine
+          // birlikte küçülür. Sığdığında hiçbir etkisi yok.
+          child: FittedBox(fit: BoxFit.scaleDown, child: column),
+        ),
+      ),
+    );
+  }
+
+  void _open(BuildContext context, Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+
+  int get _menuItemCount => _hasSaves ? 8 : 7;
 }
 
 // ─── Başlık bloğu ────────────────────────────────────────────────────────────
@@ -238,9 +372,32 @@ class _TitleBlock extends StatelessWidget {
   const _TitleBlock();
   @override
   Widget build(BuildContext context) {
+    const medallion = 148.0;
+    const logo = 108.0;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Madalyon logosu — arkasında ölçülü bir ember hâlesi, yoksa şafak
+        // göğüne yapıştırılmış gibi duruyor.
+        Container(
+          width: medallion,
+          height: medallion,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [Color(0x33E49139), Color(0x00E49139)],
+              stops: [0.45, 1.0],
+            ),
+          ),
+          child: Image.asset(
+            'assets/ui/logo.png',
+            width: logo,
+            height: logo,
+            filterQuality: FilterQuality.medium,
+          ),
+        ),
+        const SizedBox(height: 14),
         // Oyma altın-ember başlık — ahşap pano yok, gün batımına oturan sıcak
         // tipografi (uzay/çelik değil).
         ShaderMask(
@@ -250,19 +407,28 @@ class _TitleBlock extends StatelessWidget {
             colors: [Color(0xFFF7EFDF), Color(0xFFF1C588), Color(0xFFE0913F)],
             stops: [0.0, 0.55, 1.0],
           ).createShader(r),
-          child: const Text(
-            'VILLAGE SIM',
+          child: Text(
+            'LUW',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: AppUi.fontDisplay,
               fontWeight: FontWeight.w700,
-              fontSize: 42,
+              fontSize: 46,
               height: 1.0,
-              letterSpacing: 3.0,
+              // Üç harflik kelime işaretinde geniş aralık — dar durmasın.
+              letterSpacing: 12.0,
               color: Colors.white,
-              shadows: [
-                Shadow(color: Color(0xCC000000), blurRadius: 12, offset: Offset(0, 4)),
-                Shadow(color: Color(0x55000000), blurRadius: 2, offset: Offset(0, 1)),
+              shadows: const [
+                Shadow(
+                  color: Color(0xCC000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+                Shadow(
+                  color: Color(0x55000000),
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
+                ),
               ],
             ),
           ),
@@ -277,25 +443,27 @@ class _TitleBlock extends StatelessWidget {
                 child: Container(
                   height: 1,
                   decoration: const BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      Color(0x00E49139),
-                      Color(0xCCE49139),
-                    ]),
+                    gradient: LinearGradient(
+                      colors: [Color(0x00E49139), Color(0xCCE49139)],
+                    ),
                   ),
                 ),
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
-                child: GameIcon(GameIconData.flame, size: 12, color: AppUi.accent),
+                child: GameIcon(
+                  GameIconData.flame,
+                  size: 12,
+                  color: AppUi.accent,
+                ),
               ),
               Expanded(
                 child: Container(
                   height: 1,
                   decoration: const BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      Color(0xCCE49139),
-                      Color(0x00E49139),
-                    ]),
+                    gradient: LinearGradient(
+                      colors: [Color(0xCCE49139), Color(0x00E49139)],
+                    ),
                   ),
                 ),
               ),
@@ -303,85 +471,116 @@ class _TitleBlock extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Text('ateşi yak · köyü kur · halkı yönet',
-            style: AppUi.body.copyWith(
-                color: AppUi.textMid,
-                fontStyle: FontStyle.italic,
-                letterSpacing: 0.5)),
+        Text(
+          'ateşi yak · köyü kur · halkı yönet',
+          textAlign: TextAlign.center,
+          style: AppUi.body.copyWith(
+            color: AppUi.textMid,
+            fontStyle: FontStyle.italic,
+            letterSpacing: 0.5,
+          ),
+        ),
       ],
     );
   }
 }
 
-// ─── Menü kartı ──────────────────────────────────────────────────────────────
+// ─── Menü kartı (masaüstü) ───────────────────────────────────────────────────
 
 class _MenuCard extends StatelessWidget {
-  final VoidCallback onNewGame, onSettings, onAbout, onContinue, onLightEditor,
-      onPlacementEditor, onAnimationRoom;
+  final VoidCallback onNewGame,
+      onSettings,
+      onAbout,
+      onContinue,
+      onLightEditor,
+      onPlacementEditor,
+      onAnimationRoom,
+      onReferenceVillage;
   final bool hasSaves;
+
+  /// Satır yüksekliği — kalan yükseklikten hesaplanıp verilir (kaydırma yok).
+  final double rowH;
+
   const _MenuCard({
     required this.onNewGame,
     required this.onContinue,
+    required this.onReferenceVillage,
     required this.hasSaves,
     required this.onSettings,
     required this.onAbout,
     required this.onLightEditor,
     required this.onPlacementEditor,
     required this.onAnimationRoom,
+    this.rowH = 54,
   });
 
   @override
   Widget build(BuildContext context) {
+    final items = <_MenuRow>[
+      if (hasSaves)
+        _MenuRow(
+          icon: GameIconData.home,
+          label: 'DEVAM ET',
+          primary: true,
+          onTap: onContinue,
+          height: rowH,
+        ),
+      _MenuRow(
+        icon: GameIconData.flame,
+        label: 'YENİ KÖY',
+        primary: !hasSaves,
+        onTap: onNewGame,
+        height: rowH,
+      ),
+      // İSTİSNA: geliştirme/test girişi. Oyuncu akışının parçası değil —
+      // her dokunuşta aynı "oturmuş, ortalama" köyü sıfırdan kurar.
+      _MenuRow(
+        icon: GameIconData.scroll,
+        label: 'REFERANS KÖY',
+        onTap: onReferenceVillage,
+        height: rowH,
+      ),
+      _MenuRow(
+        icon: GameIconData.gear,
+        label: 'AYARLAR',
+        onTap: onSettings,
+        height: rowH,
+      ),
+      _MenuRow(
+        icon: GameIconData.scroll,
+        label: 'HAKKINDA',
+        onTap: onAbout,
+        height: rowH,
+      ),
+      _MenuRow(
+        icon: GameIconData.bolt,
+        label: 'IŞIK EDİTÖRÜ',
+        onTap: onLightEditor,
+        height: rowH,
+      ),
+      _MenuRow(
+        icon: GameIconData.hammer,
+        label: 'EBAT EDİTÖRÜ',
+        onTap: onPlacementEditor,
+        height: rowH,
+      ),
+      _MenuRow(
+        icon: GameIconData.play,
+        label: 'ANİMASYONLAR',
+        onTap: onAnimationRoom,
+        height: rowH,
+      ),
+    ];
+
     return AppPanel(
       padding: const EdgeInsets.all(14),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (hasSaves) ...[
-            _MenuRow(
-              icon: GameIconData.home,
-              label: 'DEVAM ET',
-              primary: true,
-              onTap: onContinue,
-            ),
-            const SizedBox(height: 9),
+          for (int i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 9),
+            items[i],
           ],
-          _MenuRow(
-            icon: GameIconData.flame,
-            label: 'YENİ KÖY',
-            primary: !hasSaves,
-            onTap: onNewGame,
-          ),
-          const SizedBox(height: 9),
-          _MenuRow(
-            icon: GameIconData.gear,
-            label: 'AYARLAR',
-            onTap: onSettings,
-          ),
-          const SizedBox(height: 9),
-          _MenuRow(
-            icon: GameIconData.scroll,
-            label: 'HAKKINDA',
-            onTap: onAbout,
-          ),
-          const SizedBox(height: 9),
-          _MenuRow(
-            icon: GameIconData.bolt,
-            label: 'IŞIK EDİTÖRÜ',
-            onTap: onLightEditor,
-          ),
-          const SizedBox(height: 9),
-          _MenuRow(
-            icon: GameIconData.hammer,
-            label: 'EBAT EDİTÖRÜ',
-            onTap: onPlacementEditor,
-          ),
-          const SizedBox(height: 9),
-          _MenuRow(
-            icon: GameIconData.play,
-            label: 'ANİMASYONLAR',
-            onTap: onAnimationRoom,
-          ),
         ],
       ),
     );
@@ -393,11 +592,14 @@ class _MenuRow extends StatefulWidget {
   final String label;
   final bool primary;
   final VoidCallback onTap;
+
+  final double height;
   const _MenuRow({
     required this.icon,
     required this.label,
     required this.onTap,
     this.primary = false,
+    this.height = 54,
   });
 
   @override
@@ -425,61 +627,630 @@ class _MenuRowState extends State<_MenuRow> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
-          height: 54,
+          height: widget.height,
           padding: const EdgeInsets.symmetric(horizontal: 14),
-          transform:
-              _down ? Matrix4.translationValues(0, 1, 0) : Matrix4.identity(),
+          transform: _down
+              ? Matrix4.translationValues(0, 1, 0)
+              : Matrix4.identity(),
           decoration: BoxDecoration(
             color: widget.primary
                 ? Color.alphaBlend(
-                    accent.withValues(alpha: hot ? 0.30 : 0.20), AppUi.surface2)
+                    accent.withValues(alpha: hot ? 0.30 : 0.20),
+                    AppUi.surface2,
+                  )
                 : hot
-                    ? AppUi.surface3
-                    : AppUi.surface1,
+                ? AppUi.surface3
+                : AppUi.surface1,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
-                color: lit ? accent.withValues(alpha: 0.85) : AppUi.line,
-                width: lit ? 1.5 : 1),
+              color: lit ? accent.withValues(alpha: 0.85) : AppUi.line,
+              width: lit ? 1.5 : 1,
+            ),
             boxShadow: lit
-                ? [BoxShadow(color: accent.withValues(alpha: 0.32), blurRadius: 14)]
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.32),
+                      blurRadius: 14,
+                    ),
+                  ]
                 : null,
           ),
           child: Row(
             children: [
               // İkon madalyonu
               Container(
-                width: 32, height: 32,
+                width: 32,
+                height: 32,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: lit
-                      ? accent.withValues(alpha: 0.18)
-                      : AppUi.surface0,
+                  color: lit ? accent.withValues(alpha: 0.18) : AppUi.surface0,
                   border: Border.all(
-                      color: lit
-                          ? accent.withValues(alpha: 0.7)
-                          : AppUi.line,
-                      width: 1),
+                    color: lit ? accent.withValues(alpha: 0.7) : AppUi.line,
+                    width: 1,
+                  ),
                 ),
-                child: GameIcon(widget.icon,
-                    size: 16,
-                    color: lit ? AppUi.accentSoft : AppUi.textMid),
+                child: GameIcon(
+                  widget.icon,
+                  size: 16,
+                  color: lit ? AppUi.accentSoft : AppUi.textMid,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
-                child: Text(widget.label,
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  // Dar sütunda uzun etiket ("IŞIK EDİTÖRÜ") kırpılmasın —
+                  // üç nokta yerine harf aralığından kısılır.
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: AppUi.fontDisplay,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    letterSpacing: 2.0,
+                    color: lit ? AppUi.textHi : AppUi.textMid,
+                  ),
+                ),
+              ),
+              GameIcon(
+                GameIconData.chevron,
+                size: 14,
+                color: lit ? accent : AppUi.textLo.withValues(alpha: 0.6),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Dokunma yerleşimi: kimlik şeridi ───────────────────────────────────────
+
+/// Madalyon + kelime işareti + slogan YAN YANA. Masaüstündeki dikey kompozisyon
+/// (madalyon, altında başlık, altında kural, altında slogan) alçak ekranda
+/// tek başına 250px yiyordu; yatayda aynı bilgi 78px'e sığar.
+class _HeroBand extends StatelessWidget {
+  final double height;
+  final bool short;
+  const _HeroBand({required this.height, required this.short});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: [
+          Container(
+            width: height,
+            height: height,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                colors: [Color(0x33E49139), Color(0x00E49139)],
+                stops: [0.45, 1.0],
+              ),
+            ),
+            child: Image.asset(
+              'assets/ui/logo.png',
+              width: height * 0.84,
+              height: height * 0.84,
+              filterQuality: FilterQuality.medium,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ShaderMask(
+                  shaderCallback: (r) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFFF7EFDF),
+                      Color(0xFFF1C588),
+                      Color(0xFFE0913F),
+                    ],
+                    stops: [0.0, 0.55, 1.0],
+                  ).createShader(r),
+                  child: Text(
+                    'LUW',
                     style: TextStyle(
                       fontFamily: AppUi.fontDisplay,
                       fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                      letterSpacing: 2.0,
-                      color: lit ? AppUi.textHi : AppUi.textMid,
-                    )),
+                      fontSize: short ? 27 : 34,
+                      height: 1.0,
+                      letterSpacing: short ? 7.0 : 10.0,
+                      color: Colors.white,
+                      shadows: const [
+                        Shadow(
+                          color: Color(0xCC000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // Slogan KIRPILMAZ: dar ekranda üç noktaya düşmek yerine blok
+                // birlikte küçülür.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 22,
+                        height: 1,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0x00E49139), Color(0xCCE49139)],
+                          ),
+                        ),
+                      ),
+                      const GameIcon(
+                        GameIconData.flame,
+                        size: 11,
+                        color: AppUi.accent,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'ateşi yak · köyü kur · halkı yönet',
+                        style: AppUi.body.copyWith(
+                          color: AppUi.textMid,
+                          fontStyle: FontStyle.italic,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Sürüm doğrudan şafak göğünün üstünde duruyordu ve beyaz bulutun
+          // önüne geldiğinde kayboluyordu → küçük koyu rozet.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppUi.surface0.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            ),
+            child: Text(
+              'sürüm 0.1.0',
+              style: AppUi.label.copyWith(
+                color: AppUi.textLo,
+                letterSpacing: 1.8,
               ),
-              GameIcon(GameIconData.chevron,
-                  size: 14,
-                  color: lit ? accent : AppUi.textLo.withValues(alpha: 0.6)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Dokunma yerleşimi: birincil kartlar ────────────────────────────────────
+
+/// Oyuncunun menüde yaptığı iki şey. Diğer her şeyden BÜYÜK olmaları
+/// kademelendirmenin kendisi: 8 eşit satırda hiyerarşi yoktu, göz nereye
+/// gideceğini bilmiyordu.
+class _PrimaryRow extends StatelessWidget {
+  final double height;
+  final bool short, hasSaves;
+  final VoidCallback onContinue, onNewGame;
+  const _PrimaryRow({
+    required this.height,
+    required this.short,
+    required this.hasSaves,
+    required this.onContinue,
+    required this.onNewGame,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: [
+          if (hasSaves) ...[
+            Expanded(
+              child: _PrimaryCard(
+                icon: GameIconData.home,
+                label: 'DEVAM ET',
+                note: 'kaldığın köye dön',
+                primary: true,
+                height: height,
+                short: short,
+                onTap: onContinue,
+              ),
+            ),
+            const SizedBox(width: 10),
+          ],
+          // Kayıt yokken tek kart kalır; boydan boya uzatmak yerine ortada
+          // durur (tek eylemli menü "bozuk" değil, SAKİN görünmeli).
+          if (!hasSaves) const Spacer(),
+          Expanded(
+            flex: hasSaves ? 1 : 2,
+            child: _PrimaryCard(
+              icon: GameIconData.flame,
+              label: 'YENİ KÖY',
+              note: 'ateşi yeniden yak',
+              primary: !hasSaves,
+              height: height,
+              short: short,
+              onTap: onNewGame,
+            ),
+          ),
+          if (!hasSaves) const Spacer(),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrimaryCard extends StatefulWidget {
+  final GameIconData icon;
+  final String label, note;
+  final bool primary, short;
+  final double height;
+  final VoidCallback onTap;
+  const _PrimaryCard({
+    required this.icon,
+    required this.label,
+    required this.note,
+    required this.primary,
+    required this.short,
+    required this.height,
+    required this.onTap,
+  });
+
+  @override
+  State<_PrimaryCard> createState() => _PrimaryCardState();
+}
+
+class _PrimaryCardState extends State<_PrimaryCard> {
+  bool _hover = false, _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hot = _hover || _down;
+    final lit = hot || widget.primary;
+    const accent = AppUi.accent;
+    final disc = (widget.height * 0.30).clamp(34.0, 56.0);
+    // Not satırı ancak kart yeterince yüksekse görünür — yoksa etiketle
+    // birbirine yapışıyor.
+    final showNote = widget.height >= 104;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapUp: (_) => setState(() => _down = false),
+        onTapCancel: () => setState(() => _down = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          curve: Curves.easeOut,
+          transform: _down
+              ? Matrix4.translationValues(0, 1.5, 0)
+              : Matrix4.identity(),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: widget.primary
+                  ? [
+                      Color.alphaBlend(
+                        accent.withValues(alpha: hot ? 0.34 : 0.24),
+                        AppUi.surface2,
+                      ),
+                      Color.alphaBlend(
+                        accent.withValues(alpha: hot ? 0.16 : 0.10),
+                        AppUi.surface1,
+                      ),
+                    ]
+                  : [
+                      hot ? AppUi.surface3 : AppUi.surface2,
+                      hot ? AppUi.surface2 : AppUi.surface1,
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(AppUi.radius),
+            border: Border.all(
+              color: lit ? accent.withValues(alpha: 0.85) : AppUi.line,
+              width: lit ? 1.5 : 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: lit
+                    ? accent.withValues(alpha: 0.30)
+                    : const Color(0x66000000),
+                blurRadius: lit ? 18 : 10,
+                offset: const Offset(0, 4),
+              ),
             ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: disc,
+                height: disc,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: lit ? accent.withValues(alpha: 0.18) : AppUi.surface0,
+                  border: Border.all(
+                    color: lit ? accent.withValues(alpha: 0.7) : AppUi.line,
+                    width: 1,
+                  ),
+                ),
+                child: GameIcon(
+                  widget.icon,
+                  size: disc * 0.46,
+                  color: lit ? AppUi.accentSoft : AppUi.textMid,
+                ),
+              ),
+              SizedBox(height: widget.short ? 8 : 12),
+              // Etiket kırpılmaz: dar kartta üç nokta yerine ölçek küçülür.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontFamily: AppUi.fontDisplay,
+                    fontWeight: FontWeight.w700,
+                    fontSize: widget.short ? 16 : 20,
+                    letterSpacing: 2.4,
+                    height: 1.0,
+                    color: lit ? AppUi.textHi : AppUi.textMid,
+                  ),
+                ),
+              ),
+              if (showNote) ...[
+                const SizedBox(height: 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.note,
+                    style: AppUi.body.copyWith(
+                      color: AppUi.textLo,
+                      fontStyle: FontStyle.italic,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Dokunma yerleşimi: alt bant ────────────────────────────────────────────
+
+/// İkincil kapılar solda (ayarlar · hakkında), GELİŞTİRİCİ araçları sağda
+/// küçük rozet olarak. Dev girişleri oyuncu akışının parçası değil; oyun
+/// menüsünde birincil eylemlerle aynı boyda durmaları yanlış kademelendirmeydi.
+/// Rozetin adı uzun basınca (Tooltip) görünür.
+class _BottomBand extends StatelessWidget {
+  final double height, width;
+  final VoidCallback onSettings,
+      onAbout,
+      onReferenceVillage,
+      onLightEditor,
+      onPlacementEditor,
+      onAnimationRoom;
+  const _BottomBand({
+    required this.height,
+    required this.width,
+    required this.onSettings,
+    required this.onAbout,
+    required this.onReferenceVillage,
+    required this.onLightEditor,
+    required this.onPlacementEditor,
+    required this.onAnimationRoom,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Row(
+        children: [
+          Expanded(
+            child: _MenuChip(
+              icon: GameIconData.gear,
+              label: 'AYARLAR',
+              onTap: onSettings,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _MenuChip(
+              icon: GameIconData.scroll,
+              label: 'HAKKINDA',
+              onTap: onAbout,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              // Opak'a yakın: yarı saydam bırakılınca altındaki şafak ışınlarını
+              // emip KAHVERENGİ okunuyordu (de-wood kuralı).
+              color: AppUi.surface0.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+              border: Border.all(color: AppUi.line),
+            ),
+            child: Row(
+              children: [
+                // Başlık ancak yer varsa; dar telefonda rozetler kendi
+                // başlarına yeterince "araç kutusu" okunuyor.
+                if (width >= 560) ...[
+                  Text(
+                    'GELİŞTİRİCİ',
+                    style: AppUi.label.copyWith(
+                      color: AppUi.textLo,
+                      fontSize: 11,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                _DevBadge(
+                  icon: GameIconData.scroll,
+                  tip: 'Referans Köy',
+                  onTap: onReferenceVillage,
+                ),
+                _DevBadge(
+                  icon: GameIconData.bolt,
+                  tip: 'Işık Editörü',
+                  onTap: onLightEditor,
+                ),
+                _DevBadge(
+                  icon: GameIconData.hammer,
+                  tip: 'Ebat Editörü',
+                  onTap: onPlacementEditor,
+                ),
+                _DevBadge(
+                  icon: GameIconData.play,
+                  tip: 'Animasyonlar',
+                  onTap: onAnimationRoom,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuChip extends StatefulWidget {
+  final GameIconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _MenuChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  State<_MenuChip> createState() => _MenuChipState();
+}
+
+class _MenuChipState extends State<_MenuChip> {
+  bool _hover = false, _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hot = _hover || _down;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _down = true),
+        onTapUp: (_) => setState(() => _down = false),
+        onTapCancel: () => setState(() => _down = false),
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 130),
+          curve: Curves.easeOut,
+          // Dokunma tabanı: kapsül bandın tamamını doldurur (>= 44dp).
+          height: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: hot ? AppUi.surface3 : AppUi.surface1,
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(
+              color: hot ? AppUi.accent.withValues(alpha: 0.75) : AppUi.line,
+              width: hot ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GameIcon(
+                widget.icon,
+                size: 15,
+                color: hot ? AppUi.accentSoft : AppUi.textMid,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                      fontFamily: AppUi.fontDisplay,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      letterSpacing: 1.4,
+                      color: hot ? AppUi.textHi : AppUi.textMid,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DevBadge extends StatefulWidget {
+  final GameIconData icon;
+  final String tip;
+  final VoidCallback onTap;
+  const _DevBadge({required this.icon, required this.tip, required this.onTap});
+
+  @override
+  State<_DevBadge> createState() => _DevBadgeState();
+}
+
+class _DevBadgeState extends State<_DevBadge> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tip,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          // 44dp dokunma tabanı — rozet küçük görünür, hedefi küçülmez.
+          child: SizedBox(
+            width: MobileUi.tap,
+            height: MobileUi.tap,
+            child: Center(
+              child: GameIcon(
+                widget.icon,
+                size: 18,
+                color: _hover ? AppUi.accentSoft : AppUi.textMid,
+              ),
+            ),
           ),
         ),
       ),
@@ -496,42 +1267,50 @@ class _SunWithGlow extends StatelessWidget {
   Widget build(BuildContext context) {
     final pulse = sin(time * 0.5) * 0.06 + 0.94;
     return SizedBox(
-      width: 132, height: 132,
+      width: 132,
+      height: 132,
       child: Stack(
         alignment: Alignment.center,
         children: [
           // Geniş soluk şafak hâlesi
           Container(
-            width: 132, height: 132,
+            width: 132,
+            height: 132,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [
-                Color.fromRGBO(255, 226, 178, 0.60 * pulse),
-                Color.fromRGBO(255, 190, 120, 0.22 * pulse),
-                const Color(0x00FFC080),
-              ], stops: const [0.0, 0.45, 1.0]),
+              gradient: RadialGradient(
+                colors: [
+                  Color.fromRGBO(255, 226, 178, 0.60 * pulse),
+                  Color.fromRGBO(255, 190, 120, 0.22 * pulse),
+                  const Color(0x00FFC080),
+                ],
+                stops: const [0.0, 0.45, 1.0],
+              ),
             ),
           ),
           // Dar parlak çekirdek — yeni doğan güneş sıcak-beyaz
           Container(
-            width: 54, height: 54,
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [
-                Color.fromRGBO(255, 246, 224, 0.9 * pulse),
-                const Color(0x00FFE6BE),
-              ]),
+              gradient: RadialGradient(
+                colors: [
+                  Color.fromRGBO(255, 246, 224, 0.9 * pulse),
+                  const Color(0x00FFE6BE),
+                ],
+              ),
             ),
           ),
           // Güneş diski — sert kare değil, sıcak-beyaz yumuşak disk
           Container(
-            width: 30, height: 30,
+            width: 30,
+            height: 30,
             decoration: const BoxDecoration(
               shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [
-                Color(0xFFFFFBF0),
-                Color(0xFFFFE7C2),
-              ]),
+              gradient: RadialGradient(
+                colors: [Color(0xFFFFFBF0), Color(0xFFFFE7C2)],
+              ),
             ),
           ),
         ],
@@ -552,12 +1331,30 @@ class _DriftingClouds extends StatelessWidget {
     final wrap = screenWidth + 120.0;
     final drift = (time * 6.0) % wrap;
     double cx(double base) => (base + drift) % wrap - 60;
-    return Stack(children: [
-      Positioned(left: cx(40), top: 70, child: const PixelCloud(scale: 1.1, parallax: 0.6)),
-      Positioned(left: cx(screenWidth * 0.35), top: 110, child: const PixelCloud(scale: 0.8, parallax: 0.4)),
-      Positioned(left: cx(screenWidth * 0.70), top: 50, child: const PixelCloud(scale: 1.3, parallax: 0.8)),
-      Positioned(left: cx(screenWidth * 0.92), top: 130, child: const PixelCloud(scale: 0.7, parallax: 0.35)),
-    ]);
+    return Stack(
+      children: [
+        Positioned(
+          left: cx(40),
+          top: 70,
+          child: const PixelCloud(scale: 1.1, parallax: 0.6),
+        ),
+        Positioned(
+          left: cx(screenWidth * 0.35),
+          top: 110,
+          child: const PixelCloud(scale: 0.8, parallax: 0.4),
+        ),
+        Positioned(
+          left: cx(screenWidth * 0.70),
+          top: 50,
+          child: const PixelCloud(scale: 1.3, parallax: 0.8),
+        ),
+        Positioned(
+          left: cx(screenWidth * 0.92),
+          top: 130,
+          child: const PixelCloud(scale: 0.7, parallax: 0.35),
+        ),
+      ],
+    );
   }
 }
 
@@ -585,10 +1382,18 @@ class _HorizonPainter extends CustomPainter {
     final ground = Paint()..color = const Color(0xFF140916);
     canvas.drawRect(Rect.fromLTWH(0, h * 0.78, w, h * 0.22), ground);
 
-    void building(double cx, double cy, double bw, double bh,
-        {bool hasRoof = true, bool hasWindow = true}) {
-      canvas.drawRect(Rect.fromLTWH(cx - bw / 2, cy - bh, bw, bh),
-          Paint()..color = const Color(0xFF0C0612));
+    void building(
+      double cx,
+      double cy,
+      double bw,
+      double bh, {
+      bool hasRoof = true,
+      bool hasWindow = true,
+    }) {
+      canvas.drawRect(
+        Rect.fromLTWH(cx - bw / 2, cy - bh, bw, bh),
+        Paint()..color = const Color(0xFF0C0612),
+      );
       if (hasRoof) {
         final roof = Path()
           ..moveTo(cx - bw / 2 - 2, cy - bh)
@@ -602,9 +1407,16 @@ class _HorizonPainter extends CustomPainter {
         canvas.drawRect(
           Rect.fromCenter(
             center: Offset(cx, cy - bh * 0.55),
-            width: bw * 0.22, height: bh * 0.22),
+            width: bw * 0.22,
+            height: bh * 0.22,
+          ),
           Paint()
-            ..color = Color.fromRGBO(255, 180, 80, (0.6 * flicker).clamp(0.2, 1.0)),
+            ..color = Color.fromRGBO(
+              255,
+              180,
+              80,
+              (0.6 * flicker).clamp(0.2, 1.0),
+            ),
         );
       }
     }
@@ -618,16 +1430,25 @@ class _HorizonPainter extends CustomPainter {
     building(w * 0.82, groundY, 30, 28);
 
     final towerX = w * 0.50;
-    canvas.drawRect(Rect.fromLTWH(towerX - 8, groundY - 64, 16, 64),
-        Paint()..color = const Color(0xFF0C0612));
-    canvas.drawRect(Rect.fromLTWH(towerX - 12, groundY - 70, 24, 8),
-        Paint()..color = const Color(0xFF1C100C));
+    canvas.drawRect(
+      Rect.fromLTWH(towerX - 8, groundY - 64, 16, 64),
+      Paint()..color = const Color(0xFF0C0612),
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(towerX - 12, groundY - 70, 24, 8),
+      Paint()..color = const Color(0xFF1C100C),
+    );
     final towerFlicker = (sin(time * 2.0) * 0.15 + 0.85).clamp(0.6, 1.0);
     canvas.drawCircle(
       Offset(towerX, groundY - 68),
       6,
       Paint()
-        ..color = Color.fromRGBO(255, 200, 100, (0.6 * towerFlicker).clamp(0.2, 1.0))
+        ..color = Color.fromRGBO(
+          255,
+          200,
+          100,
+          (0.6 * towerFlicker).clamp(0.2, 1.0),
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
 
@@ -636,23 +1457,29 @@ class _HorizonPainter extends CustomPainter {
       Offset(w * 0.42, groundY - 8),
       34,
       Paint()
-        ..color = Color.fromRGBO(255, 140, 40, (0.32 * fireFlicker).clamp(0.1, 1.0))
+        ..color = Color.fromRGBO(
+          255,
+          140,
+          40,
+          (0.32 * fireFlicker).clamp(0.1, 1.0),
+        )
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18),
     );
 
     // Sabah bacaları — evler uyanıyor, ocaklar tütüyor.
     void smoke(double cx, double topY) {
-      final smk = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+      final smk = Paint()
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
       for (int i = 0; i < 5; i++) {
         final t = i / 4.0;
         final rise = t * 46;
         final wob = sin(time * 0.9 + i * 0.8 + cx) * (5 + t * 10);
         final a = (0.20 * (1 - t)).clamp(0.0, 1.0);
         smk.color = Color.fromRGBO(226, 214, 224, a);
-        canvas.drawCircle(
-            Offset(cx + wob, topY - rise), 3.0 + t * 5.0, smk);
+        canvas.drawCircle(Offset(cx + wob, topY - rise), 3.0 + t * 5.0, smk);
       }
     }
+
     smoke(w * 0.18, groundY - 34);
     smoke(w * 0.68, groundY - 36);
   }
@@ -706,7 +1533,8 @@ class _LightRaysPainter extends CustomPainter {
     final len = size.height * 0.95;
     for (int i = 0; i < n; i++) {
       // Aşağıya doğru açılan yelpaze + nazik salınım
-      final a = pi / 2 + (i - (n - 1) / 2) * 0.19 + sin(time * 0.25 + i) * 0.025;
+      final a =
+          pi / 2 + (i - (n - 1) / 2) * 0.19 + sin(time * 0.25 + i) * 0.025;
       final width = 30.0 + (i % 3) * 16.0;
       final alpha = i.isEven ? 0.040 : 0.024;
       final ex = cos(a) * len, ey = sin(a) * len;
@@ -715,16 +1543,16 @@ class _LightRaysPainter extends CustomPainter {
         ..lineTo(ex - width, ey)
         ..lineTo(ex + width, ey)
         ..close();
-      final shader = ui.Gradient.linear(
-        Offset.zero,
-        Offset(ex, ey),
-        [Color.fromRGBO(255, 224, 160, alpha), const Color(0x00FFE0A0)],
-      );
+      final shader = ui.Gradient.linear(Offset.zero, Offset(ex, ey), [
+        Color.fromRGBO(255, 224, 160, alpha),
+        const Color(0x00FFE0A0),
+      ]);
       canvas.drawPath(
-          path,
-          Paint()
-            ..shader = shader
-            ..blendMode = BlendMode.plus);
+        path,
+        Paint()
+          ..shader = shader
+          ..blendMode = BlendMode.plus,
+      );
     }
     canvas.restore();
   }
@@ -779,8 +1607,11 @@ class _WakingBirdsPainter extends CustomPainter {
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
     const offsets = [
-      Offset(0, 0), Offset(-22, 10), Offset(22, 10),
-      Offset(-44, 22), Offset(44, 22),
+      Offset(0, 0),
+      Offset(-22, 10),
+      Offset(22, 10),
+      Offset(-44, 22),
+      Offset(44, 22),
     ];
     for (int i = 0; i < offsets.length; i++) {
       final cx = baseX + offsets[i].dx;
@@ -864,11 +1695,17 @@ class _WelcomerPainter extends CustomPainter {
     // — Bacaklar
     final legTop = h * 0.62;
     canvas.drawRRect(
-        RRect.fromRectXY(Rect.fromLTWH(cx - 15, legTop, 12, feetY - legTop), 3, 3),
-        body);
+      RRect.fromRectXY(
+        Rect.fromLTWH(cx - 15, legTop, 12, feetY - legTop),
+        3,
+        3,
+      ),
+      body,
+    );
     canvas.drawRRect(
-        RRect.fromRectXY(Rect.fromLTWH(cx + 3, legTop, 12, feetY - legTop), 3, 3),
-        body);
+      RRect.fromRectXY(Rect.fromLTWH(cx + 3, legTop, 12, feetY - legTop), 3, 3),
+      body,
+    );
 
     // — Cübbe / gövde (aşağı doğru genişleyen pelerin)
     final robe = Path()
@@ -900,11 +1737,20 @@ class _WelcomerPainter extends CustomPainter {
     final lanternSway = sin(time * 1.6) * 2.0;
     final lx = handX + lanternSway, ly = handY + 12;
     canvas.drawRRect(
-        RRect.fromRectXY(Rect.fromCenter(center: Offset(lx, ly), width: 13, height: 17), 3, 3),
-        Paint()..color = const Color(0xFF241016));
+      RRect.fromRectXY(
+        Rect.fromCenter(center: Offset(lx, ly), width: 13, height: 17),
+        3,
+        3,
+      ),
+      Paint()..color = const Color(0xFF241016),
+    );
     // fener alevi/camı
     canvas.drawRRect(
-      RRect.fromRectXY(Rect.fromCenter(center: Offset(lx, ly), width: 8, height: 11), 2, 2),
+      RRect.fromRectXY(
+        Rect.fromCenter(center: Offset(lx, ly), width: 8, height: 11),
+        2,
+        2,
+      ),
       Paint()
         ..color = Color.fromRGBO(255, 198, 110, flick)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
@@ -941,9 +1787,11 @@ class _WelcomerPainter extends CustomPainter {
 
     // — Rim-light: şafak arkadan geldiği için sağ/üst kenarlar sıcak parlar
     canvas.drawPath(
-      Path()
-        ..addArc(Rect.fromCircle(center: Offset(cx + 1, h * 0.235), radius: 12.5),
-            -pi * 0.85, pi * 0.9), // baş sağ-üst yayı
+      Path()..addArc(
+        Rect.fromCircle(center: Offset(cx + 1, h * 0.235), radius: 12.5),
+        -pi * 0.85,
+        pi * 0.9,
+      ), // baş sağ-üst yayı
       rim,
     );
     canvas.drawPath(

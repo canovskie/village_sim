@@ -5,6 +5,9 @@ import '../characters/personality.dart';
 import '../characters/life_stage.dart';
 import '../core/constants.dart';
 import '../systems/chronicle.dart';
+import '../systems/villager_act.dart';
+import '../systems/villager_memory.dart';
+import '../systems/villager_mind.dart';
 import 'villager_job.dart';
 import 'worker_entity.dart';
 
@@ -51,6 +54,7 @@ enum VillagerActivity {
   fleeing,
   chasing,
   abducted,
+  playing,     // çocuk oyunu — kovalamaca/birlikte zıplama (scene_tick _tickChildPlay)
 }
 
 /// NPC'nin anlık duygusu — "canlılık" altyapısı. Geçici tepki olarak tetiklenir
@@ -111,6 +115,11 @@ class VillagerEntity extends WorkerEntity {
   /// Kutlanan yıldönümü sayısı — yaş kilometre taşı geçince artar (kişisel an).
   int annivCount = 0;
 
+  /// "Büyüdü" anı yaşandı mı — çocuk→genç geçişinde bir kez kutlanır (köyün
+  /// işlerine ilk el atış). Genç+ yaşla doğanlar köyde büyümediği için baştan
+  /// true (an tetiklenmez); bebek doğanlar büyüyünce sahne tetikler.
+  bool grewUpMoment;
+
   /// "Çağrısını buldu" anı yaşandı mı — genç→yetişkin geçişinde meslek görünür
   /// olur ([hasProfession]) ve bu bir kez kutlanır. Yetişkin/yaşlı yaşıyla
   /// doğanlar (kurucu/göçmen) köyde büyümediği için baştan true (an tetiklenmez);
@@ -149,10 +158,24 @@ class VillagerEntity extends WorkerEntity {
   /// Aktif (none olmayan) bir işi üstlenmiş mi — iş döngüsü/rutin kapısı.
   bool get hasActiveJob => job != null && job!.role != JobRole.none;
 
+
   /// İş bırakıldıktan sonra kısa süre tekrar işe atanmama süresi (sn) — ör.
   /// erişilemez hedefte takılıp iş bırakınca aynı köylü hemen yeniden aynı işe
   /// atanıp yeniden takılmasın. 0 = serbest. Geçici (kaydedilmez).
   double jobReassignCd = 0.0;
+
+  /// OYUNCUNUN ELLE VERDİĞİ İŞ — `null` ise bu köylü otomatik iş gücü havuzunda
+  /// (eski davranış: `_reconcileRole` en yakın boş yetişkini kapar). Doluysa
+  /// köylü o rolde KİLİTLİDİR: otomatik atama onu başka role çekemez ve fazlalık
+  /// sayılıp bırakamaz — yalnız oyuncu geri alabilir.
+  ///
+  /// Bu alan erken oyunun omurgası: "kimin ne yaptığına oyuncu karar verir"
+  /// hissi buradan gelir. [JobRole.none] "boş dursun" demektir (otomatikten de
+  /// muaf) — `null` ile aynı şey DEĞİL.
+  JobRole? assignedRole;
+
+  /// Oyuncu bu köylünün işini elle mi belirledi — okunabilirlik kısayolu.
+  bool get isPlayerAssigned => assignedRole != null;
 
   /// Özel kostüm — meslekten bağımsız görsel override (bkz. [NpcCostume]).
   /// Normal köylüler `none`; imparatorluk askerleri spawn'da `imperial` set eder.
@@ -178,9 +201,73 @@ class VillagerEntity extends WorkerEntity {
   double _errandDwell = 0;   // hedefe varınca kaç sn oyalanacak
   double _errandWait = 0;    // atanmayı kaç sn bekledi (fallback için)
 
-  /// Errand/iş koşturması yapabilir mi — çocuk değil VE akut yaralı değil
-  /// (yaralı dinlenip iyileşir; kalıcı sakat çalışır ama yavaş). [injuryDays].
-  bool get canRunErrands => lifeStage != LifeStage.child && injuryDays <= 0;
+  /// Errand/iş koşturması yapabilir mi — çocuk değil, yaralı/hasta değil VE
+  /// kürek cezasında değil (yaralı/hasta dinlenir, mahkûm ocakta; hepsi köyün
+  /// gündelik işine karışmaz). [injuryDays], [sickDays], [laborDays].
+  bool get canRunErrands =>
+      lifeStage != LifeStage.child &&
+      injuryDays <= 0 &&
+      sickDays <= 0 &&
+      laborDays <= 0;
+
+  // ── KÖYÜN HÂLİ (world_pressure) — köylüye işlenen dünya basıncı ────────────
+  // Sahne her saniye [_applyPressure] ile tazeler; köylü bunları kendi
+  // update()'inde okur. Yasanın gövdeye değdiği yer burası.
+
+  /// Gece eşiği kayması. `dayLight < kNightThreshold + curfewBias` → köylü
+  /// içeri çekilir; sokağa çıkma yasağı arttıkça köy daha aydınlıkken boşalır.
+  double curfewBias = 0;
+
+  /// Gece feneri mecburiyeti — meslek/yaş şartı olmadan meşale hakkı verir
+  /// ([torchEligibleDefault]).
+  bool lanternMandate = false;
+
+  /// YÜRÜYEN EYLEM — varış noktasındaki mikro-sahne (bkz. scene_act). null ise
+  /// köylünün elinde somut bir iş yok.
+  Act? act;
+
+  /// Elindeki görünür nesne — kova/çuval/ekmek/maşrapa/sepet/odun.
+  /// Eylem adımları yazar, [PropRenderer] çizer, hız buna göre yavaşlar.
+  PropKind prop = PropKind.none;
+
+  /// Eylem sırasındaki iş duruşu (null = normal).
+  ActPose? actPose;
+
+  /// HAFIZA — gördükleri (sönen anılar) + kime ne kadar güvendiği (kalıcı
+  /// kanaat). Köylüler artık birbirini GÖRÜYOR (bkz. scene_perception);
+  /// gördükleri sonraki kararlarını ve kime nasıl davrandıklarını etkiliyor.
+  final VillagerMemory memory = VillagerMemory();
+
+  /// AKIL — dürtüler + yürürlükteki niyet + sebep. Köylünün bir sonraki
+  /// eylemini artık "hangi sistem önce kaptı" değil bu belirler (bkz.
+  /// [scene_mind.dart]). Panelde gösterilen "ne yapıyor / neden" buradan okunur.
+  final VillagerMind mind = VillagerMind();
+
+  // ── DURUŞ (bearing) — köyün hâlinin gövdeye inen hâli ──────────────────────
+  // Anlık duygudan ([feel]/[NpcEmotion]) FARKLI: duygu bir olaya verilen geçici
+  // tepki, duruş ise köylünün o dönemki SÜREKLİ hâli. Baskı altındaki köyde
+  // kimse "korku ikonu" taşımaz — sadece herkes biraz daha eğik yürür. Üçü de
+  // 0..1; render katmanı ([_VillagerDrawable]) postüre çevirir.
+
+  /// Boyun eğme — omuz düşük, baş hafif önde, adım kısa.
+  double bearingBow = 0;
+
+  /// Tedirginlik — gergin salınım, sık omuz üstü bakış, hızlı adım.
+  double bearingTense = 0;
+
+  /// Dinçlik/şenlik — dik duruş, adımda hafif sekme.
+  double bearingLift = 0;
+
+  /// GECE NÖBETİ — bu köylü geceyi uyanık geçirir (muhafız). Devriye yoğunluğu
+  /// ([WorldPressure.patrolDensity]) kaç muhafızın nöbete kalacağını belirler;
+  /// nöbetçi gece uykuya çekilmez, postunda kalır. Sokağa çıkma yasağının
+  /// görünür tamamlayıcısı: boşalan sokakta yürüyen tek siluet.
+  bool nightDuty = false;
+
+  /// PAYDOS (sn) — mesai dürtüsü düşükken (Kutsal Gün, nadas, kış, bolluk)
+  /// köylü işini gerçekten bırakır: tezgâh boş kalır, rutin devralır, meydan
+  /// dolar. Sayaç bitince kendiliğinden işine döner. Kaydedilmez (geçici hâl).
+  double workPause = 0;
 
   /// Sahne rutin sistemi çağırır: amaçlı bir hedefe yürü, varınca [dwell] sn
   /// orada oyalan (bir şey yapıyormuş gibi). Amaçsız wander'ın yerini alır.
@@ -199,18 +286,40 @@ class VillagerEntity extends WorkerEntity {
     needsErrand = false;
     _errandWait = 0;
     state = VillagerState.moving;
-    glanceAround(duration: 0.6);
+    // NOT: burada eskiden `glanceAround` vardı — köylü tam yola çıkacakken
+    // ters dönüp geri dönüyordu. Yola çıkış anı bakınma anı değil; bakınma
+    // artık varışta ([_tickIdleAnim]) ve durakta olur.
   }
 
   /// Ana hız — meslekten türer (getter; meslek değişince güncellenir).
   /// Yaralı/sakatsa [injuryFactor] ile yavaşlar (görünür aksama); kaçarken /
   /// kovalarken [hasteFactor] ile hızlanır (telaş gözle görülür).
+  /// Elindeki yükün hız çarpanı — dolu kova ve çuval taşıyan yavaşlar.
+  /// Yüklü köylünün yavaşlaması hem inandırıcı hem oynanışta işlevsel:
+  /// çuvalla kaçan hırsız yakalanabilir olmalı.
+  double get propFactor => propSpeedFactor(prop);
+
   @override
-  double get speed => _speedFor(type) * injuryFactor * hasteFactor;
+  double get speed => _speedFor(type) *
+      injuryFactor *
+      hasteFactor *
+      propFactor *
+      paceFactor;
 
   /// Telaş çarpanı — kaçan suçlu / kovalayan muhafız kısa süreliğine hızlanır.
   /// scene_crime yazar, iş bitince 1.0'a döner. Transient (kaydedilmez).
   double hasteFactor = 1.0;
+
+  /// KÖYÜN TEMPOSU — basınç tablosunun adım payı (bkz. WorldPressure.hurry).
+  /// Baskı/tedirginlik altında sokakta oyalanma biter, geçişler hızlanır.
+  /// scene_pressure yazar; kişisel telaştan ([hasteFactor]) ayrıdır ve onunla
+  /// çarpılır. Transient — her tabloda yeniden yazılır, kaydedilmez.
+  double paceFactor = 1.0;
+
+  /// KILIK — köyün ambar hâli, -1 yoksunluk … +1 refah (bkz.
+  /// WorldPressure.provision). Yalnız çizim okur: giysi renkleri buradan
+  /// soluklaşır ya da doyar. scene_pressure yazar, transient.
+  double provision = 0.0;
 
   /// Bu NPC'nin boş zaman hareket kişiliği — meslekten türer (getter; meslek
   /// değişince yeni personaya geçer).
@@ -226,6 +335,9 @@ class VillagerEntity extends WorkerEntity {
 
   // Uyku sistemi
   bool _wasSleeping = false;
+  /// Şafakta kademeli uyanış için kişisel gecikme (sn) — köy dalga dalga
+  /// uyansın, herkes aynı karede kapıdan fırlamasın. <0 = henüz kurulmadı.
+  double _wakeDelay = -1.0;
   /// Nereye gidip uyuyacak (main.dart tarafından her gece atanır)
   (double, double)? sleepTarget;
   /// true → eve girmiş sayılır (render edilmez)
@@ -281,13 +393,34 @@ class VillagerEntity extends WorkerEntity {
   /// Kaydedilir. Kavgada (scene_conflict) atanır.
   double injuryDays = 0.0;
 
+  /// HASTALIK — kalan hastalık süresi (oyun günü). >0 iken köylü düşkün:
+  /// yavaşlar ve dinlenir (işe/errand'a gitmez). ÇOĞU İYİLEŞİR; yalnız çok
+  /// yaşlı/düşük moralli için küçük ölüm riski taşır (bkz. scene_illness).
+  /// İyi beslenme + mabet iyileşmeyi hızlandırır. Kaydedilir.
+  double sickDays = 0.0;
+
+  /// Bu köylü şu an hasta mı.
+  bool get isSick => sickDays > 0;
+
+  /// KÜREK CEZASI — kalan zorunlu emek süresi (oyun günü). >0 iken köylü
+  /// mahkûm: normal işe/errand'a gitmez, kadroya alınmaz; gündüzleri taş
+  /// ocağına koşulur ve köye günlük taş üretir ([_tickConvictLabor]). Süre
+  /// dolunca salıverilir. Kaydedilir. scene_crime `_sentenceToLabor` atar.
+  double laborDays = 0.0;
+
+  /// Bu köylü şu an kürek cezasında mı (zorunlu emekte).
+  bool get isConvictLaboring => laborDays > 0;
+
   /// KALICI SAKATLIK — ağır bir yaralanma kalıcı aksaklık bırakır: ömür boyu
   /// hafif yavaş (limp). injuryDays bitse de kalır. Kaydedilir.
   bool disabled = false;
 
-  /// Yaralı/sakat hız çarpanı — akut yaralı çok yavaş (0.55), kalıcı sakat hafif
-  /// aksak (0.8), sağlam 1.0. [speed] bununla ölçeklenir → gövde dili (aksama).
-  double get injuryFactor => injuryDays > 0 ? 0.55 : (disabled ? 0.8 : 1.0);
+  /// Yaralı/sakat/hasta hız çarpanı — akut yaralı çok yavaş (0.55), hasta düşkün
+  /// (0.7), kalıcı sakat hafif aksak (0.8), sağlam 1.0. [speed] bununla ölçeklenir
+  /// → gövde dili (aksama/ağırlaşma).
+  double get injuryFactor => injuryDays > 0
+      ? 0.55
+      : (sickDays > 0 ? 0.7 : (disabled ? 0.8 : 1.0));
 
   /// Küslükler — bu köylünün dargın olduğu kişiler → küslüğün biteceği sim zamanı
   /// ([_time]). Kavga sonrası kurulur; süresi dolunca lazy temizlenir. Küs çiftler
@@ -405,9 +538,11 @@ class VillagerEntity extends WorkerEntity {
   /// Köylünün biriktirdiği soyut varlık ("sikke"). Çalışan yetişkinler her gün
   /// mesleklerine göre kazanır; moral (üretkenlik) + ev kademesi çarpar; küçük
   /// bir yaşam gideri asimptota çeker (sınırsız büyümez). Çocuk/mesleksiz
-  /// kazanmaz → gider zamanla sıfıra indirir. SADECE göreli karşılaştırma için
-  /// (Köy Nüfus Defteri'nde "zenginlik" sütunu); şimdilik hiçbir mantık harcamaz.
-  /// [_tickVillagerMorale] besler, kayıtta saklanır. Bkz. [wealthDailyIncome].
+  /// kazanmaz → gider zamanla sıfıra indirir. Köy Nüfus Defteri'nde "zenginlik"
+  /// sütununda gösterilir VE mekanik sürer: yoksul köylü (wealth<10) suça daha
+  /// yatkın, hırsız daha zengin komşuyu hedefler, çalınan servet el değiştirir
+  /// (bkz. scene_crime). Günlük gelir scene_estates'te işlenir ([wealthDailyIncome]),
+  /// kayıtta saklanır.
   double wealth = 0;
   /// Zanaat ustalığı — bu köylünün her zanaatta biriktirdiği deneyim (birikim
   /// kanalı, bkz. buildings/craft.dart). Yalnız YAPI zanaatları (marangozluk/taş
@@ -475,6 +610,39 @@ class VillagerEntity extends WorkerEntity {
     emotion = NpcEmotion.none;
     emotionTime = 0;
     if (sitClaimed) _cancelSit();
+  }
+
+  // ── Sürgün (köyden ayrılış — ölüm DEĞİL) ────────────────────────────────────
+  /// Sürgün edilen köylü olduğu yerde ÖLMEZ; harita kenarına doğru yürür ve
+  /// varınca sahneden çekilir (metinle uyum: "yolun başına yürütüldü, çıkarıldı").
+  /// AI donar (update erken döner), yalnız kenara yürüme sürer.
+  bool isLeaving = false;
+  double _leaveX = 0, _leaveY = 0;
+  /// Kenara vardı → sahne bir sonraki geçişte listeden çıkarabilir.
+  bool leftVillage = false;
+
+  void startLeaving(double edgeX, double edgeY) {
+    if (isLeaving || isDying) return;
+    isLeaving = true;
+    _leaveX = edgeX;
+    _leaveY = edgeY;
+    emotion = NpcEmotion.grief; // ağır, başı önde ayrılış (gövde dili)
+    emotionTime = 5.0;
+    if (sitClaimed) _cancelSit();
+  }
+
+  // ── Yaş-evresi boyutu (yumuşatılmış) ────────────────────────────────────────
+  /// [LifeStage.renderScale] AYRIK (0.60→0.82→1.00→0.95); doğrudan çizilirse
+  /// köylü evre eşiğinde tek karede sıçrayarak büyür/küçülür. [displayScale] o
+  /// hedefe ~1.2s'de süzülür (ilk karede snap) — renderer bunu kullanır.
+  double displayScale = 1.0;
+  bool _displayScaleInit = false;
+
+  /// "Belirme" — doğum / köye katılma anında köylü tek karede pat belirmesin;
+  /// [from] küçük ölçekten hedef boyuta yumuşakça süzülür (displayScale lerp'i).
+  void appearScaleIn([double from = 0.2]) {
+    displayScale = from;
+    _displayScaleInit = true;
   }
 
   /// İç dünyayı her tick ilerletir: duygu zamanlayıcısı, mood'un nötre dönüşü,
@@ -595,6 +763,9 @@ class VillagerEntity extends WorkerEntity {
         // Yetişkin/yaşlı yaşıyla doğan (kurucu/göçmen) çağrısını "köyde büyürken"
         // bulmadı → an tetiklenmesin. Bebek (ageDays≈0) büyüyünce keşfeder.
         callingFound = ageDays >= kAdultStartDay,
+        // Genç ve üstü yaşla doğan köylü çocukluğunu köyde yaşamadı → "büyüdü"
+        // anı tetiklenmesin.
+        grewUpMoment = ageDays >= kYouthStartDay,
         targetCol = startCol,
         targetRow = startRow,
         // [visual] verilirse (kayıttan yükleme) birebir o görsel kimlik korunur;
@@ -639,12 +810,16 @@ class VillagerEntity extends WorkerEntity {
   /// Villager torch eligibility: yetişkin/yaşlı, dışarıda, uyumuyor, ateşte
   /// oturmuyor. walkingToSleep eligible — eve yürürken torch yansın.
   /// sitClaimed olup henüz oturmamış da eligible (ateşe yürürken torch).
+  ///
+  /// [lanternMandate] (bkz. WorldPressure) mesleksizi de kapsar: hüküm gece
+  /// ışığı mecbur kıldıysa sokaktaki HERKESİN elinde ışık olur — çocuk da
+  /// dahil, çünkü yasa yaşa bakmaz.
   @override
   bool get torchEligibleDefault =>
       !isInsideBuilding &&
       state != VillagerState.sleeping &&
       !isSeatedAtFire &&
-      hasProfession;
+      (hasProfession || lanternMandate);
   bool get isCarrying => state == VillagerState.carrying || state == VillagerState.walkingToPickup;
 
   /// Güncel yaşam evresi (yaştan türer).
@@ -765,8 +940,27 @@ class VillagerEntity extends WorkerEntity {
     // Ölüyor — AI/hareket donar (renderer çöküşü çizer, scene timer'ı sayar).
     if (isDying) return;
 
+    // Sürgün — AI donar; köylü kenara yürür, varınca sahne onu kaldırır. Ölüm
+    // çöküşü DEĞİL: köyden çıkıp gidiyor (bkz. startLeaving / _exileVillager).
+    if (isLeaving) {
+      isWalking = true;
+      state = VillagerState.moving;
+      if (moveTowards(_leaveX, _leaveY, dt, arriveD: 0.6)) leftVillage = true;
+      walkPhase += dt * speed * 5.5;
+      walkPhase %= pi * 2;
+      return;
+    }
+
     // ── Yaşlanma — her durumda (uyku/taşıma dahil) ilerler ────────────────
     ageDays += dt / kGameDaySeconds;
+    // Yaş-evresi boyut geçişini yumuşat (eşikte sıçramayı önler; ilk karede snap).
+    final targetScale = lifeStage.renderScale;
+    if (_displayScaleInit) {
+      displayScale += (targetScale - displayScale) * min(1.0, dt / 1.2);
+    } else {
+      displayScale = targetScale;
+      _displayScaleInit = true;
+    }
 
     // Meşale fade — WorkerEntity.tickTorch sahnenin son sweep'inden çalışır.
     // Eligibility villager'a özgü (override edilmiş): aşağıda
@@ -788,16 +982,27 @@ class VillagerEntity extends WorkerEntity {
     }
 
     // ── Gece/gündüz geçişi ────────────────────────────────────────────────
-    final isNight = dayLight < kNightThreshold;
-    final isDawn  = dayLight >= kDawnThreshold;
+    // [curfewBias] eşiği yukarı iter: sokağa çıkma yasağı altında köylü ortalık
+    // hâlâ aydınlıkken içeri çekilir — akşam sokağı erken boşalır.
+    //
+    // TUZAK: uyanma eşiği yatma eşiğinin ÜSTÜNDE kalmalı. Yasak eşiği
+    // kDawnThreshold'u geçerse köylü şafakta uyanır, aynı karede "hâlâ gece"
+    // görüp tekrar yatar — kilitlenmiş bir titreme. Bu yüzden yasak ağırken
+    // sabah da onunla birlikte kayar: yasak şafakla kalkar.
+    final nightAt = kNightThreshold + curfewBias;
+    final isNight = dayLight < nightAt;
+    final isDawn  = dayLight >= (kDawnThreshold > nightAt + 0.02
+        ? kDawnThreshold
+        : nightAt + 0.02);
 
     // ── Porter: finish delivery first even at night ──────────────────────────
     // dt * carrySpeedMultiplier → step = speed * carrySpeedMult * dt (matematik
     // birebir aynı, ama moveTowards path-aware: uzak pickup yolları A* ile takip).
     if (state == VillagerState.walkingToPickup) {
-      if (moveTowards(_pickupX, _pickupY, dt * carrySpeedMultiplier, arriveD: 0.25)) {
+      if (moveTowards(_pickupX, _pickupY, dt, arriveD: 0.25, speedScale: carrySpeedMultiplier)) {
         gridX       = _pickupX;
         gridY       = _pickupY;
+        loco.reset();
         carriedItem = _pickupItem;
         _pickupItem = null;
         state       = VillagerState.carrying;
@@ -811,9 +1016,10 @@ class VillagerEntity extends WorkerEntity {
     }
 
     if (state == VillagerState.carrying) {
-      if (moveTowards(_deliverX, _deliverY, dt * carrySpeedMultiplier, arriveD: 0.25)) {
+      if (moveTowards(_deliverX, _deliverY, dt, arriveD: 0.25, speedScale: carrySpeedMultiplier)) {
         gridX = _deliverX;
         gridY = _deliverY;
+        loco.reset();
         _onDelivered?.call();
         _onDelivered = null;
         carriedItem  = null;
@@ -841,6 +1047,7 @@ class VillagerEntity extends WorkerEntity {
           if (moveTowards(sitArriveX, sitArriveY, dt, arriveD: 0.18)) {
             gridX     = sitArriveX;
             gridY     = sitArriveY;
+            loco.reset();
             isWalking = false;
             facingRight = sitFaceX > gridX;
           }
@@ -861,7 +1068,8 @@ class VillagerEntity extends WorkerEntity {
       }
     }
 
-    if (isNight && !_wasSleeping) {
+    // Nöbetçi geceyi uyanık geçirir — uyku akışına hiç girmez.
+    if (isNight && !_wasSleeping && !nightDuty) {
       _wasSleeping = true;
       if (sleepTarget != null) {
         state     = VillagerState.walkingToSleep;
@@ -871,16 +1079,28 @@ class VillagerEntity extends WorkerEntity {
         isWalking = false;
       }
     } else if (isDawn && _wasSleeping) {
-      state               = VillagerState.idle;
-      idleTimer           = 1.0 + rng.nextDouble() * 2.0;
-      _wasSleeping        = false;
-      isInsideBuilding    = false;
+      // KADEMELİ UYANIŞ — herkes aynı anda ışınlanıp kapıdan fırlamasın.
+      // İlk şafak karesinde kişisel bir gecikme kurulur; köylü o kadar daha
+      // "yatakta" kalır (state sleeping), sonra gerinerek (content) uyanır.
+      // Sonuç: sabah dalga dalga başlar, ölü "toplu spawn" gider.
+      if (_wakeDelay < 0) _wakeDelay = 0.5 + rng.nextDouble() * 6.0;
+      _wakeDelay -= dt;
+      if (_wakeDelay <= 0) {
+        state               = VillagerState.idle;
+        idleTimer           = 1.0 + rng.nextDouble() * 2.0;
+        _wasSleeping        = false;
+        _wakeDelay          = -1.0; // bir sonraki gece için sıfırla
+        isInsideBuilding    = false;
+        facingRight         = rng.nextBool();
+        feel(NpcEmotion.content, 1.6, moodDelta: 0.02); // gerinme/esneme
+      }
     }
 
     if (state == VillagerState.walkingToSleep) {
       final (tx, ty) = sleepTarget!;
       if (moveTowards(tx, ty, dt, arriveD: 0.55)) {
         gridX = tx; gridY = ty;
+        loco.reset();
         state = VillagerState.sleeping;
         isWalking = false;
         if (sleepIsHome) isInsideBuilding = true;
@@ -938,9 +1158,12 @@ class VillagerEntity extends WorkerEntity {
       case VillagerState.moving:
         final prevX = gridX;
         final prevY = gridY;
-        if (moveTowards(targetCol, targetRow, dt * _tripSpeed, arriveD: 0.05)) {
-          gridX = targetCol;
-          gridY = targetRow;
+        // TUZAK (düzeltildi): arriveD 0.05 idi ve varışta konum hedefe SNAP
+        // ediliyordu. Separation itmesiyle birleşince NPC hedefin çevresinde
+        // mikro-salınım yapıyor, her salınımda ışınlanıyordu. Artık varış
+        // yarıçapı gerçekçi (0.32) ve snap yok — lokomosyon zaten frenleyerek
+        // geliyor, kalan farkı render lerp'i yutuyor.
+        if (moveTowards(targetCol, targetRow, dt, arriveD: 0.32, speedScale: _tripSpeed)) {
           // Devriyede vardığında sıradaki uca dön.
           if (_activeBehavior == WanderBehavior.patrol) _patToB = !_patToB;
           state = VillagerState.idle;
@@ -959,6 +1182,7 @@ class VillagerEntity extends WorkerEntity {
           // pushback ile geri al + idle'a düş, hedefi yeniden seçsin.
           gridX     = prevX;
           gridY     = prevY;
+          loco.reset();
           state     = VillagerState.idle;
           idleTimer = 0.1;
         }
@@ -1008,11 +1232,24 @@ class VillagerEntity extends WorkerEntity {
       result = _waterEdgeTarget(
           rng, radius, waterTiles, softObstacles, minC, minR, maxC, maxR);
     }
+    // YÖN SÜREKLİLİĞİ — yeni hedef, mevcut gidişin devamı olmaya çalışır.
+    // Bu olmadan ardışık iki hedef yarı yarıya zıt yönde çıkıyor ve köylü
+    // gerçek anlamda git-gel yapıyordu. Durakta hız 0 olduğu için son bakış
+    // yönü heading yerine geçer: "baktığı tarafa doğru yürür".
+    var hx = loco.vx, hy = loco.vy;
+    if (hx * hx + hy * hy < 0.02) {
+      hx = facingRight ? 1.0 : -1.0;
+      hy = 0.0;
+    }
     result ??= pickWanderTarget(
       spawnCol, spawnRow, radius, rng,
       waterTiles:    waterTiles,
       softObstacles: softObstacles,
       minC: minC, minR: minR, maxC: maxC, maxR: maxR,
+      headX: hx, headY: hy,
+      // Yarım tile'lık "hedefler" varış yarıçapının içinde kalıp anlık
+      // titremeye dönüşüyordu — gerçek bir yolculuk en az bu kadar olsun.
+      minDist: 1.4,
     );
 
     if (result != null) {

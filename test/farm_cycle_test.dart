@@ -1,21 +1,7 @@
-import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/core/constants.dart';
-import 'package:village_sim/entities/farm_farmer.dart';
 import 'package:village_sim/farm/farm_tile.dart';
 import 'package:village_sim/world/season.dart';
-
-/// Çiftçiyi belirli bir duruma varana dek (ya da süre dolana dek) sür.
-void _run(FarmFarmer f, List<FarmTile> tiles, {required double seconds}) {
-  const dt = 0.05;
-  final steps = (seconds / dt).round();
-  for (int i = 0; i < steps; i++) {
-    f.update(dt, tiles, Random(1));
-    for (final t in tiles) {
-      t.update(dt, Season.spring);
-    }
-  }
-}
 
 void main() {
   group('FarmTile ekim → büyüme → hasat → nadas', () {
@@ -106,104 +92,6 @@ void main() {
       final t = FarmTile(1, 1); // needsSowing
       t.nudgeGrowth(0.5);
       expect(t.growthProgress, 0.0);
-    });
-  });
-
-  group('FarmFarmer ekim döngüsü', () {
-    test('boşta çiftçi ekilmemiş tarlaya gider ve eker', () {
-      final tiles = [FarmTile(5, 5)];
-      final f = FarmFarmer(startCol: 5.5, startRow: 5.5);
-
-      f.update(0.05, tiles, Random(1));
-      expect(f.state, FarmerState.walkingToSow);
-      expect(tiles.first.beingSown, isTrue);
-
-      _run(f, tiles, seconds: kFarmSowDuration + 2.0);
-      expect(tiles.first.needsSowing, isFalse);
-      expect(tiles.first.isGrowing, isTrue);
-      expect(f.state, FarmerState.idle);
-    });
-
-    test('nadastaki tarla ekim hedefi olmaz', () {
-      final tiles = [FarmTile(5, 5)..harvest(fallowSeconds: 30.0)];
-      final f = FarmFarmer(startCol: 5.5, startRow: 5.5);
-
-      f.update(0.05, tiles, Random(1));
-      expect(f.state, FarmerState.idle);
-      expect(tiles.first.beingSown, isFalse);
-    });
-
-    test('olgun ekin ekimden önce gelir (hasat önceliği)', () {
-      final ready = FarmTile(5, 5)..sow();
-      ready.stage = 4;
-      final bare = FarmTile(6, 5); // ekim bekliyor
-      final tiles = [bare, ready]; // sırayı kasten ters ver
-
-      final f = FarmFarmer(startCol: 5.5, startRow: 5.5);
-      f.update(0.05, tiles, Random(1));
-
-      expect(f.state, FarmerState.walkingToFarm);
-      expect(ready.beingHarvested, isTrue);
-      expect(bare.beingSown, isFalse);
-    });
-
-    test('hasat → saman düşer, tarla yeniden ekim ister', () {
-      final t = FarmTile(5, 5)..sow();
-      t.stage = 4;
-      final tiles = [t];
-      final f = FarmFarmer(startCol: 5.5, startRow: 5.5);
-
-      (int, int)? hay;
-      const dt = 0.05;
-      for (int i = 0; i < 400 && hay == null; i++) {
-        f.update(dt, tiles, Random(1));
-        hay ??= f.harvestHayPos;
-      }
-      expect(hay, isNotNull, reason: 'hasat samanı düşmeli');
-      expect(t.needsSowing, isTrue);
-    });
-
-    test('releaseClaim tarlanın biçiliyor/ekiliyor bayrağını bırakır', () {
-      final harvest = FarmTile(5, 5)..sow();
-      harvest.stage = 4;
-      final sow = FarmTile(6, 5);
-      final f1 = FarmFarmer(startCol: 5.5, startRow: 5.5);
-      final f2 = FarmFarmer(startCol: 6.5, startRow: 5.5);
-
-      f1.update(0.05, [harvest], Random(1));
-      f2.update(0.05, [sow], Random(1));
-      expect(harvest.beingHarvested, isTrue);
-      expect(sow.beingSown, isTrue);
-
-      f1.releaseClaim();
-      f2.releaseClaim();
-      expect(harvest.beingHarvested, isFalse);
-      expect(sow.beingSown, isFalse);
-      // Bırakılan tile yeniden hedeflenebilir olmalı.
-      expect(harvest.readyToHarvest, isTrue);
-      expect(sow.readyToSow, isTrue);
-    });
-
-    test('irrigate:false → çiftçi su turuna çıkmaz, ekimle ilgilenir', () {
-      final tiles = [FarmTile(5, 5)];
-      final f = FarmFarmer(startCol: 5.5, startRow: 5.5);
-      // Kuyu/anchor verilmese de irrigate:false yolu güvenli olmalı.
-      for (int i = 0; i < 60; i++) {
-        f.update(0.05, tiles, Random(1), irrigate: false);
-      }
-      expect(f.state, isNot(FarmerState.walkingToWell));
-      expect(f.state, isNot(FarmerState.fetchingWater));
-      expect(tiles.first.needsSowing, isFalse); // yine de ekti
-    });
-
-    test('kışta çiftçi ne eker ne biçer', () {
-      final tiles = [FarmTile(5, 5)];
-      final f = FarmFarmer(startCol: 5.5, startRow: 5.5);
-      for (int i = 0; i < 40; i++) {
-        f.update(0.05, tiles, Random(1), farmingActive: false);
-      }
-      expect(f.state, FarmerState.idle);
-      expect(tiles.first.needsSowing, isTrue);
     });
   });
 }

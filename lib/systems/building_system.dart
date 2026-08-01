@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import '../buildings/building_entity.dart';
 import '../buildings/building_function.dart';
 import '../buildings/building_type.dart';
@@ -5,43 +7,110 @@ import '../core/constants.dart';
 import '../core/resources.dart';
 
 /// Köy çapında, binalardan türetilen anlık istatistikler.
-/// Hem oyun mantığı (kapasite sınırı, taşıyıcı hızı) hem de detay paneli
-/// (moral, kapasite çubuğu) bunları kullanır.
+/// Hem oyun mantığı (kapasite sınırı, taşıyıcı hızı, amenite morali) hem de
+/// detay paneli (kapasite çubuğu) bunları kullanır.
 class VillageStats {
   /// Her malzeme kaynağının üst sınırı (depo sayısına bağlı).
   final int stockCapacity;
 
-  /// Köy morali 0..1 — PASİF GÖSTERGE. Artık binalardan/ekonomiden TÜREMEZ;
-  /// sahnedeki `_morale` birikim değeri buraya geçirilir (yalnızca display).
-  /// Hiçbir oyun mantığı bunu okumaz. 0.5 = nötr.
+  /// Köy morali 0..1 — PASİF GÖSTERGE. Köylülerin bireysel moral ortalaması
+  /// (bkz. villager_morale) sahneden buraya geçirilir. 0.5 = nötr.
   final double morale;
 
-  /// (Artık kullanılmıyor — geriye dönük uyumluluk için sabit 1.0.)
-  final double growthMultiplier;
-
-  /// Taşıyıcı NPC hız çarpanı (ahır sayısına bağlı, ≥1).
+  /// Taşıyıcı NPC hız çarpanı (ahır/han sayısına bağlı, ≥1).
   final double carrierSpeedMultiplier;
 
   /// Köydeki kuyu sayısı — evlerin su deposunu doldurur.
   final int wellCount;
 
+  /// Civic binaların köylü moraline GERÇEK katkısı (0..[kAmenityMoraleCap]).
+  /// `evaluateVillagerMorale`'in bina terimi tam olarak budur — panelde
+  /// gösterilen "amenite morali" ile simülasyonun okuduğu değer aynı sayıdır.
+  final double amenityMorale;
+
   const VillageStats({
     required this.stockCapacity,
     required this.morale,
-    required this.growthMultiplier,
     required this.carrierSpeedMultiplier,
     this.wellCount = 0,
+    this.amenityMorale = 0.0,
   });
 }
 
-/// Köy çapı değerlerini binalardan türetir (kapasite, taşıyıcı hızı, kuyu).
-/// Moral artık burada HESAPLANMAZ — sahneden gelen [morale] birikim değeri
-/// olduğu gibi taşınır (pasif gösterge). Yan etkisizdir.
+// ─── Amenite morali ──────────────────────────────────────────────────────────
+
+/// Amenite moralinin tavanı — bütün civic mahalle kurulsa bile aşılamaz.
+const double kAmenityMoraleCap = 0.20;
+
+/// Doyum ölçeği: toplam ağırlık bu değere yaklaştıkça tavanın ~%63'ü alınır.
+/// Küçük tutulur ki İLK taverna/kuyu hissedilsin (tek başına ~+%9).
+const double kAmenityMoraleScale = 0.30;
+
+/// Bir binanın moral AĞIRLIĞI — yalnız civic + [CivicEffect.morale] binalar
+/// taşır, değeri `BuildingFunction.civicValue`'dur. Başka bir yerde ikinci bir
+/// liste tutulmaz: yeni bir moral binası eklemek için tabloya değer yazmak yeter.
+double moraleWeightOf(BuildingType t) {
+  final f = kBuildingFunctions[t];
+  if (f == null || f.role != BuildingRole.civic) return 0.0;
+  return f.civicEffect == CivicEffect.morale ? f.civicValue : 0.0;
+}
+
+/// Tür→adet sayımından amenite moralini üretir. Aynı türün İKİNCİSİ ve sonrası
+/// ¼ ağırlıkla sayılır (ikinci taverna işe yarar ama ilki kadar değil), toplam
+/// ağırlık yumuşak doyuma sokulur: tek bina bile hissedilir, on bina tavanı
+/// patlatmaz. Saf fonksiyon — testten doğrudan çağrılabilir.
+double amenityMoraleFrom(Map<BuildingType, int> counts) {
+  double weight = 0.0;
+  for (final e in counts.entries) {
+    final w = moraleWeightOf(e.key);
+    if (w <= 0) continue;
+    weight += w * (1 + 0.25 * (e.value - 1));
+  }
+  if (weight <= 0) return 0.0;
+  return kAmenityMoraleCap * (1 - math.exp(-weight / kAmenityMoraleScale));
+}
+
+// ─── Pazar geliri ────────────────────────────────────────────────────────────
+
+/// Pazarın "fazla" saydığı taban: bu miktarın altındaki stok köyün kendi
+/// ihtiyacıdır, satılığa çıkmaz.
+const int kMarketSurplusFloor = 40;
+
+/// Taban üstü her bu kadar birim fazla → +1 altın.
+const int kMarketSurplusPerGold = 70;
+
+/// Tek bir tahsilatın tavanı (pazar sayısı ne olursa olsun).
+const int kMarketMaxIncome = 4;
+
+/// Pazarın bir tahsilatta getireceği TABAN altın — köyün elindeki fazlaya
+/// bağlıdır. Tezgâhta satacak bir şey yoksa 0 döner (pazar boş durur).
+/// Altın ve saz sayılmaz (biri para, diğeri yataklık — pazara çıkmaz).
+int marketBaseIncome(ResourceBundle s) {
+  var surplus = 0;
+  for (final k in ResourceKind.values) {
+    if (k == ResourceKind.gold || k == ResourceKind.reed) continue;
+    final over = s.get(k) - kMarketSurplusFloor;
+    if (over > 0) surplus += over;
+  }
+  if (surplus <= 0) return 0;
+  return (1 + surplus ~/ kMarketSurplusPerGold).clamp(1, kMarketMaxIncome);
+}
+
+/// Köyün kaçıncı pazarı ne kadar pay alır — ikinci pazar aynı fazlayı ikinci
+/// kez satamaz. 1, ½, ⅓ …
+double marketShare(int rank) => 1.0 / (1 + rank);
+
+// ─── Köy istatistikleri ──────────────────────────────────────────────────────
+
+/// Köy çapı değerlerini binalardan türetir (kapasite, taşıyıcı hızı, kuyu,
+/// amenite morali). Köy morali burada HESAPLANMAZ — sahneden gelen [morale]
+/// birikim değeri olduğu gibi taşınır (pasif gösterge). Yan etkisizdir.
 VillageStats computeVillageStats(List<BuildingEntity> buildings,
     {double morale = 0.5}) {
   int capacity = kBaseStockCapacity;
   double carrierBonus = 0.0;
   int wellCount = 0;
+  final amenityCounts = <BuildingType, int>{};
 
   for (final b in buildings) {
     final f = b.fn;
@@ -58,7 +127,7 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
           case CivicEffect.carrierSpeed:
             carrierBonus += f.civicValue;
           case CivicEffect.morale:
-          case CivicEffect.populationGrowth:
+            amenityCounts[b.type] = (amenityCounts[b.type] ?? 0) + 1;
           case CivicEffect.none:
             break;
         }
@@ -72,9 +141,9 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
   return VillageStats(
     stockCapacity: capacity,
     morale: morale.clamp(0.0, 1.0),
-    growthMultiplier: 1.0,
     carrierSpeedMultiplier: 1.0 + carrierBonus,
     wellCount: wellCount,
+    amenityMorale: amenityMoraleFrom(amenityCounts),
   );
 }
 
@@ -82,22 +151,20 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
 ///
 /// Yan etkiler:
 ///  • Konut: su deposu sakinlerle tüketilir, kuyularla doldurulur.
-///  • Pazar: periyodik pasif altın geliri.
-///  • Belediye: yiyecek harcayıp [onSpawnVillager] ile yeni köylü ister.
+///  • Pazar: fazlaya bağlı periyodik altın geliri.
 ///  • Stok malzeme kaynakları kapasiteye göre kırpılır.
 ///
-/// [freeHousingSlots] büyümenin tetiklenebilmesi için boş ev kapasitesi.
-/// [onSpawnVillager] bir köylü doğurmak gerektiğinde büyüten binayla çağrılır.
+/// Nüfus büyümesi burada DEĞİL: doğal doğum (couple → fertilityDays →
+/// scene._tickReproduction) devraldı; belediye yalnız yönetişimin koltuğu.
 VillageStats updateBuildings({
   required double dt,
   required List<BuildingEntity> buildings,
   required ResourceBundle stockpile,
-  required int freeHousingSlots,
-  required void Function(BuildingEntity townhall) onSpawnVillager,
   bool enforceCapacity = true,
   double morale = 0.5,
 }) {
   final stats = computeVillageStats(buildings, morale: morale);
+  var marketRank = 0;
 
   for (final b in buildings) {
     final f = b.fn;
@@ -107,13 +174,7 @@ VillageStats updateBuildings({
       case BuildingRole.housing:
         _tickHousing(dt, b, stats.wellCount);
       case BuildingRole.trade:
-        _tickMarket(dt, b, f, stockpile);
-      case BuildingRole.civic:
-        // Nüfus büyümesi artık belediye-bazlı pump değil; doğal doğum
-        // (couple → fertilityDays → scene._tickReproduction) ile geliyor.
-        // Belediye binası civic role'unu sürdürür (moral/kapasite katkısı
-        // computeVillageStats üzerinden), bu döngüde özel iş yapmaz.
-        break;
+        _tickMarket(dt, b, stockpile, marketRank++);
       default:
         break;
     }
@@ -135,18 +196,21 @@ void _tickHousing(double dt, BuildingEntity b, int wellCount) {
 
 // ─── Ticaret (pazar) ─────────────────────────────────────────────────────────
 
+/// Pazarın pasif geliri KOŞULSUZ değildir: köyün taban üstü fazlası ne kadarsa
+/// tezgâh o kadar döner. [rank] köyün kaçıncı pazarı olduğudur — ikinci pazar
+/// aynı fazlayı ikinci kez satamaz, payı yarıya iner.
 void _tickMarket(
   double dt,
   BuildingEntity b,
-  BuildingFunction f,
   ResourceBundle stockpile,
+  int rank,
 ) {
   b.incomeTimer += dt;
-  if (b.incomeTimer >= kMarketIncomeInterval) {
-    b.incomeTimer = 0.0;
-    stockpile.gold += f.civicValue.round();
-    b.isActive = true;
-  }
+  if (b.incomeTimer < kMarketIncomeInterval) return;
+  b.incomeTimer = 0.0;
+  final gain = (marketBaseIncome(stockpile) * marketShare(rank)).round();
+  b.isActive = gain > 0; // fazla yoksa tezgâh boş durur (panel + duman)
+  if (gain > 0) stockpile.gold += gain;
 }
 
 /// Pazarda manuel satış: bir parti kaynağı altına çevirir. Panel butonu çağırır.

@@ -36,40 +36,59 @@ class LawVector {
 /// YASA → VEKTÖR HARİTASI. Her mühürün köyü nereye ittiği. Haritada olmayan
 /// yasa nötr (pusulayı oynatmaz) sayılır — yeni yasa eklerken buraya bir satır.
 ///
-/// TASARIM NOTU (ilk taslak, denge kullanıcı onayına açık):
-///   • GEÇİM çoğunlukla Ortakçı'ya hafif iter (köy imecesi doğal hâli); birkaçı
-///     mülk/pazar (hospitality, apprenticeship) ya da otorite (oneChild,
-///     slowMaturity, tradeGuidance) tarafına.
+/// TASARIM NOTU:
 ///   • NİZAM kolu saf Baskı; registry ayrıca Mülkçü (mülk sayımı+vergi).
 ///   • DERGÂH kolu ağır Dinî + değişken otorite; oneFaith en uç dinî-baskı.
+///
+/// İKTİSAT EKSENİ KURALI (denge düzeltmesi): bir hüküm iktisat eksenini ancak
+/// MÜLKİYET ya da PAYLAŞIM hakkında bir şey söylüyorsa oynatır.
+///
+/// Önceki taslakta geçim hükümlerinin neredeyse hepsi "ortak/imece" gerekçesiyle
+/// economy −1 taşıyordu; toplamları −15'ti ve `kAxisScale = 8` ile eksen daha
+/// oyunun ortasında −1.0'a YAPIŞIYORDU. Sonuç: sıradan tarım fermanlarını
+/// mühürleyen her köy zorunlu Ortakçı oluyordu ve pusulanın Mülkçü yarısı —
+/// dolayısıyla Açık Pazar rejimi ve ona bağlı `rejim.mulkTapusu` fermanı —
+/// pratikte ulaşılamazdı. Selamlaşma, sürü çoğaltma ya da nadas bir iktisat
+/// hükmü değildir; artık nötrler (0). Ölü bant zaten band altını Ortakçı
+/// (imece = köyün doğal hâli) sayıyor, o yüzden nötr olmak bir şey kaybettirmez.
+///
+/// Yeni toplam: geçim −4 (≈ −0.5), mülkçü yol +7'ye kadar açık
+/// (hospitality + apprenticeship + outsideMarriage + freeRange). Kutup seçimi
+/// artık "defterin %80'ine dokunma" değil, birkaç gerçek tercih.
 const Map<String, LawVector> kLawVectors = {
   // ── GEÇİM ──────────────────────────────────────────────────────────────────
-  'neighborliness': LawVector(economy: -1), // komşuluk = imece bağı
-  'winterFodder': LawVector(economy: -1), // ortak ihtiyat
+  'neighborliness': LawVector(), // selamlaşma bir iktisat hükmü değil
+  'winterFodder': LawVector(), // ihtiyat; mülkiyet hakkında bir şey söylemez
   'sharedHarvest': LawVector(economy: -3), // müşterek harman = kolektifleştirme
-  'irrigation': LawVector(economy: -1), // ortak emek seferi
-  'farmLabor': LawVector(authority: 1, economy: -2), // seferberlik + zorlama
-  'hospitality': LawVector(authority: -1, economy: 1), // açık kapı = özgür + pazar/emek
-  'familyReunion': LawVector(economy: -1), // ocak dayanışması
-  'herdGrowth': LawVector(economy: -1), // ortak sürü büyütme
-  'cropRotation': LawVector(economy: -1), // ortak toprak gözetimi
+  'irrigation': LawVector(economy: -1), // ortak su seferi (commons emeği)
+  'farmLabor': LawVector(authority: 2, economy: -1), // seferberlik = önce ZORLAMA
+  'hospitality': LawVector(authority: -1, economy: 2), // açık kapı = özgür + pazar/emek
+  'familyReunion': LawVector(), // ocak dayanışması; iktisadi hüküm değil
+  'herdGrowth': LawVector(), // sürü çoğaltmak mülkiyet demek değil
+  'cropRotation': LawVector(), // nadas bir tarım tekniği, bir düzen değil
   'apprenticeship': LawVector(authority: 1, economy: 2), // zanaat mülkü + soy zorlaması
-  'oneChild': LawVector(authority: 2, economy: -1), // beşiğe devlet eli (sert)
+  'oneChild': LawVector(authority: 2), // beşiğe devlet eli (sert)
   'twoChild': LawVector(authority: 1), // beşiğe devlet eli (yumuşak)
-  'familyEncouragement': LawVector(economy: -1), // ortak beşik teşviki
+  'familyEncouragement': LawVector(), // teşvik; paylaşım düzeni değil
   'tradeGuidance': LawVector(authority: 1, economy: -1), // merkezî emek dağıtımı
   'freeRange': LawVector(authority: -1, economy: 1), // bırakınız otlasınlar
   'treePlanting': LawVector(authority: 1, economy: -1, faith: 1), // regülasyon+commons+saygı
-  'peacefulEnd': LawVector(economy: -1, faith: 1), // tören onuru
+  'peacefulEnd': LawVector(faith: 1), // tören onuru
   'slowMaturity': LawVector(authority: 1), // paternalist çocukluk
   'eldersExemptFromFood': LawVector(economy: -2), // yeniden dağıtım (yaşlıya)
-  'greenVillage': LawVector(economy: -1, faith: 1), // ortak güzellik + hafif ruh
+  'greenVillage': LawVector(faith: 1), // ortak güzellik + hafif ruh
+  'quarantine': LawVector(authority: 2, economy: -1), // tecrit = zor + ortak sağlık yükü
+  'hearthWatch': LawVector(authority: 1, economy: -1), // ortak ocak, ortak odun
+  'outsideMarriage': LawVector(authority: -1, economy: 2), // kapıyı dışarı açar
 
   // ── NİZAM (⚔ saf Baskı) ─────────────────────────────────────────────────────
   'nizam.watch': LawVector(authority: 2), // gece nöbeti = düzen
   'nizam.registry': LawVector(authority: 2, economy: 2), // sicil = sayım + mülk vergisi
   'nizam.labor': LawVector(authority: 3, economy: 1), // kürek cezası = zor + emek sömürüsü
   'nizam.exile': LawVector(authority: 3), // sürgün
+  // Diyet: öcü haneden alıp devlete verir (+otorite) ve kanı paraya çevirir
+  // (+mülkçü). Nizam kolunun tek "kan dökmeyen" hükmü ama en soğuk mantığı.
+  'nizam.bloodPrice': LawVector(authority: 2, economy: 2),
   'nizam.sole': LawVector(authority: 5), // tek söz = mutlak otorite (dilekçe susar)
 
   // ── DERGÂH (☾ ağır Dinî) ────────────────────────────────────────────────────

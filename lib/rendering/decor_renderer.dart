@@ -150,6 +150,25 @@ class DecorRenderer {
     );
     final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
 
+    // Ezilme animasyonu — köylü basınca yere doğru yassılaşıp solar. Taban
+    // (baseY) sabit; sprite dikeyde ezilir, yatayda hafif yayılır, alpha söner.
+    // Sway kapatılır (ezilirken sallanma tuhaf durur).
+    final crush = d.crushProgress;
+    if (crush > 0) {
+      final sink = 1.0 - 0.82 * crush;      // dikey ezilme (yere yatar)
+      final spread = 1.0 + 0.22 * crush;    // yatay hafif yayılma
+      canvas.saveLayer(
+        null,
+        Paint()..color = Color.fromARGB(((1.0 - crush) * 255).round(), 0, 0, 0),
+      );
+      canvas.translate(center.dx, baseY);
+      canvas.scale(spread, sink);
+      canvas.translate(-center.dx, -baseY);
+      canvas.drawImageRect(img, src, dst, _pSprite);
+      canvas.restore();
+      return;
+    }
+
     // Rüzgâr sallantısı — ortak rüzgâr alanı (ağaç/sazla aynı dalga). Taban
     // sabit (baseY), tepe sallanır; düz/ağır objelerde amp=0 → skew yok.
     final amp = _swayAmp(d.kind);

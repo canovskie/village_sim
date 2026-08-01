@@ -34,12 +34,15 @@ void assignCarriers({
   final hasWarehouse = anchorSystem.warehousePoints.isNotEmpty;
 
   // Değirmen(ler): balya öğütme bonusu artık global boolean değil — çalışan
-  // her değirmen katkı sağlar (2'ye kadar yığılır), duraklatılan sayılmaz.
+  // her değirmen katkı sağlar ([kMillBonusMaxCount]'a kadar yığılır),
+  // duraklatılan sayılmaz. Değirmencinin katkısı ayrı: baleYieldMultiplier
+  // (bkz. scene_work._millerYieldMul) — bina makine, değirmenci bereket.
   final mills = [
     for (final b in buildings)
       if (b.type == BuildingType.mill && !b.userPaused) b
   ];
-  final int millBonus = 2 * (mills.length > 2 ? 2 : mills.length);
+  final int millBonus = kMillBaleBonus *
+      (mills.length > kMillBonusMaxCount ? kMillBonusMaxCount : mills.length);
 
   for (final v in villagers) {
     if (v.state != VillagerState.idle) continue;
@@ -125,8 +128,9 @@ void assignCarriers({
             point.release(slot, v);
             bale.isDelivered = true;
             hayEntities.remove(bale);
-            // 1 balya = kHayPilesPerBale hasat. Değirmen başına +2 yem (2'ye
-            // kadar yığılır). Sonbahar bereketi balya verimini artırır.
+            // 1 balya = kHayPilesPerBale hasat. Değirmen başına +kMillBaleBonus
+            // yem (kMillBonusMaxCount'a kadar yığılır). Mevsim/rejim/değirmenci
+            // çarpanları baleYieldMultiplier'da toplanır.
             final base = kBaleFoodBase + millBonus;
             stockpile.food += (base * baleYieldMultiplier).round();
             // En yakın değirmeni öğütmeye geçir → görünür duman + panel doğruluğu.

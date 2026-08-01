@@ -126,7 +126,11 @@ class AnimalEntity {
        gridY   = startRow,
        renderX = startCol,
        renderY = startRow,
-       lifespanDays = lifespanDays ?? kAnimalElderDay + 9.0;
+       lifespanDays = lifespanDays ?? kAnimalElderDay + 9.0 {
+    // Idle nefes/salınım fazını konumdan tohumla → aynı ağıldaki hayvanlar
+    // tek karede donsalar bile aynı ritimde soluyup senkron/robotik görünmesin.
+    walkPhase = ((startCol * 1.7 + startRow * 3.3).abs() % (2 * pi));
+  }
 
   /// Wander radius scale — `freeRange` politikası açıkken scene 1.5 yapar.
   /// Default 1.0. AnimalEntity policy'ye erişmesin diye side channel.
@@ -139,6 +143,10 @@ class AnimalEntity {
   static const double _hungerRate   = 1.0 / 70.0;   // 70 sn'de aç
   static const double _grazeRate    = 1.0 / 30.0;   // 30 sn yürüyüşle doyar
   static const double _milkRate     = 1.0 / 45.0;   // dolu kalınca 45 sn'de hazır
+  // Idle/otlama sırasında walkPhase yavaşça sürünür — walk frame'ini etkilemez
+  // (frame yalnız isWalking iken okunur) ama renderer bunu hayvana özgü nefes
+  // fazı olarak kullanır → grazing hayvanlar hep birlikte donmaz, doğal desync.
+  static const double _idleDrift    = 0.6;          // rad/sn, çok yumuşak
 
   // ── Yaşam evresi eşikleri (oyun günü) ────────────────────────────────────
   // Hayvanlar köylüden biraz daha kısa ömürlü → sürü yenilenmesi gözle görülür.
@@ -220,7 +228,9 @@ class AnimalEntity {
     if (_grazeTimer > 0) {
       _grazeTimer -= dt;
       isWalking = false;
-      walkPhase = 0; // idle frame'de sabit, walkPhase ilerlemesin
+      // Otlarken sprite frame'i 0'da kalır (isWalking=false) ama fazı sürdür ki
+      // renderer prosedürel otlama/nefes gövde diliyle canlandırabilsin.
+      walkPhase = (walkPhase + dt * _idleDrift) % (2 * pi);
       _smoothRender(dt);
       return;
     }
@@ -239,7 +249,7 @@ class AnimalEntity {
       // Vardık → otlama. Yeni hedef freeze bittikten sonra seçilir.
       _grazeTimer = 4.0 + rng.nextDouble() * 5.0;
       isWalking = false;
-      walkPhase = 0;
+      walkPhase = (walkPhase + dt * _idleDrift) % (2 * pi);
       _smoothRender(dt);
       return;
     }

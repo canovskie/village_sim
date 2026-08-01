@@ -109,7 +109,6 @@ const Map<BuildingType, String> _kAssets = {
   BuildingType.library:        'assets/buildings/library.png',
   BuildingType.bathhouse:      'assets/buildings/bathhouse.png',
   BuildingType.monument:       'assets/buildings/monument.png',
-  BuildingType.dock:           'assets/buildings/dock.png',
   BuildingType.caravanserai:   'assets/buildings/caravanserai.png',
   BuildingType.shrine:         'assets/buildings/shrine.png',
   BuildingType.belltower:      'assets/buildings/belltower.png',

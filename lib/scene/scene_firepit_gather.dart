@@ -14,15 +14,8 @@ extension _SceneFirepitGather on _VillageSceneState {
   /// uyumaya gider, sit otomatik cancel.
   static const double _kEveningGatherStart = 0.55;
 
-  /// Gather scan periyodu (sn) — her N sn'de bir uygun NPC'leri tarar.
-  static const double _kGatherScanInterval = 2.5;
-
   /// Hikaye saati tetik kontrolü periyodu.
   static const double _kStoryScanInterval = 4.0;
-
-  /// Oturma süresi aralığı (sn) — dinlence süresi.
-  static const double _kSitMinSec = 22.0;
-  static const double _kSitMaxSec = 40.0;
 
   /// Hikaye süresi (sn) — anlatıcı bu kadar konuşur, dinleyiciler kalır.
   static const double _kStoryDuration = 18.0;
@@ -31,10 +24,6 @@ extension _SceneFirepitGather on _VillageSceneState {
   static const double _kStoryMoralBonus = 0.10;
   static const double _kStoryMoralDuration = 35.0;
 
-  /// Bir gather scan'de en fazla kaç NPC ateşe yönlendirilir — sahnenin
-  /// "akın" hissetmemesi için.
-  static const int _kMaxRecruitsPerScan = 2;
-
   /// Bir storytelling tetiğinde minimum oturan kişi sayısı (anlatıcı dahil).
   static const int _kMinSittersForStory = 3;
 
@@ -42,51 +31,15 @@ extension _SceneFirepitGather on _VillageSceneState {
   void _tickFirepitGather(double dt) {
     if (_buildings.every((b) => b.type != BuildingType.firepit)) return;
 
-    _gatherScanTimer += dt;
-    if (_gatherScanTimer >= _kGatherScanInterval) {
-      _gatherScanTimer = 0;
-      _scanGather();
-    }
-
+    // NOT: akşam toplanma taraması KALDIRILDI. Ateş başına gitme kararı artık
+    // köylünün ÜŞÜME dürtüsünden doğuyor ([_bidHearth], scene_mind) — yani
+    // "akşam oldu, rastgele 3 kişiyi ateşe yolla" yerine "üşüyen gider".
+    // Hikâye taraması kalıyor: o bir toplanma kararı değil, oturanların
+    // arasında doğan bir an.
     _storyScanTimer += dt;
     if (_storyScanTimer >= _kStoryScanInterval) {
       _storyScanTimer = 0;
       _scanStorytellers();
-    }
-  }
-
-  /// Akşam pencerelerinde boştaki NPC'leri yakındaki ateş başına otur'a yolla.
-  void _scanGather() {
-    if (!_fireBurning) return; // sönmüş ateşin başına kimse toplanmaz
-    final dl = _cycle.dayLight;
-    // Sadece akşam: dayLight night threshold ile evening start arası.
-    if (dl >= _kEveningGatherStart || dl < kNightThreshold) return;
-    if (_cycle.rainIntensity > 0.4) return; // yağmurda toplanma yok
-
-    int recruited = 0;
-    // Karışık tarama — her zaman aynı NPC önde olmasın.
-    final candidates = List<VillagerEntity>.from(_villagers)..shuffle(_rng);
-    // Hafif kişilik rengi: ateş/hikâye/sohbet sevenler öne geçer → akşamları
-    // bu köylüler ateş başında daha sık görünür (görünür ama zararsız eğilim).
-    candidates.sort((a, b) {
-      final aw = a.personality.likes.atFireAffinity ? 0 : 1;
-      final bw = b.personality.likes.atFireAffinity ? 0 : 1;
-      return aw - bw;
-    });
-    for (final v in candidates) {
-      if (recruited >= _kMaxRecruitsPerScan) break;
-      if (!_canGather(v)) continue;
-      // Slot rezerve et (NPC'nin pozisyonuna en yakını, maks 14 tile).
-      final claim = _anchorSystem.claimNearestFirepitSit(
-          v.gridX, v.gridY, v);
-      if (claim == null) continue;
-      final (point, slot) = claim;
-      final cx = point.building.col + point.building.cols / 2.0;
-      final cy = point.building.row + point.building.rows / 2.0;
-      final dur = _kSitMinSec + _rng.nextDouble() * (_kSitMaxSec - _kSitMinSec);
-      v.assignSit(slot.col, slot.row, cx, cy, dur,
-          () => point.release(slot, v));
-      recruited++;
     }
   }
 
@@ -119,18 +72,6 @@ extension _SceneFirepitGather on _VillageSceneState {
     _feelVillage(NpcEmotion.content, 8, morale * 0.5);
     if (_fireBurning) _gatherAtFire(kGameDaySeconds * 0.3, max: 5);
     _showNotification(msg);
-  }
-
-  /// Bir köylünün ateşe çağrılmaya uygun olup olmadığı.
-  bool _canGather(VillagerEntity v) {
-    if (v.sitClaimed) return false;
-    if (v.isSleeping || v.isInsideBuilding) return false;
-    if (v.isCarrying) return false;
-    if (v.activity != VillagerActivity.none) return false;
-    if (v.socialCooldown > 0) return false;
-    // Çocuk hariç (çocuklar oyun oynamaya devam etsin, akın hissi vermesin).
-    if (v.isChild) return false;
-    return true;
   }
 
   /// Her firepit için: oturanlar sayılır, eşiği aşarsa hikaye başlat.

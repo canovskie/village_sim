@@ -1,6 +1,7 @@
 import 'dart:math';
 import '../characters/npc_visual.dart';
 import '../core/constants.dart';
+import '../systems/locomotion.dart';
 import '../systems/path_context.dart';
 import '../systems/pathfinder.dart';
 import '../systems/road_system.dart';
@@ -39,12 +40,27 @@ abstract class WorkerEntity {
   int _pathGoalC   = -999;
   int _pathGoalR   = -999;
   int _pathVersion = -1;
+  /// Aynı hedef için yeniden plan yapmadan önce beklenecek süre (sn).
+  double _replanCd = 0;
+  static const double _kReplanInterval = 0.30;
 
   double gridX;
   double gridY;
-  bool   facingRight = true;
   double walkPhase   = 0.0;
   bool   isWalking   = false;
+
+  /// HAREKET FİZİĞİ — hız vektörü, ivme, dönüş sınırı, bakış histerezisi.
+  /// Tüm konum değişimi buradan geçer (bkz. [_stepDt] / [_stepFixed]).
+  final Locomotion loco = Locomotion();
+
+  /// Gövde yönü. Artık ham `dx` işareti değil, yumuşatılmış hızdan histerezisle
+  /// türeyen karar. Dışarıdan set edilebilir (ateşe dönme, oturma) — o zaman da
+  /// görsel dönüş [Locomotion.faceTick] ile yumuşak akar, tek karede aynalanmaz.
+  bool get facingRight => loco.facingRight;
+  set facingRight(bool v) => loco.faceTo(v);
+
+  /// Renderer'ın dönüş anında uygulayacağı yatay ölçek (0.10..1.0).
+  double get turnScaleX => loco.turnScaleX;
 
   /// AI gridX/Y'yi takip eden yumuşatılmış render pozisyonu.
   /// AI hassas tile-snap yaparken render lerp ile akıcı kalır.
@@ -97,6 +113,8 @@ abstract class WorkerEntity {
   // "etrafa bakma" anları (yoldan çıkarken, yieldden çıkarken, yeni hedef
   // seçince, yolculuk bitince). Random timer YOK — her bakış bir olaya bağlı.
   double _glanceTimer = 0.0;
+  /// Bakınmadan önceki yön — süre dolunca buraya dönülür.
+  bool   _glanceBack  = true;
   bool   _prevOnRoad  = false;
   bool   _prevIsWalking = false;
 
@@ -134,6 +152,14 @@ abstract class WorkerEntity {
   void smoothMotion(double dt) {
     _tickStuck(dt);
     _tickIdleAnim(dt);
+    if (_replanCd > 0) _replanCd -= dt;
+
+    // Bu karede hiç adım atılmadıysa (idle/oturma/uyku) hız sıfıra frenlenir —
+    // konum ötelenmez, ama bir sonraki kalkış duran bir gövdeden başlar.
+    if (!isWalking) loco.brake(dt);
+    // Bakış yönü her karede ilerler: yürüyende hızdan, durakta dışarıdan
+    // verilen karardan. Dönüş animasyonu (turnScaleX) burada akar.
+    loco.faceTick(dt);
 
     final kPos  = 1 - exp(-dt * 14.0);
     renderX += (gridX - renderX) * kPos;
@@ -169,18 +195,18 @@ abstract class WorkerEntity {
       // çıkmaması için her entity'nin yield süresi farklı.
       final seed = (identityHashCode(this) & 0xFF) / 255.0;
       _yieldTimer = 0.5 + seed * 0.7;
-      // Engelle karşılaşan NPC "etrafa bakıp" başka yol arar gibi görünür.
-      glanceAround(duration: _yieldTimer);
     }
     _stuckRefX = gridX;
     _stuckRefY = gridY;
   }
 
   /// Glance state'i decrement eder + walking→idle geçişinde bir kez bakış.
-  /// Diğer trigger'lar (yol bitimi, yield, yeni hedef) ilgili call site'lardan
-  /// `glanceAround()`'u çağırır.
+  /// Süre dolunca NPC eski yönüne döner (yine yumuşak dönüşle).
   void _tickIdleAnim(double dt) {
-    if (_glanceTimer > 0) _glanceTimer -= dt;
+    if (_glanceTimer > 0) {
+      _glanceTimer -= dt;
+      if (_glanceTimer <= 0) loco.faceTo(_glanceBack);
+    }
     // Yolculuk yeni bitti (walking → idle) → varış kontrolü bakışı.
     if (_prevIsWalking && !isWalking) {
       glanceAround(duration: 0.9);
@@ -188,13 +214,22 @@ abstract class WorkerEntity {
     _prevIsWalking = isWalking;
   }
 
-  /// Bağlamsal "etrafa bak" — geçici süreyle facingRight'ı ters gösterir.
-  /// Yol bitiminde, yieldden çıkarken, yeni hedef seçildiğinde, varışta vb.
-  /// çağrılır. Hash-bazlı süre varyasyonu desync sağlar.
+  /// Bağlamsal "etrafa bak" — NPC bir süreliğine öbür yana dönüp geri döner.
+  ///
+  /// TUZAK (düzeltildi): bu eskiden `effectiveFacingRight` üzerinden sprite'ı
+  /// ANINDA aynalıyordu ve varışta / yield'de / yoldan çıkışta / iş döngüsünün
+  /// yedi ayrı yerinde tetikleniyordu. Oyuncunun "sürekli ileri geri
+  /// yapıyorlar" dediği şeyin en gürültülü kaynağı buydu. Artık:
+  ///   • yalnız DURAKTA çalışır — yürüyen NPC adımının ortasında geri dönmez,
+  ///   • dönüş [Locomotion] üzerinden animasyonlu akar (aynalama yok),
+  ///   • süre dolunca eski yönüne döner.
   void glanceAround({double duration = 1.0}) {
+    if (isWalking || loco.speedNow > 0.18) return;
+    if (_glanceTimer > 0) return; // zaten bakınıyor — üstüne binme
     final seed = (identityHashCode(this) & 0xFF) / 255.0;
-    final dur = duration * (0.85 + seed * 0.3);
-    if (_glanceTimer < dur) _glanceTimer = dur;
+    _glanceBack = facingRight;
+    _glanceTimer = duration * (0.85 + seed * 0.3);
+    loco.faceTo(!facingRight);
   }
 
   /// Her NPC'ye özgü deterministik faz offset'i (hashCode'dan). Nefes/sway
@@ -216,9 +251,11 @@ abstract class WorkerEntity {
     return sin(time * 0.45 + _idlePhaseSeed * 1.7) * 0.022 * idleAmt;
   }
 
-  /// Render tarafı facing — bağlamsal glance sırasında ters çevirir.
-  bool get effectiveFacingRight =>
-      _glanceTimer > 0 ? !facingRight : facingRight;
+  /// Render tarafı facing. Artık glance burada TERS ÇEVİRMEZ — bakınma da dahil
+  /// her yön değişimi [Locomotion] içinde yumuşatılır, bu getter yalnız o
+  /// kararın anlık işaretini verir. (Geriye dönük API: 20+ çizim noktası bunu
+  /// kullanıyor.)
+  bool get effectiveFacingRight => loco.facingRight;
 
   /// Meşale eligibility — subclass override edebilir. Worker'lar (oduncu,
   /// madenci, çoban, vd) her zaman dışarıda → gece torch hep yanmalı.
@@ -273,41 +310,71 @@ abstract class WorkerEntity {
     final dist = sqrt(dx * dx + dy * dy);
     if (dist < 0.01) return;
     final next = _nextWaypoint(tx, ty, dist);
-    _stepFixed(next.$1, next.$2, step);
+    _stepFixed(next.$1, next.$2, step, dist);
   }
 
   /// Hedefe `speed * dt` adımla ilerle. arriveD altına düşünce true döner —
   /// alt sınıf state geçişi için kullanır. Path-aware (bkz. moveTo).
-  bool moveTowards(double tx, double ty, double dt, {double arriveD = 0.08}) {
+  ///
+  /// [speedScale] tempo çarpanı (taşıma hızı, kişilik temposu, sürünme…).
+  /// TUZAK: bunu eskiden çağıranlar `dt * çarpan` diye geçiyordu. Lokomosyon
+  /// gelince bu yanlış oldu — dt'yi ölçeklemek ivme/dönüş zaman sabitlerini de
+  /// ölçekler, NPC yavaşlarken aynı zamanda ağırlaşırdı. Tempo artık ayrı.
+  bool moveTowards(double tx, double ty, double dt,
+      {double arriveD = 0.08, double speedScale = 1.0}) {
     final dx   = tx - gridX;
     final dy   = ty - gridY;
     final dist = sqrt(dx * dx + dy * dy);
     if (dist <= arriveD) return true;
     final next = _nextWaypoint(tx, ty, dist);
-    _stepDt(next.$1, next.$2, dt);
+    _stepDt(next.$1, next.$2, dt, speedScale, dist);
     return false;
   }
 
   /// (tx, ty) gerçek hedef; dönüş: bir SONRAKİ adımın hedefi (waypoint ya
   /// da true goal). Kısa mesafe / no-context → doğrudan true goal.
+  /// A*'ın atlandığı mesafe eşiği (tile). Eskiden 3.0 idi; köyün içindeki
+  /// gidiş gelişlerin çoğu bu eşiğin ALTINDA kaldığı için NPC'ler yolları hiç
+  /// kullanmıyor, binaların arasından çapraz kesiyordu. 1.8'e indirmek kısa
+  /// mesafeleri de yol ağına oturtur (yol maliyeti [PathContext.costAt]'te
+  /// zaten indirimli) — gerçekten bir adımlık hoplar hâlâ düz gider.
+  static const double kPathMinDist = 1.8;
+
   (double, double) _nextWaypoint(double tx, double ty, double dist) {
     final ctx = pathContext;
-    if (ctx == null || dist < 3.0) return (tx, ty);
+    if (ctx == null || dist < kPathMinDist) return (tx, ty);
 
     _ensurePath(tx, ty, ctx);
     final path = _path;
     if (path == null || path.isEmpty) return (tx, ty);
 
-    // Yaklaşılmış waypoint'leri atla (NPC drift'inde geri dönme yok).
+    // Geride kalan waypoint'leri atla.
+    //
+    // İKİ KURAL. Sadece "yeterince yaklaştıysan atla" yetmiyor: kaçınma kavisi
+    // (bkz. separation → [Locomotion.addAvoid]) NPC'yi bir waypoint'in
+    // İLERİSİNE sürükleyebiliyor ve NPC geri dönüp o noktayı işaretlemeye
+    // çalışıyor — tam da düzeltmeye çalıştığımız git-gel. İkinci kural bunu
+    // kapatır: bir SONRAKİ waypoint daha yakınsa, mevcut olan geride kalmıştır.
     while (_pathIdx < path.length) {
       final wp  = path[_pathIdx];
       final wpx = wp.$1 + 0.5;
       final wpy = wp.$2 + 0.5;
       final wd  = sqrt((wpx - gridX) * (wpx - gridX) +
                        (wpy - gridY) * (wpy - gridY));
-      if (wd < 0.30) {
+      if (wd < 0.35) {
         _pathIdx++;
         continue;
+      }
+      if (_pathIdx + 1 < path.length) {
+        final nxt = path[_pathIdx + 1];
+        final nx  = nxt.$1 + 0.5;
+        final ny  = nxt.$2 + 0.5;
+        final nd  = sqrt((nx - gridX) * (nx - gridX) +
+                         (ny - gridY) * (ny - gridY));
+        if (nd < wd) {
+          _pathIdx++;
+          continue;
+        }
       }
       return (wpx, wpy);
     }
@@ -326,6 +393,12 @@ abstract class WorkerEntity {
     final pathExhausted = _path == null || _pathIdx >= (_path?.length ?? 0);
 
     if (!goalChanged && !versionStale && !pathExhausted) return;
+    // Replan kısıtı — [kPathMinDist] 3.0'dan 1.8'e indiği için kısa gidişler de
+    // A* kullanıyor; hedef değişmediği sürece saniyede birkaç kereden fazla
+    // yeniden plan yapmak boşuna (her çağrı 128×128 buffer'ı üç kez siliyor).
+    // Hedef ya da dünya değiştiyse kısıt yok — gecikmeli tepki istemiyoruz.
+    if (!goalChanged && !versionStale && _replanCd > 0) return;
+    _replanCd = _kReplanInterval;
 
     _pathGoalC   = goalC;
     _pathGoalR   = goalR;
@@ -335,34 +408,64 @@ abstract class WorkerEntity {
     _pathIdx = 0;
   }
 
-  void _stepFixed(double tx, double ty, double step) {
-    if (_yieldTimer > 0) return; // deadlock yield
-    final dx   = tx - gridX;
-    final dy   = ty - gridY;
-    final dist = sqrt(dx * dx + dy * dy);
-    if (dist < 0.01) return;
-    final boost = roadSystem?.speedMultiplierAt(gridX, gridY) ?? 1.0;
-    final ratio = min(step * boost / dist, 1.0);
-    final prevX = gridX;
-    gridX += dx * ratio;
-    gridY += dy * ratio;
-    facingRight = gridX >= prevX;
+  /// Sabit adımlı hareket (dt'den bağımsız mutlak `step`). Lokomosyonun aynı
+  /// ivme/dönüş kurallarından geçer; `step` burada "bu karede kat edilmek
+  /// istenen mesafe" olarak istenen hıza çevrilir.
+  void _stepFixed(double tx, double ty, double step, double goalDist) {
+    // dt bilinmiyor — çağıran kare başına mutlak adım verir. Hızı adımdan
+    // türetmek için nominal 1/60 kare varsayılır.
+    const nominalDt = 1 / 60.0;
+    _drive(tx, ty, nominalDt, step / nominalDt, goalDist);
   }
 
-  void _stepDt(double tx, double ty, double dt) {
-    if (_yieldTimer > 0) return; // deadlock yield
+  void _stepDt(
+      double tx, double ty, double dt, double speedScale, double goalDist) {
+    final boost = roadSystem?.speedMultiplierAt(gridX, gridY) ?? 1.0;
+    _drive(tx, ty, dt, speed * boost * speedScale, goalDist);
+  }
+
+  /// ORTAK SÜRÜŞ — hedefe doğru bir kare ilerlet.
+  ///
+  /// Eskiden burada hedefe düz çizgi bir "ışınlanma" vardı: yön anlık,
+  /// hız anlık, bakış ham `dx > 0`. Artık gidiş [Locomotion] üzerinden:
+  /// kalkışta ivmelenir, hedefe yaklaşırken frenler, yön değişimi açısal hız
+  /// sınırıyla kavise dönüşür.
+  ///
+  /// [tx],[ty] bir SONRAKİ adımın hedefi — A* izlenirken ara waypoint olabilir.
+  /// [goalDist] ise GERÇEK hedefe kalan mesafe: varış freni buna bakar, yoksa
+  /// NPC her waypoint'te yavaşlayıp yol boyunca zıplayarak ilerlerdi.
+  void _drive(double tx, double ty, double dt, double maxSpeed, double goalDist) {
     final dx   = tx - gridX;
     final dy   = ty - gridY;
     final dist = sqrt(dx * dx + dy * dy);
-    if (dist < 0.001) return;
-    final boost = roadSystem?.speedMultiplierAt(gridX, gridY) ?? 1.0;
-    final step = (speed * boost * dt).clamp(0.0, dist);
-    gridX += (dx / dist) * step;
-    gridY += (dy / dist) * step;
-    facingRight = dx > 0;
 
-    // Yol bitimi tetiği — yoldan toprağa geçişte ve hedef hâlâ uzaktaysa
-    // NPC bir an "şimdi nereden gideyim" bakışı atar.
+    // Deadlock yield ya da hedefin üstündeyiz → yumuşak duruş (konum sabit).
+    if (_yieldTimer > 0 || dist < 0.001) {
+      loco.brake(dt);
+      return;
+    }
+
+    // Varış freni — GERÇEK hedefin son ~1 tile'ında hız düşer, NPC duvara
+    // toslar gibi durmaz. Taban çarpan sürünmeyi engeller.
+    var want = maxSpeed;
+    if (goalDist < Locomotion.kArriveRadius) {
+      final t = goalDist / Locomotion.kArriveRadius;
+      want *= t < Locomotion.kArriveFloor ? Locomotion.kArriveFloor : t;
+    }
+
+    var (mx, my) = loco.advance(dt, dx / dist, dy / dist, want);
+    // Hedefi aşma — kalan mesafeden uzun adım atma.
+    final m = sqrt(mx * mx + my * my);
+    if (m > dist && m > 1e-9) {
+      final s = dist / m;
+      mx *= s;
+      my *= s;
+    }
+    gridX += mx;
+    gridY += my;
+
+    // Yol bitimi tetiği — yoldan toprağa geçiş. (Yürürken bakınma artık no-op;
+    // NPC hedefine varıp duraklayınca gerçekleşir.)
     final onRoad = roadSystem?.has(gridX.round(), gridY.round()) ?? false;
     if (_prevOnRoad && !onRoad && dist > 1.5) {
       glanceAround(duration: 1.1);
@@ -382,6 +485,9 @@ abstract class WorkerEntity {
         wanderOriginX, wanderOriginY, wanderRadius, rng,
         waterTiles:    waterTiles,
         softObstacles: softObstacles,
+        headX:         loco.vx,
+        headY:         loco.vy,
+        minDist:       1.2,
       );
       if (result != null) {
         _idleTargetX = result.$1;
@@ -393,16 +499,28 @@ abstract class WorkerEntity {
       _idleTimer = lo + rng.nextDouble() * (hi - lo);
     }
     final prevX = gridX;
-    moveTowards(_idleTargetX, _idleTargetY, dt * idleSpeedFactor);
+    moveTowards(_idleTargetX, _idleTargetY, dt, speedScale: idleSpeedFactor);
     if (waterTiles.contains((gridX.round(), gridY.round()))) {
       gridX      = prevX;
+      loco.reset();
       _idleTimer = 0.1;
     }
   }
 
-  /// İki geçişli wander hedefi seçimi:
-  ///  1. Önce soft engelsiz tile dene.
-  ///  2. Bulunamazsa sadece su'dan kaçın (fallback).
+  /// Dolaşma hedefi seçimi — SEÇMELİ, rastgele değil.
+  ///
+  /// Eski hâli [homeCol],[homeRow] çevresinde düzgün rastgele bir nokta
+  /// seçiyordu; ardışık iki hedef yaklaşık yarı yarıya ZIT yönde çıkıyor ve
+  /// NPC gerçek anlamda git-gel yapıyordu. Artık aday havuzu puanlanır:
+  ///   • ileri süreklilik — mevcut gidiş yönüyle aynı tarafta olan hedef
+  ///     kazanır ([headX],[headY] verilmişse); geri dönüşler cezalanır,
+  ///   • mesafe — çok yakın (yerinde titreme) ve çok uzak adaylar elenir
+  ///     ([minDist] altı hiç kabul edilmez),
+  ///   • yol — yol tile'ı üstündeki hedef bonus alır; köy trafiği kendiliğinden
+  ///     damarlara oturur,
+  ///   • küçük gürültü — aynı köylü hep aynı köşeye gitmesin.
+  ///
+  /// Hiçbir aday geçmezse yalnız sudan kaçınan eski fallback devreye girer.
   (double, double)? pickWanderTarget(
     double homeCol,
     double homeRow,
@@ -414,17 +532,47 @@ abstract class WorkerEntity {
     double minR = 1.0,
     double maxC = -1,
     double maxR = -1,
+    double headX = 0,
+    double headY = 0,
+    double minDist = 0,
   }) {
     final mC = maxC < 0 ? (kCols - 2).toDouble() : maxC;
     final mR = maxR < 0 ? (kRows - 2).toDouble() : maxR;
 
-    for (int i = 0; i < 8; i++) {
+    final headMag = sqrt(headX * headX + headY * headY);
+    final sweet = radius * 0.75; // tercih edilen yolculuk uzunluğu
+
+    (double, double)? best;
+    double bestScore = -1e9;
+
+    for (int i = 0; i < 14; i++) {
       final tx = (homeCol + rng.nextDouble() * radius * 2 - radius).clamp(minC, mC);
       final ty = (homeRow + rng.nextDouble() * radius * 2 - radius).clamp(minR, mR);
-      if (waterTiles.contains((tx.round(), ty.round()))) continue;
-      if (softObstacles.contains((tx.round(), ty.round()))) continue;
-      return (tx, ty);
+      final c = tx.round(), r = ty.round();
+      if (waterTiles.contains((c, r))) continue;
+      if (softObstacles.contains((c, r))) continue;
+
+      final dx = tx - gridX, dy = ty - gridY;
+      final d = sqrt(dx * dx + dy * dy);
+      if (d < minDist) continue;
+
+      double score = rng.nextDouble() * 0.30;
+      // İleri süreklilik — mevcut yönle hizalı hedef kazanır.
+      if (headMag > 1e-6 && d > 1e-6) {
+        score += ((dx * headX + dy * headY) / (d * headMag)) * 1.5;
+      }
+      // Mesafe uygunluğu — sweet spot'tan uzaklaştıkça düşer.
+      score += (1.0 - (d - sweet).abs() / (radius + 1.0)) * 0.6;
+      // Yol tercihi.
+      if (roadSystem?.has(c, r) ?? false) score += 0.75;
+
+      if (score > bestScore) {
+        bestScore = score;
+        best = (tx, ty);
+      }
     }
+    if (best != null) return best;
+
     for (int i = 0; i < 8; i++) {
       final tx = (homeCol + rng.nextDouble() * radius * 2 - radius).clamp(minC, mC);
       final ty = (homeRow + rng.nextDouble() * radius * 2 - radius).clamp(minR, mR);

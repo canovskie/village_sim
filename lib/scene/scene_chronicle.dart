@@ -101,35 +101,46 @@ extension _SceneChronicle on _VillageSceneState {
     (BuildingType.church, 'Kilise dikildi. Çan ilk kez çaldı.', '⛪'),
   ];
 
+  /// Şu an sağlanan tüm başarımlar (id, başlık, ikon). Hem canlı tarama
+  /// (`_tickAchievements`) hem sessiz backfill (`_backfillAchievements`) tek
+  /// kaynaktan okusun → eşik mantığı asla ikiye ayrışmaz.
+  Iterable<(String, String, String)> _satisfiedAchievements() sync* {
+    // Nüfus — köyde yaşayan herkes (anonim işçi avatarları kaldırıldı).
+    final pop = _villagers.length;
+    for (final t in _kPopThresholds) {
+      if (pop >= t) {
+        yield ('pop_$t', 'Nüfus $t cana çıktı. Meydan daraldı.', '🎉');
+      }
+    }
+    // İlk binalar.
+    for (final (type, title, icon) in _kFirstBuildings) {
+      if (_buildings.any((b) => b.type == type)) {
+        yield ('build_${type.name}', title, icon);
+      }
+    }
+    // Yıl dönümü — 1 yıl = 4 mevsim × kDaysPerSeason gün.
+    final year = (_dayCount - 1) ~/ (kDaysPerSeason * Season.values.length);
+    if (year >= 1) {
+      yield ('year_$year', '$year. yıl doldu. Köy hâlâ ayakta.', '🗓️');
+    }
+  }
+
   /// Durum-taraması başarımları — scene_tick'in ana döngüsünden çağrılır
   /// (eski `_tickMilestones` yerine). _award idempotent olduğundan her tick
   /// güvenle taranır.
   void _tickAchievements() {
-    // Nüfus — köylü + tüm işçi tipleri.
-    final pop = _villagers.length +
-        _farmers.length +
-        _woodcutters.length +
-        _miners.length +
-        _fishers.length +
-        _builders.length +
-        _shepherds.length +
-        _florists.length;
-    for (final t in _kPopThresholds) {
-      if (pop >= t) _award('pop_$t', 'Nüfus $t cana çıktı. Meydan daraldı.', '🎉');
+    for (final (id, title, icon) in _satisfiedAchievements()) {
+      _award(id, title, icon);
     }
+  }
 
-    // İlk binalar.
-    for (final (type, title, icon) in _kFirstBuildings) {
-      if (_buildings.any((b) => b.type == type)) {
-        _award('build_${type.name}', title, icon);
-      }
-    }
-
-    // Yıl dönümü — 1 yıl = 4 mevsim × kDaysPerSeason gün. Tamamlanan her yıl bir
-    // dayanıklılık başarımı (köy bir yılı daha atlattı).
-    final year = (_dayCount - 1) ~/ (kDaysPerSeason * Season.values.length);
-    if (year >= 1) {
-      _award('year_$year', '$year. yıl doldu. Köy hâlâ ayakta.', '🗓️');
+  /// HAZIR kurulan köyler (referans/showcase) için: şu an zaten sağlanan tüm
+  /// başarımları SESSİZCE kazanılmış işaretler — toast/kronik/sevinç YOK. Bunlar
+  /// köyün geçmişinde çoktan geçilmiş eşiklerdir; oturmuş köy açılır açılmaz
+  /// başarımların "çat çat" patlaması (ilk tick'te hepsi birden) bununla önlenir.
+  void _backfillAchievements() {
+    for (final (id, _, _) in _satisfiedAchievements()) {
+      _achievedMilestones.add(id);
     }
   }
 }

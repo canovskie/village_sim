@@ -48,16 +48,18 @@ class AboutScreen extends StatelessWidget {
                       const SizedBox(height: 18),
 
                       Center(
-                        child: GameIcon(GameIconData.flame,
-                            size: 38, color: AppUi.accent),
+                        child: Image.asset('assets/ui/logo.png',
+                            width: 72,
+                            height: 72,
+                            filterQuality: FilterQuality.medium),
                       ),
                       const SizedBox(height: 12),
                       Center(
-                        child: Text('VILLAGE SIM',
+                        child: Text('LUW',
                             style: AppUi.display.copyWith(
                               fontSize: 26,
                               color: AppUi.accentSoft,
-                              letterSpacing: 4.0,
+                              letterSpacing: 8.0,
                             )),
                       ),
                       const SizedBox(height: 4),

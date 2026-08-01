@@ -33,29 +33,35 @@ extension _SceneSave on _VillageSceneState {
   // ── NpcVisual ──────────────────────────────────────────────────────────────
 
   Map<String, dynamic> _visualToJson(NpcVisual v) => {
-        'skin': _colInt(v.skin),
-        'hair': _colInt(v.hair),
-        'hairStyle': v.hairStyle.name,
-        'eyes': _colInt(v.eyes),
-        'hasBeard': v.hasBeard,
-        'beardStyle': v.beardStyle.name,
-        'clothingShift': v.clothingShift,
-        'blinkPhase': v.blinkPhase,
-        'isMale': v.isMale,
-      };
+    'skin': _colInt(v.skin),
+    'hair': _colInt(v.hair),
+    'hairStyle': v.hairStyle.name,
+    'eyes': _colInt(v.eyes),
+    'hasBeard': v.hasBeard,
+    'beardStyle': v.beardStyle.name,
+    'clothingShift': v.clothingShift,
+    'blinkPhase': v.blinkPhase,
+    'isMale': v.isMale,
+    'build': v.build,
+  };
 
   NpcVisual _visualFromJson(Map<String, dynamic> j) => NpcVisual(
-        skin: _colFromInt(_i(j['skin'], 0xFFFFCB9A)),
-        hair: _colFromInt(_i(j['hair'], 0xFF3E2A14)),
-        hairStyle: _enumByName(HairStyle.values, j['hairStyle'], HairStyle.short),
-        eyes: _colFromInt(_i(j['eyes'], 0xFF4A381E)),
-        hasBeard: _b(j['hasBeard']),
-        beardStyle:
-            _enumByName(BeardStyle.values, j['beardStyle'], BeardStyle.none),
-        clothingShift: _d(j['clothingShift']),
-        blinkPhase: _d(j['blinkPhase']),
-        isMale: _b(j['isMale'], true),
-      );
+    skin: _colFromInt(_i(j['skin'], 0xFFFFCB9A)),
+    hair: _colFromInt(_i(j['hair'], 0xFF3E2A14)),
+    hairStyle: _enumByName(HairStyle.values, j['hairStyle'], HairStyle.short),
+    eyes: _colFromInt(_i(j['eyes'], 0xFF4A381E)),
+    hasBeard: _b(j['hasBeard']),
+    beardStyle: _enumByName(
+      BeardStyle.values,
+      j['beardStyle'],
+      BeardStyle.none,
+    ),
+    clothingShift: _d(j['clothingShift']),
+    blinkPhase: _d(j['blinkPhase']),
+    isMale: _b(j['isMale'], true),
+    // Eski kayıtlarda yok → 1.0 (nötr beden), köylü aynı görünmeye devam eder.
+    build: j['build'] == null ? 1.0 : _d(j['build']),
+  );
 
   // ── Kayıt tetikleyiciler ────────────────────────────────────────────────────
 
@@ -103,32 +109,45 @@ extension _SceneSave on _VillageSceneState {
   /// her şey tek kapıda). Açılınca öğeler gear'ın ÜSTÜNDE belirir (alttaki inşa
   /// çubuğundan uzakta). Varsayılan kapalı (sade ekran).
   Widget buildSaveButton() {
+    // MOBİL: bu küme telefonda ÇİZİLMEZ. Dünyanın ortasında sahipsiz duran bir
+    // "⚙ Menü" pill'iydi — beş yuvalı kenar ızgarasının ("Kenar Rayı",
+    // ui/mobile_ui.dart) hiçbirine ait değildi ve tema hissini en çok bozan tek
+    // öğeydi. İçeriği (Kaydet / Ana menü) sağ ray'ın araçlar menüsüne taşındı.
+    if (useCompactGameUi(context)) return const SizedBox.shrink();
+    // Sol-ÜST (HUD şeridinin altında, Defter mührünün eski yeri) — Komuta
+    // çubuğu artık alt kenarı sahiplendi, gear ondan uzağa taşındı. Küme AŞAĞI
+    // açılır: gear üstte, öğeler altında.
     return Positioned(
       left: 14,
-      bottom: 78,
+      top: 56,
       child: SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Gear tutamağı — her zaman görünür; kümeyi aç/kapa.
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () =>
+                  setStateHere(() => _menuClusterOpen = !_menuClusterOpen),
+              child: SizedBox(
+                child: Center(
+                  child: AppChip(
+                    label: _menuClusterOpen ? '⚙ Kapat' : '⚙ Menü',
+                    color: AppUi.accent,
+                  ),
+                ),
+              ),
+            ),
             if (_menuClusterOpen) ...[
+              const SizedBox(height: 10),
               // Ana menüye dönüş — onay ister, onaylanınca kaydedip çıkar.
               MenuButton(
                 onTap: () => setStateHere(() => _exitConfirmOpen = true),
               ),
               const SizedBox(height: 10),
               SaveButton(onTap: () => _saveNow(manual: true)),
-              const SizedBox(height: 10),
             ],
-            // Gear tutamağı — her zaman görünür; kümeyi aç/kapa.
-            GestureDetector(
-              onTap: () =>
-                  setStateHere(() => _menuClusterOpen = !_menuClusterOpen),
-              child: AppChip(
-                label: _menuClusterOpen ? '⚙ Kapat' : '⚙ Menü',
-                color: AppUi.accent,
-              ),
-            ),
           ],
         ),
       ),
@@ -238,7 +257,9 @@ extension _SceneSave on _VillageSceneState {
       'firekeeper': vRef(_firekeeper),
 
       // ── Harita + kaynaklar + sistemler ──
-      'water': [for (final t in _waterTiles) [t.$1, t.$2]],
+      'water': [
+        for (final t in _waterTiles) [t.$1, t.$2],
+      ],
       'stockpile': _stockpileToJson(),
       'policies': _policiesToJson(),
       'houses': _houses.toJson(),
@@ -256,6 +277,9 @@ extension _SceneSave on _VillageSceneState {
       'imperialTimer': _imperialTimer,
       // Sinematik merdiveni — yazılmazsa her yüklemede "ilk ziyaret" sanılır
       // ve film baştan oynar (tam da kaçındığımız tekrar).
+      // Hane baskı sayacı — yazılmazsa yüklemede sert geçmiş silinir ve
+      // oyuncu aynı haneyi sıfır bedelle yeniden sağabilir.
+      'housePressure': _housePressure,
       'imperialVisits': _imperialVisits,
       'impGrudge': _impGrudge,
       'impGrimShown': _impGrimShown,
@@ -263,32 +287,62 @@ extension _SceneSave on _VillageSceneState {
       // ── Varlıklar ──
       'buildings': [for (final b in _buildings) _buildingToJson(b)],
       'villagers': [for (final v in _villagers) _villagerToJson(v, bRef, vRef)],
-      'builders': [for (final b in _builders) _workerBaseToJson(b)],
       'orders': [for (final o in _orders) _orderToJson(o)],
       'roadOrders': [for (final o in _roadOrders) _roadOrderToJson(o)],
       'roads': [for (final t in _roadSystem.all) _roadTileToJson(t)],
       'farmTiles': [for (final t in _farmTiles) _farmTileToJson(t)],
-      'farmers': [for (final f in _farmers) _workerBaseToJson(f)],
       'trees': [for (final t in _trees) _treeToJson(t)],
-      'woodcutters': [for (final w in _woodcutters) _workerBaseToJson(w)],
-      'lumberCamps': [for (final c in _lumberCamps) _lumberCampToJson(c)],
       'mineNodes': [for (final n in _mineNodes) _mineNodeToJson(n)],
-      'miners': [for (final m in _miners) _workerBaseToJson(m)],
-      'fishers': [for (final f in _fishers) _workerBaseToJson(f)],
-      'florists': [for (final f in _florists) _floristToJson(f)],
-      'shepherds': [for (final s in _shepherds) _shepherdToJson(s)],
       'animals': [for (final a in _cows) _animalToJson(a)],
-      'lotuses': [for (final l in _lotuses) {'col': l.col, 'row': l.row, 'variant': l.variant}],
+      'lotuses': [
+        for (final l in _lotuses)
+          {'col': l.col, 'row': l.row, 'variant': l.variant},
+      ],
       'reeds': [for (final r in _reeds) _reedClumpToJson(r)],
+      // Böğürtlen çalıları — olgunluk KALICI dünya durumu. Kaydedilmezse köy
+      // her yüklemede toplanmamış çalılarla dolu uyanır (bedava yiyecek).
+      'berryBushes': [
+        for (final b in _berryBushes)
+          {'col': b.col, 'row': b.row, 'variant': b.variant, 'ripe': b.ripeness},
+      ],
+      'cookedMeals': _cookedMeals,
+      'berriesPicked': _berriesPicked,
+      if (_firstMealShown) 'firstMealShown': true,
       'decor': [for (final d in _decor) _decorToJson(d)],
       'graves': [for (final g in _graves) _graveToJson(g)],
-      'reedBeds': [for (final b in _reedBeds) {'x': b.gridX, 'y': b.gridY, 'owner': vRef(b.owner)}],
+      'reedBeds': [
+        for (final b in _reedBeds)
+          {'x': b.gridX, 'y': b.gridY, 'owner': vRef(b.owner)},
+      ],
       'resourceBoxes': [for (final r in _resourceBoxes) _resourceBoxToJson(r)],
       'hay': [for (final h in _hayEntities) _hayToJson(h)],
+      // Gömülü zulalar — KALICI dünya durumu. Kaydedilmezse çalınan mal
+      // yüklemede sessizce buharlaşırdı (stoktan çıkmış, toprakta da yok).
+      'lootCaches': [
+        for (final l in _lootCaches)
+          {
+            'x': l.gridX,
+            'y': l.gridY,
+            'kind': l.kind.name,
+            'amount': l.amount,
+            'age': l.age,
+            // Görülmüş olmak zulanın bulunabilirliğini belirler → kalıcı.
+            'witnessed': l.witnessed,
+            'culprit': vRef(l.culprit),
+            'culpritName': l.culpritName,
+          },
+      ],
 
       // ── Dilekçe / meclis ──
       'pendingPetition': _pendingPetition?.id,
       'petitionAuthor': vRef(_petitionAuthor),
+      // Bekleyen düğünün ÇİFTİ. Eskiden kaydedilmiyordu ve yüklemede
+      // `_findCourtship()` ile RASTGELE yeni bir çift bağlanıyordu: modal
+      // kayıttaki gelini (`petitionAuthor`) gösterip "Kutla" BAŞKA birini
+      // evlendiriyordu. Kimin evlendiği oyuncunun okuduğu şeyle aynı olmalı.
+      'weddingCouple': _weddingCouple == null
+          ? null
+          : [vRef(_weddingCouple!.$1), vRef(_weddingCouple!.$2)],
       // Dilekçeye özel yer tutucular ({suçlu}, {suç}…) — metin yüklemede aynen
       // yeniden dokunabilsin diye saklanır.
       'petitionExtra': _petitionExtra,
@@ -296,8 +350,16 @@ extension _SceneSave on _VillageSceneState {
       'petitionDeadline': _petitionDeadline,
       'petitionModalOpen': _petitionModalOpen,
       'petitionForced': _petitionForced,
-      'petitionFollowUps':
-          [for (final f in _petitionFollowUps) {'id': f.id, 'fireAtSim': f.fireAtSim}],
+      'petitionFollowUps': [
+        for (final f in _petitionFollowUps)
+          {
+            'id': f.id,
+            'fireAtSim': f.fireAtSim,
+            // Zincirin aktörü indeksle taşınır (köylü referansı kaydedilemez).
+            'actor': vRef(f.actor),
+            'actorName': f.actorName,
+          },
+      ],
       'petitionCooldowns': _petitionCooldowns,
 
       // ── Suç (scene_crime) ──
@@ -310,10 +372,17 @@ extension _SceneSave on _VillageSceneState {
       'unrest': _unrest,
       'crisisCooldown': _crisisCooldown,
       'unrestStirShown': _unrestStirShown,
+      // Çürüme (Faz 3) — huzursuzluğun kalıcı izi + kronik hâl duyuru bayrağı.
+      'regimeRot': _regimeRot,
+      'chronicShown': _chronicShown,
 
       'crimeSuspicion': _crimeSuspicion,
       'crimePardons': _crimePardons,
       'crimesSeen': _crimesSeen,
+      // Kanunname kapıları bunları okur (Tecrit / Diyet) — kayıttan dönen köyün
+      // defteri aynı hükümleri göstermeli, yoksa gündem sıfırlanmış görünür.
+      'illnessSeen': _illnessSeen,
+      'feudsSeen': _feudsSeen,
       'accusedCriminal': vRef(_accusedCriminal),
 
       // ── Olay / politika moral / ambient timer ──
@@ -321,51 +390,56 @@ extension _SceneSave on _VillageSceneState {
       'eventMorale': _eventMorale,
       'eventMoraleLeft': _eventMoraleLeft,
       'eventLabel': _eventLabel,
-      'policyMoraleEffects':
-          [for (final e in _policyMoraleEffects) {'untilSim': e.untilSim, 'amount': e.amount}],
+      'policyMoraleEffects': [
+        for (final e in _policyMoraleEffects)
+          {'untilSim': e.untilSim, 'amount': e.amount},
+      ],
       'migrationTimerSec': _migrationTimerSec,
       'meteorShowerTimer': _meteorShowerTimer,
     };
   }
 
   Map<String, dynamic> _stockpileToJson() => {
-        'wood': _stockpile.wood,
-        'stone': _stockpile.stone,
-        'iron': _stockpile.iron,
-        'coal': _stockpile.coal,
-        'food': _stockpile.food,
-        'honey': _stockpile.honey,
-        'reed': _stockpile.reed,
-        'gold': _stockpile.gold,
-      };
+    'wood': _stockpile.wood,
+    'stone': _stockpile.stone,
+    'iron': _stockpile.iron,
+    'coal': _stockpile.coal,
+    'food': _stockpile.food,
+    'honey': _stockpile.honey,
+    'reed': _stockpile.reed,
+    'gold': _stockpile.gold,
+  };
 
   /// KANUNNAME — mühür seti + girilen dava kolu + ıslak mürekkep. Tek doğruluk
   /// kaynağı `sealed`; bool'lar yüklemede ondan türer (bkz. restoreSealed).
   Map<String, dynamic> _policiesToJson() => {
-        'sealed': _policies.sealed.toList(),
-        'inkDryUntilSim': _policies.inkDryUntilSim,
-        // Gündeme gelmiş hüküm id'leri — yüklemede bütün defter "yeni açıldı"
-        // diye bağırmasın diye taşınır (bkz. _tickLawGates).
-        'lawSeen': _lawSeen.toList(),
-      };
+    'sealed': _policies.sealed.toList(),
+    'inkDryUntilSim': _policies.inkDryUntilSim,
+    // Gündeme gelmiş hüküm id'leri — yüklemede bütün defter "yeni açıldı"
+    // diye bağırmasın diye taşınır (bkz. _tickLawGates).
+    'lawSeen': _lawSeen.toList(),
+  };
 
   Map<String, dynamic> _buildingToJson(BuildingEntity b) => {
-        'type': b.type.name,
-        'col': b.col,
-        'row': b.row,
-        'isActive': b.isActive,
-        'userPaused': b.userPaused,
-        'growthProgress': b.growthProgress,
-        'incomeTimer': b.incomeTimer,
-        'waterLevel': b.waterLevel,
-        'occupants': b.occupants,
-        'eggTimer': b.eggTimer,
-        'honeyTimer': b.honeyTimer,
-        'fireFuel': b.fireFuel,
-      };
+    'type': b.type.name,
+    'col': b.col,
+    'row': b.row,
+    'isActive': b.isActive,
+    'userPaused': b.userPaused,
+    'incomeTimer': b.incomeTimer,
+    'waterLevel': b.waterLevel,
+    'occupants': b.occupants,
+    'ownerSurname': b.ownerSurname,
+    'eggTimer': b.eggTimer,
+    'honeyTimer': b.honeyTimer,
+    'fireFuel': b.fireFuel,
+  };
 
   Map<String, dynamic> _villagerToJson(
-      VillagerEntity v, int Function(Object?) bRef, int Function(Object?) vRef) {
+    VillagerEntity v,
+    int Function(Object?) bRef,
+    int Function(Object?) vRef,
+  ) {
     return {
       'type': v.type.name,
       'name': v.name,
@@ -373,6 +447,7 @@ extension _SceneSave on _VillageSceneState {
       'personalitySeed': v.personalitySeed,
       'annivCount': v.annivCount,
       'callingFound': v.callingFound,
+      'grewUpMoment': v.grewUpMoment,
       'spawnCol': v.spawnCol,
       'spawnRow': v.spawnRow,
       'x': v.gridX,
@@ -388,8 +463,14 @@ extension _SceneSave on _VillageSceneState {
       // Üstlenilmiş iş — yalnız rol adı; faz/sayaç/claim geçici (açılışta
       // _syncJobWorkforce yeniden kurar, tıpkı workCooldown gibi).
       if (v.hasActiveJob) 'jobRole': v.job!.role.name,
+      // OYUNCUNUN ELİ — bu, `jobRole`'dan farklı olarak KARAR'dır, durum değil.
+      // Yüklerken geri konmazsa köy sessizce otomatik dağıtıma döner ve oyuncu
+      // kurduğu iş bölümünü kaybeder. `none` da geçerli bir karardır ("boş dursun").
+      if (v.assignedRole != null) 'assignedRole': v.assignedRole!.name,
       if (v.surname.isNotEmpty) 'surname': v.surname,
       if (v.injuryDays > 0) 'injuryDays': v.injuryDays,
+      if (v.sickDays > 0) 'sickDays': v.sickDays,
+      if (v.laborDays > 0) 'laborDays': v.laborDays,
       if (v.disabled) 'disabled': true,
       'life': [for (final e in v.life) e.toJson()],
       'fertilityDays': v.fertilityDays.isNaN ? null : v.fertilityDays,
@@ -398,6 +479,17 @@ extension _SceneSave on _VillageSceneState {
       'mood': v.mood,
       'energy': v.energy,
       'morale': v.morale,
+      // DÜRTÜLER — köylünün aklı (bkz. villager_mind). Niyet KAYDEDİLMEZ
+      // (yüklemede hakem yeniden karar verir) ama dürtüler kalıcıdır: aç
+      // yatan köylü aç uyanmalı, yoksa yükleme köyü sıfırlanmış gibi olur.
+      'drives': v.mind.toJson(),
+      // KANAAT — anılar söner (kaydedilmez, geçicidir) ama bıraktıkları iz
+      // kalır. "Ne yaptığını hatırlamıyorum ama ondan hoşlanmıyorum" hâli
+      // kayıttan sonra da sürsün: köyün sosyal dokusu yüklemede sıfırlanmaz.
+      'opinion': [
+        for (final e in v.memory.opinion.entries)
+          if (vRef(e.key) >= 0) {'v': vRef(e.key), 'o': e.value},
+      ],
       'lowMoraleTime': v.lowMoraleTime,
       'moraleReason': v.moraleReason,
       'wealth': v.wealth,
@@ -406,8 +498,7 @@ extension _SceneSave on _VillageSceneState {
       'parents': [for (final p in v.parents) vRef(p)],
       'children': [for (final c in v.children) vRef(c)],
       'grudges': [
-        for (final e in v.grudges.entries)
-          {'v': vRef(e.key), 'until': e.value}
+        for (final e in v.grudges.entries) {'v': vRef(e.key), 'until': e.value},
       ],
       'bloodEnemies': [for (final e in v.bloodEnemies) vRef(e)],
       'feudKills': v.feudKills,
@@ -416,150 +507,173 @@ extension _SceneSave on _VillageSceneState {
   }
 
   /// İşçi base — pozisyon + dolaşma merkezi (spawn). Görev/path state taşınmaz.
-  Map<String, dynamic> _workerBaseToJson(WorkerEntity w) => {
-        'spawnCol': w.spawnCol,
-        'spawnRow': w.spawnRow,
-        'x': w.gridX,
-        'y': w.gridY,
-        'facingRight': w.facingRight,
-      };
+  /// ESKİ KAYIT GÖÇÜ — soyadsız köylüleri hane grafiğine bağlar.
+  ///
+  /// Hane sistemi köylüyü SOYADINDAN tanır: besleme döngüsü (scene_estates)
+  /// `if (v.surname.isNotEmpty)` diyor. Haneler eklenmeden önce yapılmış
+  /// kayıtlarda kimsenin soyadı yok → Divan masası boş, hane kartları boş,
+  /// hane eylemleri hedefsiz. Kayıt BOZUK değil, EKSİK: yönetişimin yarısı
+  /// sessizce ölü açılıyor ve oyuncu bunu bir hata olarak da göremiyor.
+  ///
+  /// Göç aile bağlarını izler: ebeveyn/çocuk grafiğinin her bağlantılı bileşeni
+  /// TEK hanedir. Bileşende soyadı olan biri varsa (karışık kayıt) o ad
+  /// kullanılır — erkek üye önce, çünkü soy erkek üzerinden taşınıyor
+  /// (bkz. `_patrilinealSurname`). Kimsede yoksa yeni bir soy adı verilir.
+  /// Bağsız köylü kendi hanesini kurar; dışarıdan gelen (tüccar/mülteci)
+  /// zaten öyle sayılıyor.
+  ///
+  /// Kendi kendini kapatır: soyadsız kimse kalmayınca hiçbir şey yapmaz, yani
+  /// yeni kayıtlarda bedeli tek bir taramadır.
+  void _migrateHouseholdSurnames() {
+    if (_villagers.every((v) => v.surname.isNotEmpty)) return;
 
-  Map<String, dynamic> _lumberCampToJson(LumberCampEntity c) => {
-        'buildingCol': c.buildingCol,
-        'buildingRow': c.buildingRow,
-        'x': c.gridX,
-        'y': c.gridY,
-        'facingRight': c.facingRight,
-      };
+    final seen = <VillagerEntity>{};
+    for (final start in _villagers) {
+      if (!seen.add(start)) continue;
+      // Bileşeni gez (iki yönlü: ebeveyn + çocuk).
+      final comp = <VillagerEntity>[start];
+      for (var i = 0; i < comp.length; i++) {
+        for (final kin in comp[i].parents) {
+          if (seen.add(kin)) comp.add(kin);
+        }
+        for (final kin in comp[i].children) {
+          if (seen.add(kin)) comp.add(kin);
+        }
+      }
 
-  Map<String, dynamic> _shepherdToJson(ShepherdEntity s) => {
-        'barnCol': s.barnCol,
-        'barnRow': s.barnRow,
-        'x': s.gridX,
-        'y': s.gridY,
-        'facingRight': s.facingRight,
-      };
+      var name = '';
+      for (final m in comp) {
+        if (m.isMale && m.surname.isNotEmpty) {
+          name = m.surname;
+          break;
+        }
+      }
+      if (name.isEmpty) {
+        for (final m in comp) {
+          if (m.surname.isNotEmpty) {
+            name = m.surname;
+            break;
+          }
+        }
+      }
+      if (name.isEmpty) name = randomVillagerSurname(_rng);
 
-  Map<String, dynamic> _floristToJson(FloristEntity f) => {
-        'cottageCol': f.cottageCol,
-        'cottageRow': f.cottageRow,
-        'effectRadius': f.effectRadius,
-        'spawnCol': f.spawnCol,
-        'spawnRow': f.spawnRow,
-        'x': f.gridX,
-        'y': f.gridY,
-        'facingRight': f.facingRight,
-      };
+      for (final m in comp) {
+        if (m.surname.isEmpty) m.surname = name;
+      }
+    }
+  }
 
   Map<String, dynamic> _animalToJson(AnimalEntity a) => {
-        'kind': a.kind.name,
-        'barnCol': a.barnCol,
-        'barnRow': a.barnRow,
-        'x': a.gridX,
-        'y': a.gridY,
-        'facingRight': a.facingRight,
-        'facing4': a.facing4.name,
-        'hunger': a.hunger,
-        'milkProgress': a.milkProgress,
-        'isMale': a.isMale,
-        'ageDays': a.ageDays,
-        'lifespanDays': a.lifespanDays,
-        'fertilityDays':
-            a.fertilityDays.isNaN ? null : a.fertilityDays,
-      };
+    'kind': a.kind.name,
+    'barnCol': a.barnCol,
+    'barnRow': a.barnRow,
+    'x': a.gridX,
+    'y': a.gridY,
+    'facingRight': a.facingRight,
+    'facing4': a.facing4.name,
+    'hunger': a.hunger,
+    'milkProgress': a.milkProgress,
+    'isMale': a.isMale,
+    'ageDays': a.ageDays,
+    'lifespanDays': a.lifespanDays,
+    'fertilityDays': a.fertilityDays.isNaN ? null : a.fertilityDays,
+  };
 
   Map<String, dynamic> _orderToJson(BuildOrder o) => {
-        'type': o.type.name,
-        'col': o.col,
-        'row': o.row,
-        'assigned': o.assigned,
-        'completed': o.completed,
-        'progress': o.progress,
-      };
+    'type': o.type.name,
+    'col': o.col,
+    'row': o.row,
+    'completed': o.completed,
+    'progress': o.progress,
+  };
 
   Map<String, dynamic> _roadOrderToJson(RoadOrder o) => {
-        'col': o.col,
-        'row': o.row,
-        'surface': o.surface.name,
-        'assigned': o.assigned,
-        'completed': o.completed,
-        'progress': o.progress,
-      };
+    'col': o.col,
+    'row': o.row,
+    'surface': o.surface.name,
+    'assigned': o.assigned,
+    'completed': o.completed,
+    'progress': o.progress,
+  };
 
-  Map<String, dynamic> _roadTileToJson(RoadTile t) =>
-      {'col': t.col, 'row': t.row, 'surface': t.surface.name};
+  Map<String, dynamic> _roadTileToJson(RoadTile t) => {
+    'col': t.col,
+    'row': t.row,
+    'surface': t.surface.name,
+  };
 
   Map<String, dynamic> _farmTileToJson(FarmTile t) => {
-        'col': t.col,
-        'row': t.row,
-        'stage': t.stage,
-        'growthProgress': t.growthProgress,
-        'needsSowing': t.needsSowing,
-        'fallow': t.fallowRemaining,
-      };
+    'col': t.col,
+    'row': t.row,
+    'stage': t.stage,
+    'growthProgress': t.growthProgress,
+    'needsSowing': t.needsSowing,
+    'fallow': t.fallowRemaining,
+  };
 
   Map<String, dynamic> _treeToJson(TreeEntity t) => {
-        'col': t.col,
-        'row': t.row,
-        'type': t.type.name,
-        'marked': t.isMarkedForCutting,
-        'felled': t.isFelled,
-        'growing': t.isGrowing,
-        'wild': t.isWild,
-      };
+    'col': t.col,
+    'row': t.row,
+    'type': t.type.name,
+    'marked': t.isMarkedForCutting,
+    'felled': t.isFelled,
+    'growing': t.isGrowing,
+    'wild': t.isWild,
+  };
 
   Map<String, dynamic> _mineNodeToJson(MineNode n) => {
-        'col': n.col,
-        'row': n.row,
-        'type': n.type.name,
-        'marked': n.isMarkedForMining,
-        'depleted': n.isDepleted,
-      };
+    'col': n.col,
+    'row': n.row,
+    'type': n.type.name,
+    'marked': n.isMarkedForMining,
+    'depleted': n.isDepleted,
+  };
 
   Map<String, dynamic> _reedClumpToJson(ReedClump r) => {
-        'col': r.col,
-        'row': r.row,
-        'col2': r.col2,
-        'row2': r.row2,
-        'growth': r.growth,
-      };
+    'col': r.col,
+    'row': r.row,
+    'col2': r.col2,
+    'row2': r.row2,
+    'growth': r.growth,
+  };
 
   Map<String, dynamic> _decorToJson(DecorEntity d) => {
-        'col': d.col,
-        'row': d.row,
-        'kind': d.kind.name,
-        'variant': d.variant,
-        'jitterX': d.jitterX,
-        'jitterY': d.jitterY,
-        'swaySeed': d.swaySeed,
-      };
+    'col': d.col,
+    'row': d.row,
+    'kind': d.kind.name,
+    'variant': d.variant,
+    'jitterX': d.jitterX,
+    'jitterY': d.jitterY,
+    'swaySeed': d.swaySeed,
+  };
 
   Map<String, dynamic> _graveToJson(Grave g) => {
-        'col': g.col,
-        'row': g.row,
-        'variant': g.variant,
-        'name': g.name,
-        'jitterX': g.jitterX,
-        'jitterY': g.jitterY,
-      };
+    'col': g.col,
+    'row': g.row,
+    'variant': g.variant,
+    'name': g.name,
+    'jitterX': g.jitterX,
+    'jitterY': g.jitterY,
+  };
 
   Map<String, dynamic> _resourceBoxToJson(ResourceBox r) => {
-        'type': r.type.name,
-        'x': r.gridX,
-        'y': r.gridY,
-        'slotIndex': r.slotIndex,
-      };
+    'type': r.type.name,
+    'x': r.gridX,
+    'y': r.gridY,
+    'slotIndex': r.slotIndex,
+  };
 
   Map<String, dynamic> _hayToJson(HayEntity h) => {
-        'type': h.type.name,
-        'x': h.gridX,
-        'y': h.gridY,
-        'slotIndex': h.slotIndex,
-        'pileSize': h.pileSize,
-        // spawnTime kayıtlıysa harmanın FIFO sırası ve düşme animasyonu
-        // yüklemeden sonra da doğru kalır (_time de kaydediliyor).
-        'spawnTime': h.spawnTime,
-      };
+    'type': h.type.name,
+    'x': h.gridX,
+    'y': h.gridY,
+    'slotIndex': h.slotIndex,
+    'pileSize': h.pileSize,
+    // spawnTime kayıtlıysa harmanın FIFO sırası ve düşme animasyonu
+    // yüklemeden sonra da doğru kalır (_time de kaydediliyor).
+    'spawnTime': h.spawnTime,
+  };
 
   // ── Restore (JSON → state) ──────────────────────────────────────────────────
 
@@ -571,6 +685,9 @@ extension _SceneSave on _VillageSceneState {
     _lotuses.clear();
     _reeds.clear();
     _reedBeds.clear();
+    _berryBushes.clear();
+    _cookedMeals = 0;
+    _berriesPicked = 0;
     _decor.clear();
     _trees.clear();
     _cleared.clear();
@@ -582,19 +699,13 @@ extension _SceneSave on _VillageSceneState {
     _roadOrders.clear();
     _roadSystem.clear();
     _placingRoad = null;
-    _roadStrokeTiles.clear();
-    _lumberCamps.clear();
-    _miners.clear();
-    _fishers.clear();
-    _florists.clear();
-    _shepherds.clear();
+    _roadErase = false;
+    _clearRoadDrag();
     _cows.clear();
-    _farmers.clear();
-    _woodcutters.clear();
-    _builders.clear();
     _villagers.clear();
     _resourceBoxes.clear();
     _eggs.clear();
+    _lootCaches.clear();
     _hayEntities.clear();
     _birdFlocks.clear();
     _beeSwarms.clear();
@@ -610,6 +721,8 @@ extension _SceneSave on _VillageSceneState {
     _activeCutscene = null; // yüklenen oyunda sinematik oynamaz
     // İmparatorluk sinematik merdiveni — restore aşağıda okur; okunmazsa
     // (yeni oyun) sıfırdan başlar: ilk ziyaret yine tam film.
+    _housePressure.clear();
+    _betrothalForced = false;
     _imperialVisits = 0;
     _impGrudge = false;
     _impGrimShown = false;
@@ -643,8 +756,9 @@ extension _SceneSave on _VillageSceneState {
       _camera = Offset(_d(cam[0]), _d(cam[1]));
     }
     _zoom = _d(w['zoom'], 1.0);
-    _speedIdx =
-        _i(w['speedIdx']).clamp(0, _VillageSceneState._speedSteps.length - 1);
+    _speedIdx = _i(
+      w['speedIdx'],
+    ).clamp(0, _VillageSceneState._speedSteps.length - 1);
     _timeScale = _VillageSceneState._speedSteps[_speedIdx];
     _morale = _d(w['morale'], 0.5);
     _avgIndividualMorale = _d(w['avgIndividualMorale'], 0.6);
@@ -693,6 +807,12 @@ extension _SceneSave on _VillageSceneState {
     _imperialFavor = _d(w['imperialFavor'], 0.5);
     _imperialTimer = _d(w['imperialTimer'], 6.0 * kGameDaySeconds);
     _imperialDemand = null; // yüklemede aktif ziyaret yok
+    final hp = w['housePressure'];
+    if (hp is Map) {
+      for (final e in hp.entries) {
+        _housePressure[e.key as String] = _d(e.value);
+      }
+    }
     _imperialVisits = _i(w['imperialVisits']);
     _impGrudge = _b(w['impGrudge']);
     _impGrimShown = _b(w['impGrimShown']);
@@ -715,7 +835,7 @@ extension _SceneSave on _VillageSceneState {
     // 5) Köylüler — iki geçiş (önce yarat, sonra aile/ev bağla).
     final vJsons = <Map<String, dynamic>>[
       for (final raw in (w['villagers'] as List? ?? const []))
-        Map<String, dynamic>.from(raw as Map)
+        Map<String, dynamic>.from(raw as Map),
     ];
     for (final vj in vJsons) {
       _villagers.add(_villagerFromJson(vj));
@@ -742,6 +862,15 @@ extension _SceneSave on _VillageSceneState {
           v.grudges[_villagers[gi]] = _d(gm['until']);
         }
       }
+      // KANAAT — kime ne kadar güvendiği (bkz. villager_memory). Anıların
+      // kendisi kaydedilmez (zaten söner); kalıcı olan bu iz.
+      for (final o in (vj['opinion'] as List? ?? const [])) {
+        final om = o as Map;
+        final oi = _i(om['v'], -1);
+        if (oi >= 0 && oi < _villagers.length) {
+          v.memory.opinion[_villagers[oi]] = _d(om['o']);
+        }
+      }
       for (final e in (vj['bloodEnemies'] as List? ?? const [])) {
         final ei = _i(e, -1);
         if (ei >= 0 && ei < _villagers.length) {
@@ -750,13 +879,18 @@ extension _SceneSave on _VillageSceneState {
       }
     }
 
+    // 5b) ESKİ KAYIT GÖÇÜ — soyadsız köylüleri hanelere bağla.
+    _migrateHouseholdSurnames();
+
     // 6) Referans wiring (firepit / firekeeper).
     final fpIdx = _i(w['firepit'], -1);
-    _firepitBuilding =
-        (fpIdx >= 0 && fpIdx < _buildings.length) ? _buildings[fpIdx] : null;
+    _firepitBuilding = (fpIdx >= 0 && fpIdx < _buildings.length)
+        ? _buildings[fpIdx]
+        : null;
     final fkIdx = _i(w['firekeeper'], -1);
-    _firekeeper =
-        (fkIdx >= 0 && fkIdx < _villagers.length) ? _villagers[fkIdx] : null;
+    _firekeeper = (fkIdx >= 0 && fkIdx < _villagers.length)
+        ? _villagers[fkIdx]
+        : null;
 
     // 7) Hayvanlar. (Eski işçi dizileri — builders/farmers/miners/fishers/
     // florists/shepherds/woodcutters/lumberCamps — artık YOK SAYILIR: işçiler
@@ -772,15 +906,23 @@ extension _SceneSave on _VillageSceneState {
       _orders.add(_orderFromJson(Map<String, dynamic>.from(raw as Map)));
     }
     for (final raw in (w['roadOrders'] as List? ?? const [])) {
-      _roadOrders.add(_roadOrderFromJson(Map<String, dynamic>.from(raw as Map)));
+      _roadOrders.add(
+        _roadOrderFromJson(Map<String, dynamic>.from(raw as Map)),
+      );
     }
     for (final raw in (w['roads'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _roadSystem.add(RoadTile(
+      _roadSystem.add(
+        RoadTile(
           col: _i(j['col']),
           row: _i(j['row']),
-          surface:
-              _enumByName(RoadSurface.values, j['surface'], RoadSurface.dirt)));
+          surface: _enumByName(
+            RoadSurface.values,
+            j['surface'],
+            RoadSurface.dirt,
+          ),
+        ),
+      );
     }
     for (final raw in (w['farmTiles'] as List? ?? const [])) {
       _farmTiles.add(_farmTileFromJson(Map<String, dynamic>.from(raw as Map)));
@@ -795,18 +937,38 @@ extension _SceneSave on _VillageSceneState {
     // 'cleared' alanı yok sayılır; land setleri boş kalır (scene_land).
     for (final raw in (w['lotuses'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _lotuses.add(LotusEntity(
-          col: _i(j['col']), row: _i(j['row']), variant: _i(j['variant'])));
+      _lotuses.add(
+        LotusEntity(
+          col: _i(j['col']),
+          row: _i(j['row']),
+          variant: _i(j['variant']),
+        ),
+      );
     }
     for (final raw in (w['reeds'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _reeds.add(ReedClump(
+      _reeds.add(
+        ReedClump(
           col: _i(j['col']),
           row: _i(j['row']),
           col2: _i(j['col2']),
           row2: _i(j['row2']),
-          growth: _d(j['growth'], 1.0)));
+          growth: _d(j['growth'], 1.0),
+        ),
+      );
     }
+    for (final raw in (w['berryBushes'] as List? ?? const [])) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      _berryBushes.add(BerryBush(
+        col: _i(j['col']),
+        row: _i(j['row']),
+        variant: _i(j['variant']),
+        ripeness: _d(j['ripe'], 1.0),
+      ));
+    }
+    _cookedMeals = _i(w['cookedMeals']);
+    _berriesPicked = _i(w['berriesPicked']);
+    _firstMealShown = _b(w['firstMealShown']);
     for (final raw in (w['decor'] as List? ?? const [])) {
       _decor.add(_decorFromJson(Map<String, dynamic>.from(raw as Map)));
     }
@@ -822,30 +984,58 @@ extension _SceneSave on _VillageSceneState {
     }
     for (final raw in (w['resourceBoxes'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _resourceBoxes.add(ResourceBox(
+      _resourceBoxes.add(
+        ResourceBox(
           type: _enumByName(
-              ResourceBoxType.values, j['type'], ResourceBoxType.woodChunk),
+            ResourceBoxType.values,
+            j['type'],
+            ResourceBoxType.woodChunk,
+          ),
           gridX: _d(j['x']),
-          gridY: _d(j['y']))
-        ..slotIndex = _i(j['slotIndex']));
+          gridY: _d(j['y']),
+        )..slotIndex = _i(j['slotIndex']),
+      );
     }
     for (final raw in (w['hay'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _hayEntities.add(HayEntity(
-          type: _enumByName(HayType.values, j['type'], HayType.pile),
+      _hayEntities.add(
+        HayEntity(
+            type: _enumByName(HayType.values, j['type'], HayType.pile),
+            gridX: _d(j['x']),
+            gridY: _d(j['y']),
+          )
+          ..slotIndex = _i(j['slotIndex'])
+          ..pileSize = _i(j['pileSize'], 1)
+          ..spawnTime = _d(j['spawnTime']),
+      );
+    }
+    // Gömülü zulalar — mal toprakta durmaya devam eder. Fail indeksi
+    // çözülemezse (ölmüş/sürülmüş) zula SAHİPSİZ döner: mal hâlâ bulunabilir
+    // ama kimseyi suçlamaz (bkz. `_forgetLootOwner` ile aynı sözleşme).
+    for (final raw in (w['lootCaches'] as List? ?? const [])) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      final ci = _i(j['culprit'], -1);
+      _lootCaches.add(
+        LootCache(
           gridX: _d(j['x']),
-          gridY: _d(j['y']))
-        ..slotIndex = _i(j['slotIndex'])
-        ..pileSize = _i(j['pileSize'], 1)
-        ..spawnTime = _d(j['spawnTime']));
+          gridY: _d(j['y']),
+          kind: _enumByName(ResourceKind.values, j['kind'], ResourceKind.food),
+          amount: _i(j['amount']),
+          culpritName: '${j['culpritName'] ?? ''}',
+          culprit: (ci >= 0 && ci < _villagers.length) ? _villagers[ci] : null,
+        )
+          ..age = _d(j['age'])
+          ..witnessed = _b(j['witnessed']),
+      );
     }
 
     // 9) Dilekçe / meclis.
     final pid = w['pendingPetition'];
     _pendingPetition = pid is String ? PetitionSystem.byId(pid) : null;
     final paIdx = _i(w['petitionAuthor'], -1);
-    _petitionAuthor =
-        (paIdx >= 0 && paIdx < _villagers.length) ? _villagers[paIdx] : null;
+    _petitionAuthor = (paIdx >= 0 && paIdx < _villagers.length)
+        ? _villagers[paIdx]
+        : null;
 
     // 9b) Suç durumu. Yürüyen suç + rehin kaydedilmez (anlık sahne) → yalnız
     // kalıcı olan geri gelir: şüphe defteri, af sayacı, hüküm bekleyen fail.
@@ -854,6 +1044,8 @@ extension _SceneSave on _VillageSceneState {
     _crimePollSec = 0;
     _chaseRefresh = 0;
     _unrest = _d(w['unrest']).clamp(0.0, 1.0);
+    _regimeRot = _d(w['regimeRot']).clamp(0.0, 1.0);
+    _chronicShown = w['chronicShown'] == true;
     _crisisCooldown = _d(w['crisisCooldown']);
     _unrestStirShown = w['unrestStirShown'] == true;
     _regimeScan = 0;
@@ -863,9 +1055,14 @@ extension _SceneSave on _VillageSceneState {
     // Eski kayıtta yok — o köyün suç geçmişi bilinmiyor. Affedilen/şüphe kadarı
     // en azından bir şey olduğunu söylüyor; sıfırdan iyi bir alt sınır.
     _crimesSeen = _i(w['crimesSeen'], _crimeSuspicion + _crimePardons);
+    // Eski kayıtta yok — mezar/husumet varsa köy bunları görmüş demektir; hüküm
+    // gündemi sıfırdan başlamasın diye dünyadan bir alt sınır türetilir.
+    _illnessSeen = _i(w['illnessSeen'], _graves.length);
+    _feudsSeen = _i(w['feudsSeen'], _villagers.any((v) => v.inFeud) ? 1 : 0);
     final acIdx = _i(w['accusedCriminal'], -1);
-    _accusedCriminal =
-        (acIdx >= 0 && acIdx < _villagers.length) ? _villagers[acIdx] : null;
+    _accusedCriminal = (acIdx >= 0 && acIdx < _villagers.length)
+        ? _villagers[acIdx]
+        : null;
     // Dayanağı kalmayan dilekçeyi at: rehin kaydedilmediği için fidye kararı
     // anlamsız; sanığı bulunamayan yargı dilekçesi de öyle.
     if (_pendingPetition?.id == 'ransom' ||
@@ -882,8 +1079,13 @@ extension _SceneSave on _VillageSceneState {
     };
     final restored = _pendingPetition;
     if (restored != null) {
-      _pendingPetition = restored.spoken(_voice(_petitionAuthor,
-          seed: _petitionSeed(restored), extra: _petitionExtra));
+      _pendingPetition = restored.spoken(
+        _voice(
+          _petitionAuthor,
+          seed: _petitionSeed(restored),
+          extra: _petitionExtra,
+        ),
+      );
     } else {
       _petitionExtra = const {};
     }
@@ -892,14 +1094,30 @@ extension _SceneSave on _VillageSceneState {
     _petitionDeadline = _d(w['petitionDeadline']);
     _petitionModalOpen = _b(w['petitionModalOpen']) && _pendingPetition != null;
     _petitionForced = _b(w['petitionForced']) && _pendingPetition != null;
-    // Bekleyen düğün çifte bağlıdır (kaydedilmez) — yüklemede uygun bir çift
-    // yeniden bağla ki sahne/sinematik tam deneyimle çözülsün (yoksa jenerik).
-    _weddingCouple =
-        _pendingPetition?.id == 'villageWedding' ? _findCourtship() : null;
+    // Bekleyen düğünün çifti — kayıttaki İKİ İNDEKSTEN geri bağlanır, yeniden
+    // seçilmez. Biri artık yoksa (eski kayıt / bozuk indeks) çift kurulmaz ve
+    // dilekçe konusuz kalır → `_tickWedding` onu masadan kaldırır. Uydurma bir
+    // çift bağlamak, oyuncunun okuduğundan başkasını evlendirmek demekti.
+    _weddingCouple = null;
+    if (_pendingPetition?.id == 'villageWedding') {
+      final wc = w['weddingCouple'];
+      if (wc is List && wc.length == 2) {
+        final bi = _i(wc[0], -1), gi = _i(wc[1], -1);
+        if (bi >= 0 && bi < _villagers.length &&
+            gi >= 0 && gi < _villagers.length) {
+          _weddingCouple = (_villagers[bi], _villagers[gi]);
+        }
+      }
+    }
     for (final raw in (w['petitionFollowUps'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _petitionFollowUps
-          .add((id: j['id'] as String, fireAtSim: _d(j['fireAtSim'])));
+      final ai = _i(j['actor'], -1);
+      _petitionFollowUps.add((
+        id: j['id'] as String,
+        fireAtSim: _d(j['fireAtSim']),
+        actor: (ai >= 0 && ai < _villagers.length) ? _villagers[ai] : null,
+        actorName: (j['actorName'] as String?) ?? '',
+      ));
     }
     final cds = w['petitionCooldowns'];
     if (cds is Map) {
@@ -913,13 +1131,20 @@ extension _SceneSave on _VillageSceneState {
     _eventLabel = w['eventLabel'] as String?;
     for (final raw in (w['policyMoraleEffects'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _policyMoraleEffects
-          .add((untilSim: _d(j['untilSim']), amount: _d(j['amount'])));
+      _policyMoraleEffects.add((
+        untilSim: _d(j['untilSim']),
+        amount: _d(j['amount']),
+      ));
     }
     _migrationTimerSec = _d(w['migrationTimerSec']);
     _meteorShowerTimer = _d(w['meteorShowerTimer'], 4.0 * kGameDaySeconds);
 
     // 11) Türetilmiş yapıları yeniden kur.
+    // Reach kayda GİRMEZ — bina/görevden türer. Snap'lemezsek `_kSpanStart`ten
+    // başlayıp 1.2/sn tırmanır: oturmuş bir köyü açınca kamera dakikalarca
+    // kendiliğinden geri çekilir. Hedefe doğrudan otur (referans köy de aynısını
+    // yapar; hesap tek yerde: `_landExpansionTarget`).
+    _reachSpan = _landExpansionTarget;
     _applyPolicySideChannels();
     _pathContext.bumpVersion();
     _anchorSystem.rebuild(_buildings);
@@ -949,7 +1174,9 @@ extension _SceneSave on _VillageSceneState {
     _policies.inkDryUntilSim = _d(j['inkDryUntilSim']);
     _lawSeen
       ..clear()
-      ..addAll((j['lawSeen'] as List?)?.whereType<String>() ?? const <String>[]);
+      ..addAll(
+        (j['lawSeen'] as List?)?.whereType<String>() ?? const <String>[],
+      );
     // Eski kayıtta liste yok → ilk tarama sessiz geçsin (o köyün gündemi zaten
     // oluşmuş, hepsini "yeni" diye duyurmak yanlış olur).
     _lawSeeded = false;
@@ -966,10 +1193,10 @@ extension _SceneSave on _VillageSceneState {
     );
     b.isActive = _b(j['isActive']);
     b.userPaused = _b(j['userPaused']);
-    b.growthProgress = _d(j['growthProgress']);
     b.incomeTimer = _d(j['incomeTimer']);
     b.waterLevel = _d(j['waterLevel'], 1.0);
     b.occupants = _i(j['occupants']);
+    b.ownerSurname = (j['ownerSurname'] as String?) ?? '';
     b.eggTimer = _d(j['eggTimer']);
     b.honeyTimer = _d(j['honeyTimer']);
     b.fireFuel = _d(j['fireFuel'], 1.0);
@@ -977,8 +1204,9 @@ extension _SceneSave on _VillageSceneState {
   }
 
   VillagerEntity _villagerFromJson(Map<String, dynamic> j) {
-    final visual =
-        _visualFromJson(Map<String, dynamic>.from(j['visual'] as Map));
+    final visual = _visualFromJson(
+      Map<String, dynamic>.from(j['visual'] as Map),
+    );
     final v = VillagerEntity(
       type: _enumByName(VillagerType.values, j['type'], VillagerType.farmer),
       name: (j['name'] as String?) ?? 'Köylü',
@@ -995,13 +1223,16 @@ extension _SceneSave on _VillageSceneState {
     v.annivCount = _i(j['annivCount']);
     // Eski kayıtta yoksa: yetişkin/yaşlı zaten çağrısını bulmuş say (an tekrar
     // tetiklenmesin); çocuk/genç ise büyürken keşfedecek.
-    v.callingFound =
-        _b(j['callingFound'], v.ageDays >= kAdultStartDay);
+    v.callingFound = _b(j['callingFound'], v.ageDays >= kAdultStartDay);
+    // Eski kayıtta yoksa: genç+ zaten büyümüş say (an tekrar tetiklenmesin).
+    v.grewUpMoment = _b(j['grewUpMoment'], v.ageDays >= kYouthStartDay);
     v.gridX = _d(j['x']);
     v.gridY = _d(j['y']);
     v.renderX = v.gridX;
     v.renderY = v.gridY;
-    v.facingRight = _b(j['facingRight'], true);
+    // Kayıttan dönen köylü "zaten öyle duruyordu" — dönüş animasyonu oynamasın
+    // (yoksa yükleme anında köyün yarısı yerinde takla atar).
+    v.loco.snapFacing(_b(j['facingRight'], true));
     v.state = _enumByName(VillagerState.values, j['state'], VillagerState.idle);
     v.targetCol = _d(j['targetCol'], v.gridX);
     v.targetRow = _d(j['targetRow'], v.gridY);
@@ -1013,8 +1244,17 @@ extension _SceneSave on _VillageSceneState {
       final role = _enumByName(JobRole.values, jobRole, JobRole.none);
       if (role != JobRole.none) v.job = VillagerJob(role);
     }
+    // Oyuncunun elle kilitlediği iş. Anahtar YOKSA null kalır (otomatik havuz);
+    // `none` yazılıysa bilinçli "boş dursun" kararıdır ve korunur — bu yüzden
+    // burada `jobRole`'daki gibi none'ı eleyen bir kapı YOK.
+    final assigned = j['assignedRole'] as String?;
+    if (assigned != null) {
+      v.assignedRole = _enumByName(JobRole.values, assigned, JobRole.none);
+    }
     v.surname = (j['surname'] as String?) ?? '';
     v.injuryDays = _d(j['injuryDays']);
+    v.sickDays = _d(j['sickDays']);
+    v.laborDays = _d(j['laborDays']);
     v.disabled = _b(j['disabled']);
     v.feudKills = _i(j['feudKills']);
     v.crimeCount = _i(j['crimeCount']);
@@ -1023,13 +1263,15 @@ extension _SceneSave on _VillageSceneState {
         v.life.add(ChronicleEntry.fromJson(Map<String, dynamic>.from(e)));
       }
     }
-    v.fertilityDays =
-        j['fertilityDays'] == null ? double.nan : _d(j['fertilityDays']);
+    v.fertilityDays = j['fertilityDays'] == null
+        ? double.nan
+        : _d(j['fertilityDays']);
     v.birthCount = _i(j['birthCount']);
     v.isSage = _b(j['isSage']);
     v.mood = _d(j['mood']);
     v.energy = _d(j['energy'], 1.0);
     v.morale = _d(j['morale'], 0.6);
+    if (j['drives'] case final Map<String, dynamic> d) v.mind.restore(d);
     v.lowMoraleTime = _d(j['lowMoraleTime']);
     v.moraleReason = (j['moraleReason'] as String?) ?? 'huzurlu';
     // Eski kayıtta servet yok → yetişkinlere makul bir taban ver (0'da kalmasın).
@@ -1053,9 +1295,7 @@ extension _SceneSave on _VillageSceneState {
       ageDays: j['ageDays'] == null
           ? AnimalEntity.kAnimalAdultDay
           : _d(j['ageDays']),
-      lifespanDays: j['lifespanDays'] == null
-          ? null
-          : _d(j['lifespanDays']),
+      lifespanDays: j['lifespanDays'] == null ? null : _d(j['lifespanDays']),
     );
     a.hunger = _d(j['hunger']);
     a.milkProgress = _d(j['milkProgress']);
@@ -1072,7 +1312,7 @@ extension _SceneSave on _VillageSceneState {
       col: _i(j['col']),
       row: _i(j['row']),
     );
-    o.assigned = false; // builder yeniden talep eder
+    o.crew = 0; // geçici — builder yeniden talep eder
     o.completed = _b(j['completed']);
     o.progress = _d(j['progress']);
     return o;
@@ -1082,8 +1322,7 @@ extension _SceneSave on _VillageSceneState {
     final o = RoadOrder(
       col: _i(j['col']),
       row: _i(j['row']),
-      surface:
-          _enumByName(RoadSurface.values, j['surface'], RoadSurface.dirt),
+      surface: _enumByName(RoadSurface.values, j['surface'], RoadSurface.dirt),
     );
     o.assigned = false;
     o.completed = _b(j['completed']);
@@ -1127,21 +1366,21 @@ extension _SceneSave on _VillageSceneState {
   }
 
   DecorEntity _decorFromJson(Map<String, dynamic> j) => DecorEntity(
-        col: _i(j['col']),
-        row: _i(j['row']),
-        kind: _enumByName(DecorKind.values, j['kind'], DecorKind.daisy),
-        variant: _i(j['variant']),
-        jitterX: _d(j['jitterX']),
-        jitterY: _d(j['jitterY']),
-        swaySeed: _i(j['swaySeed']),
-      );
+    col: _i(j['col']),
+    row: _i(j['row']),
+    kind: _enumByName(DecorKind.values, j['kind'], DecorKind.daisy),
+    variant: _i(j['variant']),
+    jitterX: _d(j['jitterX']),
+    jitterY: _d(j['jitterY']),
+    swaySeed: _i(j['swaySeed']),
+  );
 
   Grave _graveFromJson(Map<String, dynamic> j) => Grave(
-        col: _d(j['col']),
-        row: _d(j['row']),
-        variant: _i(j['variant']),
-        name: (j['name'] as String?) ?? '',
-        jitterX: _d(j['jitterX']),
-        jitterY: _d(j['jitterY']),
-      );
+    col: _d(j['col']),
+    row: _d(j['row']),
+    variant: _i(j['variant']),
+    name: (j['name'] as String?) ?? '',
+    jitterX: _d(j['jitterX']),
+    jitterY: _d(j['jitterY']),
+  );
 }

@@ -1,10 +1,40 @@
 part of '../main.dart';
 
-/// Kişilik katmanı — köylülerin kişisel anları. Şimdilik: yıldönümü (yaş
-/// kilometre taşı). Köylü köyde belli bir süreyi doldurunca sıcak, küçük bir
-/// kutlama anı yaşar (bildirim + sevinç gövde dili). Cozy: spam yok, taramada
-/// en fazla bir kutlama; tamamen pozitif.
+/// Kişilik katmanı — köylülerin kişisel anları: yıldönümü (yaş kilometre taşı),
+/// çağrısını buldu (genç→yetişkin meslek keşfi, [_tickCallingMoments]), BÜYÜDÜ
+/// (çocuk→genç ilk iş), ve DOSTLUK (karşılıklı yüksek kanaat → can dostu).
+/// Köylü sıcak, küçük bir an yaşar (bildirim + gövde dili + komşu tepkisi).
+/// Cozy: spam yok, her taramada en fazla bir an; tamamen pozitif. Her an mevcut
+/// veriye bağlıdır (yaş/lifeStage/opinion) — bağlanmayan süs an EKLENMEZ.
 extension _ScenePersonality on _VillageSceneState {
+  // ── "Büyüdü" anı (çocuk→genç) ──────────────────────────────────────────────
+  static const _kGrewUpPool = [
+    '🌱 {ad} büyüdü. Artık köyün işlerine el atıyor, peşinde koştuğu oyun değil.',
+    '🌱 {ad} çocukluğu geride bıraktı. Sabah ilk kez kendi ayağıyla işe yürüdü.',
+    '🌱 {ad} serpildi. Yükü hafif de olsa artık o da taşıyor.',
+  ];
+  static const _kGrewUpChroniclePool = [
+    '{ad} büyüdü, köyün işine karıştı.',
+    '{ad} çocukluktan çıktı.',
+    '{ad} artık koşuşturmanın içinde.',
+  ];
+
+  // ── Dostluk anı (karşılıklı kanaat) ────────────────────────────────────────
+  static const _kBondPool = [
+    '🤝 {ad} ile {öteki} can dostu oldu. Artık işleri hep birlikte.',
+    '🤝 {ad} ve {öteki} birbirinin sırdaşı — köyün en sağlam dostluğu.',
+    '🤝 {ad-in} en yakını artık {öteki}. İkisini bir arada görmeye alıştı köy.',
+  ];
+  static const _kBondChroniclePool = [
+    '{ad} ile {öteki} can dostu oldu.',
+    '{ad} ve {öteki} arasında sağlam bir dostluk kuruldu.',
+    '{ad-in} yol arkadaşı {öteki} oldu.',
+  ];
+  /// Dostluk anı tarama periyodu (sn) — seyrek, sakin tempo.
+  static const double _kBondScanInterval = 5.0;
+  /// İki köylünün "can dostu" sayılması için karşılıklı kanaat eşiği ([-1,1]).
+  static const double _kBondThreshold = 0.55;
+
   // ── Kişisel anların sesi ([[lib/text/voice.dart]]) ────────────────────────
 
   static const _kAnnivPool = [
@@ -61,6 +91,12 @@ extension _ScenePersonality on _VillageSceneState {
     for (final i in order) {
       final v = _villagers[i];
       if (v.isDying) continue;
+      // BÜYÜDÜ — çocukluktan çıkan genç bir kez kutlanır (köyün işine ilk el).
+      if (!v.grewUpMoment && v.lifeStage != LifeStage.child) {
+        v.grewUpMoment = true;
+        _celebrateGrewUp(v);
+        return; // taramada tek an
+      }
       final years = (v.ageDays / _kAnnivYearDays).floor();
       if (years >= 1 && years > v.annivCount) {
         v.annivCount = years;
@@ -70,11 +106,18 @@ extension _ScenePersonality on _VillageSceneState {
     }
   }
 
+  /// Çocuk→genç büyüme anı — sıcak bildirim + filiz gövde dili + komşu tepkisi.
+  void _celebrateGrewUp(VillagerEntity v) {
+    v.feel(NpcEmotion.wonder, 3.5, moodDelta: 0.06);
+    _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.02);
+    final ctx = _voice(v, seed: _stableSeed('büyüdü${v.name}', _dayCount));
+    _showNotification(Voice.say(_kGrewUpPool, ctx));
+    _chronicle(Voice.say(_kGrewUpChroniclePool, ctx), icon: '🌱');
+  }
+
   /// Tek köylünün yıldönümü — sıcak bildirim + sevinç gövde dili + komşu tepkisi.
   void _celebrateAnniversary(VillagerEntity v, int years) {
     v.feel(NpcEmotion.joy, 4.0, moodDelta: 0.08);
-    v.chatBubbleIcon = '🎂';
-    v.chatBubbleTime = 4.0;
     _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.03);
     _showNotification(Voice.say(
         _kAnnivPool,
@@ -123,8 +166,6 @@ extension _ScenePersonality on _VillageSceneState {
       final pioneer = !_villagers.any((o) =>
           o != v && !o.isDying && o.hasProfession && o.type == v.type);
       v.feel(NpcEmotion.wonder, 4.0, moodDelta: pioneer ? 0.14 : 0.10);
-      v.chatBubbleIcon = '🌟';
-      v.chatBubbleTime = 4.5;
       _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.02);
       if (pioneer) {
         _showNotification(Voice.say(_kCallingPioneerPool, ctx));
@@ -138,13 +179,57 @@ extension _ScenePersonality on _VillageSceneState {
       // Çağrısına rağmen ailesinin yoluna çekildi — buruk büyüme. Kalıcı
       // kırgınlık moral formülünden gelir ('gönlü başka işte').
       v.feel(NpcEmotion.content, 3.5, moodDelta: -0.05);
-      v.chatBubbleIcon = '🌫️';
-      v.chatBubbleTime = 4.0;
       _showNotification(Voice.say(_kCallingMissedPool, ctx));
       _chronicle(Voice.say(_kCallingMissedChroniclePool, ctx), icon: '🌫️');
     }
     // Çağrı kanalı — bu köylünün mesleği bir zanaat taşıyorsa ve köy henüz
     // bilmiyorsa, o zanaat şimdi köye doğar (kutlama bildirimi buradan gelir).
     _discoverCallingCraft(v, _CraftSource.calling);
+  }
+
+  /// DOSTLUK ANI — iki köylü birbirini yeterince sevince (karşılıklı kanaat
+  /// [_kBondThreshold] üstü) "can dostu" olur ve bir kez kutlanır. Kanaat
+  /// hafızadan gelir ([VillagerMemory.opinion]) — dedikodu/tanıklık/birlikte
+  /// vakit değiştirir; yani bu an köyün gerçek ilişki dokusundan doğar, uydurma
+  /// değil. Çift bazında dedupe: [_bondSeen] (kozmetik → kaydedilmez).
+  void _tickFriendshipMoments(double dt) {
+    _bondScan += dt;
+    if (_bondScan < _kBondScanInterval) return;
+    _bondScan = 0;
+    if (_villagers.length < 2) return;
+    // Karışık gez — hep aynı çift öne çıkmasın.
+    final order = List<int>.generate(_villagers.length, (i) => i)..shuffle(_rng);
+    for (final i in order) {
+      final v = _villagers[i];
+      if (v.isDying || v.lifeStage == LifeStage.child) continue;
+      for (final e in v.memory.opinion.entries) {
+        if (e.value < _kBondThreshold) continue;
+        final o = e.key;
+        if (o is! VillagerEntity || o.isDying || o.lifeStage == LifeStage.child) {
+          continue;
+        }
+        if (o.memory.opinionOf(v) < _kBondThreshold) continue; // KARŞILIKLI şart
+        final key = _bondKey(v, o);
+        if (_bondSeen.contains(key)) continue;
+        _bondSeen.add(key);
+        _celebrateBond(v, o);
+        return; // taramada tek an
+      }
+    }
+  }
+
+  /// İki köylünün sırasız çift anahtarı — kişilik tohumundan (kararlı).
+  String _bondKey(VillagerEntity a, VillagerEntity b) {
+    final x = a.personalitySeed, y = b.personalitySeed;
+    return x <= y ? '$x:$y' : '$y:$x';
+  }
+
+  void _celebrateBond(VillagerEntity a, VillagerEntity b) {
+    a.feel(NpcEmotion.love, 3.5, moodDelta: 0.06);
+    b.feel(NpcEmotion.love, 3.5, moodDelta: 0.06);
+    final ctx = _voice(a,
+        other: b, seed: _stableSeed('dost${a.name}${b.name}', _dayCount));
+    _showNotification(Voice.say(_kBondPool, ctx));
+    _chronicle(Voice.say(_kBondChroniclePool, ctx), icon: '🤝');
   }
 }

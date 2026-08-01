@@ -116,29 +116,6 @@ const Cutscene _reelFire = Cutscene([
   ),
 ]);
 
-/// Kuşbakışı — izometrik yüksek açı, köy büyüdükçe yoğunlaşır.
-const Cutscene _reelAerialSmall = Cutscene([
-  CutsceneShot(
-    bg: CutsceneBg.aerial,
-    aerialGrowth: 0.30,
-    framing: CutsceneFraming.wide,
-    zoomFrom: 1.0,
-    zoomTo: 1.08,
-    lines: [CutsceneLine('Ocaklar çoğaldı. Patika, gide gele yola dönüştü.')],
-  ),
-]);
-
-const Cutscene _reelAerialBig = Cutscene([
-  CutsceneShot(
-    bg: CutsceneBg.aerial,
-    aerialGrowth: 1.0,
-    framing: CutsceneFraming.wide,
-    zoomFrom: 1.0,
-    zoomTo: 1.12,
-    lines: [CutsceneLine('Ambarlar kışa hazır. İlk gelen çocuklar şimdi kendi çocuklarını taşıyor.')],
-  ),
-]);
-
 /// POV — köyün ortak gözü: halkanın içinden bakış, göz kapağı açılışı.
 const Cutscene _reelPov = Cutscene([
   CutsceneShot(
@@ -170,8 +147,6 @@ List<Frame> buildFrames() => const [
       Frame('imperial_2', 'komutan konuşurken (diğerleri kısık)', _reelImperial, 7.5),
       Frame('fire_1', 'gece ateşi: alev + közler', _reelFire, 3.0),
       Frame('fire_2', 'ateş ışığı aktörlerin üstünde', _reelFire, 7.0),
-      Frame('aerial_1', 'KUŞBAKIŞI: küçük köy', _reelAerialSmall, 3.0),
-      Frame('aerial_2', 'KUŞBAKIŞI: büyümüş köy', _reelAerialBig, 5.0),
       Frame('pov_0', 'POV: göz kapağı açılırken', _reelPov, 0.16),
       Frame('pov_1', 'POV: halkanın içinden (komşu omuzları)', _reelPov, 3.5),
     ];

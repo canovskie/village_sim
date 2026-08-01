@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
@@ -8,6 +10,7 @@ import '../rendering/portrait_renderer.dart';
 import '../systems/estate_system.dart' show EstateMoodTier;
 import '../systems/house_system.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 
 /// Bir köylünün defter satırı için önceden hesaplanmış görünüm modeli — barınma
 /// bilgisi sahnede (kBuildingMeta erişimiyle) türetilip buraya taşınır, panel
@@ -141,6 +144,8 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
       onTap: () => setState(() => _tab = idx),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
+        alignment: Alignment.center,
+        constraints: _tapFloor(context),
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
         decoration: BoxDecoration(
           color: on ? AppUi.accent.withValues(alpha: 0.16) : AppUi.surface0,
@@ -158,6 +163,22 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
       ),
     );
   }
+
+  /// Telefonda 44dp dokunma tabanı; masaüstünde sınır dayatmaz.
+  ///
+  /// GENİŞLİK de dahil: "Ad" gibi kısa etiketli sıralama chip'i 40dp'de
+  /// kalıyordu — yükseklik tabanı tek başına yetmiyor, dar bir hedefi parmak
+  /// yine ıskalıyor.
+  BoxConstraints _tapFloor(BuildContext context) => useCompactGameUi(context)
+      ? const BoxConstraints(minHeight: MobileUi.tap, minWidth: MobileUi.tap)
+      : const BoxConstraints();
+
+  /// Telefonda ikon tabanı. [MobileTextScaler] yalnız YAZIYA uygulanır —
+  /// Icon widget'ı MediaQuery ölçeğini almaz (applyTextScaling varsayılanı
+  /// false), yani 8-9px'lik künye ikonları telefonda olduğu gibi çiziliyor ve
+  /// yanındaki 11px'lik yazının yanında lekeye dönüşüyordu.
+  double _iconSize(BuildContext context, double base) =>
+      useCompactGameUi(context) ? math.max(base, 11) : base;
 
   // ── KPI özet şeridi ─────────────────────────────────────────────────────────
   Widget _kpiStrip() {
@@ -258,6 +279,10 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
       child: GestureDetector(
         onTap: () => setState(() => _sort = key),
         child: Container(
+          // Telefonda dokunma hedefi tabanı (bkz. ui/mobile_ui.dart) — chip
+          // 28dp yüksekliğindeydi, parmakla ıskalanıyordu.
+          alignment: Alignment.center,
+          constraints: _tapFloor(context),
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
           decoration: BoxDecoration(
             color: on ? AppUi.accent.withValues(alpha: 0.18) : AppUi.surface0,
@@ -285,6 +310,7 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
     return GestureDetector(
       onTap: widget.onSelect == null ? null : () => widget.onSelect!(v),
       child: Container(
+        constraints: _tapFloor(context),
         padding: const EdgeInsets.fromLTRB(9, 8, 11, 8),
         decoration: BoxDecoration(
           color: AppUi.surface0,
@@ -592,7 +618,7 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         if (icon != null) ...[
-          GameIcon(icon, size: 9, color: color),
+          GameIcon(icon, size: _iconSize(context, 9), color: color),
           const SizedBox(width: 4),
         ],
         Text(label,
@@ -605,7 +631,8 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
   Widget _thinBar(double value, Color color, {GameIconData? icon}) {
     return Row(mainAxisSize: MainAxisSize.min, children: [
       if (icon != null) ...[
-        GameIcon(icon, size: 8, color: color.withValues(alpha: 0.8)),
+        GameIcon(icon,
+            size: _iconSize(context, 8), color: color.withValues(alpha: 0.8)),
         const SizedBox(width: 4),
       ],
       SizedBox(

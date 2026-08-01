@@ -46,9 +46,6 @@ extension _SceneWork on _VillageSceneState {
   /// Çobanın sürüye azami uzaklığı — bundan uzaklaşırsa geri döner.
   static const double _kFlockRange = 3.0;
 
-  /// Değirmende çalışan değirmenci varken balya verimi çarpanı.
-  static const double _kMillerYieldBonus = 1.25;
-
   /// Muhafızın nöbet noktaları — köyün kıymetli/kalabalık yerleri (suçun hedef
   /// aldığı yerler). Muhafız bunlar arasında dolaşır; suç çıkarsa üstüne koşar
   /// (kovalama scene_crime'da: `_guardResponse`).
@@ -79,7 +76,12 @@ extension _SceneWork on _VillageSceneState {
     // Üstlenilmiş iş her zaman "yapılacak iş"tir (site'ta çakılı kalsın, rutin
     // errand atamasın). Gündüz/gece ayrımı iş yürütücüsünde (uyku askıya alır).
     if (v.hasActiveJob) return true;
-    if (_cycle.dayLight <= 0.35) return false; // iş gündüz
+    // PAYDOS — köyün hâli mesaiyi kestiyse (bkz. world_pressure.workDrive) bu
+    // köylünün şu an işi YOKTUR; rutin devralır. Tek kapı: paydosu yalnız
+    // _applyPressure verir, burası sadece okur.
+    if (v.workPause > 0) return false;
+    // İş gündüz — tek istisna gece nöbetçisi (bkz. WorldPressure.patrolDensity).
+    if (_cycle.dayLight <= 0.35 && !v.nightDuty) return false;
     switch (v.type) {
       case VillagerType.shepherd:
         // Sürü varsa çobanın işi HEP vardır (acıkanı besler ya da başında bekler).
@@ -144,13 +146,21 @@ extension _SceneWork on _VillageSceneState {
     _workScan += dt;
     if (_workScan < _kWorkScan) return;
     _workScan = 0;
-    if (_cycle.dayLight <= 0.35) return; // gece: uyku/rutin sistemi devralır
+    // Gece: uyku/rutin sistemi devralır — nöbetçiler HARİÇ. Gece bekçisi
+    // fermanı altında sokak boşalırken devriye postunda dönmeye devam eder.
+    final night = _cycle.dayLight <= 0.35;
 
     for (final v in _villagers) {
+      if (night && !v.nightDuty) continue;
+      // SAHİPLİK — akıl bu köylüyü işe verdi mi? Vermediyse dokunma. Eskiden
+      // burası "boştaysa kap" diyordu ve aynı köylüyü ateş/sohbet/saz
+      // sistemleriyle yarışa sokuyordu (bkz. scene_mind).
+      if (!v.mind.owns(IntentKind.work)) continue;
       // Üstlenilmiş bina-işi olan köylüyü civil döngü SÜRMEZ — onu _tickJobs
       // yürütür (yoksa çoban-tipli bir inşaatçı hem güder hem inşa eder → çift
       // goTo çakışması).
       if (v.hasActiveJob) continue;
+      if (v.workPause > 0) continue; // paydos — köyün hâli mesaiyi kesti
       if (!_hasJobLoop(v)) continue;
       if (v.isInsideBuilding ||
           v.isSleeping ||
@@ -160,17 +170,21 @@ extension _SceneWork on _VillageSceneState {
           v.activity != VillagerActivity.none) {
         continue;
       }
+      // Gövde dilini her taramada sıfırla — post'taki dal (aşağıda) yeniden
+      // kurar, yürüyen/işsiz kalanda temizlenmiş kalır. Tarama 0.6s'de bir
+      // döner ama duruş yapışkan bir alan; iki tarama arası sabit görünür.
+      _setWorkPose(v, null);
       switch (v.type) {
         case VillagerType.shepherd:
           _workShepherd(v);
         case VillagerType.hunter:
           _workHunter(v);
         case VillagerType.miller:
-          _workAtPost(v, BuildingType.mill, '🌾');
+          _workAtPost(v, BuildingType.mill);
         case VillagerType.innkeeper:
-          _workHost(v, BuildingType.tavern, '🍺', NpcEmotion.joy);
+          _workHost(v, BuildingType.tavern, NpcEmotion.joy);
         case VillagerType.priest:
-          _workHost(v, BuildingType.church, '🕯️', NpcEmotion.content);
+          _workHost(v, BuildingType.church, NpcEmotion.content);
         case VillagerType.guard:
           _workGuard(v);
         default:
@@ -236,10 +250,9 @@ extension _SceneWork on _VillageSceneState {
         // Bakım: hayvanı otlağa yönlendirir → açlığı düşer, ikisi de rahatlar.
         hungry.hunger = (hungry.hunger - _kTendRelief).clamp(0.0, 1.0);
         v.feel(NpcEmotion.content, 3.0, moodDelta: 0.03);
-        v.chatBubbleIcon = '🌿';
-        v.chatBubbleTime = 2.5;
         v.glanceAround(duration: 1.6);
         v.lookToward(hungry.gridX, hungry.gridY);
+        _setWorkPose(v, ActPose.stoop); // eğilip hayvana bakar
         v.workCooldown = _kTendCooldown;
       } else if (!_enRouteTo(v, hungry.gridX, hungry.gridY)) {
         v.goTo(hungry.gridX, hungry.gridY, 1.0);
@@ -301,9 +314,8 @@ extension _SceneWork on _VillageSceneState {
       // Pusu → av. Kaynak yaratır (et), ağaca DOKUNMAZ (o oduncunun işi).
       _stockpile.food += _kHuntFood;
       v.feel(NpcEmotion.joy, 3.5, moodDelta: 0.05);
-      v.chatBubbleIcon = '🏹';
-      v.chatBubbleTime = 3.0;
       v.glanceAround(duration: _kHuntStalk);
+      _setWorkPose(v, ActPose.stoop); // pusuda çömelir
       v.workCooldown = _kHuntCooldown;
     } else {
       v.goTo(spot.$1, spot.$2, _kHuntStalk);
@@ -334,7 +346,7 @@ extension _SceneWork on _VillageSceneState {
   }
 
   // ── DEĞİRMENCİ — değirmenin başında durur (verim bonusu buradan) ──────────
-  void _workAtPost(VillagerEntity v, BuildingType type, String icon) {
+  void _workAtPost(VillagerEntity v, BuildingType type) {
     final b = _nearestOf(type, v);
     if (b == null) return;
     final spot = _standSpotFor(b, v);
@@ -343,9 +355,8 @@ extension _SceneWork on _VillageSceneState {
     if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten yolda
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       // İşinin başında — oyalanır (bonus _millerYieldMul'dan okunur).
+      _setWorkPose(v, ActPose.labor); // taş çevirir / harman döver: sürekli işlik
       if (v.workCooldown <= 0) {
-        v.chatBubbleIcon = icon;
-        v.chatBubbleTime = 2.5;
         v.feel(NpcEmotion.content, 2.5, moodDelta: 0.02);
         v.workCooldown = _kAuraCooldown;
       }
@@ -357,20 +368,42 @@ extension _SceneWork on _VillageSceneState {
     }
   }
 
-  /// Değirmende çalışan bir değirmenci varsa balya verimi çarpanı — yoksa 1.0.
+  /// Başında değirmenci DURAN değirmenlerin balya verimi çarpanı — yoksa 1.0.
   /// scene_tick bunu baleYieldMultiplier'a çarpar (carrier_system'e dokunmadan).
+  ///
+  /// Yan etki: her değirmenin [BuildingEntity.staffed] bayrağını tazeler — panel
+  /// "değirmenci başında mı" sorusunu buradan okur. Eskiden İLK bulduğu
+  /// değirmenciyle dönüyordu: ikinci değirmene ikinci değirmenci koymak hiçbir
+  /// şey katmıyordu. Artık her donanımlı değirmen katkı verir, ikincisi yarım
+  /// (aynı harman iki kez bereketlenmez).
   double _millerYieldMul() {
-    for (final v in _villagers) {
-      if (v.type != VillagerType.miller || v.isDying || v.isSleeping) continue;
-      final b = _nearestOf(BuildingType.mill, v);
-      if (b == null) continue;
-      final spot = _standSpotFor(b, v);
-      if (spot == null) continue;
-      if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
-        return _kMillerYieldBonus;
+    var staffedCount = 0;
+    for (final b in _buildings) {
+      if (b.type != BuildingType.mill) continue;
+      var staffed = false;
+      if (!b.userPaused) {
+        for (final v in _villagers) {
+          if (v.type != VillagerType.miller || v.isDying || v.isSleeping) {
+            continue;
+          }
+          if (_nearestOf(BuildingType.mill, v) != b) continue;
+          final spot = _standSpotFor(b, v);
+          if (spot == null) continue;
+          if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
+            staffed = true;
+            break;
+          }
+        }
       }
+      b.staffed = staffed;
+      if (staffed) staffedCount++;
     }
-    return 1.0;
+    // 1. değirmenci tam, 2. yarım, 3. çeyrek… (kMillBonusMaxCount'la sınırlı).
+    var mul = 1.0;
+    for (var i = 0; i < staffedCount && i < kMillBonusMaxCount; i++) {
+      mul += kMillerYieldBonus / (1 << i);
+    }
+    return mul;
   }
 
   // ── MUHAFIZ — nöbet noktaları arasında devriye gezer ──────────────────────
@@ -389,10 +422,8 @@ extension _SceneWork on _VillageSceneState {
 
     if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten posta yürüyor
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
-      // Nöbette — çevreyi tarar (gövde dili: sürekli bakınma).
+      // Nöbette — çevreyi tarar (gövde dili: sürekli bakınma; baş-üstü ikon YOK).
       if (v.workCooldown <= 0) {
-        v.chatBubbleIcon = '🛡️';
-        v.chatBubbleTime = 2.0;
         v.workCooldown = _kAuraCooldown;
       }
       v.glanceAround(duration: 2.0);
@@ -402,7 +433,7 @@ extension _SceneWork on _VillageSceneState {
   }
 
   // ── HANCI / RAHİP — işyerinde durur, çevresine iyi gelir ──────────────────
-  void _workHost(VillagerEntity v, BuildingType type, String icon, NpcEmotion e) {
+  void _workHost(VillagerEntity v, BuildingType type, NpcEmotion e) {
     final b = _nearestOf(type, v);
     if (b == null) return;
     final spot = _standSpotFor(b, v);
@@ -411,9 +442,7 @@ extension _SceneWork on _VillageSceneState {
     if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten yolda
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       if (v.workCooldown <= 0) {
-        // Ağırlar / dua eder — yakındakiler bunu hisseder.
-        v.chatBubbleIcon = icon;
-        v.chatBubbleTime = 3.0;
+        // Ağırlar / dua eder — yakındakiler bunu hisseder (gövde dili + aura).
         v.feel(e, 3.0, moodDelta: 0.03);
         _reactNearby(v.gridX, v.gridY, _kAuraRadius, e, 2.5, moodDelta: 0.02);
         v.workCooldown = _kAuraCooldown;
@@ -429,8 +458,8 @@ extension _SceneWork on _VillageSceneState {
   /// Köylüye en yakın, verilen türde bina — yoksa null.
   /// NOT: `_buildings` yalnız TAMAMLANMIŞ binaları tutar (inşaat halindekiler
   /// BuildOrder'da yaşar) → ayrıca "bitti mi" filtresi gerekmez.
-  /// (`BuildingEntity.growthProgress` inşaat değil, BELEDİYE nüfus sayacıdır —
-  /// onunla filtrelemek tüm binaları eler; bir kez bu tuzağa düşüldü.)
+  /// (Bir bina alanıyla "bitti mi" filtrelemeye kalkma — tüm binaları eler;
+  /// bir kez bu tuzağa düşüldü.)
   BuildingEntity? _nearestOf(BuildingType type, VillagerEntity v) {
     BuildingEntity? best;
     double bestD = 1e9;

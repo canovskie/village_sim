@@ -182,6 +182,15 @@ class HouseSystem {
     }
   }
 
+  /// Nüfuz KIRMA — [nudge] yalnız nüfuz biriktirir (kararların ödülü); oyuncu
+  /// eylemleri (ceza/el koyma/sürgün/entrika) nüfuzu kırabilmeli. Taban
+  /// ([_swayFloor]) altına inmez: hane söner ama yok sayılmaz.
+  void drainSway(String surname, double amount) {
+    final h = _states[surname];
+    if (h == null || amount <= 0) return;
+    h.sway = (h.sway - amount).clamp(_swayFloor, double.infinity);
+  }
+
   /// Zaman geçişi — hane moralleri üye moraline (yoksa tabana) süzülür; nüfuz
   /// tabana çok yavaş erir (üstel süzülme, sway sönmez).
   void tick(double dt, double gameDaySeconds) {

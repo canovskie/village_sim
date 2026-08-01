@@ -33,6 +33,28 @@ class _ActiveCrime {
   /// yakalanma bundan önce olursa suç ÖNLENMİŞ sayılır.
   bool done = false;
 
+  // ── HIRSIZLIK: eve gir → çuvalla çık → göm (Faz 4) ────────────────────────
+
+  /// Fail binanın İÇİNDE mi ve içeride kalan süre (sn).
+  ///
+  /// İçerideyken sprite yoktur: ne oyuncu dokunabilir ne muhafız yakalayabilir.
+  /// Sahnenin gerilimi tam burada — kapı kapanır, köy bekler. Yakalama penceresi
+  /// kaybolmaz, ÇUVALLA ÇIKIŞA kayar (yüklü hırsız yavaştır: `propSpeedFactor`).
+  bool inside = false;
+  double insideLeft = 0;
+
+  /// Çuvalın içindekiler — gömülürse zulaya geçer, yakalanırsa köye döner.
+  /// Çalınan mal buharlaşmaz; yeri değişir.
+  ResourceKind? lootKind;
+  int lootAmount = 0;
+
+  /// Zulanın gömüleceği nokta — kaçışın hedefi.
+  double bx = 0, by = 0;
+  bool buried = false;
+
+  /// Gömme işinin ilerlemesi (sn) — eğilip toprağı eşeleme süresi.
+  double buryProgress = 0;
+
   _ActiveCrime({
     required this.culprit,
     required this.kind,
@@ -62,8 +84,8 @@ class _ActiveCrime {
 extension _SceneCrime on _VillageSceneState {
   /// Suç taraması (sn) — sık taranır ama çıkış olasılığı düşük → nadir.
   static const double _kCrimePoll = 5.0;
-  /// Taban suç olasılığı (poll başına, tek aday için).
-  static const double _kCrimeBase = 0.045;
+  // NOT: taban suç olasılığı (`_kCrimeBase`) KALDIRILDI — suç artık poll başına
+  // zar atışıyla doğmuyor. Yeltenme eşiği hakemde: scene_mind `_kCrimeBidFloor`.
   /// Hedefe sokulma için azami süre — bu kadarda varamazsa vazgeçer (takılma
   /// güvenliği: ulaşılamayan hedefte suç sonsuza kadar askıda kalmasın).
   static const double _kProwlTimeout = 40.0;
@@ -89,6 +111,17 @@ extension _SceneCrime on _VillageSceneState {
   static const int _kSuspicionThreshold = 3;
   /// Ağır suç için gereken asgari sebep yükü — altındaysa yalnız hafif suç.
   static const double _kGraveMotive = 0.6;
+
+  // ── Kürek cezası (zindan emeği) ────────────────────────────────────────────
+  /// Kürek hükmünün süresi (oyun günü) — mahkûm bu kadar gün ocakta.
+  static const double _kLaborSentenceDays = 3.0;
+  /// Mahkûmun günlük taş üretimi — köy sert hükmün karşılığını yavaş ama
+  /// süregelen bir akışla görür (eski anlık +14 yerine gün gün birikir).
+  static const double _kLaborStonePerDay = 6.0;
+  /// Hükmün ilk günü peşin verilen taş — "emeğin ilk hasadı" (jest, akış ayrı).
+  static const int _kLaborUpfrontStone = 4;
+  /// Mahkûmun ocağa "vardım" sayılma mesafesi (tile).
+  static const double _kLaborAtQuarry = 1.6;
 
   // ── Köyün sesi ([[lib/text/voice.dart]]) — suç metin havuzları ─────────────
   // Suç ANINDA fail İSİMLE ifşa edilmez; köy yalnız bir kıpırtı sezer. İsim
@@ -133,6 +166,16 @@ extension _SceneCrime on _VillageSceneState {
     '{ad} meydanda cezalandırıldı.',
     'Köy {ad-i} teşhir etti; asayiş sağlandı.',
     '{ad-in} cezası halkın önünde kesildi.',
+  ];
+  static const _kPenancePool = [
+    '🙏 {ad} günahını meydanda söyledi. Sesi titredi, kimse bölmedi.',
+    '🙏 {ad} tövbe etti. Köy dinledi, sonra yavaşça dağıldı.',
+    '🙏 Hüküm: tövbe. {ad} bedelini utançla ödedi.',
+  ];
+  static const _kPenanceAnnalPool = [
+    '{ad} meydanda tövbe etti; ceza kesilmedi.',
+    'Köy {ad-in} tövbesini dinledi.',
+    '{ad-in} günahı meydanda söylendi; defter orada kapandı.',
   ];
   static const _kRescuedPool = [
     '🕊️ {öteki} kurtarıldı. Titriyor ama ayakta.',
@@ -181,6 +224,11 @@ extension _SceneCrime on _VillageSceneState {
     if (_crimePollSec > 0) return;
     _crimePollSec = _kCrimePoll;
     if (!_hasFire || _villagers.length < 5) return;
+    // KADEMELİ UYANIŞ (bkz. scene_flow) — suç en son uyanır: çalınacak bir
+    // şeyin, kıskanılacak bir hanenin olması gerekir. Kuruluş sürerken köyde
+    // hırsızlık çıkması oyuncuya "burada bir şey ters" dedirtiyordu; oysa
+    // henüz ortada köy yoktu.
+    if (!_governanceAwake) return;
 
     // Test yatağı: olasılık kapısını atla, hemen yeni bir suç kur (bütün
     // evreler + muhafız tepkisi gözlenebilsin). Normal oyunda ASLA çalışmaz.
@@ -198,7 +246,10 @@ extension _SceneCrime on _VillageSceneState {
       return;
     }
 
-    _maybeStartCrime();
+    // NOT: normal oyunda suç BURADAN doğmaz. Suça yeltenme artık köylünün
+    // dürtülerinden doğan bir TEKLİF ([_bidCrime], scene_mind) — "5 saniyede
+    // bir köye zar at" değil, "aç ve kırgın olan çalmayı gerçekten ister".
+    // Bu blok yalnız test yatağının (kCaptureCrime) zorlama yolunu tutar.
   }
 
   /// Test yatağı: bekleyen modal'ları oyuncu yerine karara bağlar. Yargı
@@ -283,22 +334,28 @@ extension _SceneCrime on _VillageSceneState {
   }
 
   /// Köyün "çaresizlik" çarpanı — suçu besleyen köy-geneli koşullar.
+  ///
+  /// Dünya-geneli etkenler (açlık, huzursuzluk, mülkiyet rejimi, nöbet yasası)
+  /// artık TEK KAPIDAN, [WorldPressure] üstünden girer. Eskiden `_wasStarving`,
+  /// `_unrest` ve `crime.watch` burada ayrı ayrı toplanıyordu; aynı yasa hem
+  /// bayraktan hem tablodan sayıldığı için caydırıcılık iki kez uygulanıyordu.
+  /// Burada kalanlar yalnız suça ÖZGÜ, yerel etkenler.
   double _crimePressure() {
     double g = 1.0;
-    if (_wasStarving) g += 0.8;                 // açlık en büyük itki
     if (_stats.morale < 0.4) g += 0.5;          // köy morali dipte
     if (_cycle.dayLight < 0.5) g += 0.4;        // alacakaranlık cesaret verir
     // Bağışlanan suçlular cesaret verir — merhametin politik bedeli.
     g += (_crimePardons * 0.12).clamp(0.0, 0.5);
-    // Rejim huzursuzluğu suçu besler: Açık Pazar'da açılan makas, Mühürlü
-    // El'de biriken öfke sokağa böyle iner (bkz. scene_regime).
-    g += (_unrest * 0.7).clamp(0.0, 0.7);
+    // İMAN: cemaat gözü + günah korkusu suç baskısını kısar (crimeDamp < 1).
+    g *= _faithEffect.crimeDamp;
+
+    // KÖYÜN HÂLİ — sebep (açlık/huzursuzluk/mülk) ve caydırıcılık (nöbet/ceza).
+    g *= _pressure.crimeUrge;
+    g /= _pressure.crimeRisk;
 
     // CAYDIRICILIK — devriyedeki her muhafız suçu belirgin biçimde kısar.
     final guards = _awakeGuards().length;
     g /= 1.0 + guards * 0.45;
-    // Gece nöbeti yasası yürürlükteyse köy daha zor suç kaldırır.
-    if (_villageMemory.contains('crime.watch')) g *= 0.55;
     return g.clamp(0.1, 3.0);
   }
 
@@ -381,28 +438,10 @@ extension _SceneCrime on _VillageSceneState {
   // SUÇ SEÇİMİ — kim, neyi, nerede
   // ══════════════════════════════════════════════════════════════════════════
 
-  void _maybeStartCrime() {
-    final glob = _crimePressure();
-
-    final eligible = <VillagerEntity>[];
-    final crim = <VillagerEntity, double>{};
-    for (final v in _villagers) {
-      if (!_crimeEligible(v)) continue;
-      eligible.add(v);
-      crim[v] = _criminality(v);
-    }
-    if (eligible.isEmpty) return;
-
-    final culprit = _weightedPick(eligible, crim);
-    if (culprit == null) return;
-
-    final p = crim[culprit]! * glob * _kCrimeBase;
-    if (_rng.nextDouble() >= p.clamp(0.0, 0.5)) return;
-
-    final plan = _planCrime(culprit);
-    if (plan == null) return; // uygun hedef yok — bu turda suç yok
-    _beginCrime(plan);
-  }
+  // NOT: eski `_maybeStartCrime` (köy geneli zar atışı) SİLİNDİ. Fail seçimi
+  // artık hakemin işi: her köylü kendi dürtüleriyle teklif verir, en çaresiz
+  // olan kazanır (bkz. scene_mind `_bidCrime`). `_planCrime`/`_beginCrime`
+  // aynen duruyor — yürütme değişmedi, KİMİN ve NEDEN yeltendiği değişti.
 
   /// Faile uygun bir suç + hedef seçer. Ağır suçlar yalnız SEBEP varsa havuza
   /// girer; her suç kendi hedefini (bina/kurban/hayvan) bulamazsa elenir.
@@ -631,7 +670,12 @@ extension _SceneCrime on _VillageSceneState {
     final v = c.culprit;
 
     // Fail bir şekilde sahneden düştüyse (öldü/uyudu/taşındı) suç düşer.
-    if (v.isDying || v.isSleeping || v.isInsideBuilding) {
+    //
+    // `isInsideBuilding` ARTIK tek başına "sahneden düştü" demek değil: Faz 4'te
+    // hırsız soyduğu binaya BİLEREK girer ve o sırada görünmez olur (`c.inside`).
+    // Bu ayrım olmadan fail kapıdan girdiği karede suç iptal ediliyordu — sahne
+    // "içeri girdi" ânında sessizce ölüyordu.
+    if (v.isDying || v.isSleeping || (v.isInsideBuilding && !c.inside)) {
       _abortCrime();
       return;
     }
@@ -648,6 +692,12 @@ extension _SceneCrime on _VillageSceneState {
       _CrimePhase.act => VillagerActivity.committing,
       _CrimePhase.flee => VillagerActivity.fleeing,
     };
+    // ÇUVAL da aynı sözleşmeye tabi: mal alındıysa ve henüz gömülmediyse yük
+    // failin elindedir. Başka sistemler (scene_work/scene_jobs) prop'u
+    // temizlemeye çalışır; tek doğruluk burasıdır.
+    if (c.kind == CrimeKind.theft && c.lootAmount > 0 && !c.buried) {
+      v.prop = PropKind.sack;
+    }
     final vic = c.victim;
     if (c.kind == CrimeKind.abduction &&
         !c.done &&
@@ -678,8 +728,13 @@ extension _SceneCrime on _VillageSceneState {
             _abortCrime();
             return;
           }
-          vic.gridX = v.gridX + (v.facingRight ? -0.55 : 0.55);
-          vic.gridY = v.gridY + 0.25;
+          // Kurbanı failin yanına LERP'le (hard-set değil) — fail yön değiştirince
+          // ±0.55 işareti dönüp kurban bir yandan öbürüne ışınlanıyordu.
+          final tvx = v.gridX + (v.facingRight ? -0.55 : 0.55);
+          final tvy = v.gridY + 0.25;
+          final k = (dt * 6.0).clamp(0.0, 1.0);
+          vic.gridX += (tvx - vic.gridX) * k;
+          vic.gridY += (tvy - vic.gridY) * k;
           vic.targetCol = vic.gridX;
           vic.targetRow = vic.gridY;
           vic.state = VillagerState.idle;
@@ -687,12 +742,34 @@ extension _SceneCrime on _VillageSceneState {
           if (_wdist(v.gridX, v.gridY, c.tx, c.ty) <= 1.2 || c.phaseLeft <= 0) {
             _completeCrime(c);
           }
+        } else if (c.inside) {
+          // İÇERİDE — köy kapıyı izliyor. Süre dolunca çuvalla çıkar.
+          c.insideLeft -= dt;
+          v.isInsideBuilding = true; // sahip BURASI: uyanma/rutin geri açmasın
+          if (c.insideLeft <= 0 || c.phaseLeft <= 0) _emergeWithLoot(c);
         } else if (c.phaseLeft <= 0) {
           _completeCrime(c);
         }
 
       case _CrimePhase.flee:
+        // HIRSIZLIK — kaçış bir yere doğrudur: zulanın gömüleceği nokta.
+        // Varınca eğilip gömer; mal buharlaşmaz, toprağa geçer.
+        if (c.kind == CrimeKind.theft && !c.buried && c.lootAmount > 0) {
+          if (_wdist(v.gridX, v.gridY, c.bx, c.by) <= 1.2) {
+            v.state = VillagerState.idle;
+            v.targetCol = v.gridX;
+            v.targetRow = v.gridY;
+            v.actPose = ActPose.stoop;
+            c.buryProgress += dt;
+            v.idleTimer = _kBurySeconds - c.buryProgress + 0.2;
+            if (c.buryProgress >= _kBurySeconds) _buryLoot(c);
+          } else if (!_enRouteTo(v, c.bx, c.by)) {
+            v.goTo(c.bx, c.by, 0.5);
+          }
+        }
         if (c.phaseLeft <= 0) {
+          // Gömmeye yetişemediyse çuval elinde kalır — `_escapeCrime` onu
+          // zulaya çevirir (mal ortada kalmaz).
           _escapeCrime(c); // kaçtı — fail meçhul
         }
     }
@@ -703,36 +780,175 @@ extension _SceneCrime on _VillageSceneState {
     final v = c.culprit;
     c.phase = _CrimePhase.act;
     v.activity = VillagerActivity.committing;
-    v.chatBubbleIcon = c.def.icon;
     v.hasteFactor = 1.0;
+
+    // HIRSIZLIK — kapıdan İÇERİ girer (Faz 4). Tanıklık burada TETİKLENMEZ:
+    // içeride görülecek bir şey yok, görülen an çuvalla çıkıştır
+    // (bkz. [_emergeWithLoot]). Eskiden fail kapının önünde dikilip bekliyordu
+    // ve "hırsızlık komik görünüyor" şikâyetinin kaynağı buydu.
+    if (c.kind == CrimeKind.theft && c.building != null) {
+      _enterBuildingToSteal(c);
+      return;
+    }
+
+    // TANIKLIK — eylem anı, suçun görülebildiği tek an. Kim o yöne bakıyorsa
+    // GERÇEKTEN görür (bkz. scene_perception); gören hatırlar, hatırlayan
+    // devriyeye koşabilir. Öncesinde suçun tek "görüleni" muhafızdı.
+    _witnessEvent(
+      Notion.crime,
+      x: c.tx,
+      y: c.ty,
+      subject: v,
+      subjectName: v.name,
+      exclude: c.victim == null ? const [] : [c.victim!],
+    );
 
     if (c.kind == CrimeKind.abduction) {
       // Kurbanı kavra, köyün dışına yönel — uzun, görünür bir sürükleme.
       final vic = c.victim!;
       vic.activity = VillagerActivity.abducted;
       vic.feel(NpcEmotion.fear, 12.0, moodDelta: -0.25);
-      vic.chatBubbleIcon = '❗';
-      vic.chatBubbleTime = 12.0;
       final (ex, ey) = _abductionExit(v);
       c.tx = ex;
       c.ty = ey;
       c.phaseLeft = 30.0; // sürükleme penceresi (yakalama şansı uzun)
       v.hasteFactor = 0.8; // yüklü: yavaş — bu yüzden yakalanabilir
-      v.chatBubbleTime = 30.0;
       v.goTo(ex, ey, 1.0);
-      _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0, moodDelta: -0.03);
+      _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0,
+          moodDelta: -0.03, alarm: 0.30);
       addCameraShake(3.0, dur: 0.4);
       return;
     }
 
     c.phaseLeft = c.def.actSeconds;
-    v.chatBubbleTime = c.def.actSeconds;
     v.lookToward(c.tx, c.ty);
     // Eylem yerinde dursun (wander eylemin ortasında kaçırmasın).
     v.state = VillagerState.idle;
     v.targetCol = v.gridX;
     v.targetRow = v.gridY;
     v.idleTimer = c.def.actSeconds;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // HIRSIZLIK SAHNESİ (Faz 4) — eve gir → çuvalla çık → göm
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /// İçeride geçen süre (sn) — köyün kapıyı izlediği gerilim anı. Uzun tutmak
+  /// oyunu durdurur, kısa tutmak "girdi mi çıktı mı" belirsizliği yaratır.
+  static const double _kInsideSeconds = 4.5;
+
+  /// Zula gömme işi (sn) — eğilip toprağı eşeleme.
+  static const double _kBurySeconds = 2.8;
+
+  /// Taze toprak izinin kapanma süresi (sn) — yarım oyun günü. Bundan sonra
+  /// zula yalnız üstüne basılırsa bulunur.
+  static const double _kLootFade = 0.5 * kGameDaySeconds;
+
+  /// Fail kapıdan içeri girer — sprite kaybolur, köy kapıyı izler.
+  void _enterBuildingToSteal(_ActiveCrime c) {
+    final v = c.culprit;
+    c.inside = true;
+    c.insideLeft = _kInsideSeconds;
+    c.phaseLeft = _kInsideSeconds + 2.0; // güvenlik payı (takılma koruması)
+    // Görünmez ol + yerinde çakıl: dışarıda bir yerde "yürüyor" gibi kalmasın.
+    v.isInsideBuilding = true;
+    v.state = VillagerState.idle;
+    v.targetCol = v.gridX;
+    v.targetRow = v.gridY;
+    v.idleTimer = c.phaseLeft;
+    // Kapının kapanışı — girişi GÖREN olabilir (kapıda bir kıpırtı), ama bu
+    // zayıf bir izlenim: suçu değil, "birinin girdiğini" hatırlatır.
+    _reactNearby(v.gridX, v.gridY, 3.5, NpcEmotion.wonder, 2.0,
+        moodDelta: -0.01);
+  }
+
+  /// Fail çuvalla dışarı çıkar — sahnenin GÖRÜLEN anı.
+  ///
+  /// Tanıklık burada tetiklenir: kapıdan çuvalla çıkan adam, suçun tek
+  /// tartışmasız görüntüsüdür. Mal da burada köyün stoğundan eksilir — yani
+  /// "çuval" boş bir görsel değil, elindeki şey gerçekten o mal.
+  void _emergeWithLoot(_ActiveCrime c) {
+    final v = c.culprit;
+    c.inside = false;
+    c.insideLeft = 0;
+    v.isInsideBuilding = false;
+
+    // Mal eksilir (lootKind/lootAmount burada dolar) → çuval gerçek yük olur.
+    _completeCrime(c);
+
+    // Yük ELDE görünür + yürüyüş yavaşlar (`VillagerEntity.speed` propFactor'ü
+    // zaten okur). "Çuvalla kaçan hırsız yakalanabilir olmalı" sözleşmesi.
+    v.prop = PropKind.sack;
+    v.actPose = ActPose.stoop;
+
+    // TANIKLIK — asıl an. Kim o yöne bakıyorsa gerçekten görür.
+    _witnessEvent(
+      Notion.crime,
+      x: v.gridX,
+      y: v.gridY,
+      subject: v,
+      subjectName: v.name,
+    );
+    _reactNearby(v.gridX, v.gridY, 5.0, NpcEmotion.wonder, 3.0,
+        moodDelta: -0.02, alarm: 0.20);
+  }
+
+  /// Zulayı topraga göm — mal dünyada KALIR, yeri değişir.
+  void _buryLoot(_ActiveCrime c) {
+    final v = c.culprit;
+    c.buried = true;
+    final kind = c.lootKind;
+    final amount = c.lootAmount;
+    v.prop = PropKind.none;
+    v.actPose = null;
+    if (kind == null || amount <= 0) return;
+
+    final cache = LootCache(
+      gridX: v.gridX,
+      gridY: v.gridY,
+      kind: kind,
+      amount: amount,
+      culprit: v,
+      culpritName: v.name,
+    );
+    _lootCaches.add(cache);
+
+    // Gömme anı da görülebilir — toprağı eşeleyen adam şüphe uyandırır. GÖREN
+    // OLDUYSA zula fiilen ele geçmiştir: köy yeri kabaca bilir ve iz kapansa da
+    // oraya bakar. Hırsızın asıl hatası "nereye gömdüğü" değil, görülmesidir.
+    final seen = _witnessEvent(
+      Notion.crime,
+      x: v.gridX,
+      y: v.gridY,
+      subject: v,
+      subjectName: v.name,
+    );
+    cache.witnessed = seen.isNotEmpty;
+  }
+
+  /// Zulanın gömüleceği nokta — köy merkezinden UZAK, failin kaçış yönünde.
+  /// Meydanın ortasına gömen hırsız komik olurdu; kenar mahalle/ağaç dibi arar.
+  (double, double) _buryTarget(VillagerEntity v) {
+    final (cc, cr) = _villageCenter();
+    var dx = v.gridX - cc, dy = v.gridY - cr;
+    final len = sqrt(dx * dx + dy * dy);
+    if (len < 0.5) {
+      dx = 1;
+      dy = 0;
+    } else {
+      dx /= len;
+      dy /= len;
+    }
+    // Köyün ETEĞİ — meydanın ortası komik olurdu, vahşi doğa ise ölü nokta:
+    // 9-15 tile'da kimse geçmiyordu ve zula fiilen hiç bulunmuyordu (10 günlük
+    // provada sıfır). Eşik, "gizli ama köyün ayak izine değen" mesafe.
+    final dist = 5.5 + _rng.nextDouble() * 4.0;
+    // Yönü hafifçe savur — her hırsız aynı hatta gömmesin.
+    final jitter = (_rng.nextDouble() - 0.5) * 0.8;
+    final ang = atan2(dy, dx) + jitter;
+    final tx = (v.gridX + cos(ang) * dist).clamp(2.0, kCols - 3.0);
+    final ty = (v.gridY + sin(ang) * dist).clamp(2.0, kRows - 3.0);
+    return _nearestLand(tx, ty);
   }
 
   /// Köyün dışına açılan bir kaçırma çıkışı — merkezden ters yöne, karaya.
@@ -763,9 +979,20 @@ extension _SceneCrime on _VillageSceneState {
     c.phaseLeft = _kFleeSeconds;
     v.activity = VillagerActivity.fleeing;
     v.hasteFactor = 1.35;
-    v.chatBubbleIcon = '💨';
-    v.chatBubbleTime = _kFleeSeconds;
     v.feel(NpcEmotion.fear, _kFleeSeconds, moodDelta: -0.05);
+
+    // HIRSIZLIK — kaçış rastgele "uzağa" değil, ZULAYA doğrudur. Yükü olan
+    // hırsızın gidecek bir yeri vardır; kaçış penceresi de bu yüzden uzun
+    // (yüklü ve yavaş: yakalanabilir olmalı).
+    if (c.kind == CrimeKind.theft && c.lootAmount > 0) {
+      final (bx, by) = _buryTarget(v);
+      c.bx = bx;
+      c.by = by;
+      c.phaseLeft = _kFleeSeconds * 2.2;
+      v.goTo(bx, by, 0.5);
+      return;
+    }
+
     final (fx, fy) = _fleeTarget(v);
     v.goTo(fx, fy, 2.0);
   }
@@ -791,15 +1018,19 @@ extension _SceneCrime on _VillageSceneState {
 
     switch (c.kind) {
       case CrimeKind.theft:
-        // Depodan mal aşırır — köyün elinde ne varsa oradan.
-        final amount = 6 + _rng.nextInt(9);
-        if (_stockpile.food >= amount && _rng.nextBool()) {
-          _stockpile.food = (_stockpile.food - amount).clamp(0, 1 << 30);
-        } else if (_stockpile.wood >= amount) {
-          _stockpile.wood = (_stockpile.wood - amount).clamp(0, 1 << 30);
-        } else {
-          _stockpile.stone = (_stockpile.stone - amount).clamp(0, 1 << 30);
-        }
+        // Depodan mal aşırır — köyün elinde ne varsa oradan. HANGİ mal ve NE
+        // KADAR olduğu artık kayda geçer (`lootKind`/`lootAmount`): çuvalın
+        // içi gerçek olmalı ki gömülünce zulaya, yakalanınca köye dönebilsin.
+        final want = 6 + _rng.nextInt(9);
+        final kind = (_stockpile.food >= want && _rng.nextBool())
+            ? ResourceKind.food
+            : (_stockpile.wood >= want ? ResourceKind.wood : ResourceKind.stone);
+        // Olmayan malı çalamaz — çuval stokta GERÇEKTEN olan kadarını taşır.
+        final amount = want.clamp(0, _stockpile.get(kind));
+        if (amount > 0) _stockpile.add(kind, -amount);
+        c.lootKind = kind;
+        c.lootAmount = amount;
+        kProbeTheftTaken += amount; // prova: malın korunumu kanıtı
         v.wealth += amount * 1.5;
 
       case CrimeKind.pickpocket:
@@ -854,7 +1085,7 @@ extension _SceneCrime on _VillageSceneState {
         if (vic != null) {
           _injureVillager(vic, feud: false, intensity: 1.0);
           _reactNearby(vic.gridX, vic.gridY, 6.0, NpcEmotion.fear, 3.0,
-              moodDelta: -0.04);
+              moodDelta: -0.04, alarm: 0.45);
         }
         _feelVillage(NpcEmotion.fear, 8, -0.08);
         addCameraShake(5.0, dur: 0.5);
@@ -894,15 +1125,9 @@ extension _SceneCrime on _VillageSceneState {
     for (final c in v.children) {
       c.parents.remove(v);
     }
-    for (final o in _villagers) {
-      o.grudges.remove(v);
-      o.bloodEnemies.remove(v);
-    }
     _villagers.remove(v);
-    if (identical(_selectedVillager, v)) _selectedVillager = null;
-    if (identical(_followedVillager, v)) _followedVillager = null;
-    if (identical(_petitionAuthor, v)) _petitionAuthor = null;
-    _ransomVictim = v;
+    _forgetVillager(v);
+    _ransomVictim = v; // _forgetVillager SONRASI — o da bu işaretçiyi temizler
     _feelVillage(NpcEmotion.fear, 12, -0.14);
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.08);
 
@@ -913,8 +1138,13 @@ extension _SceneCrime on _VillageSceneState {
     if (_pendingPetition == null) {
       _presentPetition(p);
     } else {
-      _petitionFollowUps
-          .add((id: 'ransom', fireAtSim: _time + 0.4 * kGameDaySeconds));
+      // Fidye zincirinin aktörü kaçırılan köylüdür — dilekçe onun adıyla gelir.
+      _petitionFollowUps.add((
+        id: 'ransom',
+        fireAtSim: _time + 0.4 * kGameDaySeconds,
+        actor: _ransomVictim,
+        actorName: _ransomVictim?.name ?? '',
+      ));
     }
   }
 
@@ -940,6 +1170,29 @@ extension _SceneCrime on _VillageSceneState {
   /// şüphe birikir. Eşik aşılınca asayiş dilekçesi gelir.
   void _escapeCrime(_ActiveCrime c) {
     final v = c.culprit;
+
+    // Çuval elinde kaçtıysa (gömmeye yetişemedi) mal ORTADA KALMAZ: bulunduğu
+    // yere gömülmüş sayılır. Aksi hâlde `_clearCrimeState` çuvalı silerdi ve
+    // çalınan mal sessizce buharlaşırdı — geri alınabilirlik sözleşmesi kırılır.
+    if (c.kind == CrimeKind.theft && !c.buried && c.lootAmount > 0) {
+      _buryLoot(c);
+    }
+
+    // TANIK VAR MI? Kaçan fail "meçhul" sayılır ama köyün onu GERÇEKTEN
+    // görmemiş olması gerekir. Gözüyle gören biri varsa fail artık meçhul
+    // değildir: tanığın hafızasında adı vardır, dedikoduyla yayılır ve o kişi
+    // devriyeye koşabilir (bkz. scene_perception). Şüphe sayacı da bu yüzden
+    // yalnız GERÇEKTEN kimsenin görmediği suçlarda artar — eskiden her kaçan
+    // suç, köyde kimse yokken bile paniğe dönüşüyordu.
+    var witnessed = false;
+    for (final o in _villagers) {
+      if (identical(o, v)) continue;
+      if (o.memory.suspects(v)) {
+        witnessed = true;
+        break;
+      }
+    }
+
     _clearCrimeState(v);
     v.crimeCooldown = _kCrimeCooldown;
     _activeCrime = null;
@@ -960,7 +1213,13 @@ extension _SceneCrime on _VillageSceneState {
       return;
     }
 
-    _crimeSuspicion++;
+    // Kimse görmediyse köy karanlıkta kalır → şüphe birikir. Gören varsa köy
+    // "kim olduğunu biliyor", panik değil kanaat oluşur.
+    if (!witnessed) {
+      _crimeSuspicion++;
+    } else {
+      _showNotification('👁️ Fail kaçtı ama gören oldu — köy adını fısıldıyor.');
+    }
     _chronicle(
         Voice.say(
             c.def.annalPool,
@@ -986,6 +1245,13 @@ extension _SceneCrime on _VillageSceneState {
   void _abortCrime() {
     final c = _activeCrime;
     if (c == null) return;
+    // MAL BUHARLAŞMAZ. İptal, suçun en sessiz çıkışıdır (fail uyudu, öldü,
+    // hedefe varamadı) ve çuval elindeyken buradan geçilirse `_clearCrimeState`
+    // onu siler: stoktan düşmüş ama dünyada hiçbir yerde olmayan bir mal kalır.
+    // Gece bastırıp kaçan hırsız uykuya daldığında tam olarak bu oluyordu.
+    if (c.kind == CrimeKind.theft && !c.buried && c.lootAmount > 0) {
+      _buryLoot(c); // bulunduğu yere gömülmüş sayılır — geri alınabilir kalır
+    }
     _clearCrimeState(c.culprit);
     c.culprit.crimeCooldown = _kCrimeCooldown * 0.5;
     final vic = c.victim;
@@ -1001,6 +1267,13 @@ extension _SceneCrime on _VillageSceneState {
     v.hasteFactor = 1.0;
     v.chatBubbleIcon = '';
     v.chatBubbleTime = 0;
+    // Faz 4'ün YAPIŞKAN alanları. Suç hangi kapıdan biterse bitsin (kaçtı,
+    // yakalandı, iptal) bunlar sıfırlanmalı: temizlenmeyen `isInsideBuilding`
+    // köylüyü kalıcı GÖRÜNMEZ yapar (sprite hiç çizilmez), temizlenmeyen çuval
+    // ise onu ömür boyu yavaş yürütür.
+    v.isInsideBuilding = false;
+    v.prop = PropKind.none;
+    v.actPose = null;
     for (final g in _villagers) {
       if (g.activity == VillagerActivity.chasing) {
         g.activity = VillagerActivity.none;
@@ -1040,7 +1313,14 @@ extension _SceneCrime on _VillageSceneState {
     if (_crimeNoticed < _kGuardNotice) return;
 
     // Menzil: suç işlenmeden GÖRÜŞ, işlendikten sonra GÜRÜLTÜ.
-    final range = c.done ? _kGuardResponse : _kGuardSight;
+    //
+    // KÖYÜN HÂLİ iki ayrı kanaldan büker: uyanık bir devriye daha uzağı GÖRÜR
+    // (patrolVigilance), haber veren bir köy suçu daha uzaktan DUYURUR
+    // (informUrge — gürültü tek başına değil, ağızdan ağza taşınır).
+    final p = _pressure;
+    final range = c.done
+        ? _kGuardResponse * (0.75 + p.informUrge * 0.9)
+        : _kGuardSight * p.patrolVigilance;
 
     VillagerEntity? best;
     double bestD = range;
@@ -1064,8 +1344,11 @@ extension _SceneCrime on _VillageSceneState {
       return;
     }
 
-    // Yakaladı!
-    if (bestD <= _kCatchDist) {
+    // Yakaladı! — ama fail BİNANIN İÇİNDEYSE yakalanamaz: sprite yok, kapı
+    // kapalı. Muhafız kapıya dayanır ve bekler; hesaplaşma fail çuvalla
+    // çıktığında olur. (Bu kapı olmadan devriye duvarın ardındaki adamı
+    // görünmez hâldeyken tutukluyordu.)
+    if (bestD <= _kCatchDist && !c.inside) {
       _catchCriminal(v, guard: best);
       return;
     }
@@ -1076,9 +1359,20 @@ extension _SceneCrime on _VillageSceneState {
     if (best.sitClaimed) best.cancelSit();
     best.activity = VillagerActivity.chasing;
     best.hasteFactor = 1.35;
-    best.chatBubbleIcon = '🛡️';
-    best.chatBubbleTime = 2.0;
     if (refresh) best.goTo(v.gridX, v.gridY, 0.5);
+  }
+
+  /// İHBAR ÜZERİNE devriyeyi failin üstüne yolla (bkz. scene_perception).
+  ///
+  /// Muhafızın suçu KENDİ görmesinden bağımsız ikinci kanal: bir tanık
+  /// koşup haber verdiyse devriye tarifle harekete geçer. Kovalama durumu
+  /// [_guardResponse] ile birebir aynı kurulur ki iki kanal aynı sahneyi
+  /// üretsin (ayrı kod = ayrı davranış = tutarsız görüntü).
+  void _sendGuardAfter(VillagerEntity guard, _ActiveCrime c) {
+    if (guard.sitClaimed) guard.cancelSit();
+    guard.activity = VillagerActivity.chasing;
+    guard.hasteFactor = 1.35;
+    guard.goTo(c.culprit.gridX, c.culprit.gridY, 0.5);
   }
 
   /// Oyuncu bu köylüye dokununca suçüstü yakalanabilir mi (input kapısı).
@@ -1095,10 +1389,27 @@ extension _SceneCrime on _VillageSceneState {
     final prevented = !c.done;
     final vic = c.victim;
 
+    // Yakalanma köyün gözü önünde olur — gören hatırlar (asayişin görünür
+    // yüzü) ve failin sicili köylülerin kanaatine kazınır.
+    _witnessEvent(Notion.arrest,
+        x: v.gridX, y: v.gridY, subject: v, subjectName: v.name, loud: true);
+
+    // ÇUVALLA YAKALANDI — mal doğrudan köye döner. Yakalamanın somut ödülü
+    // budur: yalnız fail değil, MAL da elde edilir. (Gömdükten sonra
+    // yakalanırsa çuval elinde değildir; o mal zulada kalır ve ayrıca
+    // bulunması gerekir — kaçış hızının gerçek bir bedeli olsun.)
+    final loot = c.lootKind;
+    if (loot != null && !c.buried && c.lootAmount > 0) {
+      _stockpile.add(loot, c.lootAmount);
+      kProbeLootRecovered += c.lootAmount;
+      _showNotification(
+          '🧺 Çuval geri alındı — ${c.lootAmount} ${loot.label.toLowerCase()} '
+          'ambara döndü.');
+      c.lootAmount = 0;
+    }
+
     _clearCrimeState(v);
     v.feel(NpcEmotion.fear, 6.0, moodDelta: -0.15);
-    v.chatBubbleIcon = '⛓️';
-    v.chatBubbleTime = 5.0;
     v.state = VillagerState.idle;
     v.targetCol = v.gridX;
     v.targetRow = v.gridY;
@@ -1166,6 +1477,36 @@ extension _SceneCrime on _VillageSceneState {
         estateMood: [(Estate.laborers, 0.06), (Estate.faithful, -0.08)],
       ));
     }
+    // TÖVBE MEYDANI (DERGÂH) — kılıcın karşılığı. Fail ne sürülür ne dövülür:
+    // günahını meydanda söyler. Affın mekanik bedeli olan bağış sayacını
+    // ARTIRMAZ (bkz. [_sentenceToPenance]); caydırıcılığı utançtan gelir.
+    if (_policies.sealed.contains('dergah.penance')) {
+      p = p.withExtraOption(const PetitionOption(
+        label: 'Tövbeye çağır',
+        detail: '{suçlu} günahını meydanda, köyün önünde söyler. Ceza kesilmez; '
+            'bedel utançtır. Af gibi düzeni gevşetmez.',
+        resolutionPool: [
+          '🙏 {suçlu} meydana çıkarıldı. Günahını kendi ağzıyla söyleyecek.',
+          '🙏 Hüküm: tövbe. {suçlu} bedelini köyün gözü önünde ödeyecek.',
+          '🙏 {suçlu} tövbeye çağrıldı; meydan sessizce doldu.',
+        ],
+        moraleAmount: 0.03,
+        moraleDays: 3,
+        fx: PetitionFx.crimePenance,
+        estateMood: [
+          (Estate.faithful, 0.10),
+          (Estate.hearth, -0.06),
+          (Estate.artisans, -0.04),
+        ],
+      ));
+    }
+    // SÜRGÜN FERMANI (NİZAM) — mühürlü değilse köy kimseyi yola vuramaz.
+    // Hane sürgünü zaten bu fermanı şart koşuyordu (bkz. house_action.gateFor);
+    // yargı da aynı kapıdan geçsin, yoksa aynı hüküm bir kapıda yasak bir
+    // kapıda serbest olurdu.
+    if (!_policies.sealed.contains('nizam.exile')) {
+      p = p.without(const {PetitionFx.crimeExile});
+    }
     _accusedCriminal = culprit;
     final author = (c.victim != null && !c.victim!.isDying)
         ? c.victim
@@ -1207,8 +1548,6 @@ extension _SceneCrime on _VillageSceneState {
     _crimePardons++;
     v.feel(NpcEmotion.content, 5.0, moodDelta: 0.20);
     v.crimeCooldown = _kCrimeCooldown * 2;
-    v.chatBubbleIcon = '🕊️';
-    v.chatBubbleTime = 4.0;
     _feelVillage(NpcEmotion.wonder, 6, -0.02);
     final ctx = _voice(v, seed: _stableSeed('af${v.name}', _dayCount));
     _chronicle(Voice.say(_kPardonAnnalPool, ctx), icon: '🕊️');
@@ -1225,8 +1564,6 @@ extension _SceneCrime on _VillageSceneState {
     v.feel(NpcEmotion.grief, 6.0, moodDelta: -0.22);
     v.injuryDays = v.injuryDays < 1.2 ? 1.2 : v.injuryDays;
     v.crimeCooldown = _kCrimeCooldown * 3;
-    v.chatBubbleIcon = '⛓️';
-    v.chatBubbleTime = 5.0;
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.06);
     _gatherAtFire(kGameDaySeconds * 0.35, max: 6);
     _feelVillage(NpcEmotion.wonder, 8, 0.03); // düzen görüldü
@@ -1255,28 +1592,128 @@ extension _SceneCrime on _VillageSceneState {
     final v = _accusedCriminal;
     _accusedCriminal = null;
     if (v == null || v.isDying) return;
-    // Mahkûm emeği — köy sert hükmün karşılığını taşta görür.
-    _stockpile.stone = (_stockpile.stone + 14).clamp(0, 1 << 30);
+    // Kürek hükmü ANLIK bir ödül değil, SÜREGELEN bir emek: mahkûm günlerce
+    // ocakta kalır ([_tickConvictLabor] günlük taş üretir + ocağa koşar).
+    // Peşin taş yalnız "ilk hasat" jesti; asıl kazanım gün gün birikir.
+    v.laborDays = _kLaborSentenceDays;
+    // Suç/kaçış durumundan temiz çıkış — bundan sonra hareketi yalnız
+    // _tickConvictLabor sürer (çakışan sürücü kalmasın).
+    v.activity = VillagerActivity.none;
+    v.act = null;
+    v.prop = PropKind.none;
+    _stockpile.stone = (_stockpile.stone + _kLaborUpfrontStone).clamp(0, 1 << 30);
     _captureLaborCount++; // telemetri: kürek cezası kaç kez uygulandı
     v.feel(NpcEmotion.grief, 6.0, moodDelta: -0.20);
-    v.injuryDays = v.injuryDays < 2.0 ? 2.0 : v.injuryDays;
     v.crimeCooldown = _kCrimeCooldown * 3;
-    v.chatBubbleIcon = '⛓️';
-    v.chatBubbleTime = 5.0;
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.05);
     _feelVillage(NpcEmotion.wonder, 8, 0.02); // düzen görüldü, üretken sertlik
     addCameraShake(3.0, dur: 0.35);
-    final ctx = _voice(v, seed: _stableSeed('kürek${v.name}', _dayCount));
+    final ctx = _voice(v,
+        seed: _stableSeed('kürek${v.name}', _dayCount),
+        extra: {'süre': _kLaborSentenceDays.round().toString()});
     _chronicle(
         Voice.say(const [
-          '⛓ {ad} taş ocağına koşuldu. Borcunu taşla ödüyor.',
+          '⛓ {ad} taş ocağına koşuldu. Borcunu gün gün taşla ödeyecek.',
           '⛓ Kürek hükmü: {ad} zindanda, gündüzleri ocakta.',
         ], ctx),
         icon: '⛓️');
     _showNotification(Voice.say(const [
-      '⛓ {ad} kürek cezasına çarptırıldı — köy 14 taş kazandı.',
+      '⛓ {ad} kürek cezasına çarptırıldı — {süre} gün ocakta.',
       '⛓ {ad} taş ocağında. Sert ama üretken bir hüküm.',
     ], ctx));
+  }
+
+  /// TÖVBE (DERGÂH) — kılıç yolunun karşılığı. Fail ne sürülür ne dövülür:
+  /// günahını meydanda, köyün gözü önünde söyler.
+  ///
+  /// Aftan ayıran şey mekaniktir, metin değil: [_pardonCriminal] BAĞIŞ SAYACINI
+  /// ([_crimePardons]) artırır ve o sayaç suç baskısını yükseltir — "sık affeden
+  /// köyde suç çoğalır". Tövbe o sayaca dokunmaz; bedel ödenmiş sayılır.
+  /// Caydırıcılığı demirden değil utançtan gelir: fail kırılır, köy toplanır,
+  /// suça yeltenme uzun süre kapanır. Dergâh yolunun adalet cevabı budur.
+  void _sentenceToPenance() {
+    final v = _accusedCriminal;
+    _accusedCriminal = null;
+    if (v == null || v.isDying) return;
+    // Suç/kaçış durumundan temiz çıkış — elindeki çalıntı da düşer.
+    v.activity = VillagerActivity.none;
+    v.act = null;
+    v.prop = PropKind.none;
+    // Aleni ikrar: köy ateş başına toplanır ve dinler (görünür olan bu).
+    _gatherAtFire(kGameDaySeconds * 0.4, max: 8);
+    v.feel(NpcEmotion.grief, 8.0, moodDelta: -0.18);
+    // Utanç yara değil: iş göremezlik yok ([_punishCriminal]'in injuryDays'i
+    // burada YOK) ama suça yeltenme cezadan da uzun süre kapalı.
+    v.crimeCooldown = _kCrimeCooldown * 4;
+    if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.04);
+    _feelVillage(NpcEmotion.wonder, 8, 0.02);
+    final ctx = _voice(v, seed: _stableSeed('tövbe${v.name}', _dayCount));
+    _chronicle(Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏');
+    _lifeEvent(v, Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏');
+    _showNotification(Voice.say(_kPenancePool, ctx));
+  }
+
+  /// KÜREK CEZASI YÜRÜTÜCÜSÜ — mahkûmu gündüzleri taş ocağına koşar, günlük taş
+  /// ürettirir, süre dolunca salıverir. Her tick çağrılır ([scene_tick]).
+  ///
+  /// Mahkûm `laborDays > 0` iken akıl karar vermez ([_canDeliberate]) ve kadroya
+  /// alınmaz ([canRunErrands] → [_freeForJob]); hareketini yalnız bu yürütücü
+  /// sürer. Görünürlük: ocağın başında `labor` gövde dili (bkz. [_setWorkPose]),
+  /// böylece hüküm ekranda da okunur — "taşı gerçekten kıran mahkûm".
+  void _tickConvictLabor(double dt) {
+    final dayFrac = dt / kGameDaySeconds;
+    for (final v in _villagers) {
+      if (v.laborDays <= 0 || v.isDying) continue;
+
+      // Gece/uyku: emek durur (zindanda dinlenir) ama süre yine akar.
+      final resting = v.isSleeping || v.isInsideBuilding || _cycle.dayLight <= 0.35;
+      if (!resting) {
+        // Ocağa koş (maden yoksa depoya — köyün taş yığını). Yoksa yerinde kır.
+        final quarry = _nearestOf(BuildingType.mineBuilding, v) ??
+            _nearestOf(BuildingType.warehouse, v);
+        if (quarry != null) {
+          final (qx, qy) = _centerOf(quarry);
+          if (_wdist(v.gridX, v.gridY, qx, qy) > _kLaborAtQuarry) {
+            if (v.state != VillagerState.moving) v.goTo(qx, qy, 0.5);
+            _setWorkPose(v, null); // yürürken dik
+          } else {
+            v.state = VillagerState.idle;
+            v.idleTimer = 0.5;
+            v.lookToward(qx, qy);
+            _setWorkPose(v, ActPose.labor); // taş kırar
+          }
+        } else {
+          _setWorkPose(v, ActPose.labor);
+        }
+        // Emek yalnız çalışırken taş üretir.
+        _convictStoneAcc += _kLaborStonePerDay * dayFrac;
+      } else {
+        _setWorkPose(v, null);
+      }
+
+      v.laborDays -= dayFrac;
+      if (v.laborDays <= 0) {
+        v.laborDays = 0;
+        _setWorkPose(v, null);
+        v.crimeCooldown = _kCrimeCooldown; // taze salıverme, hemen suça dönmesin
+        v.feel(NpcEmotion.content, 5.0, moodDelta: 0.10);
+        final ctx = _voice(v, seed: _stableSeed('salıver${v.name}', _dayCount));
+        _chronicle(
+            Voice.say(const [
+              '🕊 {ad} borcunu ödedi, ocaktan salıverildi.',
+              '🕊 {ad-in} kürek hükmü doldu; köye geri karıştı.',
+            ], ctx),
+            icon: '🕊️');
+        _showNotification(Voice.say(const [
+          '🕊 {ad} kürek cezasını tamamladı — köye döndü.',
+        ], ctx));
+      }
+    }
+    // Biriken kesirli emeği tam sayı taşa çevir.
+    while (_convictStoneAcc >= 1.0) {
+      _stockpile.stone = (_stockpile.stone + 1).clamp(0, 1 << 30);
+      _convictStoneAcc -= 1.0;
+    }
   }
 
   /// İDAM — suçlu halkın önünde infaz edilir (mevcut idam mekanizması).

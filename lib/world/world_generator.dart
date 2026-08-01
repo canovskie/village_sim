@@ -14,6 +14,7 @@ class WorldGeneratorResult {
   final List<TreeEntity> trees;
   final List<MineNode> mineNodes;
   final List<DecorEntity> decor;
+  final List<BerryBush> berryBushes;
 
   const WorldGeneratorResult({
     required this.waterTiles,
@@ -22,6 +23,7 @@ class WorldGeneratorResult {
     required this.trees,
     required this.mineNodes,
     required this.decor,
+    this.berryBushes = const [],
   });
 }
 
@@ -82,6 +84,9 @@ class WorldGenerator {
     final mines = _generateMines(water, treeTiles);
     final mineTiles = {for (final m in mines) (m.col, m.row)};
     final decor = _generateDecor(water, treeTiles, mineTiles, reedTiles);
+    final decorTiles = {for (final d in decor) (d.col, d.row)};
+    final berries =
+        _generateBerryBushes(water, treeTiles, mineTiles, reedTiles, decorTiles);
     return WorldGeneratorResult(
       waterTiles: water,
       lotuses: lotuses,
@@ -89,7 +94,78 @@ class WorldGenerator {
       trees: trees,
       mineNodes: mines,
       decor: decor,
+      berryBushes: berries,
     );
+  }
+
+  // ── Böğürtlen çalıları ──────────────────────────────────────────────────────
+
+  /// Çalılar ORMAN KENARINA yaslanır: ağaç komşusu olan açık tile'lar tercih
+  /// edilir. Sebep oyun tasarımı — toplayıcı ilk günden ormanın dibine gider,
+  /// yani oduncunun gideceği yerle aynı yöne; köyün ilk iki işi birbirine
+  /// yakın durur ve harita "iki ayrı uca koşturma" hissi vermez.
+  ///
+  /// Başlangıç bölgesinden DIŞLANMAZ (su/maden gibi): oyuncunun ilk dakikada
+  /// elinin altında birkaç çalı olmalı, yoksa "yapacak bir şey yok" boşluğu
+  /// aynen sürer.
+  List<BerryBush> _generateBerryBushes(
+    Set<(int, int)> water,
+    Set<(int, int)> treeTiles,
+    Set<(int, int)> mineTiles,
+    Set<(int, int)> reedTiles,
+    Set<(int, int)> decorTiles,
+  ) {
+    final bushes = <BerryBush>[];
+    final taken = <(int, int)>{};
+
+    bool free(int c, int r) =>
+        c >= 1 && c < kCols - 1 && r >= 1 && r < kRows - 1 &&
+        !water.contains((c, r)) &&
+        !treeTiles.contains((c, r)) &&
+        !mineTiles.contains((c, r)) &&
+        !reedTiles.contains((c, r)) &&
+        !decorTiles.contains((c, r)) &&
+        !taken.contains((c, r));
+
+    bool nearTree(int c, int r) {
+      for (int dc = -1; dc <= 1; dc++) {
+        for (int dr = -1; dr <= 1; dr++) {
+          if (dc == 0 && dr == 0) continue;
+          if (treeTiles.contains((c + dc, r + dr))) return true;
+        }
+      }
+      return false;
+    }
+
+    // Çalılar ÖBEK hâlinde büyür (tek tek serpilmiş çalı doğal durmuyor ve
+    // toplayıcıyı harita boyunca koşturuyor). Her öbek 2-4 çalı.
+    final clusters = _scaledRange(5, 8);
+    int guard = 0;
+    while (bushes.length < clusters * 3 && guard < clusters * 60) {
+      guard++;
+      final c0 = 1 + _rng.nextInt(kCols - 2);
+      final r0 = 1 + _rng.nextInt(kRows - 2);
+      if (!free(c0, r0)) continue;
+      // Orman kenarı tercihli: değilse çoğu denemeyi reddet.
+      if (!nearTree(c0, r0) && _rng.nextDouble() > 0.22) continue;
+
+      final n = 2 + _rng.nextInt(3);
+      for (int i = 0; i < n; i++) {
+        final c = c0 + _rng.nextInt(3) - 1;
+        final r = r0 + _rng.nextInt(3) - 1;
+        if (!free(c, r)) continue;
+        taken.add((c, r));
+        bushes.add(BerryBush(
+          col: c,
+          row: r,
+          variant: _rng.nextInt(3),
+          // Olgunluk dağınık başlar — hepsi aynı anda dolup aynı anda boşalırsa
+          // toplayıcı sırayla değil dalga dalga çalışır, iş düzensiz görünür.
+          ripeness: 0.35 + _rng.nextDouble() * 0.65,
+        ));
+      }
+    }
+    return bushes;
   }
 
   // ── Su ──────────────────────────────────────────────────────────────────────

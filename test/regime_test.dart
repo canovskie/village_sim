@@ -234,4 +234,247 @@ void main() {
       expect(LawBook.repealable(LawBook.byId('rejim.ortakAmbar')!), isFalse);
     });
   });
+
+  imperialTests();
+  rotTests();
+  faithTests();
+}
+
+// ─── REJİM × İMPARATORLUK ────────────────────────────────────────────────────
+// İç yönetişim ile dış tehdidin kesişimi: rejim, vergici heyet karşısında
+// köyün duruşunu büker (görünürlük, direniş eli, pazarlık kolaylığı, meclis).
+void imperialTests() {
+  group('rejim × imparatorluk duruşu', () {
+    test('mülkçü köy göz doldurur, ortakçı köy gözden ırak', () {
+      final market = Regime.imperialPostureOf(VillageRegime.market,
+          committed: true);
+      final commune = Regime.imperialPostureOf(VillageRegime.commune,
+          committed: true);
+      expect(market.attentionMul, greaterThan(1.0));
+      expect(commune.attentionMul, lessThan(1.0));
+      // Tüccar köy pazarlıkta usta, kavgada zayıf.
+      expect(market.haggleEase, greaterThan(0));
+      expect(market.resistBonus, lessThan(0));
+    });
+
+    test('militan köy direniş elini güçlendirir', () {
+      final tyrant = Regime.imperialPostureOf(VillageRegime.sealedHand,
+          committed: true);
+      expect(tyrant.resistBonus, greaterThan(0.15));
+    });
+
+    test('yemin duruşu keskinleştirir', () {
+      final plain = Regime.imperialPostureOf(VillageRegime.sealedHand,
+          committed: true);
+      final sworn = Regime.imperialPostureOf(VillageRegime.sealedHand,
+          committed: true, oath: true);
+      expect(sworn.resistBonus, greaterThan(plain.resistBonus));
+      expect(sworn.attentionMul, greaterThan(plain.attentionMul));
+    });
+
+    test('merkez rejim imparatorluğu hiç bükmez', () {
+      final m = Regime.imperialPostureOf(VillageRegime.moderate,
+          committed: false);
+      expect(m.resistBonus, 0);
+      expect(m.haggleEase, 0);
+      expect(m.attentionMul, 1.0);
+      expect(m.note, isEmpty);
+    });
+  });
+
+  group('meclis imparatorluk kararı', () {
+    test('rahat karşılanan talebi memnun köy öder', () {
+      final v = Regime.councilImperialVerdict(
+        affordability: 2.0,
+        conscript: false,
+        resistChance: 0.1,
+        mood: happy,
+        villageMorale: 0.7,
+      );
+      expect(v, ImperialVerdict.comply);
+    });
+
+    test('güçlü ve gururlu köy direnmek ister', () {
+      final v = Regime.councilImperialVerdict(
+        affordability: 1.5,
+        conscript: false,
+        resistChance: 0.6,
+        mood: happy,
+        villageMorale: 0.7,
+      );
+      expect(v, ImperialVerdict.resist);
+    });
+
+    test('ödeyemeyen ama zayıf köy pazarlığa yönelir', () {
+      final v = Regime.councilImperialVerdict(
+        affordability: 0.5,
+        conscript: false,
+        resistChance: 0.1,
+        mood: {
+          Estate.laborers: 0.5,
+          Estate.artisans: 0.5,
+          Estate.faithful: 0.5,
+          Estate.hearth: 0.5,
+        },
+        villageMorale: 0.5,
+      );
+      expect(v, ImperialVerdict.haggle);
+    });
+
+    test('meclis bir evladı kolay teslim etmez', () {
+      final strong = Regime.councilImperialVerdict(
+        affordability: 1.0,
+        conscript: true,
+        resistChance: 0.5,
+        mood: happy,
+        villageMorale: 0.6,
+      );
+      expect(strong, ImperialVerdict.resist);
+      final weak = Regime.councilImperialVerdict(
+        affordability: 1.0,
+        conscript: true,
+        resistChance: 0.1,
+        mood: happy,
+        villageMorale: 0.6,
+      );
+      // Direnemiyorsa fidye/uzlaşma (comply) — ama asla "reddet".
+      expect(weak, ImperialVerdict.comply);
+    });
+
+    test('meclis asla reddet (bilinçli kıyım) önermez', () {
+      // Enum'da zaten yok; ama her kombinasyonda dönen değer 3 duruştan biri.
+      for (final aff in [0.2, 0.6, 1.0, 2.0]) {
+        for (final rc in [0.0, 0.3, 0.6, 0.85]) {
+          final v = Regime.councilImperialVerdict(
+            affordability: aff,
+            conscript: false,
+            resistChance: rc,
+            mood: sullen,
+            villageMorale: 0.3,
+          );
+          expect(ImperialVerdict.values, contains(v));
+        }
+      }
+    });
+
+    test('her duruşun okunur bir meclis cümlesi var', () {
+      for (final v in ImperialVerdict.values) {
+        expect(Regime.verdictLine(v, conscript: false), isNotEmpty);
+        expect(Regime.verdictLine(v, conscript: true), isNotEmpty);
+      }
+    });
+  });
+}
+
+// ─── FAZ 3: ÇÜRÜME + KRONİK HÂL ──────────────────────────────────────────────
+// Huzursuzluk hızlı bir nabız; çürüme onun bıraktığı KALICI iz. Kronikleşmek
+// oyun-sonu DEĞİL — çıkışı açık kalmalı (cozy çizgi).
+void rotTests() {
+  group('rejim çürümesi', () {
+    test('kaynayan köy iz biriktirir, sakin köy siler', () {
+      expect(Regime.rotStep(unrest: 0.95, days: 1), greaterThan(0));
+      expect(Regime.rotStep(unrest: 0.10, days: 1), lessThan(0));
+    });
+
+    test('çürütmek iyileştirmekten hızlıdır', () {
+      final harm = Regime.rotStep(unrest: 1.0, days: 1);
+      final heal = -Regime.rotStep(unrest: 0.0, days: 1);
+      expect(harm, greaterThan(heal));
+    });
+
+    test('kStir eşiğinin tam altında birikim yok', () {
+      expect(Regime.rotStep(unrest: Regime.kStir - 0.01, days: 1),
+          lessThanOrEqualTo(0));
+      expect(Regime.rotStep(unrest: Regime.kStir, days: 1), greaterThan(0));
+    });
+
+    test('kronik hâlden ÇIKIŞ var — iz silinebilir', () {
+      var rot = 0.75; // kronikleşmiş köy
+      expect(rot, greaterThanOrEqualTo(Regime.kChronic));
+      // Uzun süre tam sakin kalırsa eşiğin altına iner (oyun-sonu değil).
+      for (var i = 0; i < 400 && rot > 0; i++) {
+        rot = (rot + Regime.rotStep(unrest: 0.0, days: 1)).clamp(0.0, 1.0);
+      }
+      expect(rot, lessThan(Regime.kChronic));
+    });
+
+    test('her krizin kalıcı bir bedeli var', () {
+      expect(Regime.kRotPerCrisis, greaterThan(0));
+    });
+
+    test('her rejimin kendi kronik hâli ve adı var', () {
+      final titles = <String>{};
+      for (final r in VillageRegime.values) {
+        final crisis = Regime.ruleOf(r).crisis;
+        final (title, body) = Regime.chronicText(crisis);
+        if (crisis == RegimeCrisis.none) {
+          expect(title, isEmpty);
+          continue;
+        }
+        expect(title, isNotEmpty);
+        expect(body, isNotEmpty);
+        titles.add(title);
+      }
+      // Merkez hariç 4 rejim → 4 ayrı kronik hâl.
+      expect(titles.length, 4);
+    });
+
+    test('etiketler eşiklerle uyumlu', () {
+      expect(Regime.rotLabel(0.05), 'sağlam');
+      expect(Regime.rotLabel(Regime.kChronic), 'kronikleşti');
+      expect(Regime.rotLabel(Regime.kFailing), 'çözülüyor');
+    });
+  });
+}
+
+// ─── DİNÎ OVERLAY MEKANİĞİ ───────────────────────────────────────────────────
+// İman pusulada bir BOYA; ama boya yalnız ismi değiştiriyorsa oyuncu için
+// yoktur. Bu testler imanın gerçek mekanik karşılığını kilitler.
+void faithTests() {
+  group('iman overlay mekaniği', () {
+    test('imansız köyde etki neredeyse yok', () {
+      final f = Regime.faithEffectOf(0.0);
+      expect(f.unrestRelief, 0);
+      expect(f.resistBonus, 0);
+      expect(f.crimeDamp, 1.0);
+      expect(f.moraleFloor, 0);
+      expect(f.conscriptSting, 1.0);
+      expect(f.note, isEmpty);
+    });
+
+    test('bandın üstünde iman gerçek sonuç doğurur', () {
+      final f = Regime.faithEffectOf(1.0);
+      expect(f.unrestRelief, greaterThan(0));   // sabır
+      expect(f.resistBonus, greaterThan(0));    // inanç için direnmek
+      expect(f.crimeDamp, lessThan(1.0));       // cemaat gözü
+      expect(f.moraleFloor, greaterThan(0));    // teselli
+      expect(f.conscriptSting, greaterThan(1)); // devşirme daha ağır
+      expect(f.note, isNotEmpty);
+    });
+
+    test('etkiler imanla birlikte tek yönlü büyür', () {
+      final lo = Regime.faithEffectOf(0.2);
+      final mid = Regime.faithEffectOf(0.6);
+      final hi = Regime.faithEffectOf(0.95);
+      expect(mid.unrestRelief, greaterThan(lo.unrestRelief));
+      expect(hi.unrestRelief, greaterThan(mid.unrestRelief));
+      expect(hi.crimeDamp, lessThan(mid.crimeDamp));
+      expect(hi.conscriptSting, greaterThan(mid.conscriptSting));
+    });
+
+    test('not yalnız dinî bandın üstünde görünür', () {
+      expect(Regime.faithEffectOf(LawCompass.kFaithBand - 0.01).note, isEmpty);
+      expect(Regime.faithEffectOf(LawCompass.kFaithBand + 0.01).note,
+          isNotEmpty);
+    });
+
+    test('iman dinî tiranı ayakta tutar ama kurtarmaz', () {
+      // Mühürlü El mutsuzken kaynar; iman bunu yavaşlatır, sıfırlamaz.
+      final r = Regime.ruleOf(VillageRegime.sealedHand);
+      final raw = Regime.unrestStep(r, morale: 0.35, days: 1);
+      final withFaith = raw - Regime.faithEffectOf(1.0).unrestRelief;
+      expect(withFaith, lessThan(raw));
+      expect(withFaith, greaterThan(0), reason: 'iman zulmü tamamen aklamaz');
+    });
+  });
 }

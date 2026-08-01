@@ -28,6 +28,7 @@ extension _SceneInput on _VillageSceneState {
     _camera = _camera + focal * (1 / newZoom - 1 / _zoom);
     _zoom = newZoom;
     _clampCamera(_viewSize);
+    _clearHover(); // zoom altında hedef kayar — künye takılı kalmasın
     _frame.value = _frame.value + 1;
   }
 
@@ -93,10 +94,31 @@ extension _SceneInput on _VillageSceneState {
   void _clampCamera(Size size) {
     if (size.width <= 0 || size.height <= 0) return;
     final uc = _centerU, vc = _centerV;
-    // İlk geçerli frame: kamerayı harita merkezine (spawn) ortala.
+    // İLK GEÇERLİ FRAME — kamerayı köyün kalbine ortala.
+    //
+    // Eskiden burada harita MERKEZİ (spawn noktası) kullanılıyordu. Kurucular
+    // spawn çevresine SERPİLDİĞİ için köy kadrajda yana kayıyordu; oyuncunun
+    // ilk gördüğü kare "senin insanların burada" demiyordu. Kalp = ocak varsa
+    // ocak, yoksa köylülerin ortalaması (bkz. scene_flow `_villageHeart`).
+    //
+    // TUZAK — TEK SAHİP: kamerayı burası kurar. Boot'ta ayrıca ortalamayı
+    // denedim, bu satır onu ilk karede eziyordu (aynı işi iki yerde yapmanın
+    // klasik bedeli). Yeni bir "başlangıçta şuraya bak" isteği çıkarsa yine
+    // BURAYA bağlanmalı.
+    // SIRALAMA TUZAĞI: ilk kare, kurucular spawn olmadan ÖNCE çizilir (dünya
+    // asset'ler hazır olunca kuruluyor). O karede kalp null olur; kamerayı
+    // harita merkezine kilitlersen köy sonradan başka yerde doğar ve kadraj
+    // bir daha düzelmez — ilk denememde tam olarak bu oldu. Bu yüzden kilit
+    // (`_cameraCentered`) yalnız GERÇEKTEN köye ortalayabildiğimizde takılır;
+    // o ana kadar harita merkezi geçici bir kadrajdır.
     if (!_cameraCentered) {
-      _centerCameraOnUV(uc, vc, size);
-      _cameraCentered = true;
+      final heart = _villageHeart();
+      if (heart != null) {
+        _centerCameraOnUV(heart.$1 - heart.$2, heart.$1 + heart.$2, size);
+        _cameraCentered = true;
+      } else {
+        _centerCameraOnUV(uc, vc, size);
+      }
     }
     // Zoom clamp — reach'ten fazla uzaklaşma.
     _zoom = _zoom.clamp(_minZoomForReach(size), _VillageSceneState._kMaxZoom);
@@ -121,6 +143,12 @@ extension _SceneInput on _VillageSceneState {
     _scaleStart = _zoom;
     _panAnchor = d.localFocalPoint;
     _cameraAnchor = _camera;
+    // Kamera oynayınca hedef imlecin altından kayar; künye üstünde takılı
+    // kalmasın (bina/mezar hareket etmez, kayan kameradır).
+    _clearHover();
+    // Oyuncu kamerayı ELİNE aldı → "İzle" kilidi düşer. Aksi hâlde her pan
+    // hareketi lerp tarafından geri çekilir ve kamera oyuncuyla güreşirdi.
+    _watchLeft = 0;
     if (_mineMode) {
       final tile = _toTile(d.localFocalPoint);
       _mineStart = tile;
@@ -136,11 +164,14 @@ extension _SceneInput on _VillageSceneState {
       _farmStart = tile;
       _farmEnd = tile;
       _frame.value = _frame.value + 1;
-    } else if (_placingRoad != null) {
-      // Yol döşeme: stroke başla, basılan tile'ı paint et
-      _roadStrokeTiles.clear();
+    } else if (_roadMode) {
+      // Yol: sürükleme ÖNİZLEME başlatır — burada hiçbir şey harcanmaz.
+      // Commit sürükleme bırakılınca (_onCanvasScaleEnd).
       final tile = _toTile(d.localFocalPoint);
-      if (tile != null) _paintRoadTile(tile.$1, tile.$2);
+      _roadDragStart = tile;
+      _roadDragEnd = tile;
+      _rebuildRoadPreview();
+      _frame.value = _frame.value + 1;
     } else if (_placing == null) {
       // Tutup-bırak SADECE kavga anında — yalnız dövüşen (ağız dalaşı/yumruklaşma)
       // bir köylü kavranabilir (onu kavgadan çekip ayır). Diğer zamanlarda
@@ -175,11 +206,15 @@ extension _SceneInput on _VillageSceneState {
         changed = true;
       }
       if (changed) _frame.value = _frame.value + 1;
-    } else if (_placingRoad != null) {
-      // Yol döşeme: drag boyunca her yeni tile'a paint et
+    } else if (_roadMode) {
+      // Yol: sürükleme yalnız güzergâhın UCUNU taşır; ara noktalar dik "L"
+      // ile türetilir (serbest el yok → el titremesi yola dönüşmez).
       final tile = _toTile(d.localFocalPoint);
-      if (tile != null && !_roadStrokeTiles.contains(tile)) {
-        _paintRoadTile(tile.$1, tile.$2);
+      if (tile != null && tile != _roadDragEnd) {
+        _roadDragEnd = tile;
+        _roadDragStart ??= tile;
+        _rebuildRoadPreview();
+        _frame.value = _frame.value + 1;
       }
     } else if (_placing != null) {
       // Bina yerleştirme modunda ghost güncelle
@@ -235,6 +270,9 @@ extension _SceneInput on _VillageSceneState {
         v.targetRow = ly;
         v.state = VillagerState.idle;
         v.idleTimer = 0.5;
+        // Işınlandı — birikmiş hızı taşıma, yoksa bırakıldığı yerde eski
+        // yönüne doğru bir kayış yapar.
+        v.loco.reset();
         // Kavgadan çekildi: yatışır + bir süre tekrar kavgaya tutuşmaz.
         v.activity = VillagerActivity.none;
         v.chatBubbleIcon = '🕊️';
@@ -247,6 +285,11 @@ extension _SceneInput on _VillageSceneState {
       _draggedVillager = null;
       _dragMovedVillager = false;
       _frame.value = _frame.value + 1;
+      return;
+    }
+    if (_roadMode) {
+      // Önizlenen güzergâh burada gerçek olur — kaynak İLK KEZ şimdi harcanır.
+      _commitRoadPreview();
       return;
     }
     if (_mineMode && _mineStart != null && _mineEnd != null) {
@@ -308,6 +351,9 @@ extension _SceneInput on _VillageSceneState {
   // ── Tap / hover ────────────────────────────────────────────────────────────
 
   void _onCanvasTapUp(TapUpDetails d) {
+    // Yol modunda dokunuşu scale akışı sahiplenir (start→önizle, end→döşe).
+    // Buraya düşerse altındaki binayı seçerdi — yol döşerken bina paneli açılırdı.
+    if (_roadMode) return;
     if (_mineMode) {
       final tile = _toTile(d.localPosition);
       if (tile != null) _commitMine(tile, tile);
@@ -343,6 +389,7 @@ extension _SceneInput on _VillageSceneState {
           setStateHere(() {
             _selectedVillager = v;
             _selectedBuilding = null;
+            _detailExpanded = false; // önce komuta çubuğunda kompakt görün
           });
         }
       } else if (tile != null) {
@@ -353,6 +400,7 @@ extension _SceneInput on _VillageSceneState {
           setStateHere(() {
             _selectedBuilding = b;
             _selectedVillager = null;
+            _detailExpanded = false; // önce komuta çubuğunda kompakt görün
           });
         } else if (g != null) {
           _showNotification(Voice.say(
@@ -388,48 +436,52 @@ extension _SceneInput on _VillageSceneState {
       return;
     }
     // Diğer mod araçlarında hover etiketi kapalı (kendi ipuçları var).
-    if (_farmMode || _lumberMode || _mineMode || _placingRoad != null) {
+    if (_farmMode || _lumberMode || _mineMode || _roadMode) {
       _clearHover();
       return;
     }
-    // Boş elde: NPC/bina üstüne gelince ad + durum etiketi. NPC önce —
-    // tıklama önceliğiyle tutarlı (sprite bina önünde görünür).
-    final tile = _toTile(e.localPosition);
-    String? title, sub;
-    final v = _villagerAtScreen(e.localPosition);
-    if (v != null) {
-      title = v.name;
-      sub = v.homeBuilding == null
-          ? '${v.type.displayName} · evsiz'
-          : v.type.displayName;
-    } else if (tile != null) {
-      final b = _buildingAt(tile.$1, tile.$2);
-      if (b != null) {
-        title = kBuildingMeta[b.type]?.label ?? '?';
-        sub = _buildingHoverSub(b);
-      } else {
-        final g = _graveAt(tile.$1, tile.$2);
-        if (g != null) {
-          title = '🕯️ ${g.name}';
-          sub = 'huzur içinde yatıyor';
-        }
+    // Boş elde: NPC/bina üstüne gelince dünya-uzayı künye. NPC önce — tıklama
+    // önceliğiyle tutarlı (sprite bina önünde görünür).
+    //
+    // PERF: imleç 3px'ten az oynadıysa hit-test'i hiç çalıştırma (trackpad
+    // saniyede 100+ olay üretir; künye imleci takip etmediği için minik
+    // titremelerin sonucu zaten değişmez).
+    final probe = _hoverProbe;
+    if (probe != null && (e.localPosition - probe).distanceSquared < 9.0) return;
+    _hoverProbe = e.localPosition;
+
+    VillagerEntity? v = _villagerAtScreen(e.localPosition);
+    BuildingEntity? b;
+    Grave? g;
+    if (v == null) {
+      final tile = _toTile(e.localPosition);
+      if (tile != null) {
+        b = _buildingAt(tile.$1, tile.$2);
+        if (b == null) g = _graveAt(tile.$1, tile.$2);
       }
     }
-    if (title != _hoverTitle || sub != _hoverSub || e.localPosition != _hoverPos) {
-      _hoverTitle = title;
-      _hoverSub = sub;
-      _hoverPos = title == null ? null : e.localPosition;
-      _frame.value = _frame.value + 1;
+    // PERF: hedef değişmediyse hiçbir şey yazma — hover başına sıfır iş.
+    if (identical(v, _hoverVillager) &&
+        identical(b, _hoverBuilding) &&
+        identical(g, _hoverGrave)) {
+      return;
     }
+    final wasEmpty =
+        _hoverVillager == null && _hoverBuilding == null && _hoverGrave == null;
+    _hoverVillager = v;
+    _hoverBuilding = b;
+    _hoverGrave = g;
+    // Hedeften hedefe geçerken künye yeniden doğmaz (fade tekrarı göz yorar);
+    // yalnız boşluktan gelirken belirir.
+    if (wasEmpty) _hoverSince = _time;
+    // NOT: bilerek _frame bumplanmıyor — künye zaten her karede yeniden konumlanır.
   }
 
   void _clearHover() {
-    if (_hoverTitle != null || _hoverPos != null) {
-      _hoverTitle = null;
-      _hoverSub = null;
-      _hoverPos = null;
-      _frame.value = _frame.value + 1;
-    }
+    _hoverVillager = null;
+    _hoverBuilding = null;
+    _hoverGrave = null;
+    _hoverProbe = null;
   }
 
   /// Verilen tile'daki mezar (varsa) — anma etkileşimi için. Mezarlar tek tile
@@ -449,7 +501,9 @@ extension _SceneInput on _VillageSceneState {
       return '${b.occupants} sakin$w';
     }
     if (b.type == BuildingType.firepit) {
-      return b.fireFuel > 0.001 ? 'yanıyor' : 'sönük';
+      if (b.fireFuel <= 0.001) return 'sönük';
+      // Kışın ocak hızlı yer — köre düşmeden önce künyeden de belli olsun.
+      return b.fireFuel < 0.30 ? 'yanıyor · yakıt az' : 'yanıyor';
     }
     return b.isActive ? 'çalışıyor' : 'boşta';
   }

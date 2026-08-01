@@ -50,31 +50,18 @@ class BuildingRenderer {
     await _loadSprite(BuildingType.church,         'assets/buildings/church.png');
     // tent.png gelince procedurel çadır yerine sprite çizilir; yoksa fallback.
     await _loadSprite(BuildingType.tent,           'assets/buildings/tent.png');
-    // Köy Meydanı & Kültür Mahallesi — PNG gelene kadar prosedürel placeholder
-    // (_drawCivicPlaceholder). Dosya yoksa _loadSprite sessizce başarısız olur.
+    // Köy Meydanı & Kültür Mahallesi — PNG'leri GELDİ (eski "placeholder
+    // bekleniyor" notu bayattı; prosedürel çizim artık yalnız yükleme hatası
+    // fallback'i, bkz. _drawFallbackBox).
     await _loadSprite(BuildingType.fountain,       'assets/buildings/fountain.png');
     await _loadSprite(BuildingType.library,        'assets/buildings/library.png');
     await _loadSprite(BuildingType.bathhouse,      'assets/buildings/bathhouse.png');
     await _loadSprite(BuildingType.monument,       'assets/buildings/monument.png');
-    // Liman & Ziyaret Mahallesi — PNG gelene kadar prosedürel placeholder.
-    await _loadSprite(BuildingType.dock,           'assets/buildings/dock.png');
+    // Liman & Ziyaret Mahallesi — PNG'leri GELDİ (aynı not).
     await _loadSprite(BuildingType.caravanserai,   'assets/buildings/caravanserai.png');
     await _loadSprite(BuildingType.shrine,         'assets/buildings/shrine.png');
     await _loadSprite(BuildingType.belltower,      'assets/buildings/belltower.png');
   }
-
-  /// PNG'si henüz gelmemiş kültür mahallesi binaları için prosedürel kutu
-  /// placeholder çizilir (footprint'e oturur, türe göre renk + harf).
-  static const Set<BuildingType> _civicPlaceholders = {
-    BuildingType.fountain,
-    BuildingType.library,
-    BuildingType.bathhouse,
-    BuildingType.monument,
-    BuildingType.dock,
-    BuildingType.caravanserai,
-    BuildingType.shrine,
-    BuildingType.belltower,
-  };
 
   static Future<void> _loadSprite(BuildingType type, String path) async {
     try {
@@ -101,42 +88,17 @@ class BuildingRenderer {
       {double time = 0, int seed = 0, double dayLight = 1.0,
        double rainIntensity = 0.0, bool isActive = false,
        bool perfMode = false, double fireFuel = 1.0}) {
-    // Lamppost — PNG yüklendiyse normal asset yolu; yoksa procedurel fallback.
-    if (type == BuildingType.lamppost && !_cache.containsKey(type)) {
-      _drawLamppost(canvas, back, left, right, front, time, seed, dayLight);
-      return;
-    }
-    // Çiçekçi Kulübesi — PNG asset gelene kadar procedurel placeholder çizilir
-    // (küçük ahşap kulübe + diamond planter). PNG yüklendiğinde _cache hit ile
-    // bu dal otomatik atlanır.
-    if (type == BuildingType.floristCottage && !_cache.containsKey(type)) {
-      _drawFlowerGarden(canvas, back, left, right, front, time, seed);
-      return;
-    }
-    // Arı Kovanı — PNG gelene kadar procedurel hasır skep fallback.
-    if (type == BuildingType.beehive && !_cache.containsKey(type)) {
-      _drawBeehive(canvas, back, left, right, front, time, seed);
-      return;
-    }
-    // Kilise — church.png gelene kadar procedurel taş şapel + çan kulesi + haç.
-    if (type == BuildingType.church && !_cache.containsKey(type)) {
-      _drawChurch(canvas, back, left, right, front, time, seed);
-      return;
-    }
-    // Çadır — tent.png gelene kadar procedurel A-frame bez çadır.
-    if (type == BuildingType.tent && !_cache.containsKey(type)) {
-      _drawTent(canvas, back, left, right, front, time, seed);
-      return;
-    }
-    // Kültür mahallesi — PNG gelene kadar prosedürel kutu placeholder.
-    if (_civicPlaceholders.contains(type) && !_cache.containsKey(type)) {
-      _drawCivicPlaceholder(canvas, type, back, left, right, front, time);
-      return;
-    }
-
     final img  = _cache[type];
     final meta = kBuildingMeta[type];
-    if (img == null || meta == null) return;
+    // Genel güvenlik fallback'i: PNG yüklenememiş / bilinmeyen bina → basit
+    // izometrik kutu placeholder (footprint'e oturur, türe göre renk + harf).
+    // Tüm bina PNG'leri assets/buildings/ altında mevcut olduğundan bu dal
+    // pratikte yalnız yükleme hatasında devreye girer.
+    if (img == null) {
+      _drawFallbackBox(canvas, type, back, left, right, front, time);
+      return;
+    }
+    if (meta == null) return;
 
     // PerfMode: ambient glow ve light points atlanır — her bina × her ışık
     // noktası × 3 drawCircle inanılmaz pahalı (5 ev = 15+ ışık × 3 = 45/frame).
@@ -187,443 +149,12 @@ class BuildingRenderer {
     }
   }
 
-  // ── Sokak feneri (procedurel) ───────────────────────────────────────────────
-  // Asset yok, doğrudan piksel çizimi. Footprint merkezinden yükselen ahşap
-  // direk + üstte demir kafesli lamba. Gece içeriden sıcak alev parlar
-  // (lighting pass ayrıca büyük halo ekler).
-  static final _pLampPostBase = Paint()..color = const Color(0xFF7A6E60)..isAntiAlias = false;
-  static final _pLampPost     = Paint()..color = const Color(0xFF5A3E20)..isAntiAlias = false;
-  static final _pLampCage     = Paint()..color = const Color(0xFF2A1A10)..isAntiAlias = false;
-
-  // ── Çiçek bahçesi (procedurel) ──────────────────────────────────────────────
-  // Küçük ahşap planter "kutu" — diamond izometri çerçevesinde. Üstünde
-  // toprak + birkaç renkli çiçek noktası. Asıl çiçek demetleri scene'in
-  // spawn ettiği gerçek DecorEntity'lerle çevreye serpilir.
-  static final _pPlanterWood   = Paint()..color = const Color(0xFF7A5A32)..isAntiAlias = true;
-  static final _pPlanterShade  = Paint()..color = const Color(0xFF5A3E20)..isAntiAlias = true;
-  static final _pPlanterSoil   = Paint()..color = const Color(0xFF4A3018)..isAntiAlias = true;
-  static final _pPlanterMoss   = Paint()..color = const Color(0xFF6B8A4A)..isAntiAlias = true;
-
-  static void _drawFlowerGarden(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front,
-      double time, int seed) {
-    // Izometrik diamond — 4 köşesi tile sınırına yakın küçültülmüş
-    final cx = (back.dx + front.dx) / 2;
-    final cy = (back.dy + front.dy) / 2;
-    final tileW = (right.dx - left.dx).abs();
-    final s = tileW / 64.0;
-    // Planter boyut — tile'ın iç ~%65'i, yüksekliği isometric yarısı + kalınlık
-    final halfW = tileW * 0.32;
-    final halfH = halfW * 0.5; // 2:1 iso
-    final depth = 4.0 * s; // ahşap kenar yüksekliği
-
-    // Üst diamond (planter ağzı — toprak)
-    final topPath = Path()
-      ..moveTo(cx, cy - halfH)
-      ..lineTo(cx + halfW, cy)
-      ..lineTo(cx, cy + halfH)
-      ..lineTo(cx - halfW, cy)
-      ..close();
-    // Alt diamond (depth ofsetli — gölgeli kenar)
-    final botPath = Path()
-      ..moveTo(cx, cy - halfH + depth)
-      ..lineTo(cx + halfW, cy + depth)
-      ..lineTo(cx, cy + halfH + depth)
-      ..lineTo(cx - halfW, cy + depth)
-      ..close();
-
-    // 1) Ahşap "yan duvarlar" — front-left ve front-right yamuk
-    final wallL = Path()
-      ..moveTo(cx - halfW, cy)
-      ..lineTo(cx, cy + halfH)
-      ..lineTo(cx, cy + halfH + depth)
-      ..lineTo(cx - halfW, cy + depth)
-      ..close();
-    final wallR = Path()
-      ..moveTo(cx, cy + halfH)
-      ..lineTo(cx + halfW, cy)
-      ..lineTo(cx + halfW, cy + depth)
-      ..lineTo(cx, cy + halfH + depth)
-      ..close();
-    canvas.drawPath(wallL, _pPlanterShade);
-    canvas.drawPath(wallR, _pPlanterWood);
-
-    // 2) Üst toprak (planter içi)
-    canvas.drawPath(topPath, _pPlanterSoil);
-    // Toprak üstüne hafif yeşil tüy (moss/grass)
-    final mossPath = Path()
-      ..moveTo(cx, cy - halfH * 0.7)
-      ..lineTo(cx + halfW * 0.7, cy)
-      ..lineTo(cx, cy + halfH * 0.7)
-      ..lineTo(cx - halfW * 0.7, cy)
-      ..close();
-    canvas.drawPath(mossPath, _pPlanterMoss);
-
-    // 3) Üst çerçeve hairline — diamond outline (ahşap üst kenar)
-    final framePaint = Paint()
-      ..color = const Color(0xFF8A6840)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2 * s
-      ..isAntiAlias = true;
-    canvas.drawPath(topPath, framePaint);
-
-    // 4) Birkaç çiçek noktası — seed bazlı renk varyantı
-    final rng = (seed * 9973) & 0xFFFF;
-    final colors = const [
-      Color(0xFFD94833), // gelincik kırmızı
-      Color(0xFFE6B54A), // buttercup sarı
-      Color(0xFFB39AC9), // lavanta mor
-      Color(0xFFF0E6D2), // papatya cream
-    ];
-    final dotR = 1.8 * s;
-    // 4 simetrik konum + offset
-    final dots = <Offset>[
-      Offset(cx, cy - halfH * 0.35),
-      Offset(cx + halfW * 0.35, cy),
-      Offset(cx, cy + halfH * 0.35),
-      Offset(cx - halfW * 0.35, cy),
-    ];
-    for (int i = 0; i < dots.length; i++) {
-      final col = colors[(rng + i) % colors.length];
-      canvas.drawCircle(dots[i], dotR, Paint()..color = col..isAntiAlias = true);
-      // Hafif yaprak — küçük yeşil nokta yanda
-      canvas.drawCircle(
-          dots[i] + Offset(-2 * s, 1 * s),
-          1.2 * s,
-          Paint()..color = const Color(0xFF6B8A4A)..isAntiAlias = true);
-    }
-    // Suppress unused warnings
-    if (botPath.getBounds().width < 0) canvas.drawPath(botPath, _pPlanterShade);
-    if (time < 0) {} // tick unused
-  }
-
-  // ── Arı kovanı (procedurel hasır skep) ──────────────────────────────────────
-  // Klasik örgü saman kovanı: tabandan tepeye daralan yatay bantlar (ellips
-  // dilimleri), önde giriş deliği + iniş tahtası. PNG gelince _cache hit ile
-  // bu dal atlanır.
-  static final _pSkepBand  = Paint()..isAntiAlias = true;
-  static final _pSkepShade = Paint()..color = const Color(0x33000000)..isAntiAlias = true;
-
-  static void _drawBeehive(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front,
-      double time, int seed) {
-    final cx = (back.dx + front.dx) / 2;
-    final cyTile = (left.dy + right.dy) / 2;
-    final tileW = (right.dx - left.dx).abs();
-    final s = tileW / 64.0;
-
-    // Zemin gölgesi
-    final groundY = cyTile + 3 * s;
-    canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(cx, groundY), width: 22 * s, height: 8 * s),
-      _pSkepShade);
-
-    // Skep gövdesi — alttan üste daralan bantlar. Renk koyu samandan açığa.
-    const bands = 6;
-    final baseHalfW = 11.0 * s;
-    final bandH = 4.2 * s;
-    final bodyBottom = groundY - 1 * s;
-    for (int i = 0; i < bands; i++) {
-      // 0 = en alt (geniş), bands-1 = tepe (dar)
-      final t = i / (bands - 1);
-      final halfW = baseHalfW * (1.0 - t * 0.62);
-      final cyBand = bodyBottom - i * bandH;
-      // Üstteki bant biraz daha açık → yumuşak hacim.
-      final lum = (0.78 + t * 0.18).clamp(0.0, 1.0);
-      _pSkepBand.color = Color.fromARGB(
-        255,
-        (200 * lum).round(),
-        (158 * lum).round(),
-        (86 * lum).round(),
-      );
-      canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(cx, cyBand), width: halfW * 2, height: bandH * 1.7),
-        _pSkepBand);
-      // Bant altı ince gölge çizgisi (örgü ayrımı)
-      canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(cx, cyBand + bandH * 0.55),
-            width: halfW * 1.9,
-            height: bandH * 0.5),
-        _pSkepShade);
-    }
-
-    // Tepe topuzu
-    final topY = bodyBottom - (bands - 1) * bandH - bandH * 0.4;
-    _pSkepBand.color = const Color(0xFFB89653);
-    canvas.drawCircle(Offset(cx, topY), 2.2 * s, _pSkepBand);
-
-    // Giriş deliği (ön-alt) + iniş tahtası
-    final holeY = bodyBottom - bandH * 0.7;
-    canvas.drawOval(
-      Rect.fromCenter(
-          center: Offset(cx, holeY), width: 5 * s, height: 3.2 * s),
-      Paint()..color = const Color(0xFF3A2410)..isAntiAlias = true);
-    canvas.drawRect(
-      Rect.fromCenter(
-          center: Offset(cx, holeY + 2.4 * s), width: 7 * s, height: 1.4 * s),
-      Paint()..color = const Color(0xFF8A6A3A)..isAntiAlias = true);
-
-    if (time < 0 || seed < 0) {} // unused tick/seed
-  }
-
-  // ── Kilise (procedurel taş şapel) ───────────────────────────────────────────
-  // church.png gelene kadar gösterilen placeholder: taş gövde + üçgen çatı +
-  // solda çan kulesi (sivri külah + haç) + gül penceresi + kemerli kapı.
-  // PNG yüklendiğinde _cache hit ile bu dal atlanır. (Tek seferlik çizim,
-  // sahnede ~1 kilise olur — perf kritik değil.)
-  static void _drawChurch(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front,
-      double time, int seed) {
-    final cx     = (back.dx + front.dx) / 2;
-    final cyTile = (left.dy + right.dy) / 2;
-    final tileW  = (right.dx - left.dx).abs();
-    final s      = tileW / 64.0;
-
-    const stone      = Color(0xFFCBBEA8);
-    const stoneShade = Color(0xFFA99B82);
-    const stoneDark  = Color(0xFF7E7058);
-    const roof       = Color(0xFF8A4B33);
-    const roofDark   = Color(0xFF6E3A26);
-    const wood       = Color(0xFF5A3A22);
-    const glass      = Color(0xFFF2D98A);
-    const cross      = Color(0xFFE8C766);
-
-    final fill   = Paint()..isAntiAlias = true;
-    final stroke = Paint()
-      ..isAntiAlias = true
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0 * s
-      ..color = stoneDark;
-
-    // Zemin gölgesi
-    final groundY = cyTile + 6 * s;
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, groundY), width: 74 * s, height: 22 * s),
-      Paint()..color = const Color(0x44000000)..isAntiAlias = true);
-
-    final baseY   = groundY - 1 * s;
-    final towerW  = 18.0 * s;
-    final towerH  = 52.0 * s;
-    final navW    = 40.0 * s;
-    final navH    = 30.0 * s;
-    final tx      = cx - 29 * s;        // kule sol kenarı
-    final nx0     = tx + towerW;        // nef sol kenarı
-    final towerTop= baseY - towerH;
-    final navTop  = baseY - navH;
-
-    // 1) Nef gövdesi (taş) + sağ kenar gölgesi
-    fill.color = stone;
-    canvas.drawRect(Rect.fromLTWH(nx0, navTop, navW, navH), fill);
-    fill.color = stoneShade;
-    canvas.drawRect(Rect.fromLTWH(nx0 + navW - 7 * s, navTop, 7 * s, navH), fill);
-    canvas.drawRect(Rect.fromLTWH(nx0, navTop, navW, navH), stroke);
-
-    // 2) Nef üçgen çatısı
-    final gable = Path()
-      ..moveTo(nx0 - 3 * s, navTop + 1 * s)
-      ..lineTo(nx0 + navW / 2, navTop - 18 * s)
-      ..lineTo(nx0 + navW + 3 * s, navTop + 1 * s)
-      ..close();
-    fill.color = roof;
-    canvas.drawPath(gable, fill);
-    // çatı sağ yüzü gölge
-    final gableShade = Path()
-      ..moveTo(nx0 + navW / 2, navTop - 18 * s)
-      ..lineTo(nx0 + navW + 3 * s, navTop + 1 * s)
-      ..lineTo(nx0 + navW / 2, navTop + 1 * s)
-      ..close();
-    fill.color = roofDark;
-    canvas.drawPath(gableShade, fill);
-
-    // 3) Çan kulesi gövdesi (taş)
-    fill.color = stone;
-    canvas.drawRect(Rect.fromLTWH(tx, towerTop, towerW, towerH), fill);
-    fill.color = stoneShade;
-    canvas.drawRect(Rect.fromLTWH(tx + towerW - 5 * s, towerTop, 5 * s, towerH), fill);
-    canvas.drawRect(Rect.fromLTWH(tx, towerTop, towerW, towerH), stroke);
-
-    // 4) Çan kulesi sivri külahı
-    final spire = Path()
-      ..moveTo(tx - 2 * s, towerTop + 1 * s)
-      ..lineTo(tx + towerW / 2, towerTop - 20 * s)
-      ..lineTo(tx + towerW + 2 * s, towerTop + 1 * s)
-      ..close();
-    fill.color = roofDark;
-    canvas.drawPath(spire, fill);
-
-    // 5) Külah tepesinde haç
-    final apexX = tx + towerW / 2;
-    final apexY = towerTop - 20 * s;
-    fill.color = cross;
-    canvas.drawRect(
-      Rect.fromCenter(center: Offset(apexX, apexY - 3 * s), width: 1.6 * s, height: 9 * s),
-      fill);
-    canvas.drawRect(
-      Rect.fromCenter(center: Offset(apexX, apexY - 5 * s), width: 5 * s, height: 1.6 * s),
-      fill);
-
-    // 6) Çan kulesi açıklığı (kemerli, koyu)
-    final belfry = Rect.fromLTWH(tx + 5 * s, towerTop + 8 * s, towerW - 10 * s, 9 * s);
-    fill.color = const Color(0xFF3A2E20);
-    canvas.drawRRect(
-      RRect.fromRectAndCorners(belfry,
-          topLeft: Radius.circular(4 * s), topRight: Radius.circular(4 * s)),
-      fill);
-
-    // 7) Gül penceresi (yuvarlak vitray) — nef alnında
-    final roseC = Offset(nx0 + navW / 2, navTop - 4 * s);
-    fill.color = stoneDark;
-    canvas.drawCircle(roseC, 5.2 * s, fill);
-    fill.color = glass;
-    canvas.drawCircle(roseC, 3.8 * s, fill);
-    fill.color = stoneDark;
-    canvas.drawRect(
-      Rect.fromCenter(center: roseC, width: 7.6 * s, height: 0.9 * s), fill);
-    canvas.drawRect(
-      Rect.fromCenter(center: roseC, width: 0.9 * s, height: 7.6 * s), fill);
-
-    // 8) Kemerli ana kapı (nef tabanı ortası)
-    final doorW = 11.0 * s, doorH = 16.0 * s;
-    final doorX = nx0 + navW / 2 - doorW / 2;
-    final doorY = baseY - doorH;
-    fill.color = wood;
-    canvas.drawRRect(
-      RRect.fromRectAndCorners(Rect.fromLTWH(doorX, doorY, doorW, doorH),
-          topLeft: Radius.circular(doorW / 2), topRight: Radius.circular(doorW / 2)),
-      fill);
-    canvas.drawRect(
-      Rect.fromCenter(
-          center: Offset(doorX + doorW / 2, doorY + doorH * 0.6),
-          width: 0.9 * s, height: doorH * 0.7),
-      Paint()..color = const Color(0xFF3A2414)..isAntiAlias = true);
-
-    // 9) Nef yan pencereleri (uzun, kemerli vitray)
-    fill.color = glass;
-    for (final fx in [0.22, 0.78]) {
-      final wx = nx0 + navW * fx - 2 * s;
-      final wy = navTop + navH * 0.30;
-      canvas.drawRRect(
-        RRect.fromRectAndCorners(Rect.fromLTWH(wx, wy, 4 * s, 11 * s),
-            topLeft: Radius.circular(2 * s), topRight: Radius.circular(2 * s)),
-        fill);
-    }
-
-    if (time < 0 || seed < 0) {} // unused tick/seed
-  }
-
-  // ── Çadır (procedurel A-frame bez çadır) ───────────────────────────────────
-  // İlkel barınak: iki eğik bez panel sırtta birleşir, önde koyu kapı yarığı,
-  // tepede çapraz sırıklar + minik flama (rüzgârda sallanır). Işık soldan →
-  // sol panel açık, sağ panel gölgeli. tent.png gelince _cache hit ile atlanır.
-  static void _drawTent(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front,
-      double time, int seed) {
-    final cx     = (back.dx + front.dx) / 2;
-    final cyTile = (left.dy + right.dy) / 2;
-    final tileW  = (right.dx - left.dx).abs();
-    final s      = tileW / 64.0;
-
-    const cloth      = Color(0xFFD9C9A6); // ham bez krem
-    const clothShade = Color(0xFFB29A74); // gölge yüz
-    const clothDark  = Color(0xFF8A7553); // taban/ek dikiş
-    const pole       = Color(0xFF6E4E2E); // ahşap sırık
-    const doorDark   = Color(0xFF2A2018); // kapı içi karanlık
-    const flag       = Color(0xFFB5503A); // kiremit flama
-
-    final fill = Paint()..isAntiAlias = true;
-
-    final baseY = cyTile + 4 * s;        // zemin çizgisi (hafif aşağı)
-    final halfW = 15.0 * s;              // taban yarı genişliği
-    final height = 26.0 * s;             // sırt yüksekliği
-    final ridgeX = cx + 2.0 * s;         // sırt hafif sağda (iso derinlik)
-    final ridgeY = baseY - height;
-
-    // Zemin gölgesi
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, baseY + 1 * s), width: 34 * s, height: 11 * s),
-      Paint()..color = const Color(0x33000000)..isAntiAlias = true);
-
-    // 1) Sağ (arka) bez yüzü — gölgeli, hafif derinlik için sağa kayık.
-    final rightFace = Path()
-      ..moveTo(ridgeX, ridgeY)
-      ..lineTo(cx + halfW, baseY)
-      ..lineTo(cx + halfW * 0.55, baseY)
-      ..lineTo(ridgeX - 3 * s, ridgeY + 2 * s)
-      ..close();
-    fill.color = clothShade;
-    canvas.drawPath(rightFace, fill);
-
-    // 2) Sol (ön) bez yüzü — aydınlık ana panel (geniş üçgen).
-    final leftFace = Path()
-      ..moveTo(ridgeX, ridgeY)
-      ..lineTo(cx - halfW, baseY)
-      ..lineTo(cx + halfW, baseY)
-      ..close();
-    fill.color = cloth;
-    canvas.drawPath(leftFace, fill);
-
-    // 3) Taban dikiş bandı (koyu) — bezin yere oturduğu kalın kenar.
-    canvas.drawRect(
-      Rect.fromLTWH(cx - halfW, baseY - 1.5 * s, halfW * 2, 2.2 * s),
-      Paint()..color = clothDark..isAntiAlias = true);
-
-    // 4) Ön kapı yarığı — ortada, alttan yukarı daralan koyu üçgen.
-    final door = Path()
-      ..moveTo(cx, ridgeY + height * 0.30)
-      ..lineTo(cx - 5 * s, baseY - 1 * s)
-      ..lineTo(cx + 5 * s, baseY - 1 * s)
-      ..close();
-    fill.color = doorDark;
-    canvas.drawPath(door, fill);
-    // Kapı bezi kıvrımı (sol kapak hafif açık)
-    final flapPaint = Paint()
-      ..color = clothShade
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.4 * s
-      ..isAntiAlias = true;
-    canvas.drawLine(Offset(cx, ridgeY + height * 0.30),
-        Offset(cx - 5 * s, baseY - 1 * s), flapPaint);
-
-    // 5) Sırt çizgisi (ridge hairline) — bezin tepe ek yeri.
-    canvas.drawLine(Offset(ridgeX, ridgeY), Offset(cx, baseY - 1 * s),
-        Paint()
-          ..color = clothDark
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.0 * s
-          ..isAntiAlias = true);
-
-    // 6) Çapraz sırıklar — tepede X yapıp dışarı taşar.
-    final polePaint = Paint()
-      ..color = pole
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6 * s
-      ..isAntiAlias = true;
-    canvas.drawLine(Offset(ridgeX - 4 * s, ridgeY - 5 * s),
-        Offset(cx - halfW * 0.7, baseY), polePaint);
-    canvas.drawLine(Offset(ridgeX + 4 * s, ridgeY - 5 * s),
-        Offset(ridgeX + 1 * s, baseY), polePaint);
-
-    // 7) Minik flama — sırık tepesinde rüzgârda dalgalanır.
-    final fx = ridgeX;
-    final fy = ridgeY - 5 * s;
-    final wave = sin(time * 2.3 + seed * 0.5) * 2.0 * s;
-    final pennant = Path()
-      ..moveTo(fx, fy)
-      ..lineTo(fx + 9 * s + wave, fy + 1.5 * s)
-      ..lineTo(fx, fy + 4 * s)
-      ..close();
-    fill.color = flag;
-    canvas.drawPath(pennant, fill);
-  }
-
-  // ── Kültür mahallesi placeholder (prosedürel kutu) ──────────────────────────
-  // PNG gelene kadar binayı footprint'e oturan basit izometrik kutu olarak çizer:
-  // taban diamond → yukarı ekstrüzyon (2 yan duvar + üst yüz) + türe göre renk +
-  // ortada baş harf. PNG yüklenince _cache hit ile bu dal atlanır.
-  static void _drawCivicPlaceholder(Canvas canvas, BuildingType type,
+  // ── Genel kutu fallback'i (prosedürel, SON ÇARE) ─────────────────────────
+  // PNG'si yüklenememiş / bilinmeyen bina için son çare placeholder: footprint'e
+  // oturan basit izometrik kutu (taban diamond → yukarı ekstrüzyon: 2 yan duvar +
+  // üst yüz) + türe göre renk + ortada baş harf. Normalde tüm bina PNG'leri
+  // mevcut olduğundan yalnız yükleme hatasında çizilir.
+  static void _drawFallbackBox(Canvas canvas, BuildingType type,
       Offset back, Offset left, Offset right, Offset front, double time) {
     // Türe göre renk + etiket.
     final (Color roof, Color wall, String tag) = switch (type) {
@@ -631,7 +162,6 @@ class BuildingRenderer {
       BuildingType.library   => (const Color(0xFF8A5A33), const Color(0xFFBE9468), 'K'),
       BuildingType.bathhouse => (const Color(0xFF3F8C86), const Color(0xFF77B6B0), 'H'),
       BuildingType.monument  => (const Color(0xFF8C8470), const Color(0xFFBFB8A6), 'A'),
-      BuildingType.dock         => (const Color(0xFF6E4E2E), const Color(0xFF9A7A4E), 'İ'),
       BuildingType.caravanserai => (const Color(0xFF9C7B4A), const Color(0xFFC9A877), 'H'),
       BuildingType.shrine       => (const Color(0xFF3F8C86), const Color(0xFF77B6B0), 'T'),
       BuildingType.belltower    => (const Color(0xFF8C8470), const Color(0xFFBFB8A6), 'Ç'),
@@ -703,66 +233,6 @@ class BuildingRenderer {
         (c.g * 255 * k).clamp(0, 255).round(),
         (c.b * 255 * k).clamp(0, 255).round(),
       );
-
-  static void _drawLamppost(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front,
-      double time, int seed, double dayLight) {
-    // Tile merkezi (footprint orta noktası)
-    final cx = (back.dx + front.dx) / 2;
-    final cy = (back.dy + front.dy) / 2;
-
-    // Boyut diğer 1×1 binalarla orantılı (well/firepit'e yakın)
-    final tileW = (right.dx - left.dx).abs();
-    final scale = tileW / 64.0; // 64 base width → ölçek katsayısı
-
-    final postH = 36.0 * scale;
-    final postW = 2.0  * scale;
-    final baseW = 10.0 * scale;
-    final baseH = 4.0  * scale;
-    final lampW = 9.0  * scale;
-    final lampH = 11.0 * scale;
-    final armW  = 14.0 * scale;
-    final armH  = 1.5  * scale;
-
-    final groundY = cy + 1; // footprint zemin seviyesi
-
-    // 1) Taş kaide
-    canvas.drawRect(
-      Rect.fromLTWH(cx - baseW / 2, groundY - baseH, baseW, baseH),
-      _pLampPostBase);
-    // Kaide gölgesi (sağa hafif düşer)
-    canvas.drawRect(
-      Rect.fromLTWH(cx - baseW / 2 + 1, groundY - baseH + 1, baseW, 1),
-      _pLampPost);
-
-    // 2) Ahşap direk
-    canvas.drawRect(
-      Rect.fromLTWH(cx - postW / 2, groundY - baseH - postH, postW, postH),
-      _pLampPost);
-
-    // 3) Üst yatay kol (estetik destek)
-    canvas.drawRect(
-      Rect.fromLTWH(cx - armW / 2, groundY - baseH - postH + 2 * scale, armW, armH),
-      _pLampPost);
-
-    // 4) Lamba kafesi (demir)
-    final lampX = cx - lampW / 2;
-    final lampY = groundY - baseH - postH - lampH + 2 * scale;
-    canvas.drawRect(Rect.fromLTWH(lampX, lampY, lampW, lampH), _pLampCage);
-    // Kafes üst kapağı (geniş)
-    canvas.drawRect(
-      Rect.fromLTWH(lampX - scale, lampY - 1.5 * scale, lampW + 2 * scale, 2 * scale),
-      _pLampCage);
-
-    // 5) Cam içi alev — gece prosedürel animasyonlu (FlameRenderer).
-    // Lamba kafesinin içinde, scale küçük (1.2 civarı).
-    final darkness = (1.0 - dayLight).clamp(0.0, 1.0);
-    if (darkness > 0.05) {
-      final flameCy = lampY + lampH * 0.85; // kafesin tabanı
-      FlameRenderer.draw(canvas, cx, flameCy, scale * 1.0, time, seed,
-          intensity: darkness, sparks: false);
-    }
-  }
 
   // ── Baca dumanı ──────────────────────────────────────────────────────────────
   // Her baca için density'ye orantılı sayıda partikül; sin sallanması + yükselme.

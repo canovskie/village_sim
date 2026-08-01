@@ -3,6 +3,11 @@ import 'package:audioplayers/audioplayers.dart';
 import '../ui/settings_model.dart';
 
 /// Tek-atış ses efektleri — masaüstünden gelen kütüphaneden (assets/audio).
+///
+/// DOSYASI OLMAYAN EFEKT SESSİZDİR, ÇÖKMEZ: [playSfx] hatayı yutar. Aşağıdaki
+/// "beklenen" grup bilerek önden bağlandı — MP3 `assets/audio/` içine düştüğü
+/// an, tek satır kod değişmeden çalmaya başlar. Hangi dosyanın beklendiği
+/// [_sfxFile] tablosunda yazılı.
 enum Sfx {
   bellChime,
   chickenCluck,
@@ -13,16 +18,38 @@ enum Sfx {
   birds,
   thunderClap,
   imperialMarch, // İmparatorluk kolonu yaklaşırken — kalabalık ordu yürüyüşü
+
+  // ── Beklenen dosyalar (bkz. assets/audio/README.md) ─────────────────────
+  // Oyunun duygusal anları bugüne dek TEK çanla karşılanıyordu: görev de,
+  // mühür de, rejim değişimi de aynı sesti. Bunlar o çanı bölüyor.
+  sealStamp,   // mühür vurulur — Kanunname'nin sesi
+  birthJoy,    // doğum
+  funeralToll, // cenaze
+  weddingJoy,  // düğün alayı
+  fightScuffle,// yumruklaşma / çekişme
+  buildDone,   // inşaat biter, gövde tamamlanır
+  uiTap,       // panel/düğme dokunuşu
 }
 
-/// Oyunun ses motoru — iki katman:
+/// Müzik parçaları — ortamdan AYRI katman (bkz. [AudioManager.playMusic]).
+enum MusicTrack {
+  menu,    // açılış/şafak menüsü
+  village, // oyun döngüsü
+}
+
+/// Oyunun ses motoru — ÜÇ katman:
 ///  1) ORTAM döngüleri (gündüz/gece/yağmur/fırtına/ateş) — yumuşak crossfade,
 ///     hedef ses seviyeleri sahne durumuna ([applyAmbient]) göre lerp'lenir.
-///  2) Tek-atış EFEKTLER ([playSfx]) — havuzdan çalınır (üst üste binebilir).
+///  2) MÜZİK ([playMusic]) — tek parça döngüde, kendi crossfade'iyle.
+///  3) Tek-atış EFEKTLER ([playSfx]) — havuzdan çalınır (üst üste binebilir).
 ///
-/// SettingsModel.musicVolume → ortam, sfxVolume → efekt çarpanı. Tüm çağrılar
-/// hata-dayanıklı (ses başarısızsa oyun akışı bozulmaz). update(dt) sahne
-/// tick'inden (gerçek-zaman dt) çağrılır; sim duraklasa da ses akar.
+/// Ayar eşlemesi: `ambientVolume` → ortam, `musicVolume` → müzik, `sfxVolume` →
+/// efekt. Bu ayrım sonradan düzeltildi: müzik yokken ortam döngüleri
+/// `musicVolume`'a bağlıydı, yani "Müzik" slider'ı kuş sesini kısıyordu.
+///
+/// Tüm çağrılar hata-dayanıklı (ses başarısızsa oyun akışı bozulmaz).
+/// update(dt) sahne tick'inden (gerçek-zaman dt) çağrılır; sim duraklasa da
+/// ses akar.
 class AudioManager {
   static final AudioManager instance = AudioManager._();
   AudioManager._();
@@ -56,6 +83,15 @@ class AudioManager {
     Sfx.birds: 0.7,
     Sfx.thunderClap: 0.65,
     Sfx.imperialMarch: 0.95, // dramatik varış anı — öne çıksın
+    // Beklenenler: tören sesleri öne, UI dokunuşu geriye. UI sesi yüksek
+    // olursa panel açıp kapayan oyuncuyu yorar — en sık duyulan ses odur.
+    Sfx.sealStamp: 0.8,
+    Sfx.birthJoy: 0.75,
+    Sfx.funeralToll: 0.7,
+    Sfx.weddingJoy: 0.75,
+    Sfx.fightScuffle: 0.6,
+    Sfx.buildDone: 0.55,
+    Sfx.uiTap: 0.25,
   };
   static const Map<Sfx, String> _sfxFile = {
     Sfx.bellChime: 'bell_chime.mp3',
@@ -67,6 +103,20 @@ class AudioManager {
     Sfx.birds: 'birds_singing.mp3',
     Sfx.thunderClap: 'thunder_clap.mp3',
     Sfx.imperialMarch: 'imperial_march.mp3',
+    // ── Henüz assets/audio'da OLMAYAN dosyalar ────────────────────────────
+    // Bunlar bilerek önden bağlandı; dosya düşene kadar sessizler.
+    Sfx.sealStamp: 'seal_stamp.mp3',
+    Sfx.birthJoy: 'birth_joy.mp3',
+    Sfx.funeralToll: 'funeral_toll.mp3',
+    Sfx.weddingJoy: 'wedding_joy.mp3',
+    Sfx.fightScuffle: 'fight_scuffle.mp3',
+    Sfx.buildDone: 'build_done.mp3',
+    Sfx.uiTap: 'ui_tap.mp3',
+  };
+
+  static const Map<MusicTrack, String> _musicFile = {
+    MusicTrack.menu: 'music_menu.mp3',
+    MusicTrack.village: 'music_village.mp3',
   };
 
   // Ortam taban tavanları (kaynak yüksekliğine göre).
@@ -78,6 +128,17 @@ class AudioManager {
 
   double _owlTimer = 22.0;  // gece baykuş aksanı sayacı (sn)
   double _birdsTimer = 18.0; // gündüz kuş cıvıltısı aksanı sayacı (sn)
+
+  // ── MÜZİK ────────────────────────────────────────────────────────────────
+  // Tek oynatıcı: iki parça aynı anda çalmaz, geçiş "kıs → değiştir → aç"
+  // biçiminde yapılır. İki oynatıcılı gerçek crossfade denenebilirdi ama köy
+  // müziği sahne değiştirmiyor (menü ↔ oyun), o geçiş zaten ekran değişimiyle
+  // maskeleniyor; iki kanal boşuna bellek ve boşuna karmaşa olurdu.
+  AudioPlayer? _music;
+  MusicTrack? _musicTrack;
+  double _musicCur = 0.0;   // anlık taban seviye (ayar öncesi)
+  double _musicTgt = 0.0;   // hedef taban seviye
+  static const double _baseMusic = 0.55; // müzik ortamı EZMEZ, altına serilir
 
   /// İlk çağrıda kanalları kurar + döngüleri sessiz başlatır. Hatalar yutulur.
   Future<void> start() async {
@@ -96,6 +157,9 @@ class AudioManager {
       for (int i = 0; i < 4; i++) {
         _sfxPool.add(AudioPlayer()..setReleaseMode(ReleaseMode.stop));
       }
+      _music = AudioPlayer();
+      _safe(_music!.setReleaseMode(ReleaseMode.loop));
+      _safe(_music!.setVolume(0.0));
     } catch (_) {
       // Ses başlatılamadı (platform/dosya) → sessiz devam.
     }
@@ -125,12 +189,49 @@ class AudioManager {
     _tgt[_fire] = hasFire ? _baseFire * (0.5 + 0.5 * (1.0 - dayLight)) : 0.0;
   }
 
-  /// Her tick (gerçek-zaman dt). Ortam seviyelerini hedefe yumuşatır + gece
-  /// baykuş aksanını tetikler.
+  /// MÜZİK — parçayı döngüde başlatır. Aynı parça zaten çalıyorsa hiçbir şey
+  /// yapmaz (sahne yeniden kurulunca müzik baştan sarmasın).
+  ///
+  /// Dosya yoksa sessizce hiçbir şey olmaz: motor bunu bir hata olarak
+  /// görmez, çünkü müzik dosyaları oyunun akışının şartı değil.
+  void playMusic(MusicTrack t) {
+    if (!_started || _music == null) return;
+    if (_musicTrack == t) {
+      _musicTgt = _baseMusic;
+      return;
+    }
+    _musicTrack = t;
+    _musicCur = 0.0;
+    _musicTgt = _baseMusic;
+    _safe(_music!.stop());
+    _safe(_music!.play(AssetSource('$_dir/${_musicFile[t]}'), volume: 0.0));
+  }
+
+  /// Müziği susturur (yumuşak iner; [update] indirmeyi sürdürür).
+  void stopMusic() {
+    _musicTgt = 0.0;
+  }
+
+  /// Her tick (gerçek-zaman dt). Ortam + müzik seviyelerini hedefe yumuşatır
+  /// ve gece baykuş / gündüz kuş aksanını tetikler.
   void update(double dt, {double dayLight = 1.0, Random? rng}) {
     if (!_started) return;
-    final music = SettingsModel.instance.effectiveMusicVolume;
+    final ambient = SettingsModel.instance.effectiveAmbientVolume;
     final k = (dt * 1.5).clamp(0.0, 1.0); // ~0.7s crossfade
+
+    // Müzik kendi ayarıyla, kendi (daha yavaş) geçişiyle: parça değişimi
+    // ortam geçişinden yumuşak olmalı, yoksa kesik gibi duyulur.
+    final mk = (dt * 0.8).clamp(0.0, 1.0);
+    if ((_musicCur - _musicTgt).abs() < 0.005) {
+      _musicCur = _musicTgt;
+    } else {
+      _musicCur += (_musicTgt - _musicCur) * mk;
+    }
+    if (_music != null) {
+      _safe(_music!.setVolume(
+          _musicCur * SettingsModel.instance.effectiveMusicVolume));
+    }
+
     for (final p in _cur.keys) {
       final cur = _cur[p]!;
       final tgt = _tgt[p]!;
@@ -139,7 +240,7 @@ class AudioManager {
       } else {
         _cur[p] = cur + (tgt - cur) * k;
       }
-      _safe(p.setVolume(_cur[p]! * music));
+      _safe(p.setVolume(_cur[p]! * ambient));
     }
     // Gece baykuş — seyrek aksan (yalnız karanlıkta).
     if (dayLight < 0.25) {
@@ -173,13 +274,17 @@ class AudioManager {
   }
 
   Future<void> dispose() async {
-    for (final p in [..._cur.keys, ..._sfxPool]) {
+    for (final p in [..._cur.keys, ..._sfxPool, ?_music]) {
       _safe(p.stop());
       _safe(p.dispose());
     }
     _cur.clear();
     _tgt.clear();
     _sfxPool.clear();
+    _music = null;
+    _musicTrack = null;
+    _musicCur = 0;
+    _musicTgt = 0;
     _started = false;
   }
 }

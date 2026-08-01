@@ -57,6 +57,7 @@ extension _SceneFuneral on _VillageSceneState {
   /// Doğal ölümde çağrılır — köylü zaten _villagers'tan çıkarıldı.
   /// [orphans] = bu ölümle yetim kalan çocuk sayısı (kilise yoksa mesaja girer).
   void _holdFuneral(VillagerEntity v, {required int orphans}) {
+    AudioManager.instance.playSfx(Sfx.funeralToll);
     _award('first_death', 'Köy ilk kez yas tuttu', '🕯️');
     // Yaşam öyküsü — geride kalanların kaybı (dul eş + yetim çocuklar). v'nin
     // çocuk/ebeveyn listeleri tören anında hâlâ dolu (karşı taraf koparılmıştı).

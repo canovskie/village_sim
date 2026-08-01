@@ -93,6 +93,66 @@ class RegimeRule {
   });
 }
 
+/// İmanın MEKANİK karşılığı — pusuladaki dinî boyanın gerçek sonuçları.
+/// Hepsi mevcut sistemlere küçük ama hissedilir kancalar (bkz. [Regime.faithEffectOf]).
+class FaithEffect {
+  /// Günlük huzursuzluk yatıştırmasına eklenen (sabır/kader).
+  final double unrestRelief;
+
+  /// İmparatorluğa direniş şansına eklenen (inanç için durmak).
+  final double resistBonus;
+
+  /// Suç baskısı çarpanı (<1 — cemaat gözü suçu kısar).
+  final double crimeDamp;
+
+  /// Köy moral tabanına eklenen teselli.
+  final double moraleFloor;
+
+  /// Devşirmenin iç faturası çarpanı (>1 — evladı yabancıya vermek ağır).
+  final double conscriptSting;
+
+  /// Kadranda gösterilen tek cümle (bant altında boş).
+  final String note;
+
+  const FaithEffect({
+    required this.unrestRelief,
+    required this.resistBonus,
+    required this.crimeDamp,
+    required this.moraleFloor,
+    required this.conscriptSting,
+    required this.note,
+  });
+}
+
+/// Köyün rejiminden gelen dış-güç duruşu — imparatorluk pazarlığını büker.
+class ImperialPosture {
+  /// Direniş şansına eklenen (militan rejim +, tüccar rejim −).
+  final double resistBonus;
+
+  /// Pazarlık eşiğinden düşülen (tüccar rejim daha ucuza anlaşır).
+  final double haggleEase;
+
+  /// İmparatorluğun gördüğü servet çarpanı — mülkçü köy daha çok göz doldurur,
+  /// ortakçı köy gözden ırak kalır (ziyaret sıklığı + talep sertliği).
+  final double attentionMul;
+
+  /// Modal'da gösterilen tek cümlelik duruş (boş = merkez, çizilmez).
+  final String note;
+
+  const ImperialPosture({
+    required this.resistBonus,
+    required this.haggleEase,
+    required this.attentionMul,
+    required this.note,
+  });
+}
+
+/// Köyün imparatorluk talebine karşı ortak duruşu — hür rejimde meclis seçer.
+/// [comply] öde/fidye ver, [haggle] pazarlık et, [resist] diren ve kov.
+/// "Reddet" (bilinçli kıyım) meclisin önerisi ASLA olmaz; o oyuncunun kendi
+/// pervasız tercihidir.
+enum ImperialVerdict { comply, haggle, resist }
+
 /// Meclisteki tek bir sesin oyu — ritüelde yüz yüze okunur.
 class CouncilVoice {
   final Estate estate;
@@ -227,6 +287,74 @@ abstract final class Regime {
     return (rule.unrestPerDay - calm) * days;
   }
 
+  // ── ÇÜRÜME — huzursuzluğun bıraktığı KALICI iz ──────────────────────────────
+  //
+  // [unrestStep] hızlı bir nabızdır: olayla sıçrar, kararla iner. Ama sürekli
+  // kaynayan bir köy iyileşince eski köy olmaz — bir yara izi kalır. Çürüme o
+  // izdir: yavaş birikir, çok daha yavaş geçer, ve eşiği aşınca rejime özgü
+  // KRONİK bir hâl doğurur (tek atımlık kriz değil, süregiden bir durum).
+  //
+  // Oyun-sonu DEĞİL: kronik hâl yeni bir uğraş açar, köyü öldürmez. Çıkışı da
+  // kapalı değildir — köy uzun süre sakin kalırsa iz yavaşça silinir.
+
+  /// Kronik hâlin başladığı eşik — rejime özgü süregiden bedel devreye girer.
+  static const double kChronic = 0.60;
+
+  /// Rejimin çözülme eşiği — kronik bedel ağırlaşır, dış güç kokuyu alır.
+  static const double kFailing = 0.85;
+
+  /// Bir gün(ün parçası) için çürüme deltası.
+  ///
+  /// Yalnız köy KAYNARKEN (kStir üstü) birikir; sakinken siler. Birikim silmeden
+  /// ~2 kat hızlıdır: bir köyü çürütmek, iyileştirmekten kolaydır.
+  static double rotStep({required double unrest, required double days}) {
+    if (unrest >= kStir) {
+      final over = ((unrest - kStir) / (1.0 - kStir)).clamp(0.0, 1.0);
+      return (0.035 + 0.075 * over) * days;
+    }
+    // Sakin köy izini yavaşça siler — ne kadar sakinse o kadar hızlı.
+    final calm = ((kStir - unrest) / kStir).clamp(0.0, 1.0);
+    return -0.020 * calm * days;
+  }
+
+  /// Her krizin bıraktığı ek iz — kriz atlatılsa bile köy bir şey kaybeder.
+  static const double kRotPerCrisis = 0.12;
+
+  /// Kronik hâlin okunur adı + köyün ağzından ne olduğu. Rejime özgü: her köy
+  /// kendi seçtiği yoldan çürür.
+  static (String, String) chronicText(RegimeCrisis c) => switch (c) {
+        RegimeCrisis.revolt => (
+            'KÖY BÖLÜNDÜ',
+            'Artık iki köy var: senin gördüğün ve ambar arkasında toplanan. '
+                'Kimse gitmiyor, kimse de kalmıyor.'
+          ),
+        RegimeCrisis.deadlock => (
+            'DİVAN FELCİ',
+            'Meclis toplanıyor, dağılıyor, yine toplanıyor. Mürekkep '
+                'kurumadan yeni bir tartışma başlıyor.'
+          ),
+        RegimeCrisis.idleness => (
+            'DURGUNLUK',
+            'Tezgâh açık, eller yavaş. Kimse tembel değil; kimse de acele '
+                'etmiyor. Köy kendi hızını unuttu.'
+          ),
+        RegimeCrisis.inequality => (
+            'İKİ AYRI KÖY',
+            'Bir uçta iki damlı haneler, öbür uçta sazlıkta yatanlar. '
+                'Aynı çeşmeden su içiyorlar, aynı köyde yaşamıyorlar.'
+          ),
+        RegimeCrisis.none => ('', ''),
+      };
+
+  /// Çürümenin okunur hâli.
+  static String rotLabel(double rot) => rot >= kFailing
+      ? 'çözülüyor'
+      : rot >= kChronic
+          ? 'kronikleşti'
+          : rot >= 0.30
+              ? 'iz bıraktı'
+              : 'sağlam';
+
   /// Huzursuzluğun okunur hâli — Divan'da tek kelime.
   static String unrestLabel(double u) => u >= kCrisis
       ? 'kaynıyor'
@@ -260,6 +388,43 @@ abstract final class Regime {
           ),
         RegimeCrisis.none => ('', ''),
       };
+
+  // ── İMAN — overlay'in MEKANİK gövdesi ───────────────────────────────────────
+  //
+  // İman pusulada ayrı bir sert eksen değil, rejimin üstüne binen bir BOYA
+  // ([RegimeIdentity.religious] — Mühürlü El → Şeyh Beyliği). Ama boya yalnız
+  // ismi değiştiriyorsa oyuncu için yoktur. Bu blok imanın gerçek karşılığını
+  // verir: inanan köy sıkıntıya daha çok DAYANIR, suça daha az meyleder, dış
+  // güce karşı inancı için dimdik durur — ama evladını yabancıya vermek ona
+  // çok daha ağır gelir.
+  //
+  // Değerler [LawCompass.kFaithBand] (0.45) civarında anlam kazanır; altında
+  // etkiler küçüktür (köyde bir kandil yanıyor, o kadar).
+
+  static FaithEffect faithEffectOf(double faith) {
+    final f = faith.clamp(0.0, 1.0);
+    // Bant altında etki cılız kalsın: eğrinin ağırlığı bandın ÜSTÜNDE.
+    final w = f <= LawCompass.kFaithBand
+        ? f * 0.45 / LawCompass.kFaithBand * 0.45
+        : 0.45 + (f - LawCompass.kFaithBand) / (1 - LawCompass.kFaithBand) * 0.55;
+    return FaithEffect(
+      // SABIR — "kader" hikâyesi olan köy yoksulluğu ve baskıyı daha uzun taşır.
+      // Bu, dinî bir tiranın neden ayakta kalabildiğinin cevabıdır.
+      unrestRelief: 0.018 * w,
+      // İnancı için direnen köy, canı için direnenden farklıdır.
+      resistBonus: 0.10 * w,
+      // Cemaat gözü + günah korkusu: suç baskısı kısılır.
+      crimeDamp: 1.0 - 0.28 * w,
+      // Teselli: köyün moral tabanı hafifçe yükselir.
+      moraleFloor: 0.05 * w,
+      // Devşirme: evladı "yoldan çıkmış" bir güce vermek çok daha ağır yara.
+      conscriptSting: 1.0 + 0.6 * w,
+      note: f < LawCompass.kFaithBand
+          ? ''
+          : 'İnanan köy: sıkıntıya sabreder, suça az meyleder, inancı için '
+              'direnir — ama evladını yabancıya vermek ona ağır gelir.',
+    );
+  }
 
   // ── MECLİS ─────────────────────────────────────────────────────────────────
 
@@ -354,6 +519,117 @@ abstract final class Regime {
   /// Yeminin köy hafızasına yazdığı bayrak — rejime özel fermanların dünya
   /// kapısı bunu okur (bkz. law_book gate'leri).
   static String oathFlag(VillageRegime r) => 'oath.${r.name}';
+
+  // ── DIŞ GÜÇ: İMPARATORLUK KARŞISINDA DURUŞ ──────────────────────────────────
+  //
+  // İç yönetişim (rejim) ile dış tehdit (vergici heyet) artık birbirini görür.
+  // Köyün kendi hakkında ettiği karar, imparatorluk kapıya dayandığında da
+  // geçerlidir: baskı rejimi tek elden ve dimdik cevap verir; hür rejimde
+  // heyetin talebi MECLİSE düşer — köyün sözü olmadan vergiye "hayır" denmez.
+
+  /// Köyün rejiminden gelen dış-güç duruşu — pazarlık masasını şekillendirir.
+  static ImperialPosture imperialPostureOf(
+    VillageRegime r, {
+    bool oath = false,
+    required bool committed,
+  }) {
+    final base = switch (r) {
+      // 👑 Mühürlü El — disiplinli, militan, "korkulan kapıdan hırsız girmez".
+      // Heyet dimdik bir köyle konuştuğunu bilir: direniş eli güçlü, ama boyun
+      // eğerse de makbul bir tâbi olur (itibar payı büyük).
+      VillageRegime.sealedHand => const ImperialPosture(
+          resistBonus: 0.20,
+          haggleEase: -0.05,
+          attentionMul: 1.12,
+          note: 'Mühürlü El: köy tek yumruk. Direnişte elin güçlü; boyun '
+              'eğersen makbul bir tâbi olursun.',
+        ),
+      // ⚖ Demir Sofra — ortak disiplin: herkes aynı safta, ama zorla eşitlik
+      // tezgâhı soğutmuş olabilir. Yükü hep birlikte kaldırır.
+      VillageRegime.ironTable => const ImperialPosture(
+          resistBonus: 0.12,
+          haggleEase: 0.05,
+          attentionMul: 0.88,
+          note: 'Demir Sofra: yük ortak, saf tek. Herkes aynı anda diş sıkar.',
+        ),
+      // 🤝 Ortak Ocak — bütün köy eşiğe dizilir, ama karar meclisindir.
+      VillageRegime.commune => const ImperialPosture(
+          resistBonus: 0.10,
+          haggleEase: 0.08,
+          attentionMul: 0.85,
+          note: 'Ortak Ocak: bütün köy eşikte. Ama vergiye cevabı meclis verir.',
+        ),
+      // 🏪 Açık Pazar — kese dolu, kol zayıf: kavgada değil pazarlıkta usta.
+      // Görünür servet heyetin iştahını kabartır.
+      VillageRegime.market => const ImperialPosture(
+          resistBonus: -0.05,
+          haggleEase: 0.16,
+          attentionMul: 1.25,
+          note: 'Açık Pazar: kavgada değil pazarlıkta güçlü — ama dolu kese '
+              'heyetin gözünü de üstüne çeker.',
+        ),
+      VillageRegime.moderate => const ImperialPosture(
+          resistBonus: 0,
+          haggleEase: 0,
+          attentionMul: 1.0,
+          note: '',
+        ),
+    };
+    if (!oath || r == VillageRegime.moderate) return base;
+    // Yemin duruşu keskinleştirir: militan köy daha da dik, tüccar köy daha da
+    // kurnaz — ve görünürlük de artar (ilan edilmiş kimlik dikkat çeker).
+    return ImperialPosture(
+      resistBonus: base.resistBonus * 1.5,
+      haggleEase: base.haggleEase * 1.3,
+      attentionMul: base.attentionMul * 1.05,
+      note: base.note,
+    );
+  }
+
+  /// Hür ve KÖKLÜ rejimde imparatorluğun talebi meclise düşer: köy kendi
+  /// duruşunu belirler. Meclis ASLA "reddet"i (bilinçli kıyım) önermez —
+  /// pay/haggle/resist arasından köyün çıkarına olanı seçer. Oyuncu bunun
+  /// dışına çıkarsa (ör. meclis öderken reddederse) meşruiyet bedeli öder.
+  static ImperialVerdict councilImperialVerdict({
+    required double affordability, // eldeki / talep (>=1 rahat karşılar)
+    required bool conscript,
+    required double resistChance,
+    required Map<Estate, double> mood,
+    required double villageMorale,
+  }) {
+    final avg = mood.values.isEmpty
+        ? 0.55
+        : mood.values.reduce((a, b) => a + b) / mood.values.length;
+    final proud = avg >= 0.6 && villageMorale >= 0.55;
+    final angry = avg < 0.4;
+
+    // Bir evlat istendiğinde meclis kolay teslim etmez: gücü varsa direnmek,
+    // yoksa fidye/uzlaşma yolunu işaret eder.
+    if (conscript) {
+      if (resistChance >= 0.4 && !angry) return ImperialVerdict.resist;
+      return ImperialVerdict.comply; // fidye ya da (çaresizse) teslim
+    }
+    // Güçlü + gururlu ya da zaten ödeyemeyecek durumda → köy direnmek ister.
+    if (resistChance >= 0.42 && (proud || affordability < 0.6)) {
+      return ImperialVerdict.resist;
+    }
+    // Rahatça karşılanıyor ve köy küskün değilse → öde, iş büyümesin.
+    if (affordability >= 1.0 && !angry) return ImperialVerdict.comply;
+    // Aradaki gri bölge: pazarlıkla en azını ver.
+    return ImperialVerdict.haggle;
+  }
+
+  /// Meclisin duruşunun tek cümlelik okunuşu (modal başlığı).
+  static String verdictLine(ImperialVerdict v, {required bool conscript}) =>
+      switch (v) {
+        ImperialVerdict.comply => conscript
+            ? 'Meclis bir evladı fidyeyle kurtarmaktan yana.'
+            : 'Meclis ödemekten yana — iş büyümesin diyor.',
+        ImperialVerdict.haggle =>
+          'Meclis pazarlıktan yana — verilecekse en azı verilsin.',
+        ImperialVerdict.resist =>
+          'Meclis direnmekten yana — köy bu talebi kaldıramaz diyor.',
+      };
 
   /// Yemin metni — ritüelde okunan ferman. Köyün ağzından, buyuruldu diliyle.
   static (String, String) oathText(RegimeIdentity id) => switch (id.regime) {

@@ -13,6 +13,11 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/ui_gallery_capture_main.dart
 // Çıktı:     preview/ui/<id>.png + preview/ui/manifest.json
 // Env:       OUT=<dizin>  ONLY=<id,id>  (yalnız bu yüzeyleri çek)
+//            PHONE=1      TELEFON MODU — her yüzeyi kendi masaüstü ölçüsünde
+//                         değil, REFERANS CİHAZ (iPhone 11, 896×414 yatay +
+//                         çentik güvenli alanı) ölçüsünde çizer, mobil yazı
+//                         tabanını uygular. "Bu panelin telefonda hâli ne?"
+//                         sorusunun tek koşuluk cevabı.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -23,6 +28,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../buildings/building_entity.dart';
+import '../buildings/building_renderer.dart';
+import '../rendering/character_renderer.dart';
 import '../buildings/building_type.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
@@ -39,6 +46,7 @@ import '../systems/estate_system.dart';
 import '../systems/event_system.dart';
 import '../systems/house_system.dart';
 import '../systems/imperial.dart';
+import '../systems/regime.dart';
 import '../systems/law_book.dart';
 import '../systems/petition_system.dart';
 import '../systems/quest_book.dart';
@@ -47,18 +55,20 @@ import '../ui/about_screen.dart';
 import '../ui/app_ui.dart';
 import '../ui/building_info_panel.dart';
 import '../ui/building_panel.dart';
+import '../ui/command_bar.dart';
 import '../ui/dev_panel.dart';
 import '../ui/village_ledger.dart';
 import '../ui/event_banner.dart';
 import '../ui/event_choice_modal.dart';
-import '../ui/house_banner.dart';
 import '../ui/hud.dart';
 import '../ui/imperial_modal.dart';
 import '../ui/law_book_panel.dart';
 import '../ui/law_compass_view.dart';
 import '../ui/loading_screen.dart';
 import '../ui/main_menu_screen.dart';
+import '../ui/mobile_ui.dart';
 import '../ui/mode_button.dart';
+import '../ui/world_tag.dart';
 import '../ui/objective_panel.dart';
 import '../ui/option_scene_card.dart';
 import '../ui/petition_modal.dart';
@@ -331,7 +341,13 @@ Widget _worldBackdrop({Widget? child}) => DecoratedBox(
           stops: [0.0, 0.55, 1.0],
         ),
       ),
-      child: SizedBox.expand(child: child),
+      // Material ATASI ŞART: yoksa Text'ler Flutter'ın "unstyled" fallback'iyle
+      // (sarı çift alt-çizgi) çizilir → önizleme paneli gerçekte olmayan bir
+      // alt-çizgi bug'ı gösterir. Gerçek oyunda paneller Scaffold içinde.
+      child: Material(
+        type: MaterialType.transparency,
+        child: SizedBox.expand(child: child),
+      ),
     );
 
 Widget _label(String text) => Padding(
@@ -355,7 +371,8 @@ List<Shot> buildShots() => <Shot>[
         w: 1440,
         h: 900,
         settleMs: 2800,
-        build: () => MainMenuScreen(onNewGame: _noop, onContinue: (_) {}),
+        build: () => MainMenuScreen(
+            onNewGame: _noop, onContinue: (_) {}, onReferenceVillage: _noop),
       ),
       Shot(
         id: 'save_slots',
@@ -427,6 +444,47 @@ List<Shot> buildShots() => <Shot>[
       ),
 
       // ── Oyun içi HUD katmanı ────────────────────────────────────────────────
+      Shot(
+        id: 'world_tag',
+        title: 'Hover Künyesi — Dünya İçi',
+        group: 'Oyun İçi HUD',
+        note: 'İmleç bir NPC üstüne gelince: kutu/kart YOK, hedefi takip eden '
+            'yazıt + ayak halkası. Okunurluk gölgeden gelir.',
+        w: 1000,
+        h: 460,
+        build: () => _worldBackdrop(
+          child: Stack(children: [
+            Positioned.fill(child: CustomPaint(painter: _TagDemoPainter())),
+            const WorldTagRing(
+                feet: Offset(250, 330), radius: 26, opacity: 1.0),
+            const WorldTag(
+              anchor: Offset(250, 108),
+              title: 'Ayşe Hatun',
+              line2: 'çiftçi · Demirci Hanesi',
+              line3: 'tarlada · keyfi iyi',
+              opacity: 1.0,
+            ),
+            const WorldTagRing(
+                feet: Offset(560, 330), radius: 26, opacity: 1.0),
+            const WorldTag(
+              anchor: Offset(560, 108),
+              title: 'Kara Mustafa',
+              line2: 'madenci · evsiz',
+              line3: 'hasta · kırgın',
+              opacity: 1.0,
+            ),
+            // Mezar künyesi — aynı dil, nötr renk.
+            const WorldTag(
+              anchor: Offset(830, 300),
+              title: 'İsmail Dede',
+              line2: 'huzur içinde yatıyor',
+              line3: '',
+              opacity: 1.0,
+              accent: Color(0xFF7E86A0),
+            ),
+          ]),
+        ),
+      ),
       Shot(
         id: 'hud',
         title: 'HUD — Kaynak / Zaman / Moral',
@@ -541,6 +599,7 @@ List<Shot> buildShots() => <Shot>[
               stockpile: _stock(),
               selected: RoadSurface.stone,
               onSelect: (_) {},
+              onSelectErase: () {},
             ),
           ),
         ),
@@ -578,27 +637,99 @@ List<Shot> buildShots() => <Shot>[
           );
         },
       ),
+      // Konsept 04 — KOMUTA: tam ekran, alt komuta çubuğu + görev takipçisi.
       Shot(
-        id: 'house_banner',
-        title: 'Hane Sancağı + İmparatorluk Madalyonu',
+        id: 'komuta',
+        title: 'Komuta — Alt Komuta Çubuğu (konsept 04)',
         group: 'Oyun İçi HUD',
-        note: 'Hanelerin hâli, yükselen hane ve imparatorluk yakınlığı.',
-        w: 620,
-        h: 600,
+        note: 'Sol inşa · orta bağlam eylemleri · sağ menü; görev sağ üstte.',
+        w: 1400,
+        h: 760,
         build: () => _worldBackdrop(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Align(
-              alignment: Alignment.topRight,
-              child: HouseBanner(
-                houses: _houses,
-                imperial: const ImperialSnapshot(
-                    favor: 0.42, watching: true, imminence: 0.66, active: false),
-                identity: 'Demirhan Hanesi',
-                collapsed: false,
-                onToggleCollapse: _noop,
-                onOpenDivan: _noop,
-                agendaCount: 3,
+          child: Stack(
+            children: [
+              // Görev takipçisi — sağ üst
+              Positioned(
+                right: 16,
+                top: 14,
+                child: QuestTracker(
+                  icon: GameIconData.wheat,
+                  activeLabel: 'Toprağı sür',
+                  tierName: 'Kapısı Açık Köy',
+                  done: 3,
+                  total: 8,
+                  onOpen: _noop,
+                ),
+              ),
+              // Komuta çubuğu — tam genişlik, altta
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: CommandBar(
+                  agenda: 2,
+                  onDefter: _noop,
+                  onDivan: _noop,
+                  onRoster: _noop,
+                  buildSegment: BuildingPanel(
+                    stockpile: _stock(),
+                    selected: BuildingType.woodenHouse,
+                    onSelect: (_) {},
+                    hasFirepit: true,
+                    category: BuildCategory.konut,
+                  ),
+                  context: CommandContext(
+                    title: 'Köy Evi',
+                    subtitle: 'Demirhan Hanesi',
+                    stats: const [
+                      ('Sakinler', '3/2', Color(0xFF7FC08C)),
+                      ('Su', '62%', Color(0xFF52B9B0)),
+                    ],
+                    actions: [
+                      CommandAction('Şenlik', GameIconData.festival,
+                          onTap: _noop),
+                      CommandAction('Taşı', GameIconData.hammer, onTap: _noop),
+                      CommandAction('Yık', GameIconData.demolish,
+                          danger: true, onTap: _noop),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      // Komuta — İNŞA seçimi: orta segment binanın AÇIKLAMASINI gösterir.
+      Shot(
+        id: 'komuta_build',
+        title: 'Komuta — İnşa Seçimi (bina açıklaması)',
+        group: 'Oyun İçi HUD',
+        note: 'Palette\'ten bina seçilince orta segment "ne işe yarar" der.',
+        w: 1400,
+        h: 760,
+        build: () => _worldBackdrop(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: CommandBar(
+              agenda: 2,
+              onDefter: _noop,
+              onDivan: _noop,
+              onRoster: _noop,
+              buildSegment: BuildingPanel(
+                stockpile: _stock(),
+                selected: BuildingType.mill,
+                onSelect: (_) {},
+                hasFirepit: true,
+                category: BuildCategory.uretim,
+              ),
+              context: CommandContext(
+                title: 'Değirmen',
+                description:
+                    'Kanatlar döndükçe içerisi un kokar. Değirmen çalışırken '
+                    'tarladan gelen her balya +1 fazla yiyecek eder.',
+                actions: [
+                  CommandAction('Vazgeç', GameIconData.close, onTap: _noop),
+                ],
               ),
             ),
           ),
@@ -723,8 +854,7 @@ List<Shot> buildShots() => <Shot>[
             final b = BuildingEntity(type: type, col: 40, row: 40)
               ..isActive = true
               ..occupants = 3
-              ..waterLevel = 0.62
-              ..growthProgress = 0.4;
+              ..waterLevel = 0.62;
             final residents = [
               _mkVillager('Kemal', 'Demirhan', VillagerType.blacksmith, 7, seed: 4),
               _mkVillager('Nur', 'Demirhan', VillagerType.farmer, 12, seed: 6),
@@ -737,14 +867,13 @@ List<Shot> buildShots() => <Shot>[
                   child: BuildingInfoPanel(
                     building: b,
                     residents: residents,
-                    activeMiners: const [],
                     stockpile: _stock(),
                     stats: const VillageStats(
                       stockCapacity: 200,
                       morale: 0.63,
-                      growthMultiplier: 1.0,
                       carrierSpeedMultiplier: 1.1,
                       wellCount: 2,
+                      amenityMorale: 0.12,
                     ),
                     population: 24,
                     populationCap: 30,
@@ -1054,6 +1183,14 @@ List<Shot> buildShots() => <Shot>[
             canAcceptFull: true,
             canRansom: true,
             resistChance: 0.28,
+            // REJİM × İMPARATORLUK — hür + köklü köyde meclis bir duruş önerir;
+            // dışına çıkan seçenek "meşruiyet bedeli" rozeti taşır.
+            haggleEase: 0.16,
+            postureNote:
+                'Ortak Ocak: bütün köy eşikte. Ama vergiye cevabı meclis verir.',
+            councilVerdict: ImperialVerdict.haggle,
+            councilLine:
+                'Meclis pazarlıktan yana — verilecekse en azı verilsin.',
             onAccept: _noop,
             onRefuse: _noop,
             onRansom: _noop,
@@ -1495,6 +1632,12 @@ class _Gallery extends StatefulWidget {
   State<_Gallery> createState() => _GalleryState();
 }
 
+/// REFERANS CİHAZ — mobil tasarım önce buna göre kurulur (bkz. PHONE env).
+/// iPhone 11 yatay: 896×414 dp, çentik yanlarda 44dp, alt çubuk 21dp.
+final bool kPhoneMode = (Platform.environment['PHONE'] ?? '').isNotEmpty;
+const Size kPhoneSize = Size(896, 414);
+const EdgeInsets kPhoneSafe = EdgeInsets.only(left: 44, right: 44, bottom: 21);
+
 class _GalleryState extends State<_Gallery> {
   int _i = 0;
   void show(int i) => setState(() => _i = i);
@@ -1524,18 +1667,34 @@ class _GalleryState extends State<_Gallery> {
         child: FittedBox(
           fit: BoxFit.contain,
           child: SizedBox(
-            width: s.w,
-            height: s.h,
+            width: kPhoneMode ? kPhoneSize.width : s.w,
+            height: kPhoneMode ? kPhoneSize.height : s.h,
             child: MediaQuery(
               data: MediaQueryData(
-                size: Size(s.w, s.h),
+                size: kPhoneMode ? kPhoneSize : Size(s.w, s.h),
                 devicePixelRatio: 1,
+                padding: kPhoneMode ? kPhoneSafe : EdgeInsets.zero,
+                viewPadding: kPhoneMode ? kPhoneSafe : EdgeInsets.zero,
                 textScaler: TextScaler.noScaling,
                 platformBrightness: Brightness.dark,
               ),
               child: RepaintBoundary(
                 key: _boundary,
-                child: KeyedSubtree(key: ValueKey(s.id), child: child),
+                // Telefon modunda mobil yazı tabanı da devrede olmalı —
+                // oyunda ağacın kökünde uygulanıyor (bkz. main.dart).
+                //
+                // Stack ŞART: telefon dalına düşen paneller (villager/bina)
+                // [MobileSheet] döndürür, o da bir Positioned'dır. Stack'siz
+                // ağaçta layout patlar ve kare SİYAH çıkar — oyunda bu paneller
+                // zaten sahnenin Stack'i içindedir (bkz. main.dart).
+                child: MobileTextFloor(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      KeyedSubtree(key: ValueKey(s.id), child: child),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -1550,6 +1709,15 @@ Future<void> main() async {
   // Görsel hata (border assert, taşma vb.) sessizce yutulmasın — "panel
   // çizilmedi" bug'larının çoğu burada yakalanır.
   FlutterError.onError = (d) => stdout.writeln('FLUTTER_ERROR: ${d.exception}');
+
+  // Animasyonlu meter'ları statik çiz — TweenAnimationBuilder'ın controller'ı
+  // zorlanmış kare saatiyle assert atıp bina panelini SİYAH bırakıyordu.
+  AppUi.captureStatic = true;
+
+  // Bina thumbnail'larını yükle — yoksa İnşa Paleti tüm binaları jenerik ev
+  // ikonuyla gösterir (oyunda gerçek sprite thumbnail'ları çizilir). PNG'si
+  // olmayan bina zaten oyunda da jenerik kalır → önizleme sadık olur.
+  await BuildingRenderer.loadAll();
 
   final all = buildShots();
   final only = (Platform.environment['ONLY'] ?? '')
@@ -1666,4 +1834,32 @@ Future<Uint8List?> _grab(Shot s) async {
     stdout.writeln('CAPTURE_FAIL: ${s.id}: $e');
     return null;
   }
+}
+
+/// Künye shot'ı için iki gerçek köylü sprite'ı — künyenin sahnenin ÜSTÜNDE
+/// değil, sahneye AİT durduğu ancak gerçek gövdeyle görülür.
+class _TagDemoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    void body(double x, double y, VillagerType t, double phase) {
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.scale(1.7);
+      CharacterRenderer.draw(canvas, t,
+          walkPhase: phase, moveIntensity: 0.85);
+      canvas.restore();
+    }
+
+    body(250, 330, VillagerType.farmer, 1.2);
+    body(560, 330, VillagerType.miner, 3.4);
+    // Mezar taşı yerine sade bir höyük — künyenin nötr rengini denemek için.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          const Rect.fromLTWH(806, 316, 48, 26), const Radius.circular(12)),
+      Paint()..color = const Color(0xFF3A4038),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TagDemoPainter old) => false;
 }

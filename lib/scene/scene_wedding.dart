@@ -19,6 +19,11 @@ extension _SceneWedding on _VillageSceneState {
   static const double _kWeddingScan = 6.0;
   /// Kur olgunlaşma süresi (oyun günü) — bu kadar görünür kur sonrası dilekçe.
   static const double _kCourtshipDays = 0.8;
+  /// Kur eşleşmesinde yaş-yakınlığı YUMUŞAK eğilimi: aday ağırlığı yaş farkıyla
+  /// exp(-fark/ölçek) sönimler. Ölçek büyükse eğilim zayıf. Yetişkinlik bracket'i
+  /// ~9.5 gün → 3.0 ölçek "yakın çift olası, uç fark nadir ama mümkün" verir.
+  /// (Sert sınır DEĞİL — kullanıcı kararı: yumuşak eğilim.)
+  static const double _kCourtshipAgeScale = 3.0;
 
   // ── Sevdanın sesi ([[lib/text/voice.dart]]) ───────────────────────────────
 
@@ -50,6 +55,20 @@ extension _SceneWedding on _VillageSceneState {
 
   void _tickWedding(double dt) {
     if (!_hasFire || _villagers.length < 2) return;
+
+    // Masadaki düğün dilekçesi ÇİFTE BAĞLI — çift dağıldıysa dilekçe konusuz
+    // kalır. Bu denetim aşağıdaki erken `return`'lerin ÜSTÜNDE durmalı: gündem
+    // doluyken hiçbir doğrulama koşmuyordu, yani gelin kaçırıldıktan sonra bile
+    // "Kutla" sahnede olmayan birini evlendiriyor ve alay ateşte bir oturma
+    // slotu claim ediyordu. Köylü listede olmadığı için `update()` hiç koşmaz →
+    // `_releaseSit` hiç tetiklenmez → o slot KALICI ölü (ateş başında bir yer
+    // sonsuza dek eksilir).
+    if (_pendingPetition?.id == 'villageWedding') {
+      final c = _weddingCouple;
+      if (c == null || !_coupleStillPresent(c.$1, c.$2)) _withdrawWedding();
+      return;
+    }
+
     // Gündem doluysa (dilekçe bekliyor / sinematik oynuyor) kur ilerlemesin.
     if (_pendingPetition != null || _activeCutscene != null) return;
 
@@ -105,6 +124,12 @@ extension _SceneWedding on _VillageSceneState {
       if (h == null) continue;
       (byHome[h] ??= []).add(v);
     }
+    // Geçerli tüm (kadın, erkek) adaylarını topla; yaş-yakınlığına YUMUŞAK ağırlık
+    // ver. Eskiden ilk geçerli çift dönüyordu (yaş körü) → taze yetişkin bir
+    // neredeyse-yaşlıyla eşit olasılıkla eşleşebiliyordu. Artık yakın yaş daha
+    // olası, uç fark seyrek (sert sınır yok).
+    final cands = <(VillagerEntity, VillagerEntity)>[];
+    final weights = <double>[];
     for (final mates in byHome.values) {
       if (mates.length < 2) continue;
       for (final w in mates) {
@@ -114,11 +139,24 @@ extension _SceneWedding on _VillageSceneState {
           if (w.parents.contains(m) || w.children.contains(m)) continue;
           if (m.parents.contains(w) || m.children.contains(w)) continue;
           if (w.parents.any(m.parents.toSet().contains)) continue; // kardeş
-          return (w, m);
+          cands.add((w, m));
+          final gap = (w.ageDays - m.ageDays).abs();
+          weights.add(exp(-gap / _kCourtshipAgeScale));
         }
       }
     }
-    return null;
+    if (cands.isEmpty) return null;
+    // Ağırlıklı çekiliş — yaşça yakın çift daha olası.
+    var total = 0.0;
+    for (final wgt in weights) {
+      total += wgt;
+    }
+    var r = _rng.nextDouble() * total;
+    for (var i = 0; i < cands.length; i++) {
+      r -= weights[i];
+      if (r <= 0) return cands[i];
+    }
+    return cands.last;
   }
 
   /// Nişanlı çift hâlâ geçerli mi (ikisi de hayatta, evlenmemiş, aynı evde yetişkin).
@@ -127,9 +165,53 @@ extension _SceneWedding on _VillageSceneState {
     if (a.lifeStage != LifeStage.adult || b.lifeStage != LifeStage.adult) {
       return false;
     }
-    if (a.homeBuilding == null || a.homeBuilding != b.homeBuilding) return false;
+    // Siyasi nikâh (zorlama) haneler ARASIDIR — aynı ev şartı yalnız organik
+    // kur için geçerli, yoksa bağlanan çift anında geçersiz sayılırdı.
+    if (!_betrothalForced &&
+        (a.homeBuilding == null || a.homeBuilding != b.homeBuilding)) {
+      return false;
+    }
     if (!_villagers.contains(a) || !_villagers.contains(b)) return false;
     return true;
+  }
+
+  /// Masadaki düğünün çifti HÂLÂ SAHNEDE Mİ — dar varlık denetimi.
+  ///
+  /// [_coupleStillValid] bilerek kullanılmaz: o KUR koşullarını da sorar (aynı
+  /// hane) ve `_armWedding` `_betrothalForced`'ı sıfırladığı için siyasi nikâhın
+  /// çifti -farklı hanelerden- dilekçe masaya konar konmaz "geçersiz" sayılırdı.
+  /// Dilekçe armlandıktan sonra tek soru şudur: bu iki insan hâlâ burada mı.
+  bool _coupleStillPresent(VillagerEntity a, VillagerEntity b) =>
+      !a.isDying &&
+      !b.isDying &&
+      !a.wed &&
+      !b.wed &&
+      _villagers.contains(a) &&
+      _villagers.contains(b);
+
+  /// Konusu kalmayan düğün dilekçesini masadan kaldır (gelin/damat öldü,
+  /// kaçırıldı ya da devşirildi). Kimsenin suçu değil → huzursuzluk/moral
+  /// cezası YOK; yalnız köy sessizce haberi alır.
+  void _withdrawWedding() {
+    final p = _pendingPetition;
+    _weddingCouple = null;
+    _brideElect = null;
+    _groomElect = null;
+    _courtshipTimer = 0;
+    _betrothalForced = false;
+    if (p == null) return;
+    setStateHere(() {
+      _petitionCooldowns[p.id] = _time + 2.0 * kGameDaySeconds;
+      _pendingPetition = null;
+      _petitionAuthor = null;
+      _petitionExtra = const {};
+      _petitionModalOpen = false;
+      _petitionForced = false;
+      _petitionTimer = _petitionInterval();
+    });
+    _showNotification('💔 Düğün dağıldı. Masadaki dilekçenin artık sahibi yok.');
+    _chronicle('Beklenen nikâh kıyılamadı. Çiftten geriye söz kaldı.',
+        icon: '💔');
   }
 
   /// Görünür kur jesti (throttle'lı, abartısız): bakışma + kalp + ara sıra dans.
@@ -159,6 +241,7 @@ extension _SceneWedding on _VillageSceneState {
     _brideElect = null;
     _groomElect = null;
     _courtshipTimer = 0;
+    _betrothalForced = false;
   }
 
   /// Kur olgunlaştı → düğün dilekçesini ÇİFTE BAĞLI sun. Yazar = gelin (modal'da
@@ -167,6 +250,7 @@ extension _SceneWedding on _VillageSceneState {
     _brideElect = null;
     _groomElect = null;
     _courtshipTimer = 0;
+    _betrothalForced = false; // bayrak SIZMASIN: sonraki kur organik olmalı
     final p = PetitionSystem.byId('villageWedding');
     if (p == null) return;
     _weddingCouple = (bride, groom);
@@ -197,13 +281,20 @@ extension _SceneWedding on _VillageSceneState {
     _brideElect = null;
     _groomElect = null;
     _courtshipTimer = 0;
+    _betrothalForced = false;
 
     final dur = kGameDaySeconds * 0.5;
+    AudioManager.instance.playSfx(Sfx.weddingJoy);
     _activeFx.add(ActiveFx(EventEffect(fx: EventFx.wedding, duration: dur), dur));
     _feelVillage(NpcEmotion.love, 14, grand ? 0.18 : 0.12);
 
     VillagerEntity? bride, groom;
-    if (couple != null) {
+    // SON KAPI: çift hâlâ sahnede mi. `_tickWedding` konusuz dilekçeyi zaten
+    // kaldırıyor, ama karar ile bu çağrı arasında da köylü sahneden çıkabilir
+    // (aynı karede kaçırılma/ölüm). Doğrulanmadan geçilirse alay ateşte bir
+    // oturma slotu claim eder ve o slot bir daha serbest kalmaz — sessiz,
+    // kalıcı, geri alınamaz. Çift düştüyse kutlama jenerik sürer.
+    if (couple != null && _coupleStillPresent(couple.$1, couple.$2)) {
       bride = couple.$1;
       groom = couple.$2;
       bride.wed = true;
@@ -251,8 +342,6 @@ extension _SceneWedding on _VillageSceneState {
         v.assignSit(
             slot.col, slot.row, cx, cy, dur, () => point.release(slot, v));
       }
-      v.chatBubbleIcon = '💍';
-      v.chatBubbleTime = dur;
       v.feel(NpcEmotion.love, dur, moodDelta: 0.10);
     }
 

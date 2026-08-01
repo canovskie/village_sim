@@ -248,6 +248,13 @@ extension _SceneConflict on _VillageSceneState {
     } else if (instigator.hasGrudgeWith(other, _time)) {
       p *= 3.0;
     }
+    // KANAAT (bkz. villager_memory) — gördükleri yüzünden birbirinden
+    // hoşlanmayan iki köylü daha kolay tutuşur. Kavga artık yalnız mizaç ve
+    // köy gerginliğinden değil, ARALARINDA GEÇENLERDEN de doğuyor: suçunu
+    // gördüğün adamla aynı meydanda durmak zor.
+    final mutual = (-instigator.memory.opinionOf(other)).clamp(0.0, 1.0) +
+        (-other.memory.opinionOf(instigator)).clamp(0.0, 1.0);
+    if (mutual > 0.2) p *= 1.0 + mutual * 1.6;
     if (_rng.nextDouble() >= p.clamp(0.0, 0.9)) return;
 
     logDev('Kavga tetiği: ${instigator.name} ↔ ${other.name}',
@@ -413,6 +420,14 @@ extension _SceneConflict on _VillageSceneState {
     _reactNearby(mx, my, brawl ? 5.0 : 4.0,
         brawl ? NpcEmotion.fear : NpcEmotion.wonder, 2.5,
         moodDelta: -0.02);
+    // TANIKLIK — yumruklaşma gürültülüdür, bakmayan da duyar. Ağız dalaşı
+    // sessizdir: yalnız o yöne bakan görür. Gören, kavgacılara dair kanaatini
+    // günlerce taşır (bkz. scene_perception).
+    if (brawl) {
+      _witnessEvent(Notion.brawl,
+          x: mx, y: my, subject: a, subjectName: a.name,
+          loud: true, exclude: [a, b]);
+    }
 
     if (brawl) addCameraShake(4.0, dur: 0.4);
 
@@ -437,8 +452,6 @@ extension _SceneConflict on _VillageSceneState {
     if (peace != null) {
       peace.lookToward(mx, my);
       peace.feel(NpcEmotion.content, 2.5, moodDelta: 0.03);
-      peace.chatBubbleIcon = '🕊️';
-      peace.chatBubbleTime = 2.5;
       _showNotification(Voice.say(
           _kPeacePool,
           _voice(a,
@@ -472,6 +485,9 @@ extension _SceneConflict on _VillageSceneState {
     final ctx = _voice(a,
         other: b, seed: _stableSeed('fight${a.name}${b.name}', _dayCount));
     if (brawl) {
+      // Yalnız YUMRUKLAŞMADA ses var: atışma sık, sesli olsaydı köy sürekli
+      // gürültülü olurdu (ve gerçek kavganın ağırlığı kaybolurdu).
+      AudioManager.instance.playSfx(Sfx.fightScuffle);
       _chronicle(Voice.say(_kBrawlChroniclePool, ctx), icon: '💢');
       // Escalation/yaralanma kendi bildirimini verdiyse base'i tekrarlama.
       if (!escalated && !injured) {
@@ -621,10 +637,9 @@ extension _SceneConflict on _VillageSceneState {
       });
     for (final v in calm) {
       if (sep >= maxSep) break;
+      // Koşup araya girme (goTo + feel) ayırmayı anlatır — baş-üstü ✋ ikonu YOK.
       v.goTo((mx + (_rng.nextDouble() - 0.5) * 1.2).clamp(1.0, kCols - 2.0),
           (my + (_rng.nextDouble() - 0.5) * 1.2).clamp(1.0, kRows - 2.0), 3.0);
-      v.chatBubbleIcon = '✋';
-      v.chatBubbleTime = 3.0;
       v.feel(NpcEmotion.wonder, 3.0, moodDelta: 0.02);
       v.conflictCooldown = 30.0;
       sep++;
@@ -694,9 +709,8 @@ extension _SceneConflict on _VillageSceneState {
     setStateHere(() {
       for (final p in [v, ?other]) {
         p.activity = VillagerActivity.none;
-        p.chatBubbleIcon = '🕊️';
-        p.chatBubbleTime = 2.0;
-        // Yatıştır: öfke postürünü kes + hasarın bir kısmını geri al.
+        // Yatıştır: öfke postürünü kes + hasarın bir kısmını geri al. Yatışma
+        // feel(content) gövde diliyle okunur — baş-üstü 🕊️ ikonu YOK.
         p.feel(NpcEmotion.content, 2.5, moodDelta: 0.05);
         // Hemen tekrar kavgaya tutuşmasın.
         p.conflictCooldown = 90.0 + _rng.nextDouble() * 60.0;
@@ -760,10 +774,10 @@ extension _SceneConflict on _VillageSceneState {
             v.lifeStage == LifeStage.elder ||
             _rng.nextDouble() < 0.25);
 
-    // Yaralı kavgadan düşer.
+    // Yaralı kavgadan düşer — acı, baş-üstü 🤕 ikonuyla değil GÖVDE DİLİYLE:
+    // irkilme/çöküş (feel grief) + injuryDays aksayan duruşu + kiliseye aksayış.
     v.activity = VillagerActivity.none;
-    v.chatBubbleIcon = '🤕';
-    v.chatBubbleTime = 3.0;
+    v.feel(NpcEmotion.grief, 3.0, moodDelta: -0.05);
     if (v.conflictCooldown < 120.0) v.conflictCooldown = 120.0;
     addCameraShake(3.0, dur: 0.3);
 
@@ -816,14 +830,38 @@ extension _SceneConflict on _VillageSceneState {
     final side1 = killerKin.difference(victimKin); // katil tarafı
     final side2 = victimKin.difference(killerKin)..remove(victim); // ölen hariç
 
-    // Kan davasını kur/genişlet — iki aile karşılıklı kan düşmanı.
-    for (final k in side1) {
-      for (final e in side2) {
-        k.bloodEnemies.add(e);
-        e.bloodEnemies.add(k);
+    // DİYET FERMANI — kanın bedeli keseden ödenirse öç elle alınmaz: kan davası
+    // HİÇ doğmaz. Ama hükmün gücü kesenin gücü kadardır; hazine yetmiyorsa
+    // ferman kâğıtta kalır ve husumet her zamanki gibi kurulur. Yönetişimin en
+    // acı dersi burada: parası olmayan devletin adaleti de yoktur.
+    // `!feudPair`: diyet YENİ husumetin doğmasını engeller, süreni satın almaz.
+    // Zaten kan davalı iki hane arasındaki intikam kanı keseyle kapanmaz — o
+    // ancak sulh/sürgün/idam ile biter (bkz. _pacifyFeudOf).
+    final feudPossible = side1.isNotEmpty && side2.isNotEmpty;
+    final bloodPriceLaw = _policies.sealed.contains('nizam.bloodPrice');
+    final canPayBlood = bloodPriceLaw &&
+        feudPossible &&
+        !feudPair &&
+        _stockpile.gold >= _kBloodPrice;
+
+    if (canPayBlood) {
+      _payBloodPrice(victim: victim, killer: killer, kin: side2);
+    } else {
+      // Kan davasını kur/genişlet — iki aile karşılıklı kan düşmanı.
+      for (final k in side1) {
+        for (final e in side2) {
+          k.bloodEnemies.add(e);
+          e.bloodEnemies.add(k);
+        }
+      }
+      if (feudPossible && !feudPair) {
+        _feudsSeen++; // Diyet Fermanı'nın kapısı bunu okur
+      }
+      if (bloodPriceLaw && feudPossible && !feudPair) {
+        _showNotification('🩸 Diyet ödenemedi — kese boş. Husumet kuruldu.');
       }
     }
-    final feudFormed = side1.isNotEmpty && side2.isNotEmpty;
+    final feudFormed = feudPossible && !canPayBlood;
 
     // Maktulü öldür — aile bağlarını kopar, görünür çöküş + cenaze.
     for (final p in victim.parents) {
@@ -853,7 +891,10 @@ extension _SceneConflict on _VillageSceneState {
     for (final k in side1) {
       if (k.isDying) continue;
       k.lookToward(victim.gridX, victim.gridY);
-      k.feel(NpcEmotion.anger, 5.0, moodDelta: -0.05); // katil tarafı savunmaya geçer
+      // Diyet ödendiyse katil tarafı savunmaya geçmez, utanır: öç beklemiyorlar
+      // çünkü hesap kapandı. Fermanın gövde dilindeki karşılığı bu.
+      k.feel(canPayBlood ? NpcEmotion.grief : NpcEmotion.anger, 5.0,
+          moodDelta: -0.05);
     }
     for (final k in side2) {
       if (k.isDying) continue;
@@ -864,7 +905,20 @@ extension _SceneConflict on _VillageSceneState {
     final ctx = _voice(killer,
         other: victim,
         seed: _stableSeed('kill${killer.name}${victim.name}', _dayCount));
-    if (feudPair) {
+    if (canPayBlood) {
+      _chronicle(
+          Voice.say(const [
+            '{ad} kan döktü; bedeli keseden ödendi, husumet kurulmadı.',
+            '{öteki} toprağa verildi. Diyet {öteki-in} hanesine sayıldı; kimse '
+                'bıçak çekmedi.',
+          ], ctx),
+          icon: '🩸',
+          milestone: true);
+      _showNotification(Voice.say(const [
+        '🩸 {ad} kan döktü. Diyet ödendi — kan davası doğmadı.',
+        '🩸 Bedel kesildi, öç elden alınmadı. {öteki-in} hanesi keseyi aldı.',
+      ], ctx));
+    } else if (feudPair) {
       _chronicle(Voice.say(_kRevengeChroniclePool, ctx),
           icon: '🩸', milestone: true);
       _showNotification(Voice.say(_kRevengePool, ctx));
@@ -878,6 +932,39 @@ extension _SceneConflict on _VillageSceneState {
       _showNotification(Voice.say(_kKillPool, ctx));
     }
     return true;
+  }
+
+  /// DİYET — maktulün hanesine köyün kesesinden ödenen kan bedeli.
+  ///
+  /// Getirisi büyük (nesil aşan bir kan davası hiç doğmaz) o yüzden bedeli de
+  /// hissedilir olmalı: tek seferde hazineden ciddi bir kesik. Yoksa ferman
+  /// "ölümlerin sonucu olmasın" düğmesine dönerdi.
+  static const int _kBloodPrice = 30;
+
+  /// Bedeli öder ve maktulün hanesini tazmin eder. Husumet KURULMAZ — bağları
+  /// çağıran zaten atlıyor; burası yalnız kesenin ve hanelerin tarafı.
+  void _payBloodPrice({
+    required VillagerEntity victim,
+    required VillagerEntity killer,
+    required Set<VillagerEntity> kin,
+  }) {
+    _stockpile.gold = (_stockpile.gold - _kBloodPrice).clamp(0, 1 << 30);
+    // Maktulün hanesi: para acıyı dindirmez ama görülmüş olmak dindirir.
+    if (victim.surname.isNotEmpty) {
+      _houses.nudge(victim.surname, moodDelta: 0.10, swayGain: 0.04);
+    }
+    // Katilin hanesi bedeli köye borçlu: hâli düşer, nüfuzu erir.
+    if (killer.surname.isNotEmpty && killer.surname != victim.surname) {
+      _houses.nudge(killer.surname, moodDelta: -0.12);
+      _houses.drainSway(killer.surname, 0.06);
+    }
+    // Maktulün yakınları öç yerine yas tutar — gövde dili öfke değil keder.
+    for (final k in kin) {
+      if (k.isDying) continue;
+      k.feel(NpcEmotion.grief, 6.0, moodDelta: -0.08);
+    }
+    // Diyet ödenmiş bir ölüm köyü yine de sarsar, ama husumetsiz sarsar.
+    pushPolicyMorale(0.04, 4.0); // kanın durdurulduğu görüldü (net etki hâlâ eksi)
   }
 
   /// Bir köylünün yaşayan kan akrabaları (kendisi dahil) — ebeveyn/çocuk graf'ı
@@ -943,7 +1030,8 @@ extension _SceneConflict on _VillageSceneState {
     final wasFeud = v.inFeud;
     if (wasFeud) _pacifyFeudOf(v);
     // Çevre tedirgin — uzaklaşan kişiye bakar (gövde dili).
-    _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0, moodDelta: -0.03);
+    _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0,
+        moodDelta: -0.03, alarm: 0.22);
     // SÜRGÜN FERMANI (NİZAM) — yürürlükteyse köy sürgüne alışmıştır; yola
     // vurmanın moral cezası yarıya iner (kapı çoktan aralanmış). Ferman sürgünü
     // bir travma olmaktan çıkarıp bir prosedüre çevirir — kılıç yolunun bedeli.
@@ -951,7 +1039,29 @@ extension _SceneConflict on _VillageSceneState {
     pushPolicyMorale(exileMorale, 3.0);
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.05);
     final ctx = _voice(v, seed: _stableSeed('exile${v.name}', _dayCount));
-    _removeVillager(v); // aile bağı kopar + sahneden çekilir (cenazesiz)
+    // Sürgün = ölüm çöküşü DEĞİL (metin "yolun başına yürütüldü" der). Aile bağı
+    // kopar, sonra köylü en yakın harita KENARINA yürür; varınca scene_tick onu
+    // listeden çıkarır (leftVillage). Ölüm hattından (startDying) ayrı.
+    for (final p in v.parents) {
+      p.children.remove(v);
+    }
+    for (final c in v.children) {
+      c.parents.remove(v);
+    }
+    final toL = v.gridX, toR = kCols - v.gridX;
+    final toT = v.gridY, toB = kRows - v.gridY;
+    final m = min(min(toL, toR), min(toT, toB));
+    double ex = v.gridX, ey = v.gridY;
+    if (m == toL) {
+      ex = 0.5;
+    } else if (m == toR) {
+      ex = kCols - 0.5;
+    } else if (m == toT) {
+      ey = 0.5;
+    } else {
+      ey = kRows - 0.5;
+    }
+    v.startLeaving(ex, ey);
     _chronicle(
         Voice.say(
             wasFeud ? _kExileFeudChroniclePool : _kExileChroniclePool, ctx),

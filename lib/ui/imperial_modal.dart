@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../systems/imperial.dart';
+import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 
 /// İmparatorluk vergi heyetiyle pazarlık modalı. Karar ZORUNLU (boşluğa
 /// dokunup kaçılamaz — sim duraklı). Kaynak talebinde basit pazarlık mini-oyunu
@@ -13,6 +15,20 @@ class ImperialModal extends StatefulWidget {
   final bool canAcceptFull; // tam ödeme karşılanabiliyor mu
   final bool canRansom;     // fidye karşılanabiliyor mu
   final double resistChance; // heyeti kovma başarı şansı (0 = denenemez)
+
+  // ── REJİM (bkz. systems/regime.dart) ────────────────────────────────────────
+  /// Pazarlık eşiğinden düşülen — tüccar köy daha ucuza anlaşır (görüntü sahne
+  /// hesabıyla birebir tutsun diye).
+  final double haggleEase;
+
+  /// Köyün rejiminden gelen dış-güç duruşu (boş = merkez, çizilmez).
+  final String postureNote;
+
+  /// Hür + köklü rejimde meclisin önerdiği duruş (null = sen karar verirsin).
+  /// Öneriyle çelişen seçenekler "meşruiyet bedeli" etiketiyle işaretlenir.
+  final ImperialVerdict? councilVerdict;
+  final String councilLine;
+
   final VoidCallback onAccept;
   final VoidCallback onRefuse;
   final VoidCallback onRansom;
@@ -27,6 +43,10 @@ class ImperialModal extends StatefulWidget {
     required this.canAcceptFull,
     required this.canRansom,
     required this.resistChance,
+    this.haggleEase = 0,
+    this.postureNote = '',
+    this.councilVerdict,
+    this.councilLine = '',
     required this.onAccept,
     required this.onRefuse,
     required this.onRansom,
@@ -107,49 +127,122 @@ class _ImperialModalState extends State<ImperialModal> {
     return Stack(
       children: [
         const Positioned.fill(child: ColoredBox(color: AppUi.scrim)),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 460),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(26),
-              child: AppReveal(
-                child: AppPanel(
-                  accent: AppUi.rust,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+        if (useCompactGameUi(context)) _compactBody(d) else _wideBody(d),
+      ],
+    );
+  }
+
+  /// Anlatı bloğu — heyetin künyesi, komutanın satırı, itibar, rejim bandı.
+  List<Widget> _narrative() => [
+        Row(
+          children: [
+            const Text('⚔️', style: TextStyle(fontSize: 22)),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text('İMPARATORLUK HEYETİ',
+                  style: AppUi.label.copyWith(color: AppUi.rust)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(_haggling ? 'Pazarlık masası' : 'Defter açıldı',
+            style: AppUi.title.copyWith(fontSize: 18)),
+        const SizedBox(height: 10),
+        Text(
+          _commanderLine,
+          style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
+        ),
+        const SizedBox(height: 12),
+        _favorBar(),
+        if (widget.postureNote.isNotEmpty || widget.councilVerdict != null) ...[
+          const SizedBox(height: 10),
+          _regimeBanner(),
+        ],
+      ];
+
+  /// TELEFON YATAY — solda heyetin sözü, sağda cevabın.
+  ///
+  /// 460dp'lik dikey kolon iPhone 11'de (896×414) hem iki yanda ~350dp ölü alan
+  /// bırakıyor hem de "Tam öde / Pazarlık et / Reddet" düğmelerini ekranın
+  /// altına itiyordu — vergi ültimatomunda cevap seçenekleri görünmüyordu.
+  Widget _compactBody(ImperialDemand d) {
+    return Builder(
+      builder: (context) => Positioned.fill(
+        child: Padding(
+          padding: EdgeInsets.only(
+            left: MobileUi.left(context),
+            right: MobileUi.right(context),
+            top: MobileUi.top(context),
+            bottom: MobileUi.bottom(context),
+          ),
+          child: AppReveal(
+            child: AppPanel(
+              accent: AppUi.rust,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: _narrative(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Container(width: 1, color: AppUi.line),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 4,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text('⚔️', style: TextStyle(fontSize: 22)),
-                          const SizedBox(width: 10),
-                          Text('İMPARATORLUK HEYETİ',
-                              style: AppUi.label.copyWith(color: AppUi.rust)),
+                          if (_haggling)
+                            ..._haggleOptions(d)
+                          else
+                            ..._mainOptions(d),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(_haggling ? 'Pazarlık masası' : 'Defter açıldı',
-                          style: AppUi.title.copyWith(fontSize: 18)),
-                      const SizedBox(height: 10),
-                      Text(
-                        _commanderLine,
-                        style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
-                      ),
-                      const SizedBox(height: 12),
-                      _favorBar(),
-                      const AppDivider(),
-                      if (_haggling)
-                        ..._haggleOptions(d)
-                      else
-                        ..._mainOptions(d),
-                    ],
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _wideBody(ImperialDemand d) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(26),
+          child: AppReveal(
+            child: AppPanel(
+              accent: AppUi.rust,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ..._narrative(),
+                  const AppDivider(),
+                  if (_haggling)
+                    ..._haggleOptions(d)
+                  else
+                    ..._mainOptions(d),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -157,8 +250,14 @@ class _ImperialModalState extends State<ImperialModal> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Etiket ÜSTTE, kendi satırında. AppStatBar'ın yan etiket yuvası 72dp;
+        // "İMPARATORLUK İTİBARIN" oraya sığmayıp üç satıra ve kelime ORTASINDAN
+        // bölünüyordu ("İMPARAT / ORLUK / İTİBARIN").
+        const Text('İMPARATORLUK İTİBARIN', style: AppUi.label),
+        const SizedBox(height: 6),
         AppStatBar(
-          label: 'İMPARATORLUK İTİBARIN',
+          label: '',
+          labelWidth: 0,
           value: widget.favor.clamp(0.0, 1.0),
           trailing: '${(widget.favor * 100).round()}%',
           color: _favorColor,
@@ -170,18 +269,62 @@ class _ImperialModalState extends State<ImperialModal> {
     );
   }
 
+  /// REJİM BANDI — köyün dış-güç duruşu + (hür rejimde) meclisin önerisi.
+  /// Bu, imparatorluk masasının iç yönetişimle kesiştiği yer: baskı köyünde
+  /// söz tek elden senindir, hür köyde meclis bir duruş gösterir ve dışına
+  /// çıkmak meşruiyet yer.
+  Widget _regimeBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+      decoration: BoxDecoration(
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.accent.withValues(alpha: 0.30)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.postureNote.isNotEmpty)
+            Text('⚑ ${widget.postureNote}',
+                style: AppUi.body.copyWith(
+                    fontSize: 11, height: 1.4, color: AppUi.textMid)),
+          if (widget.councilVerdict != null) ...[
+            if (widget.postureNote.isNotEmpty) const SizedBox(height: 7),
+            Text('🏛 ${widget.councilLine}',
+                style: AppUi.bodyHi.copyWith(
+                    fontSize: 11.5, height: 1.4, color: AppUi.accent)),
+            const SizedBox(height: 3),
+            Text('Başka türlü seçersen meclise rağmen karar vermiş olursun — '
+                'moral ve huzur bunun bedelini öder.',
+                style: AppUi.body.copyWith(
+                    fontSize: 9.5, height: 1.35, color: AppUi.textLo)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Bir seçenek meclisin duruşuyla çelişiyor mu — çelişiyorsa "meşruiyet
+  /// bedeli" etiketi eklenir. Meclis yoksa (baskı/ılımlı rejim) hiç çizilmez.
+  bool _defies(ImperialVerdict v) =>
+      widget.councilVerdict != null && widget.councilVerdict != v;
+  bool get _refuseDefies => widget.councilVerdict != null;
+
   List<Widget> _mainOptions(ImperialDemand d) {
     return [
       if (d.isConscript) ...[
         _opt('Genci teslim et', 'Kolona katılır ve bir daha dönmez. Köy yas tutar.',
-            AppUi.textMid, widget.onAccept),
+            AppUi.textMid, widget.onAccept, defies: _defies(ImperialVerdict.comply)),
         _opt(
             'Altınla kurtar · ${widget.ransomCost}★',
             widget.canRansom
                 ? 'Keseyi tart, çocuğu bırak. İtibar da biraz kazanılır.'
                 : 'Kese bu kadarını kaldırmıyor.',
             AppUi.gold,
-            widget.canRansom ? widget.onRansom : null),
+            widget.canRansom ? widget.onRansom : null,
+            defies: _defies(ImperialVerdict.comply)),
       ] else ...[
         _opt(
             'Tam öde · ${d.amount}${d.icon}',
@@ -189,9 +332,11 @@ class _ImperialModalState extends State<ImperialModal> {
                 ? 'Rakamı sorgusuz kapat. En güvenli yol; itibarın yükselir.'
                 : 'Elindeki yetmiyor. Ne bulurlarsa onu alırlar.',
             AppUi.sage,
-            widget.onAccept),
+            widget.onAccept,
+            defies: _defies(ImperialVerdict.comply)),
         _opt('Pazarlık et', 'Daha düşük bir sayı söyle. İtibarın yüksekse tutar.',
-            AppUi.accent, () => setState(() => _haggling = true)),
+            AppUi.accent, () => setState(() => _haggling = true),
+            defies: _defies(ImperialVerdict.haggle)),
       ],
       const SizedBox(height: 8),
       // Direniş — yalnız köy yeterince güçlüyse (muhafız/kalabalık). Başarı
@@ -202,9 +347,10 @@ class _ImperialModalState extends State<ImperialModal> {
             'Muhafızlar eşiğe dizilir. Tutarsa kimse ölmez, köy başını dik tutar; '
                 'tutmazsa ilk düşenler onlar olur.',
             AppUi.accent,
-            widget.onResist),
+            widget.onResist,
+            defies: _defies(ImperialVerdict.resist)),
       _opt('Reddet', 'Hiçbir şey verme. Bedeli komutan kendi eliyle toplar.',
-          AppUi.rust, widget.onRefuse),
+          AppUi.rust, widget.onRefuse, defies: _refuseDefies),
     ];
   }
 
@@ -213,7 +359,9 @@ class _ImperialModalState extends State<ImperialModal> {
     // 0.85 - favor*0.45 ile aynı): #7 saydamlık → hangi teklifin tutacağını
     // oyuncuya açıkça göster (deneme-yanılma yerine bilinçli risk).
     const fracs = [0.5, 0.7, 0.85];
-    final threshold = 0.85 - widget.favor * 0.45;
+    // Eşik sahne hesabıyla birebir: itibar + REJİM kolaylığı (tüccar köy ucuza).
+    final threshold =
+        (0.85 - widget.favor * 0.45 - widget.haggleEase).clamp(0.0, 1.0);
     return [
       for (final f in fracs)
         _opt(
@@ -229,7 +377,8 @@ class _ImperialModalState extends State<ImperialModal> {
     ];
   }
 
-  Widget _opt(String label, String detail, Color accent, VoidCallback? onTap) {
+  Widget _opt(String label, String detail, Color accent, VoidCallback? onTap,
+      {bool defies = false}) {
     final disabled = onTap == null;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -247,7 +396,27 @@ class _ImperialModalState extends State<ImperialModal> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: AppUi.bodyHi.copyWith(fontSize: 13.5)),
+                Row(children: [
+                  Expanded(
+                    child: Text(label, style: AppUi.bodyHi.copyWith(fontSize: 13.5)),
+                  ),
+                  // Meclise rağmen seçim: küçük kırmızı uyarı rozeti.
+                  if (defies) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: AppUi.rust.withValues(alpha: 0.5)),
+                      ),
+                      child: Text('meşruiyet bedeli',
+                          style: AppUi.label.copyWith(
+                              fontSize: 7, color: AppUi.rust, letterSpacing: 0.5)),
+                    ),
+                  ],
+                ]),
                 const SizedBox(height: 2),
                 Text(detail,
                     style: AppUi.body.copyWith(

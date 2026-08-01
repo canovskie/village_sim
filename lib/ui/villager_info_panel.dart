@@ -4,9 +4,14 @@ import '../buildings/craft.dart';
 import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
+import '../entities/villager_job.dart';
 import '../rendering/portrait_renderer.dart';
 import '../systems/chronicle.dart';
+import '../systems/village_custom.dart';
+import '../systems/villager_act.dart';
+import '../systems/villager_mind.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 
 /// Köylü kartı — modern koyu app_ui dilinde. Üstte portre + isim + meslek
 /// rozeti + favori/kapat ikon butonları; altta durum rozetleri, animasyonlu
@@ -26,6 +31,17 @@ class VillagerInfoPanel extends StatefulWidget {
   final VoidCallback? onExile;
   final VoidCallback? onExecute;
 
+  /// ELLE İŞ VERME — oyuncunun köylüye doğrudan iş verdiği kapı.
+  /// `null` rol = "serbest bırak" (köylü otomatik iş gücü havuzuna döner).
+  /// Boş [assignableRoles] verilirse bölüm hiç çizilmez.
+  final void Function(JobRole?)? onAssignJob;
+  final List<JobRole> assignableRoles;
+
+  /// ŞU ANKİ ADIMIN istediği iş (bkz. Quest.jobTarget) — o rol düğmesi sakin
+  /// bir halka ile işaretlenir. Dünyadaki halka doğru köylüyü gösteriyor;
+  /// panel açılınca oyuncu yine bir rol listesiyle baş başa kalmasın.
+  final JobRole? hintRole;
+
   /// Açılışta seçili sekme: 0 = GENEL, 1 = KİŞİLİK, 2 = ÖYKÜ.
   final int initialTab;
 
@@ -41,6 +57,9 @@ class VillagerInfoPanel extends StatefulWidget {
     this.onRename,
     this.onExile,
     this.onExecute,
+    this.onAssignJob,
+    this.assignableRoles = const [],
+    this.hintRole,
     this.initialTab = 0,
   });
 
@@ -98,6 +117,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   Widget build(BuildContext context) {
     final v = widget.villager;
     final stage = v.lifeStage;
+    if (useCompactGameUi(context)) return _mobileSheet(v, stage);
     return AppReveal(
       child: SizedBox(
         width: 312,
@@ -140,6 +160,57 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     );
   }
 
+  /// MOBİL — "yüzen kutu" değil, sağa yapışan TAM BOY sayfa.
+  ///
+  /// Telefonda eski hâl masaüstünden gelen 312px'lik kutuydu: ekranın ortasında
+  /// asılı duruyor, altı komuta hattının içinde kayboluyor, üstteki rayı
+  /// örtüyordu — kesilmiş bir kâğıt gibi görünmesinin sebebi buydu. Sayfa
+  /// bunun yerine yuvasını DOLDURUR: başlık üstte sabit, eylemler altta sabit,
+  /// yalnız ortadaki gövde kayar. Yüzey/yarıçap [MobileSheet] ile aynı dilde.
+  Widget _mobileSheet(VillagerEntity v, LifeStage stage) {
+    return SizedBox(
+      width: MobileUi.sheetWidth(MediaQuery.sizeOf(context)),
+      child: AppPanel(
+        accent: _stageColor(stage),
+        padding: EdgeInsets.zero,
+        borderRadius: BorderRadius.circular(MobileUi.radius),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _header(v, stage),
+            Container(height: 1, color: AppUi.line),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _statusStrip(v),
+                    const SizedBox(height: 12),
+                    _ageBar(v, stage),
+                    const SizedBox(height: 10),
+                    _moraleBar(v),
+                    const SizedBox(height: 4),
+                    _moodRow(v),
+                    const SizedBox(height: 12),
+                    AppTabs(tabs: _tabs(v), initial: widget.initialTab),
+                  ],
+                ),
+              ),
+            ),
+            Container(height: 1, color: AppUi.line),
+            // Eylemler kaymaz: sayfanın dibinde, parmağın doğal yerinde.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: _actionRow(v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ─── Sekmeler ───────────────────────────────────────────────────────────────
 
   /// GENEL (ev + aile) · KİŞİLİK (mizaç/künye) · ÖYKÜ (yaşam çizelgesi).
@@ -154,6 +225,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
+            ..._workSection(v),
+            ..._mindSection(v),
             _row('Ev', widget.homeLabel ?? 'Evsiz', icon: GameIconData.home),
             if (family.isNotEmpty) ...[
               const SizedBox(height: 6),
@@ -409,6 +482,10 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   }
 
   (String, Color, String) _stateChip(VillagerEntity v) {
+    // Durum bozucular önce — köylü neden dinliyor/yavaş, oyuncu görsün.
+    if (v.sickDays > 0)   return ('Hasta',        const Color(0xFF7E8A5A), '🤒');
+    if (v.injuryDays > 0) return ('Yaralı',       AppUi.rust, '🤕');
+    if (v.laborDays > 0)  return ('Kürek cezası', const Color(0xFF8A8A92), '⛓️');
     if (v.isSeatedAtFire) return ('Ateş başı', AppUi.accent, '🔥');
     if (v.isSleeping)     return ('Uyuyor',    const Color(0xFF6C7CB2), '💤');
     if (v.isCarrying)     return ('Taşıyor',   AppUi.gold, '📦');
@@ -445,6 +522,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         return _emojiChip('Kovalıyor', AppUi.accent, '🏃');
       case VillagerActivity.abducted:
         return _emojiChip('Kaçırıldı', AppUi.rust, '⛓️');
+      case VillagerActivity.playing:
+        return _emojiChip('Oynuyor', AppUi.sage, '🪁');
       case VillagerActivity.none:
         return null;
     }
@@ -601,6 +680,207 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           ],
         ),
       );
+
+  // ─── İş — oyuncunun köye dokunduğu yer ─────────────────────────────────────
+
+  /// ELLE İŞ VERME.
+  ///
+  /// Köyün işleri normalde kendiliğinden dağılır (`_reconcileRole` en yakın boş
+  /// yetişkini kapar). Bu bölüm oyuncuya o dağıtımı ELDEN ALMA hakkı verir:
+  /// seçilen rol köylüye kilitlenir, otomatik kadro ona bir daha dokunmaz.
+  ///
+  /// Âdete aykırı seçim ENGELLENMEZ — yalnız işaretlenir (⚠) ve seçilince
+  /// bedeli anlatılır. Kapatılan buton yok; köyün huyu bir kural değil.
+  List<Widget> _workSection(VillagerEntity v) {
+    final onAssign = widget.onAssignJob;
+    if (onAssign == null || widget.assignableRoles.isEmpty) return const [];
+    // Çocuk / hasta / sakat köylüye iş verilmez — sebebini yaz, boş bırakma.
+    if (!v.canRunErrands) {
+      return [
+        _sectionLabel('İŞ'),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(_noWorkReason(v),
+              style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11)),
+        ),
+      ];
+    }
+
+    final assigned = v.assignedRole;
+    final current = v.job?.role ?? JobRole.none;
+    final against = assigned != null &&
+        assigned != JobRole.none &&
+        VillageCustom.isAgainst(assigned, male: v.isMale);
+
+    return [
+      _sectionLabel('İŞ'),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          // Serbest = otomatik havuz. Elle atama yokken seçili görünür.
+          _jobChip(
+            label: 'Serbest',
+            icon: '🎲',
+            selected: assigned == null,
+            warn: false,
+            onTap: () => onAssign(null),
+          ),
+          for (final r in widget.assignableRoles)
+            _jobChip(
+              label: r.label,
+              icon: r.icon,
+              selected: assigned == r,
+              hinted: widget.hintRole == r && assigned != r,
+              warn: VillageCustom.isAgainst(r, male: v.isMale),
+              onTap: () => onAssign(r),
+            ),
+        ],
+      ),
+      const SizedBox(height: 6),
+      // Ne olduğunun tek satırlık okuması — seçim ile simin yaptığı iş aynı
+      // yerden okunur (panel bir şey der, sim başka bir şey yapar olmasın).
+      Text(
+        assigned == null
+            ? (current == JobRole.none
+                ? 'Köyün işleri kendiliğinden dağılıyor.'
+                : 'Kendiliğinden ${current.label.toLowerCase()} oldu.')
+            : 'Bu işe sen verdin.',
+        style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11),
+      ),
+      if (against) ...[
+        const SizedBox(height: 4),
+        Text('⚠ Köyün âdeti bu işi böyle bilmez — iş ağır ilerler ve köy konuşur.',
+            style: AppUi.body.copyWith(color: AppUi.gold, fontSize: 11)),
+      ],
+      const SizedBox(height: 10),
+    ];
+  }
+
+  String _noWorkReason(VillagerEntity v) {
+    if (v.lifeStage == LifeStage.child) return 'Daha çocuk — işe koşulmaz.';
+    if (v.sickDays > 0) return 'Hasta yatıyor; iyileşmeden iş tutmaz.';
+    if (v.injuryDays > 0) return 'Yaralı — bir süre iş göremez.';
+    return 'Şimdilik iş tutamaz.';
+  }
+
+  Widget _sectionLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(text,
+            style: AppUi.label.copyWith(letterSpacing: 0.6)),
+      );
+
+  /// Tek iş rozeti — seçili/âdet-dışı durumları renkle taşır.
+  Widget _jobChip({
+    required String label,
+    required String icon,
+    required bool selected,
+    required bool warn,
+    required VoidCallback onTap,
+    bool hinted = false,
+  }) {
+    final base = warn ? AppUi.gold : AppUi.accent;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected
+                ? base.withValues(alpha: 0.16)
+                : AppUi.surface0,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              // İşaret seçili gibi DURMAZ: seçili dolu ember, işaret yarı
+              // ember + kalın. İkisi aynı görünürse oyuncu işi çoktan
+              // verdiğini sanır.
+              color: selected
+                  ? base.withValues(alpha: 0.65)
+                  : hinted
+                      ? AppUi.accent.withValues(alpha: 0.5)
+                      : AppUi.line,
+              width: hinted && !selected ? 1.6 : 1,
+            ),
+          ),
+          child: Text(
+            '$icon $label${warn ? ' ⚠' : ''}',
+            style: AppUi.body.copyWith(
+              color: selected ? base : AppUi.textHi,
+              fontSize: 11,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Aklı — ne yapıyor, neden, derdi ne ────────────────────────────────────
+
+  /// NİYET + SEBEP + BASKIN DERT.
+  ///
+  /// Bu üç satır Faz 1'in oyuncuya bakan yüzü. Bir köylünün ne yaptığını
+  /// görmek yetmez — NEDEN yaptığı görünmezse davranış rastgele, yani
+  /// karikatür görünür. Sebep hakemin seçtiği teklifin kendi cümlesidir
+  /// ([Bid.reason]); yani panelde yazan şey, kararın gerçek gerekçesi.
+  List<Widget> _mindSection(VillagerEntity v) {
+    final m = v.mind;
+    if (m.intent.isIdle && m.readout.isEmpty) return const [];
+    final dom = m.dominant;
+    final domVal = m.drive(dom);
+    return [
+      _row('Hâli', intentLabel(m.intent.kind), icon: GameIconData.people),
+      if (!m.intent.isIdle)
+        Padding(
+          padding: const EdgeInsets.only(left: 20, bottom: 2),
+          child: Text('“${m.intent.reason}”',
+              style: AppUi.body.copyWith(
+                  fontSize: 11.5,
+                  fontStyle: FontStyle.italic,
+                  color: AppUi.textLo)),
+        ),
+      // Elinde ne var — mikro-sahnenin somut kanıtı (bkz. villager_act).
+      if (v.prop != PropKind.none)
+        Padding(
+          padding: const EdgeInsets.only(left: 20, bottom: 2),
+          child: Text('elinde: ${propLabel(v.prop)}',
+              style: AppUi.label.copyWith(fontSize: 10.5)),
+        ),
+      // Baskın dert yalnız gerçekten bir dert varken yazılır — her köylüde
+      // sürekli "işsizlik 4" yazan bir satır gürültüdür.
+      if (domVal >= 0.30)
+        Padding(
+          padding: const EdgeInsets.only(left: 20, bottom: 4),
+          child: Text('derdi: ${driveLabel(dom)}',
+              style: AppUi.label.copyWith(fontSize: 10.5)),
+        ),
+      // HATIRLADIKLARI — köylünün gördükleri. Kulaktan duyduğu açıkça
+      // işaretlenir, çünkü köyde neyin bilindiği ile neyin KANITLANDIĞI
+      // arasındaki fark oyunun kendisidir (yalnız gözüyle gören ihbar eder).
+      ..._memorySection(v),
+      const SizedBox(height: 4),
+    ];
+  }
+
+  List<Widget> _memorySection(VillagerEntity v) {
+    final lines = v.memory.readout();
+    if (lines.isEmpty) return const [];
+    return [
+      const SizedBox(height: 6),
+      Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Text('HATIRLADIKLARI',
+            style: AppUi.label.copyWith(letterSpacing: 0.6)),
+      ),
+      for (final l in lines)
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 1),
+          child: Text('· $l',
+              style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textLo)),
+        ),
+    ];
+  }
 
   // ─── Kişilik — mizaç + sevdiği şey + tek cümlelik künye ────────────────────
 

@@ -34,22 +34,33 @@ extension _SceneLand on _VillageSceneState {
 
   // ── Reach büyümesi (dünyanın açılması) ──────────────────────────────────────
 
-  /// Her frame (scene_tick). Reach span'i (hu+hv) büyüdükçe izin verilen zoom-out
-  /// + pan artar → dünya açılır; gerçek kenar yine hiç görünmez. Üst sınır
-  /// `_maxSpan` = min(kCols,kRows)-1-[_VillageSceneState._kEdgeBuffer] (elmasa
-  /// içten sığan en büyük ekran-hizalı dikdörtgen; bkz. scene_input._clampCamera).
+  /// Reach hedefi — **asimptotik**, `_maxSpan`'e ulaşmaz. Eğrinin matematiği
+  /// ve neden lineerden vazgeçildiği: [[lib/world/land_expansion.dart]].
   ///
-  /// **Karma ilerleme (faz anahtarı YOK):** hedef = max(hikâye, organik).
+  /// Yan fayda PERF: geç oyunda izin verilen zoom-out eskisinden dar kalır
+  /// (134 binada ~88 vs 117) → max zoom-out'ta viewport'a belirgin daha az
+  /// tile/entity girer.
+  ///
+  /// **Karma ilerleme (faz anahtarı YOK):** ilerleme = max(hikâye, organik).
   ///  • Hikâye: tamamlanan görev başına (scene_flow beat'leri) — erken oyunda
   ///    bina az / görev çok olduğu için AÇILIMI HİKÂYE SÜRER.
   ///  • Organik: bina sayısıyla — köy büyüyünce bu baskın gelir, yani hikâye
   ///    kendiliğinden PASİFLEŞİR ve dünya sessizce açılmaya devam eder.
+  double get _landExpansionTarget {
+    final story   = _completedQuests.length * 1.5; // hikâye beat'leri
+    final organic = _buildings.length * 0.5;       // köyün büyümesi
+    return landExpansionTarget(
+      start: _VillageSceneState._kSpanStart,
+      ceil: _maxSpan - kSpanCeilMargin,
+      progress: story > organic ? story : organic,
+    );
+  }
+
+  /// Her frame (scene_tick). Reach span'i (hu+hv) büyüdükçe izin verilen zoom-out
+  /// + pan artar → dünya açılır; gerçek kenar yine hiç görünmez. Hedef için
+  /// bkz. [_landExpansionTarget].
   void _updateLandExpansion(double dt) {
-    const start = _VillageSceneState._kSpanStart;
-    final story   = start + _completedQuests.length * 1.5; // hikâye beat'leri
-    final organic = start + _buildings.length * 0.5;        // köyün büyümesi
-    final target =
-        (story > organic ? story : organic).clamp(start, _maxSpan);
+    final target = _landExpansionTarget;
     if (_reachSpan < target) {
       _reachSpan = (_reachSpan + dt * 1.2).clamp(0.0, target); // ~1.2 span/sn
     }

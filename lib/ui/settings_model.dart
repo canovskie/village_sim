@@ -7,6 +7,13 @@ class SettingsModel extends ChangeNotifier {
   SettingsModel._();
 
   double _musicVolume = 0.7;
+  /// ORTAM sesi (kuş/cırcır/yağmur/ateş döngüleri) — MÜZİKTEN AYRI.
+  ///
+  /// Eskiden ortam döngüleri `musicVolume` ile kısılıyordu ve oyunda hiç müzik
+  /// olmadığı için ayarın adı yalan söylüyordu: "Müzik" slider'ı aslında kuş
+  /// sesini kısıyordu. Müzik katmanı gelince ikisi ayrıldı — panelde yazan
+  /// şey, motorun okuduğu şey olmalı.
+  double _ambientVolume = 0.7;
   double _sfxVolume   = 0.8;
   bool   _muted       = false;
   bool   _showFps     = false;
@@ -14,12 +21,14 @@ class SettingsModel extends ChangeNotifier {
   AppLanguage _language = AppLanguage.tr;
 
   double get musicVolume   => _musicVolume;
+  double get ambientVolume => _ambientVolume;
   double get sfxVolume     => _sfxVolume;
   /// Sessiz modu — oyun içi hızlı kıs/aç. Slider değerlerini korur (aç =
   /// eski seviyelere döner). Ses üreten her yer "effective" getter'ları okur.
   bool   get muted         => _muted;
   /// AudioManager bunları okur: sessizken 0, değilse slider değeri.
   double get effectiveMusicVolume => _muted ? 0.0 : _musicVolume;
+  double get effectiveAmbientVolume => _muted ? 0.0 : _ambientVolume;
   double get effectiveSfxVolume   => _muted ? 0.0 : _sfxVolume;
   bool   get showFps       => _showFps;
   bool   get shakeOnEvents => _shakeOnEvents;
@@ -29,6 +38,13 @@ class SettingsModel extends ChangeNotifier {
     final c = v.clamp(0.0, 1.0);
     if (c == _musicVolume) return;
     _musicVolume = c;
+    notifyListeners();
+  }
+
+  set ambientVolume(double v) {
+    final c = v.clamp(0.0, 1.0);
+    if (c == _ambientVolume) return;
+    _ambientVolume = c;
     notifyListeners();
   }
 
@@ -67,6 +83,7 @@ class SettingsModel extends ChangeNotifier {
 
   void resetToDefaults() {
     _musicVolume   = 0.7;
+    _ambientVolume = 0.7;
     _sfxVolume     = 0.8;
     _muted         = false;
     _showFps       = false;

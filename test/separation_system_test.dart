@@ -1,13 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/constants.dart';
-import 'package:village_sim/entities/builder_entity.dart';
-import 'package:village_sim/entities/farm_farmer.dart';
-import 'package:village_sim/entities/fisher_entity.dart';
-import 'package:village_sim/entities/miner_entity.dart';
 import 'package:village_sim/entities/villager_entity.dart';
-import 'package:village_sim/entities/woodcutter_entity.dart';
 import 'package:village_sim/systems/separation_system.dart';
+import 'package:village_sim/world/animal_entity.dart';
 
 double _dist(double x1, double y1, double x2, double y2) {
   final dx = x1 - x2;
@@ -25,11 +21,6 @@ void main() {
       applySeparation(
         dt: 0.016,
         villagers:   [a, b],
-        farmers:     [],
-        woodcutters: [],
-        miners:      [],
-        fishers:     [],
-        builders:    [],
         waterTiles:  const {},
       );
       final after = _dist(a.gridX, a.gridY, b.gridX, b.gridY);
@@ -46,11 +37,6 @@ void main() {
       applySeparation(
         dt: 0.016,
         villagers:   [a, b],
-        farmers:     [],
-        woodcutters: [],
-        miners:      [],
-        fishers:     [],
-        builders:    [],
         waterTiles:  const {},
       );
 
@@ -61,20 +47,18 @@ void main() {
     test('mixed entity types — separation still applies across kinds', () {
       final v = VillagerEntity(type: VillagerType.farmer, name: 'V', male: true,
                                startCol: 5, startRow: 5);
-      final w = WoodcutterEntity(startCol: 5.3, startRow: 5);
+      final cow = AnimalEntity(
+          kind: AnimalKind.cow, barnCol: 0, barnRow: 0,
+          startCol: 5.3, startRow: 5);
 
-      final before = _dist(v.gridX, v.gridY, w.gridX, w.gridY);
+      final before = _dist(v.gridX, v.gridY, cow.gridX, cow.gridY);
       applySeparation(
         dt: 0.016,
         villagers:   [v],
-        farmers:     [],
-        woodcutters: [w],
-        miners:      [],
-        fishers:     [],
-        builders:    [],
+        cows:        [cow],
         waterTiles:  const {},
       );
-      final after = _dist(v.gridX, v.gridY, w.gridX, w.gridY);
+      final after = _dist(v.gridX, v.gridY, cow.gridX, cow.gridY);
 
       expect(after, greaterThan(before));
     });
@@ -90,11 +74,6 @@ void main() {
       applySeparation(
         dt: 0.5,
         villagers:   [a, b],
-        farmers:     [],
-        woodcutters: [],
-        miners:      [],
-        fishers:     [],
-        builders:    [],
         waterTiles:  water,
       );
 
@@ -112,47 +91,31 @@ void main() {
     });
 
     test('working entity is not displaced', () {
-      // Builder building durumunda → workingI=true → push uygulanmaz.
-      final builder = BuilderEntity(startCol: 5, startRow: 5)
-        ..state = BuilderState.building;
-      final villager = VillagerEntity(type: VillagerType.guard, name: 'V', male: true,
+      // Ateş başına oturmuş köylü (sitClaimed) "çalışıyor" sayılır → itilmez.
+      final seated = VillagerEntity(type: VillagerType.farmer, name: 'S', male: true,
+                                    startCol: 5, startRow: 5)
+        ..sitClaimed = true;
+      final passerby = VillagerEntity(type: VillagerType.guard, name: 'V', male: true,
                                       startCol: 5.2, startRow: 5);
 
-      final bx0 = builder.gridX, by0 = builder.gridY;
+      final sx0 = seated.gridX, sy0 = seated.gridY;
       applySeparation(
         dt: 0.016,
-        villagers:   [villager],
-        farmers:     [],
-        woodcutters: [],
-        miners:      [],
-        fishers:     [],
-        builders:    [builder],
+        villagers:   [seated, passerby],
         waterTiles:  const {},
       );
 
-      expect(builder.gridX, bx0,
-          reason: 'aktif inşaatçı yerinden oynamamalı');
-      expect(builder.gridY, by0);
+      expect(seated.gridX, sx0, reason: 'oturan köylü yerinden oynamamalı');
+      expect(seated.gridY, sy0);
     });
 
     test('empty entity lists do not crash', () {
       applySeparation(
         dt: 0.016,
         villagers:   [],
-        farmers:     [],
-        woodcutters: [],
-        miners:      [],
-        fishers:     [],
-        builders:    [],
         waterTiles:  const {},
       );
     });
 
-    // Compiler memnuniyeti için kullanılmamış importları referansla.
-    test('placeholder for unused imports', () {
-      expect(MinerEntity, isNotNull);
-      expect(FisherEntity, isNotNull);
-      expect(FarmFarmer, isNotNull);
-    });
   });
 }

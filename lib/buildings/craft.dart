@@ -76,7 +76,6 @@ const Map<BuildingType, String?> kBuildingCraft = {
   BuildingType.mill: Craft.milling,
   BuildingType.mineBuilding: Craft.mining,
   BuildingType.fisherCabin: Craft.fishing,
-  BuildingType.dock: Craft.fishing,
   BuildingType.market: Craft.trade,
   BuildingType.caravanserai: Craft.trade,
   BuildingType.stable: Craft.trade,

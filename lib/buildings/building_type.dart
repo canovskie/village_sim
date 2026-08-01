@@ -139,10 +139,6 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.44, 0.06, LightKind.lantern),
   ],
   // Liman & Ziyaret — yaklaşık; ışık editörüyle oturt.
-  BuildingType.dock: [
-    BuildingLight(0.20, 0.55, LightKind.lantern),
-    BuildingLight(0.78, 0.60, LightKind.lantern),
-  ],
   BuildingType.caravanserai: [
     BuildingLight(0.30, 0.55, LightKind.lantern),
     BuildingLight(0.50, 0.50, LightKind.window),
@@ -268,13 +264,12 @@ enum BuildingType {
   chickenCoop,    // 2x2 — chickencoop.png. Tavuk kümesi: 3-4 tavuk spawn + periyodik yumurta (food).
   beehive,        // 1x1 — beehive.png. Arı kovanı: menzildeki çiçeğe göre bal üretir + ambient arılar.
   church,         // 2x2 — church.png. Kilise: civic moral + cenaze töreni mekânı + yanına mezarlık.
-  // ─── Köy Meydanı & Kültür Mahallesi (PNG gelene kadar prosedürel placeholder) ─
+  // ─── Köy Meydanı & Kültür Mahallesi ──────────────────────────────────────────
   fountain,       // 2x2 — fountain.png. Şadırvan: su kaynağı (kuyu gibi) + gündüz toplanma + dekoratif.
   library,        // 2x2 — library.png. Kütüphane: kültür ameniteleri morali + kronik evi.
   bathhouse,      // 2x2 — bathhouse.png. Hamam: kültür morali + buhar bacası.
   monument,       // 1x1 — monument.png. Anıt: prestij/kültür morali + landmark (ileride kronik).
-  // ─── Liman & Ziyaret Mahallesi (PNG gelene kadar prosedürel placeholder) ─────
-  dock,           // 3x2 — dock.png. İskele: pasif deniz ticareti altını (trade).
+  // ─── Liman & Ziyaret Mahallesi ───────────────────────────────────────────────
   caravanserai,   // 3x3 — caravanserai.png. Han: taşıyıcı hızı + tüccar (civic/carrierSpeed).
   shrine,         // 2x2 — shrine.png. Türbe: kültür-amenite morali + ziyaret landmark.
   belltower,      // 1x1 — belltower.png. Çan Kulesi: kültür morali + çan sesi + dikey landmark.
@@ -330,7 +325,6 @@ const Map<BuildingType, BuildCategory> kBuildingCategory = {
   BuildingType.library: BuildCategory.civic,
   BuildingType.bathhouse: BuildCategory.civic,
   BuildingType.monument: BuildCategory.civic,
-  BuildingType.dock: BuildCategory.ticaret,
   BuildingType.caravanserai: BuildCategory.ticaret,
   BuildingType.shrine: BuildCategory.civic,
   BuildingType.belltower: BuildCategory.civic,
@@ -380,8 +374,8 @@ class BuildingMeta {
 // • Erken oyun (ev, kulübeler): ağırlıklı odun, az taş.
 // • Orta oyun (değirmen, ahır, depo, taverna, fisher): odun + taş.
 // • İleri oyun (pazar, belediye): demir + altın gerektirir.
-// • Altın yalnız pazar üzerinden gelir (gelecek özellik); şimdilik yalnızca
-//   en üst kademe binalarda gerekli.
+// • Altın pazardan gelir: pasif gelir (bkz. _tickMarket) + manuel satış
+//   (bkz. sellAtMarket, panel butonu scene_ui). En üst kademe binalarda gerekli.
 
 const Map<BuildingType, BuildingMeta> kBuildingMeta = {
   BuildingType.firepit: BuildingMeta(
@@ -453,12 +447,13 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     effectRadius: 3.5, // tavukların dolaştığı menzil
   ),
   BuildingType.beehive: BuildingMeta(
+    groundY: 1.04,
     cols: 1,
     rows: 1,
     label: 'Arı Kovanı',
     cost: ResourceCost(wood: 8),
-    groundXCenter: 0.50,
-    spriteScale: 0.62, // küçük kovan — well/firepit ölçeğine yakın
+    groundXCenter: 0.5,
+    spriteScale: 0.6123, // küçük kovan — well/firepit ölçeğine yakın
     walkable: true, // 1×1 dekor; etrafından geçilebilir
     effectRadius: 3.5, // bu menzildeki çiçekler bal üretimini hızlandırır
   ),
@@ -474,8 +469,8 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     effectRadius: 5.5, // moral menzili + cenaze töreni/mezarlık alanı
   ),
   // ─── Köy Meydanı & Kültür Mahallesi ────────────────────────────────────────
-  // PNG'ler gelene kadar prosedürel placeholder (building_renderer _drawCivicPlaceholder).
-  // groundY 1.0 + groundXCenter 0.5 başlangıç; PNG sonrası ebat editörüyle oturt.
+  // PNG'ler geldi; ebatlar yerleşim editörüyle oturtuldu (spriteScale/groundY
+  // değerleri artık ölçülmüş değerler, başlangıç tahmini değil).
   BuildingType.fountain: BuildingMeta(
     spriteScale: 0.6422,
     cols: 2,
@@ -520,40 +515,33 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     walkable: true,       // 1×1 dekoratif landmark
   ),
   // ─── Liman & Ziyaret Mahallesi ─────────────────────────────────────────────
-  // PNG gelene kadar prosedürel placeholder; groundY 1.0 + center 0.5 başlangıç,
-  // PNG sonrası ebat editörüyle oturt.
-  BuildingType.dock: BuildingMeta(
-    cols: 3,
-    rows: 2,
-    label: 'İskele',
-    cost: ResourceCost(wood: 24, stone: 4),
-    groundY: 1.0,
-    groundXCenter: 0.5,
-    walkable: true,       // tahta iskele — üstünde durulur
-  ),
+  // PNG'ler geldi; ebatlar yerleşim editörüyle oturtuldu.
   BuildingType.caravanserai: BuildingMeta(
+    spriteScale: 1.0606,
     cols: 3,
     rows: 3,
     label: 'Han',
     cost: ResourceCost(wood: 20, stone: 24, iron: 3),
-    groundY: 1.0,
-    groundXCenter: 0.5,
+    groundY: 0.8061,
+    groundXCenter: 0.4923,
   ),
   BuildingType.shrine: BuildingMeta(
+    spriteScale: 1.0999,
     cols: 2,
     rows: 2,
     label: 'Türbe',
     cost: ResourceCost(wood: 6, stone: 22, gold: 2),
-    groundY: 1.0,
-    groundXCenter: 0.5,
+    groundY: 1.0014,
+    groundXCenter: 0.4993,
     effectRadius: 4.0,    // ziyaret/moral menzili
   ),
   BuildingType.belltower: BuildingMeta(
+    spriteScale: 1.271,
     cols: 1,
     rows: 1,
     label: 'Çan Kulesi',
     cost: ResourceCost(wood: 4, stone: 18, iron: 2),
-    groundY: 1.0,
+    groundY: 0.9665,
     groundXCenter: 0.5,
   ),
   BuildingType.tent: BuildingMeta(
@@ -564,9 +552,9 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     // başının sokmak için. Kalıcı ama düşük konfor (bkz. poorHousing morali).
     cost: ResourceCost(wood: 6),
     // tent.png trimlenmiş (1100×936) → taban alt kenarda, içerik merkezi 0.50.
-    groundY: 1.0,
-    groundXCenter: 0.5,
-    spriteScale: 1.15, // 1×1 footprint'ten biraz taşan, evden küçük barınak
+    groundY: 1.0158,
+    groundXCenter: 0.5171,
+    spriteScale: 0.839, // 1×1 footprint'ten biraz taşan, evden küçük barınak
     walkable: true, // sakin içine girip uyur (ev gibi)
   ),
   BuildingType.woodenHouse: BuildingMeta(

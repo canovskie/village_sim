@@ -128,13 +128,19 @@ class AnchorSystem {
                 _ringSlot(cx, cy, 1.4, i, 6),
             ],
           ));
-          // Aynı ateşin iç halkası — akşam oturma için. Carrier slot'larıyla
-          // çakışmasın diye 30°/0.25 tile offset.
+          // Aynı ateşin oturma halkaları — akşam toplanması ve törenler için.
+          // İÇ halka 6 kişilik (carrier slot'larıyla çakışmasın diye 30°/0.25
+          // tile offset). DIŞ halka 8 kişilik: tören çağrıları 7-8 kişi
+          // istiyordu ama yalnız 6 yer vardı, fazlası sessizce düşüyordu —
+          // "bütün köy toplandı" hep 6 kişilik görünürdü. Dış halka teslim
+          // halkasının (1.4) dışında kalır, yol kesmez.
           firepitSitPoints.add(AnchorPoint(
             building: b,
             slots: [
               for (int i = 0; i < 6; i++)
                 _ringSlotOffset(cx, cy, 1.15, i, 6, 0.5),
+              for (int i = 0; i < 8; i++)
+                _ringSlotOffset(cx, cy, 2.05, i, 8, 0.5),
             ],
           ));
         default:

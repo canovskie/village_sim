@@ -18,8 +18,18 @@ extension _SceneEvents on _VillageSceneState {
       if (_omenLeft <= 0) _strikeOmen();
       return;
     }
+    // Harness zorlaması — godMode'dan bağımsız, tek atış.
+    if (kProbeTriggerEvent) {
+      kProbeTriggerEvent = false;
+      _beginOmen();
+      return;
+    }
     // Otomatik olay üretimi yalnızca godMode KAPALIYKEN (dev elle tetikler).
     if (_godMode) return;
+    // KADEMELİ UYANIŞ (bkz. scene_flow): kuruluş sürerken rastgele olay yok.
+    // Sayaç da işlemez — yoksa kuruluş biter bitmez birikmiş süre boşalıp
+    // ilk olay anında patlardı.
+    if (!_governanceAwake) return;
     _eventTimer -= dt;
     if (_eventTimer <= 0) {
       _beginOmen();
@@ -39,7 +49,19 @@ extension _SceneEvents on _VillageSceneState {
       stockpile:  _stockpile,
       buildings:  _buildings,
     );
-    final e = EventSystem.roll(_rng, ctx);
+    // Zorlanmış olay (dev konsol / test) — çekilişi atlar. Tüketilir: bir kez
+    // sahnelenir, sonrası yine rastgeledir.
+    EventOutcome? forced;
+    if (kForcedEventId.isNotEmpty) {
+      for (final ev in EventSystem.events) {
+        if (ev.id == kForcedEventId) {
+          forced = ev;
+          break;
+        }
+      }
+      kForcedEventId = '';
+    }
+    final e = forced ?? EventSystem.roll(_rng, ctx);
     logDev('Rastgele olay mayalanıyor: ${e.title}', tag: '🎲', color: AppUi.info);
     _omenEvent = e;
     _omenLeft = _kOmenMin + _rng.nextDouble() * (_kOmenMax - _kOmenMin);
@@ -93,11 +115,6 @@ extension _SceneEvents on _VillageSceneState {
       '🐺 Köpekler ağaç hattına bakıp hırlıyor, havlamıyorlar.',
       '🐺 Çobanın sürüsü bu akşam ağıla girmek için itişti.',
       '🐺 Ormanın kıyısında bir uluma duyuldu. Ardından çok sessiz oldu.',
-    ],
-    EventIds.thief: [
-      '🦹 Pazarda yabancı bir yüz, tezgâhları değil keseleri sayıyor.',
-      '🦹 Biri sabahtan beri aynı sokakta üçüncü kez göründü.',
-      '🦹 Tezgâhın arkasındaki iple oynayan bir el görüldü.',
     ],
     EventIds.storm: [
       '⛈ Kuşlar alçaktan uçuyor, hepsi aynı yöne.',
@@ -292,8 +309,6 @@ extension _SceneEvents on _VillageSceneState {
     final NpcEmotion emotion;
     double dur, mood;
     switch (e.effect?.fx) {
-      case EventFx.thiefDash:
-        emotion = NpcEmotion.anger; dur = 6; mood = -0.02;
       case EventFx.beastEyes:
         emotion = NpcEmotion.fear; dur = 7; mood = -0.03;
       case EventFx.meteorShower:
@@ -320,7 +335,6 @@ extension _SceneEvents on _VillageSceneState {
       EventFx.fireOutbreak => 12.0,
       EventFx.storm        => 9.0,
       EventFx.beastEyes    => 8.0,
-      EventFx.thiefDash    => 6.0,
       EventFx.meteorShower => 5.0,
       _ => e.category == EventCategory.negative
           ? (e.severity == EventSeverity.major ? 10.0 : 5.0)
@@ -339,6 +353,11 @@ extension _SceneEvents on _VillageSceneState {
     final (tx, ty) = _eventFocusPoint(base);
     final (cx, cy) = _villageCenter();
     final center = (cx.toDouble(), cy.toDouble());
+    // BAŞ ROLLER — olayın izlenebilir çekirdeği (roller + adımlar). Aşağıdaki
+    // rally/kutlama artık KORO: kalabalığın koşuşması. Vinyet önce çağrılır ki
+    // baş roller kadroyu koro dağılmadan seçebilsin (ikisi de aynı "boştaki
+    // köylü" havuzundan besleniyor; koro rolleri kapmasın).
+    _stageVignette(base, choiceId: choiceId);
     switch (base.id) {
       // ── Pozitif — köye gelen iyilik dünya-içi kutlamayla karşılanır ──────────
       case EventIds.bard:
@@ -358,10 +377,6 @@ extension _SceneEvents on _VillageSceneState {
           _rallyToward(center.$1, center.$2,
               count: 5, emotion: NpcEmotion.fear, dwell: 5); // ateşe sığın
         }
-      case EventIds.thief:
-        if (choiceId == 'chase') {
-          _rallyToward(tx, ty, count: 3, emotion: NpcEmotion.anger, dwell: 3);
-        } // "bırak gitsin" → sadece bakış (reactToEvent yeterli)
       case EventIds.houseFire:
         if (choiceId == 'extinguish') {
           _rallyToward(tx, ty, count: 5, emotion: NpcEmotion.fear, dwell: 6);
@@ -370,9 +385,18 @@ extension _SceneEvents on _VillageSceneState {
               count: 4, emotion: NpcEmotion.grief, dwell: 5); // geri çekil
         }
       case EventIds.plague:
-        if (choiceId == 'healer') {
+        // DİKKAT: bu fonksiyon olay BAŞINDA (choiceId=null) ve KARAR sonrası
+        // (choiceId!=null) iki kez çağrılır. Ölümcül tol YALNIZ karar anında —
+        // başta köy henüz tedirgin, kimse ölmez.
+        if (choiceId == null) {
+          _rallyToward(center.$1, center.$2,
+              count: 3, emotion: NpcEmotion.fear, dwell: 5); // tedirgin toplanma
+        } else if (choiceId == 'healer') {
           _rallyToward(center.$1, center.$2,
               count: 3, emotion: NpcEmotion.fear, dwell: 6); // tedavi etrafı
+          _plagueToll(healer: true); // erken kırıldı — ölüm yok, birkaç hafif hasta
+        } else {
+          _plagueToll(healer: false); // şifacı yok → salgın en zayıfları alır
         }
       case EventIds.drought:
         _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.fear, dwell: 5); // kuyu
@@ -392,7 +416,6 @@ extension _SceneEvents on _VillageSceneState {
           return (b.col + b.cols / 2.0, b.row + b.rows / 2.0);
         }
         return _villageCenterD();
-      case EventIds.thief:
       case EventIds.caravan:
         final m = _firstBuildingOf(BuildingType.market);
         if (m != null) return (m.col + m.cols / 2.0, m.row + m.rows / 2.0);
@@ -423,6 +446,10 @@ extension _SceneEvents on _VillageSceneState {
             !v.isCarrying &&
             !v.isDying &&
             !v.sitClaimed &&
+            // Vinyetin baş rolü koroya karışmaz: ceremony niyeti `activity`yi
+            // none bırakır, bu yüzden filtre onu YAKALAMAZ ve koşturarak
+            // koreografiyi bozardı (kova doldurmaya giden adam meydana kaçar).
+            v.mind.intent.priority < IntentPriority.ceremony &&
             v.activity == VillagerActivity.none)
         .toList();
     cands.sort((a, b) {
@@ -481,6 +508,7 @@ extension _SceneEvents on _VillageSceneState {
             !v.isCarrying &&
             !v.isDying &&
             !v.sitClaimed &&
+            v.mind.intent.priority < IntentPriority.ceremony && // baş rol hariç
             v.activity == VillagerActivity.none &&
             v.socialCooldown <= 0)
         .toList()

@@ -3,18 +3,25 @@ import '../core/resources.dart';
 import '../world/road_surface.dart';
 import 'app_ui.dart';
 
-/// Yol döşeme rafı — 3 surface chip (toprak / taş / köprü). Modern koyu panel;
-/// bir chip seçilince road placement mode aktif, accent (ember) vurgu çevreliyor.
+/// Yol rafı — 3 surface chip (toprak / taş / köprü) + SİLGİ. Modern koyu panel;
+/// bir chip seçilince yol modu aktif, accent (ember) vurgu çevreliyor.
+///
+/// Silgi ayrı bir chip: yanlış döşenmiş yolun tek geri dönüşü. Öncesinde
+/// döşenen yol hiçbir şekilde kaldırılamıyordu — hata kalıcıydı.
 class RoadPanel extends StatelessWidget {
   final ResourceBundle stockpile;
   final RoadSurface? selected;
   final void Function(RoadSurface) onSelect;
+  final bool eraseSelected;
+  final VoidCallback onSelectErase;
 
   const RoadPanel({
     super.key,
     required this.stockpile,
     required this.selected,
     required this.onSelect,
+    this.eraseSelected = false,
+    required this.onSelectErase,
   });
 
   @override
@@ -35,7 +42,82 @@ class RoadPanel extends StatelessWidget {
                 onTap: () => onSelect(s),
               ),
             ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: _EraseChip(
+              selected: eraseSelected,
+              onTap: onSelectErase,
+            ),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Yol silgisi chip'i — surface chip'leriyle aynı ölçüde, ayrı renkte (sönük
+/// kırmızı) ki "döşe" ile "sil" gözle karışmasın.
+class _EraseChip extends StatelessWidget {
+  final bool selected;
+  final VoidCallback onTap;
+  const _EraseChip({required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    const tint = Color(0xFFCC6655);
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        width: 58,
+        padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? Color.alphaBlend(tint.withValues(alpha: 0.20), AppUi.surface2)
+              : AppUi.surface1,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(
+            color: selected ? tint : AppUi.line,
+            width: selected ? 1.6 : 1,
+          ),
+          boxShadow: selected
+              ? [BoxShadow(color: tint.withValues(alpha: 0.4), blurRadius: 9)]
+              : null,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              height: 26,
+              child: Center(child: Text('🧹', style: TextStyle(fontSize: 20))),
+            ),
+            const SizedBox(height: 3),
+            SizedBox(
+              height: 22,
+              child: Center(
+                child: Text(
+                  'Yolu Sil',
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                  style: AppUi.body.copyWith(
+                    fontSize: 8.5,
+                    height: 1.15,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? tint : AppUi.textMid,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text('yarı iade',
+                style: AppUi.body.copyWith(
+                  fontSize: 8,
+                  color: AppUi.textLo,
+                  fontWeight: FontWeight.w600,
+                )),
+          ],
+        ),
       ),
     );
   }

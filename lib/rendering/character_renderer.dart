@@ -108,6 +108,86 @@ enum CharPose {
 // Ayaklar canvas orijininde (y=0). Çağıran save/translate/scale/restore yapar.
 
 class CharacterRenderer {
+  // ── KÖYÜN HÂLİ (Faz 5) ─────────────────────────────────────────────────────
+  //
+  // Basınç tablosunun çizime inen iki değeri. Parametre olarak 15 ayrı meslek
+  // fonksiyonuna taşımak yerine [_accent] ile aynı kalıpta statik: çizim tek
+  // iş parçacığında, tek karakter için, baştan sona sürer. ÇAĞIRAN SORUMLU —
+  // her NPC'den önce [beginNpc] çağrılmalı, yoksa bir önceki karakterin hâli
+  // sızar (aynı tuzak [_accent]'te de var, o yüzden aynı yerde yazılıyorlar).
+
+  /// Köyün ambar hâli: -1 yoksunluk … +1 refah. Giysi renkleri buradan solar
+  /// ya da doyar (bkz. [_cloth]).
+  static double _provision = 0;
+
+  /// Örtünme 0..1 — tedirginliğin siluete inmiş hâli (omuzda şal, başta
+  /// kapüşon). Köylünün `bearingTense` değerinden gelir.
+  static double _shroud = 0;
+
+  /// Bir NPC çizmeden ÖNCE köyün hâlini yaz. Yabancı (imparatorluk) için
+  /// sıfır geçilir: köyün ambarı onun kumaşını soldurmaz.
+  ///
+  /// SÖZLEŞME (aynen [_accent] gibi): **her giriş noktası kendi hâlini yazar.**
+  /// Argümansız çağrı nötre döner ve oyun-dışı çağıranlar (künye portresi,
+  /// animasyon odası, yakalama harness'ları) hiçbir şey bilmeden doğru sonucu
+  /// alır — yazmayan çağıran son çizilen köylünün kıtlığını miras alırdı.
+  static void beginNpc({double provision = 0, double shroud = 0}) {
+    _provision = provision.clamp(-1.0, 1.0);
+    _shroud = shroud.clamp(0.0, 1.0);
+  }
+
+  /// GİYSİ RENGİ — tek kapı. Kişisel ton ([NpcVisual.clothingShift]) üstüne
+  /// köyün hâli biner. Dosyadaki bütün kumaş renkleri buradan geçer; yeni bir
+  /// meslek eklerken doğrudan `tintCloth` çağırma, yoksa o meslek köyün
+  /// kıtlığından etkilenmeyen tek kişi olur.
+  ///
+  /// Ölçek bilinçli ölçülü: en kötü günde bile kumaş TANINIR kalır — amaç
+  /// "kostüm değişti" değil, "bu köy bugün yorgun" hissi.
+  static Color _cloth(Color base, double shift) {
+    final c = tintCloth(base, shift);
+    final p = _provision;
+    if (p.abs() < 0.02) return c;
+
+    final r = (c.r * 255), g = (c.g * 255), b = (c.b * 255);
+    // Algısal gri — yeşil ağırlıklı (göz yeşile duyarlı).
+    final grey = r * 0.30 + g * 0.59 + b * 0.11;
+
+    if (p < 0) {
+      // YOKSUNLUK — doygunluk griye çekilir + tozlu bir gri-kahve karışır +
+      // hafif koyulaşma. Üç etki birlikte "yıkanmış, yamalı, güneş yemiş"
+      // okunur; yalnız alpha/koyuluk oynatmak kirli değil KARANLIK gösterirdi.
+      final t = (-p).clamp(0.0, 1.0);
+      final desat = 0.45 * t;
+      var nr = r + (grey - r) * desat;
+      var ng = g + (grey - g) * desat;
+      var nb = b + (grey - b) * desat;
+      const dustR = 110.0, dustG = 103.0, dustB = 92.0;
+      final mix = 0.16 * t;
+      nr += (dustR - nr) * mix;
+      ng += (dustG - ng) * mix;
+      nb += (dustB - nb) * mix;
+      final dim = 1.0 - 0.10 * t;
+      return Color.fromARGB(
+        (c.a * 255).round(),
+        (nr * dim).clamp(0, 255).round(),
+        (ng * dim).clamp(0, 255).round(),
+        (nb * dim).clamp(0, 255).round(),
+      );
+    }
+
+    // REFAH — doygunluk artar (kanallar griden UZAKLAŞIR) + çok hafif
+    // aydınlanma. Boya parası olan köyün kumaşı canlıdır.
+    final t = p.clamp(0.0, 1.0);
+    final sat = 0.28 * t;
+    final lift = 1.0 + 0.06 * t;
+    return Color.fromARGB(
+      (c.a * 255).round(),
+      ((r + (r - grey) * sat) * lift).clamp(0, 255).round(),
+      ((g + (g - grey) * sat) * lift).clamp(0, 255).round(),
+      ((b + (b - grey) * sat) * lift).clamp(0, 255).round(),
+    );
+  }
+
   static void draw(Canvas canvas, VillagerType type, {
     bool flipX = false,
     double walkPhase = 0,
@@ -131,9 +211,29 @@ class CharacterRenderer {
     bool commander = false,
     /// İmparatorluk askeri saldırı modunda mı — mızrak ileri dürtme (jab) pozu.
     bool attacking = false,
+    /// Hane aksan rengi (bkz. [houseAccentColor]) — göğüsteki çapraz kuşak.
+    /// null → hanesiz/yabancı, kuşak çizilmez.
+    Color? houseAccent,
+    /// Köyün ambar hâli -1..1 ve köylünün örtünmesi 0..1 (bkz. [beginNpc]).
+    /// Oyun-dışı çağıranlar geçmez → nötr görünüm.
+    double provision = 0,
+    double shroud = 0,
   }) {
+    // İmparatorluk askeri köyün YABANCISI — hane kuşağı takmaz. Aksi halde
+    // dışarıdan gelen vergici bir köy hanesinin rengiyle görünürdü.
+    _accent = costume == NpcCostume.imperial ? null : houseAccent;
+    final foreign = costume == NpcCostume.imperial;
+    beginNpc(
+      provision: foreign ? 0 : provision,
+      shroud: foreign ? 0 : shroud,
+    );
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
+    // Beden farkı — ayaklar orijinde (y=0) olduğu için dikey ölçek tabanı
+    // kaydırmaz, köylü yerde basılı kalır. Genişlik boydan daha az oynatılır:
+    // uzun köylü orantısal olarak hafif ince görünsün.
+    final b = visual?.build ?? 1.0;
+    if (b != 1.0) canvas.scale(1 + (b - 1) * 0.55, b);
     var anim = _Anim.compute(walkPhase, moveIntensity, carrying: carrying);
     if (pose != CharPose.normal) {
       // Poz tüm duruşu ele alır — yürüyüş/taşıma/meşale açıları geçersiz.
@@ -192,6 +292,16 @@ class CharacterRenderer {
       }
     }
 
+    // ÖRTÜNME — köylünün tedirginliği siluete iner (Faz 5). Gövdenin ÜSTÜNE,
+    // meşaleden önce: şal bir dış giysidir, kolun altında kalmaz.
+    // (Yabancı için _shroud girişte zaten sıfırlandı.)
+    if (_shroud > 0.30) {
+      canvas.save();
+      _applyTorsoTransform(canvas, anim);
+      _shroudOverlay(canvas, visual, stage);
+      canvas.restore();
+    }
+
     // Gece dışarıda meşale — sol omuz (off-hand), tüm character render
     // yolları aynı helper'ı kullanır → civilian + worker pattern tutarlı.
     // Oturma/ayin/yas pozunda eller serbest → meşale taşınmaz.
@@ -200,6 +310,77 @@ class CharacterRenderer {
           time: time, torchPhase: torchPhase);
     }
     canvas.restore();
+    _accent = null;
+  }
+
+  /// ŞAL + KAPÜŞON — tedirginliğin görünür hâli.
+  ///
+  /// İki kademe, çünkü tek kademe ya hiç okunmuyor ya da herkesi keşişe
+  /// çeviriyordu:
+  ///   • 0.30–0.62 → omuzlarda şal (siluetin omuz hattı kalınlaşır, uzaktan
+  ///     "büzülmüş" okunur; yüz tamamen açık kalır).
+  ///   • 0.62 üstü → şalın üstüne kapüşon (saç/alın örtülür).
+  ///
+  /// TUZAK (bkz. char-shaded-system): başlık GÖZÜ YUTMAMALI. Yüz -90..-70
+  /// arasında, kaşlar -85 hizasında; kapüşon tepesi -99..-87 ile SINIRLI —
+  /// avcı kukuletasının denenmiş geometrisi birebir buradan alındı.
+  static void _shroudOverlay(Canvas c, NpcVisual? visual, LifeStage stage) {
+    // Yoğunluk 0..1'e normalize: eşikte 0'dan başlasın ki şal aniden BELİRMESİN,
+    // birkaç saniye içinde koyulaşarak gelsin.
+    final t = ((_shroud - 0.30) / 0.70).clamp(0.0, 1.0);
+    // Örtü rengi kumaşın kendi ailesinden — kişisel ton korunur, köyün hâli
+    // (_cloth üzerinden) buna da işler. Nötr yün: köyde herkesin sandığında var.
+    //
+    // TON DERSİ (ilk sürüm harness'ta yakalandı): koyu yün (0xFF5A5348) bu
+    // ölçekte kumaş değil DERİ ZIRH okunuyordu — omuzda siyaha yakın bir bar,
+    // hane kuşağıyla yarışıyor. Açık, sıcak, düşük kontrastlı yün hem şal gibi
+    // duruyor hem de siluetin okunmasını bozmuyor.
+    final wool = _cloth(const Color(0xFF8C8071), (visual?.clothingShift ?? 0) * 0.6);
+    // Çocuk gövdesi küçük — örtü de daralır, yoksa omuzları yutar.
+    final k = stage == LifeStage.child ? 0.78 : 1.0;
+
+    // FADE YOK, BÜYÜME VAR: şal eşikte ince bir atkı olarak başlar, tedirginlik
+    // arttıkça omuzu sarar. Saydamlıkla soldurmak per-NPC saveLayer isterdi —
+    // bu projede gece ışıklandırması zaten saveLayer'a boğulmuş durumda
+    // (bkz. juice-comfort FPS denetimi), karakter başına bir tane daha eklemek
+    // görünmez bir maliyet olurdu. Kalınlık değişimi bedava ve daha okunur.
+    final band = 4.0 + 3.0 * t;
+
+    // Omuz örtüsü — omuz hattından göğse inen bant. Kolların pivotu -68'de;
+    // bant onun üstünden başlar ki kol dönerken şalın altından çıksın.
+    // Genişlik omuzdan taşmaz (-13..13): taşan bant gövdeyi genişletip
+    // siluetin kendi okunuşunu (zayıf/iri) bozuyordu.
+    _shadedRect(c, Rect.fromLTWH(-13 * k, -71, 26 * k, band), wool);
+    // Sırttan öne dolanan uçlar (asimetrik — düz bant yassı durur).
+    _shadedRect(c, Rect.fromLTWH(-12 * k, -71 + band, 7 * k, 2 + 3 * t), wool);
+    _shadedRect(c, Rect.fromLTWH(6 * k, -71 + band, 6 * k, 2 + 2 * t), wool);
+    // Boyun altı gölgesi — örtünün altına giren gövde. Yumuşak: sert siyah
+    // çizgi bu ölçekte kumaşı ikiye bölünmüş gösteriyor.
+    c.drawRect(Rect.fromLTWH(-9 * k, -71, 18 * k, 1.5),
+        _f(darker(wool, 0.12)));
+
+    // KAPÜŞON — yalnız üst kademede. Avcı kukuletası geometrisi: tepe +
+    // yüzü çerçeveleyen iki yanak. Yüz bandına (-90..-70) girmez.
+    if (_shroud > 0.62) {
+      // Başlık DAR ve YÜKSEK: köylülerin çoğunda zaten bir şapka var (hasır,
+      // bez, kask). Geniş bir kapüşon onu yutup "iki başlık üst üste" gibi
+      // duruyordu; dar hâli şapkanın kenarını açıkta bırakıyor ve başa çekilmiş
+      // bir örtü olarak okunuyor. Yüz bandına (-90..-70) yine girmez.
+      _shadedRect(c, Rect.fromLTWH(-10 * k, -100, 20 * k, 11), wool);
+      _shadedRect(c, Rect.fromLTWH(-11 * k, -95, 3.5 * k, 9), wool);
+      _shadedRect(c, Rect.fromLTWH(7.5 * k, -95, 3.5 * k, 9), wool);
+      // Kapüşonun iç gölgesi — alın hizasında ince koyu şerit (derinlik).
+      c.drawRect(Rect.fromLTWH(-9 * k, -90, 18 * k, 1.5),
+          _f(darker(wool, 0.22)));
+    }
+    // NOT: burada `c.restore()` YOK ve olmamalı. Bu fonksiyon hiç `save()`
+    // çağırmıyor — gövde dönüşümünü ve save/restore çiftini ÇAĞIRAN kuruyor
+    // (bkz. [draw], `_shroud > 0.30` dalı). Buradaki fazladan bir restore
+    // çağıranın save'ini de yer ve canvas'ı eksiye düşürür; Flutter bunu
+    // "custom painter called canvas.restore() 1 more time" diye yakalar ve
+    // O KAREDE SAHNENİN TAMAMI ÇİZİLMEZ. Sessiz kalmasının sebebi şuydu:
+    // yalnız TEDİRGİN köylüde (shroud > 0.30) tetikleniyor, oturmuş bir köyde
+    // kimse o eşiğe çıkmıyordu.
   }
 
   /// Poz → uzuv açıları. Bacakları katlar, kolları konumlar, gövdeyi eğip
@@ -233,6 +414,11 @@ class CharacterRenderer {
     double walkPhase = 0,
     bool flipX = false,
   }) {
+    // Uyuyan gövde battaniye altında — kuşak görünmez, ama bir önceki NPC'nin
+    // rengi sızmasın diye invariant burada da uygulanır. Köyün hâli de nötre
+    // döner: battaniye altındaki gövdede kılık okunmaz.
+    _accent = null;
+    beginNpc();
     c.save();
     if (flipX) c.scale(-1, 1);
 
@@ -335,7 +521,10 @@ class CharacterRenderer {
     double time = 0,
     double torchLevel = 0,
     double torchPhase = 0,
+    /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
+    Color? houseAccent,
   }) {
+    _accent = houseAccent;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -375,7 +564,10 @@ class CharacterRenderer {
     double time = 0,
     double torchLevel = 0,
     double torchPhase = 0,
+    /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
+    Color? houseAccent,
   }) {
+    _accent = houseAccent;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
     _Anim anim;
@@ -458,9 +650,39 @@ class CharacterRenderer {
 
   // ─── ORTAK PARÇALAR ───────────────────────────────────────────────────────
 
-  static void _shadow(Canvas c) {
-    c.drawRect(const Rect.fromLTWH(-11, -3, 22, 5),
-        Paint()..color = const Color(0x30000000)..isAntiAlias = false);
+  /// Çizilmekte olan NPC'nin hane aksan rengi — null ise kuşak çizilmez.
+  ///
+  /// INVARIANT: her public giriş noktası ([draw], [drawSleeping] ve iş sprite'ı
+  /// çizicileri) İLK satırında bunu set eder. Böylece bir önceki NPC'nin rengi
+  /// sızamaz; ayrı bir "temizle" adımına güvenilmez. Renderer zaten tümüyle
+  /// static ve tek karede tek NPC çiziliyor — rengi 15 helper'a parametre
+  /// olarak threadlemek yerine tek alan.
+  static Color? _accent;
+
+  /// Temas gölgesi — yumuşak elips, ışık vektörüne göre hafif sağa-aşağı
+  /// kaydırılmış (binaların drop shadow yönüyle aynı).
+  ///
+  /// Eski hali sert bir dikdörtgendi ve [anim] ile hiç değişmiyordu; figür
+  /// zıplarken gölge sabit kaldığı için karakterler yerde durmuyor, "yüzüyor"
+  /// gibi görünüyordu. Artık bob/sway ile küçülüp soluklaşır → temas hissi.
+  static final Paint _shadowPaint = Paint()..isAntiAlias = true;
+
+  static void _shadow(Canvas c, [_Anim? anim]) {
+    // bob negatif = gövde yukarıda. Yükseldikçe gölge küçülür + soluklaşır.
+    final lift = anim == null ? 0.0 : (-anim.bob).clamp(0.0, 6.0);
+    final k = 1.0 - lift * 0.055; // 1.0 → ~0.67
+    final cx = 2.0 + (anim?.sway ?? 0.0) * 0.35;
+    final outer = Rect.fromCenter(
+        center: Offset(cx, -0.5), width: 27 * k, height: 9.5 * k);
+    c.drawOval(outer,
+        _shadowPaint..color = Color.fromARGB((0x30 * k).round(), 0, 0, 0));
+    // Çekirdek — ayak dibinde koyu küçük leke; temas noktasını çiviler.
+    c.drawOval(
+        Rect.fromCenter(
+            center: outer.center,
+            width: outer.width * 0.50,
+            height: outer.height * 0.50),
+        _shadowPaint..color = Color.fromARGB((0x2A * k).round(), 0, 0, 0));
   }
 
   /// Gövde transform — bacaklar ve gölge yere sabit kalır, üst gövde
@@ -521,33 +743,22 @@ class CharacterRenderer {
     c.restore();
   }
 
-  /// Tunik gövde + kemer.
-  static void _tunic(Canvas c, Color col, Color shade) {
-    c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(col));
-    c.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _s(shade));
-    // Kemer
-    c.drawRect(const Rect.fromLTWH(-12, -50, 24, 5), _f(_leather));
-    c.drawRect(const Rect.fromLTWH(-12, -50, 24, 5), _s(_leatherDk));
-    // Kemer tokası
-    c.drawRect(const Rect.fromLTWH(-3, -50, 6, 5), _f(_leatherDk));
-  }
-
   // ─── 1. ÇIFTÇI ────────────────────────────────────────────────────────────
   static void _farmer(Canvas c, _Anim anim,
       {bool carryingWater = false, NpcVisual? v, double time = 0}) {
-    final tunic = v != null ? tintCloth(_linen, v.clothingShift) : _linen;
-    final hose  = v != null ? tintCloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
-    final hat   = v != null ? tintCloth(_straw, v.clothingShift * 0.4) : _straw;
+    final tunic = v != null ? _cloth(_linen, v.clothingShift) : _linen;
+    final hose  = v != null ? _cloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
+    final hat   = v != null ? _cloth(_straw, v.clothingShift * 0.4) : _straw;
     final skin  = v?.skin ?? _skin1;
-    _shadow(c);
-    _leg(c, -6, anim.legL, hose, _leatherDk);
-    _leg(c,  6, anim.legR, hose, _leatherDk);
+    _shadow(c, anim);
+    _shadedLeg(c, -6, anim.legL, hose, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(c,  6, anim.legR, hose, _leatherDk, legLift: anim.legLiftR);
     c.save();
     _applyTorsoTransform(c, anim);
-    _tunic(c, tunic, _woolBrown);
-    _arm(c, -15, anim.armL, tunic);
+    _shadedTunic(c, tunic);
+    _shadedArm(c, -15, anim.armL, tunic, skin);
     // Sulama turunda sağ elde su kovası; değilse boş el (idle/hasat).
-    _arm(c, 15, anim.armR, tunic,
+    _shadedArm(c, 15, anim.armR, tunic, skin,
         carryingWater ? (a) => ToolRenderer.drawWaterbucket(a) : null);
     if (v != null) {
       _shadedHead(c, v, time);
@@ -555,16 +766,14 @@ class CharacterRenderer {
       _head(c, skin);
     }
     // Hasır şapka (yassı brim + kule)
-    c.drawRect(const Rect.fromLTWH(-17, -98, 34, 8), _f(hat));
-    c.drawRect(const Rect.fromLTWH(-17, -98, 34, 8), _s(const Color(0xFF8A6820)));
-    c.drawRect(const Rect.fromLTWH(-7,  -114, 14, 16), _f(hat));
-    c.drawRect(const Rect.fromLTWH(-7,  -114, 14, 16), _s(const Color(0xFF8A6820)));
+    _shadedRect(c, const Rect.fromLTWH(-17, -98, 34, 8), hat);
+    _shadedRect(c, const Rect.fromLTWH(-7, -114, 14, 16), hat);
     c.restore();
   }
 
   // ─── 2. TÜCCAR ────────────────────────────────────────────────────────────
   static void _merchant(Canvas c, _Anim anim) {
-    _shadow(c);
+    _shadow(c, anim);
     _leg(c, -6, anim.legL, _woolDark, _leatherDk);
     _leg(c,  6, anim.legR, _woolDark, _leatherDk);
     c.save();
@@ -592,7 +801,7 @@ class CharacterRenderer {
 
   // ─── 3. DEMİRCİ ───────────────────────────────────────────────────────────
   static void _blacksmith(Canvas c, _Anim anim) {
-    _shadow(c);
+    _shadow(c, anim);
     _leg(c, -6, anim.legL, const Color(0xFF3A3028), _leatherDk);
     _leg(c,  6, anim.legR, const Color(0xFF3A3028), _leatherDk);
     c.save();
@@ -620,7 +829,7 @@ class CharacterRenderer {
 
   // ─── 4. MUHAFIZ ───────────────────────────────────────────────────────────
   static void _guard(Canvas c, _Anim anim) {
-    _shadow(c);
+    _shadow(c, anim);
     _leg(c, -6, anim.legL, const Color(0xFF504838), const Color(0xFF303028));
     _leg(c,  6, anim.legR, const Color(0xFF504838), const Color(0xFF303028));
     c.save();
@@ -673,7 +882,7 @@ class CharacterRenderer {
 
   // ─── 7. MADENCİ ───────────────────────────────────────────────────────────
   static void _miner(Canvas c, _Anim anim) {
-    _shadow(c);
+    _shadow(c, anim);
     _leg(c, -6, anim.legL, const Color(0xFF3A3028), _leatherDk);
     _leg(c,  6, anim.legR, const Color(0xFF3A3028), _leatherDk);
     c.save();
@@ -720,7 +929,10 @@ class CharacterRenderer {
     double time = 0,
     double torchLevel = 0,
     double torchPhase = 0,
+    /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
+    Color? houseAccent,
   }) {
+    _accent = houseAccent;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -745,31 +957,28 @@ class CharacterRenderer {
     final armLAngle = anim.armL;
 
     final shirtCol  = visual != null
-        ? tintCloth(const Color(0xFF4A4840), visual.clothingShift)
+        ? _cloth(const Color(0xFF4A4840), visual.clothingShift)
         : const Color(0xFF4A4840);
-    const shirtDark = Color(0xFF2A2820);
     final vestCol = visual != null
-        ? tintCloth(const Color(0xFF6A4A28), visual.clothingShift * 0.5)
+        ? _cloth(const Color(0xFF6A4A28), visual.clothingShift * 0.5)
         : const Color(0xFF6A4A28);
     final hoseCol = visual != null
-        ? tintCloth(const Color(0xFF3A3028), visual.clothingShift * 0.4)
+        ? _cloth(const Color(0xFF3A3028), visual.clothingShift * 0.4)
         : const Color(0xFF3A3028);
     final skin = visual?.skin ?? _skin2;
 
-    _shadow(canvas);
-    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
-    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
+    _shadow(canvas, anim);
+    _shadedLeg(canvas, -6, anim.legL, hoseCol, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(canvas,  6, anim.legR, hoseCol, _leatherDk, legLift: anim.legLiftR);
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtCol));
-    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
+    _shadedTorso(canvas, const Rect.fromLTWH(-13, -68, 26, 32), shirtCol);
     // Deri yelek
-    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 30), _f(vestCol));
-    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 30), _s(_leatherDk));
-    canvas.drawRect(const Rect.fromLTWH(-2, -58, 4, 14),   _f(_leatherDk));
+    _shadedRect(canvas, const Rect.fromLTWH(-10, -67, 20, 30), vestCol);
+    canvas.drawRect(const Rect.fromLTWH(-2, -58, 4, 14), _f(_leatherDk));
 
-    _arm(canvas, -16, armLAngle, shirtCol);
-    _arm(canvas,  16, armRAngle, shirtCol,
+    _shadedArm(canvas, -16, armLAngle, shirtCol, skin);
+    _shadedArm(canvas,  16, armRAngle, shirtCol, skin,
         (arm) => ToolRenderer.drawPickaxe(arm));
 
     if (visual != null) {
@@ -778,11 +987,9 @@ class CharacterRenderer {
       _head(canvas, skin);
     }
     // Kask
-    canvas.drawRect(const Rect.fromLTWH(-12, -96, 24,  6), _f(const Color(0xFF2A2010)));
-    canvas.drawRect(const Rect.fromLTWH(-12, -96, 24,  6), _s(const Color(0xFF1A1008)));
-    canvas.drawRect(const Rect.fromLTWH( -8,-108, 16, 12), _f(const Color(0xFF2A2010)));
-    canvas.drawRect(const Rect.fromLTWH( -8,-108, 16, 12), _s(const Color(0xFF1A1008)));
-    canvas.drawRect(const Rect.fromLTWH( -3,-108,  6,  4), _f(const Color(0xFFFFDD44)));
+    _shadedRect(canvas, const Rect.fromLTWH(-12, -96, 24,  6), const Color(0xFF2A2010));
+    _shadedRect(canvas, const Rect.fromLTWH( -8, -108, 16, 12), const Color(0xFF2A2010));
+    canvas.drawRect(const Rect.fromLTWH( -3, -108, 6, 4), _f(const Color(0xFFFFDD44)));
     canvas.restore();
 
     if (showTorch) {
@@ -804,7 +1011,10 @@ class CharacterRenderer {
     double time = 0,
     double torchLevel = 0,
     double torchPhase = 0,
+    /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
+    Color? houseAccent,
   }) {
+    _accent = houseAccent;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -831,30 +1041,29 @@ class CharacterRenderer {
     final armLAngle = anim.armL;
 
     final hoseCol = visual != null
-        ? tintCloth(_woolDark, visual.clothingShift * 0.5) : _woolDark;
+        ? _cloth(_woolDark, visual.clothingShift * 0.5) : _woolDark;
     final shirtColor = visual != null
-        ? tintCloth(const Color(0xFF8B2020), visual.clothingShift) : const Color(0xFF8B2020);
+        ? _cloth(const Color(0xFF8B2020), visual.clothingShift) : const Color(0xFF8B2020);
     const shirtDark  = Color(0xFF5A1010);
     final skin = visual?.skin ?? _skin1;
 
-    _shadow(canvas);
-    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
-    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
+    _shadow(canvas, anim);
+    _shadedLeg(canvas, -6, anim.legL, hoseCol, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(canvas,  6, anim.legR, hoseCol, _leatherDk, legLift: anim.legLiftR);
 
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtColor));
-    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
+    _shadedTorso(canvas, const Rect.fromLTWH(-13, -68, 26, 32), shirtColor);
     for (final v in [-62.0, -54.0, -46.0]) {
       canvas.drawRect(Rect.fromLTWH(-12, v, 24, 2), _f(const Color(0xFF6A1010)));
     }
     canvas.drawRect(const Rect.fromLTWH(-1, -68, 2, 32), _f(shirtDark));
-    canvas.drawRect(const Rect.fromLTWH(-9, -50, 18, 4), _f(_leather));
+    _shadedRect(canvas, const Rect.fromLTWH(-9, -50, 18, 4), _leather);
 
     // Sol kol
-    _arm(canvas, -16, armLAngle, shirtColor);
+    _shadedArm(canvas, -16, armLAngle, shirtColor, skin);
     // Sağ kol + balta PNG
-    _arm(canvas, 16, armRAngle, shirtColor, (arm) => ToolRenderer.drawAxe(arm));
+    _shadedArm(canvas, 16, armRAngle, shirtColor, skin, (arm) => ToolRenderer.drawAxe(arm));
 
     if (visual != null) {
       _shadedHead(canvas, visual, time);
@@ -862,8 +1071,7 @@ class CharacterRenderer {
       _head(canvas, skin);
     }
     // Basit bere / bandana
-    canvas.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _f(const Color(0xFF4A3010)));
-    canvas.drawRect(const Rect.fromLTWH(-10, -98, 20, 18), _s(const Color(0xFF2A1A08)));
+    _shadedRect(canvas, const Rect.fromLTWH(-10, -98, 20, 18), const Color(0xFF4A3010));
     canvas.restore();
 
     if (showTorch) {
@@ -875,7 +1083,7 @@ class CharacterRenderer {
 
   // ─── 9. BALIKÇI (idle draw — VillagerType.fisher için) ────────────────────
   static void _fisherIdle(Canvas c, _Anim anim) {
-    _shadow(c);
+    _shadow(c, anim);
     _leg(c, -6, anim.legL, const Color(0xFF3A5060), _leatherDk);
     _leg(c,  6, anim.legR, const Color(0xFF3A5060), _leatherDk);
     c.save();
@@ -909,15 +1117,18 @@ class CharacterRenderer {
     double time = 0,
     double torchLevel = 0,
     double torchPhase = 0,
+    /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
+    Color? houseAccent,
   }) {
+    _accent = houseAccent;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
     final shirtCol = visual != null
-        ? tintCloth(const Color(0xFF5A7888), visual.clothingShift) : const Color(0xFF5A7888);
+        ? _cloth(const Color(0xFF5A7888), visual.clothingShift) : const Color(0xFF5A7888);
     final vestCol  = visual != null
-        ? tintCloth(const Color(0xFF2A3840), visual.clothingShift * 0.5) : const Color(0xFF2A3840);
+        ? _cloth(const Color(0xFF2A3840), visual.clothingShift * 0.5) : const Color(0xFF2A3840);
     final hoseCol  = visual != null
-        ? tintCloth(const Color(0xFF3A5060), visual.clothingShift * 0.4) : const Color(0xFF3A5060);
+        ? _cloth(const Color(0xFF3A5060), visual.clothingShift * 0.4) : const Color(0xFF3A5060);
     final skin = visual?.skin ?? _skin1;
 
     _Anim anim;
@@ -952,20 +1163,18 @@ class CharacterRenderer {
       leftSwing = _kTorchArmAngle;
     }
 
-    _shadow(canvas);
-    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
-    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
+    _shadow(canvas, anim);
+    _shadedLeg(canvas, -6, anim.legL, hoseCol, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(canvas,  6, anim.legR, hoseCol, _leatherDk, legLift: anim.legLiftR);
 
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    canvas.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _f(shirtCol));
-    canvas.drawRect(const Rect.fromLTWH(-12, -68, 24, 32), _s(const Color(0xFF3A5060)));
-    canvas.drawRect(const Rect.fromLTWH(-9, -67, 18, 30), _f(vestCol));
-    canvas.drawRect(const Rect.fromLTWH(-9, -67, 18, 30), _s(const Color(0xFF1A2830)));
+    _shadedTorso(canvas, const Rect.fromLTWH(-12, -68, 24, 32), shirtCol);
+    _shadedRect(canvas, const Rect.fromLTWH(-9, -67, 18, 30), vestCol);
 
-    _arm(canvas, -15, leftSwing, shirtCol);
+    _shadedArm(canvas, -15, leftSwing, shirtCol, skin);
     // Sağ kol + olta
-    _arm(canvas,  15, armRAngle, shirtCol,
+    _shadedArm(canvas,  15, armRAngle, shirtCol, skin,
         (arm) => ToolRenderer.drawRod(arm, castAngle: castAngle));
 
     // Olta ipi (fishing sırasında)
@@ -988,10 +1197,8 @@ class CharacterRenderer {
       _head(canvas, skin);
     }
     // Şapka
-    canvas.drawRect(const Rect.fromLTWH(-14, -98, 28, 6),   _f(const Color(0xFF4A3A20)));
-    canvas.drawRect(const Rect.fromLTWH(-14, -98, 28, 6),   _s(const Color(0xFF2A1A08)));
-    canvas.drawRect(const Rect.fromLTWH( -8, -110, 16, 12), _f(const Color(0xFF5A4A28)));
-    canvas.drawRect(const Rect.fromLTWH( -8, -110, 16, 12), _s(const Color(0xFF2A1A08)));
+    _shadedRect(canvas, const Rect.fromLTWH(-14, -98, 28, 6), const Color(0xFF4A3A20));
+    _shadedRect(canvas, const Rect.fromLTWH( -8, -110, 16, 12), const Color(0xFF5A4A28));
     canvas.restore();
 
     if (showTorch) {
@@ -1014,7 +1221,10 @@ class CharacterRenderer {
     double time = 0,
     double torchLevel = 0,
     double torchPhase = 0,
+    /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
+    Color? houseAccent,
   }) {
+    _accent = houseAccent;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -1039,38 +1249,34 @@ class CharacterRenderer {
     }
 
     final hoseCol = visual != null
-        ? tintCloth(const Color(0xFF4A3818), visual.clothingShift * 0.4) : const Color(0xFF4A3818);
+        ? _cloth(const Color(0xFF4A3818), visual.clothingShift * 0.4) : const Color(0xFF4A3818);
     final shirtColor = visual != null
-        ? tintCloth(const Color(0xFFC8B080), visual.clothingShift) : const Color(0xFFC8B080);
-    const shirtDark  = Color(0xFF8A6C40);
+        ? _cloth(const Color(0xFFC8B080), visual.clothingShift) : const Color(0xFFC8B080);
     final vestColor = visual != null
-        ? tintCloth(const Color(0xFF3A6A40), visual.clothingShift * 0.6) : const Color(0xFF3A6A40);
-    const vestDark  = Color(0xFF1E3A22);
+        ? _cloth(const Color(0xFF3A6A40), visual.clothingShift * 0.6) : const Color(0xFF3A6A40);
     final skin = visual?.skin ?? _skin1;
 
-    _shadow(canvas);
-    _leg(canvas, -6, anim.legL, hoseCol, _leatherDk);
-    _leg(canvas,  6, anim.legR, hoseCol, _leatherDk);
+    _shadow(canvas, anim);
+    _shadedLeg(canvas, -6, anim.legL, hoseCol, _leatherDk, legLift: anim.legLiftL);
+    _shadedLeg(canvas,  6, anim.legR, hoseCol, _leatherDk, legLift: anim.legLiftR);
 
     canvas.save();
     _applyTorsoTransform(canvas, anim);
-    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _f(shirtColor));
-    canvas.drawRect(const Rect.fromLTWH(-13, -68, 26, 32), _s(shirtDark));
-    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 28), _f(vestColor));
-    canvas.drawRect(const Rect.fromLTWH(-10, -67, 20, 28), _s(vestDark));
+    _shadedTorso(canvas, const Rect.fromLTWH(-13, -68, 26, 32), shirtColor);
+    _shadedRect(canvas, const Rect.fromLTWH(-10, -67, 20, 28), vestColor);
     // Kemer
-    canvas.drawRect(const Rect.fromLTWH(-11, -42, 22, 4), _f(_leatherDk));
+    _shadedRect(canvas, const Rect.fromLTWH(-11, -42, 22, 4), _leatherDk);
 
-    _arm(canvas, -16, armLAngle, shirtColor);
+    _shadedArm(canvas, -16, armLAngle, shirtColor, skin);
     // Sağ elde çoban değneği (basit kavisli sopa). Milking'de çizmiyoruz —
     // değnek yere bırakılmış sayılır.
     if (!milking) {
-      _arm(canvas, 16, armRAngle, shirtColor, (arm) {
+      _shadedArm(canvas, 16, armRAngle, shirtColor, skin, (arm) {
         arm.drawRect(const Rect.fromLTWH(-1, -32, 3, 56), _f(const Color(0xFF6A4A20)));
         arm.drawRect(const Rect.fromLTWH(-3, -34, 6, 6),  _f(const Color(0xFF6A4A20)));
       });
     } else {
-      _arm(canvas, 16, armRAngle, shirtColor);
+      _shadedArm(canvas, 16, armRAngle, shirtColor, skin);
     }
 
     if (visual != null) {
@@ -1079,10 +1285,8 @@ class CharacterRenderer {
       _head(canvas, skin);
     }
     // Hasır şapka (geniş kenar + üst)
-    canvas.drawRect(const Rect.fromLTWH(-14, -94, 28, 4), _f(_straw));
-    canvas.drawRect(const Rect.fromLTWH(-14, -94, 28, 4), _s(const Color(0xFF6A4A18)));
-    canvas.drawRect(const Rect.fromLTWH(-9, -104, 18, 10), _f(_straw));
-    canvas.drawRect(const Rect.fromLTWH(-9, -104, 18, 10), _s(const Color(0xFF6A4A18)));
+    _shadedRect(canvas, const Rect.fromLTWH(-14, -94, 28, 4), _straw);
+    _shadedRect(canvas, const Rect.fromLTWH(-9, -104, 18, 10), _straw);
     canvas.restore();
 
     if (showTorch) {
@@ -1092,140 +1296,99 @@ class CharacterRenderer {
     canvas.restore();
   }
 
-  // ─── İNEK ─────────────────────────────────────────────────────────────────
-  // 4 bacaklı, beyaz gövde + kahverengi lekeler. walkPhase'a göre çapraz
-  // bacak yürüyüşü (sol-ön + sağ-arka birlikte ↔ sağ-ön + sol-arka). beingMilked
-  // iken sabit durur, kuyruk hafif sallanır.
-  // Boyut: insan ~110 px boyunda; ineğin sırtı insanın göğüs hizasında
-  // (~80 px). Bu insan boyunun ~%75'i — gerçek inek/insan oranına yakın.
-  static void drawCow(Canvas canvas, {
-    bool   flipX         = false,
-    double walkPhase     = 0,
-    bool   isWalking     = false,
-    bool   beingMilked   = false,
-  }) {
-    canvas.save();
-    if (flipX) canvas.scale(-1, 1);
-
-    // Bacak salınımı — diagonal pairs. Bacak uzadığı için lift biraz daha.
-    final sw = isWalking ? sin(walkPhase) * 4.0 : 0.0;
-    final liftFL = isWalking ? max(0.0, sin(walkPhase)) * 3.0 : 0.0;
-    final liftBR = liftFL;
-    final liftFR = isWalking ? max(0.0, -sin(walkPhase)) * 3.0 : 0.0;
-    final liftBL = liftFR;
-
-    const bodyColor  = Color(0xFFE8DCC4);
-    const bodyShade  = Color(0xFFB8A888);
-    const patchColor = Color(0xFF5A3818);
-    const patchDark  = Color(0xFF3A2410);
-    const hoof       = Color(0xFF1A1208);
-    const udder      = Color(0xFFD88A8A);
-    const muzzle     = Color(0xFFC89870);
-
-    // Gölge — gövde tabanından geniş projeksiyon
-    canvas.drawRect(const Rect.fromLTWH(-28, -3, 56, 7),
-        Paint()..color = const Color(0x35000000)..isAntiAlias = false);
-
-    // Bacaklar (ayaklar y=0). 4 bacak — ön/arka × sol/sağ. Bacak 25 px.
-    void leg(double x, double lift) {
-      canvas.drawRect(Rect.fromLTWH(x - 2.5, -25 + lift, 5, 23), _f(bodyColor));
-      canvas.drawRect(Rect.fromLTWH(x - 2.5, -25 + lift, 5, 23), _s(_outline));
-      // Üst kısım — gölge tonu (kas hissi)
-      canvas.drawRect(Rect.fromLTWH(x - 2.5, -25 + lift, 5, 6), _f(bodyShade));
-      // Toynak (siyah)
-      canvas.drawRect(Rect.fromLTWH(x - 3, -3 + lift, 6, 4), _f(hoof));
-    }
-    // Bacak konumları: gövde 50 geniş (-25..+25), bacaklar ön ve arka çeyrekte
-    leg(-19, liftBL);  // arka sol
-    leg(-12, liftFL);  // ön sol
-    leg( 11, liftFR);  // ön sağ
-    leg( 18, liftBR);  // arka sağ
-
-    // Gövde — 50 geniş × 32 yüksek. Bacaklar hip=-25'te, gövde alt kenarı orada.
-    final bodyTop = -57.0 + (isWalking ? sin(walkPhase * 2) * 0.8 : 0.0);
-    final bodyRect = Rect.fromLTWH(-25, bodyTop, 50, 32);
-    canvas.drawRect(bodyRect, _f(bodyColor));
-    canvas.drawRect(bodyRect, _s(_outline));
-    // Üst highlight (1px)
-    canvas.drawRect(Rect.fromLTWH(bodyRect.left + 1, bodyRect.top + 1,
-        bodyRect.width - 2, 2), _f(lighter(bodyColor, 0.10)));
-    // Alt gölge (1px)
-    canvas.drawRect(Rect.fromLTWH(bodyRect.left + 1, bodyRect.bottom - 3,
-        bodyRect.width - 2, 2), _f(bodyShade));
-
-    // Kahverengi lekeler — gövdeye göre yeniden ölçeklendi
-    canvas.drawRect(Rect.fromLTWH(-22, bodyTop + 4, 14, 9), _f(patchColor));
-    canvas.drawRect(Rect.fromLTWH(-22, bodyTop + 4, 14, 9), _s(patchDark));
-    canvas.drawRect(Rect.fromLTWH(-6, bodyTop + 15, 16, 11), _f(patchColor));
-    canvas.drawRect(Rect.fromLTWH(-6, bodyTop + 15, 16, 11), _s(patchDark));
-    canvas.drawRect(Rect.fromLTWH(11, bodyTop + 3, 12, 7), _f(patchColor));
-    canvas.drawRect(Rect.fromLTWH(11, bodyTop + 3, 12, 7), _s(patchDark));
-
-    // Meme (gövdenin alt-ön kısmında). beingMilked iken biraz sarkar.
-    final udderY = bodyTop + 26.0 + (beingMilked ? 1.5 : 0.0);
-    canvas.drawRect(Rect.fromLTWH(-3, udderY, 8, 6), _f(udder));
-    canvas.drawRect(Rect.fromLTWH(-3, udderY, 8, 6), _s(_outline));
-
-    // Kuyruk — arkada sarkık, beingMilked iken sallanır. Uzun ve ince.
-    final tailSway = beingMilked
-        ? sin(walkPhase * 1.5) * 4.0
-        : (isWalking ? sw * 0.5 : sin(walkPhase * 0.3) * 1.5);
-    canvas.save();
-    canvas.translate(-25, bodyTop + 6);
-    canvas.rotate(tailSway * 0.04);
-    canvas.drawRect(const Rect.fromLTWH(-2, 0, 3, 20), _f(patchColor));
-    canvas.drawRect(const Rect.fromLTWH(-3, 18, 5, 5), _f(_outline));
-    canvas.restore();
-
-    // Kafa — gövdenin ön (sağ) ucundan dışarı çıkar, biraz aşağıda
-    final headX = 22.0;
-    final headY = bodyTop + 4.0;
-    canvas.drawRect(Rect.fromLTWH(headX, headY, 18, 22), _f(bodyColor));
-    canvas.drawRect(Rect.fromLTWH(headX, headY, 18, 22), _s(_outline));
-    // Yüz üst kısmı highlight
-    canvas.drawRect(Rect.fromLTWH(headX + 1, headY + 1, 16, 2),
-        _f(lighter(bodyColor, 0.10)));
-    // Burun (muzzle)
-    canvas.drawRect(Rect.fromLTWH(headX + 10, headY + 11, 9, 10), _f(muzzle));
-    canvas.drawRect(Rect.fromLTWH(headX + 10, headY + 11, 9, 10), _s(_outline));
-    // Burun delikleri
-    canvas.drawRect(Rect.fromLTWH(headX + 12, headY + 15, 2, 3), _f(_outline));
-    canvas.drawRect(Rect.fromLTWH(headX + 16, headY + 15, 2, 3), _f(_outline));
-    // Göz
-    canvas.drawRect(Rect.fromLTWH(headX + 5, headY + 5, 3, 3), _f(_outline));
-    // Kulak (yan tarafta, kafadan dışarı taşar)
-    canvas.drawRect(Rect.fromLTWH(headX + 2, headY - 4, 5, 5), _f(bodyColor));
-    canvas.drawRect(Rect.fromLTWH(headX + 2, headY - 4, 5, 5), _s(_outline));
-    // Boynuz (içeride, kafanın üst-arkası)
-    canvas.drawRect(Rect.fromLTWH(headX + 7, headY - 3, 3, 5),
-        _f(const Color(0xFFCFC0A0)));
-    canvas.drawRect(Rect.fromLTWH(headX + 7, headY - 3, 3, 5), _s(_outline));
-
-    canvas.restore();
-  }
-
   // ════════════════════════════════════════════════════════════════════════════
   // YENİ NPC RENDER SİSTEMİ — per-NPC görsel varyasyon + 3-ton shading
   // ════════════════════════════════════════════════════════════════════════════
 
-  /// Shaded rect — base color + top-left highlight + bottom-right shadow + outline.
-  /// Pixel-art görünüm korunur, 3 ton hacim hissi katar.
+  /// Shaded rect — baz renk + BLOK ayrımlı ton (üst aydınlık / alt gölge) +
+  /// sağ kenar ışık düşüşü + outline.
+  ///
+  /// Neden 1px şerit değil: karakterler kCharScale=0.34 ile çiziliyor, yani
+  /// 1px'lik highlight ekranda 0.34px'e düşüyor — kaybolur ya da gri bulanıklık
+  /// bırakır. Downscale'den sağ çıkan tek şey BLOK değer kontrastı; hacim onunla
+  /// okunuyor. Yakın zoom'da da pixel-art dili bozulmuyor (kenarlar hâlâ sert).
   static void _shadedRect(Canvas c, Rect r, Color base) {
-    final hl = lighter(base, 0.18);
-    final sh = darker(base, 0.22);
-
-    // Ana doluş
     c.drawRect(r, _f(base));
-    // Üst highlight stripe (1px)
-    c.drawRect(Rect.fromLTWH(r.left + 1, r.top + 1, r.width - 2, 1), _f(hl));
-    // Sol highlight stripe (1px)
-    c.drawRect(Rect.fromLTWH(r.left + 1, r.top + 1, 1, r.height - 2), _f(hl));
-    // Sağ shadow stripe (1px)
-    c.drawRect(Rect.fromLTWH(r.right - 2, r.top + 1, 1, r.height - 2), _f(sh));
-    // Alt shadow stripe (1px)
-    c.drawRect(Rect.fromLTWH(r.left + 1, r.bottom - 2, r.width - 2, 1), _f(sh));
-    // Outline (siyahımsı)
+    if (r.width >= 10) {
+      // GENİŞ yüzey (gövde, şapka, çanta) → yatay blok ayrımı: üstten gelen
+      // ışık, alt yarı gölgede.
+      c.drawRect(
+          Rect.fromLTRB(r.left, r.top + r.height * 0.55, r.right, r.bottom),
+          _f(darker(base, 0.20)));
+      c.drawRect(Rect.fromLTRB(r.left, r.top, r.right, r.top + r.height * 0.22),
+          _f(lighter(base, 0.13)));
+      // Sağ kenar ışık düşüşü — alpha ki alt/üst blok tonları korunsun.
+      c.drawRect(
+          Rect.fromLTRB(r.right - r.width * 0.20, r.top, r.right, r.bottom),
+          _f(const Color(0x24000000)));
+    } else {
+      // DAR uzuv (kol, bacak, el) → DİKEY ayrım: silindir shading. Yatay blok
+      // burada hacim değil, "çizme üstü / manşet" gibi sahte bir detay çizgisi
+      // okunuyordu — uzuv boyunca ton sabit, yanları koyu olmalı.
+      c.drawRect(Rect.fromLTRB(r.left, r.top, r.left + r.width * 0.34, r.bottom),
+          _f(lighter(base, 0.10)));
+      c.drawRect(
+          Rect.fromLTRB(r.right - r.width * 0.30, r.top, r.right, r.bottom),
+          _f(darker(base, 0.18)));
+    }
     c.drawRect(r, _s(_outline));
+  }
+
+  /// Gövde — omuzdan bele daralan yamuk + hane kuşağı.
+  ///
+  /// Düz dikdörtgen gövde tüm meslekleri aynı dikey çubuğa çeviriyordu; oynanan
+  /// zoom'da NPC'yi ayırt eden ilk şey siluet, taper onu geri veriyor. Dış hat
+  /// AA'lı (yumuşak siluet), iç bloklar sert (pixel-art dili) — "yuvarlaklık
+  /// dış hatta, içeride değil".
+  static void _shadedTorso(Canvas c, Rect r, Color base, {double waist = 0.72}) {
+    final cx = r.center.dx;
+    // Omuz, gövde kutusundan biraz TAŞAR — dikdörtgen siluetin en tepesinde
+    // gerçek bir omuz hattı oluşur. Alt uçta bele daralır (cüppede tersine
+    // açılır, bkz. waist > 1).
+    final flare = waist > 1.0 ? 1.0 : 1.07;
+    final ht = r.width / 2 * flare;
+    final hb = r.width / 2 * waist;
+    final p = Path()
+      ..moveTo(cx - ht, r.top + 2)
+      ..lineTo(cx - ht * 0.86, r.top)
+      ..lineTo(cx + ht * 0.86, r.top)
+      ..lineTo(cx + ht, r.top + 2)
+      ..lineTo(cx + hb, r.bottom)
+      ..lineTo(cx - hb, r.bottom)
+      ..close();
+
+    c.save();
+    c.clipPath(p);
+    c.drawRect(r, _f(base));
+    c.drawRect(Rect.fromLTRB(r.left, r.top + r.height * 0.55, r.right, r.bottom),
+        _f(darker(base, 0.20)));
+    c.drawRect(Rect.fromLTRB(r.left, r.top, r.right, r.top + r.height * 0.22),
+        _f(lighter(base, 0.13)));
+    c.drawRect(Rect.fromLTRB(r.right - r.width * 0.20, r.top, r.right, r.bottom),
+        _f(const Color(0x24000000)));
+    _houseSash(c, r, cx, ht, hb);
+    c.restore();
+
+    c.drawPath(p, _sa(_outline, 1.0));
+  }
+
+  /// Hane kuşağı — sol omuzdan sağ kalçaya doğygun renkli bant.
+  /// Yatay kemer yerine ÇAPRAZ: siluette kırılma yapar, uzaktan da okunur.
+  /// Renk soyaddan geliyor (bkz. [houseAccentColor]) → "şu adam Karaoğulları'ndan"
+  /// bilgisi kozmetik değil, gözle okunan oyun bilgisi.
+  static void _houseSash(
+      Canvas c, Rect r, double cx, double ht, double hb) {
+    final acc = _accent;
+    if (acc == null) return;
+    // Kuşak GÖĞÜSTE durur: uzun gövdelerde (rahip cüppesi 62px) bitişe kadar
+    // uzatılırsa dev bir çapraz banda dönüşüyor. Bant boyu göğüsle sınırlı.
+    final bottom = min(r.bottom - 6.0, r.top + 26.0);
+    final a = Offset(cx - ht - 1, r.top + 3.5);
+    final b = Offset(cx + hb + 1, bottom);
+    c.drawLine(a, b, _sa(acc, 5.0));
+    // Alt kenarına koyu ton — kuşağın kendi hacmi (düz renk bant yassı durur).
+    c.drawLine(a.translate(0, 2.6), b.translate(0, 2.6),
+        _sa(darker(acc, 0.24), 1.4));
   }
 
   /// Shaded leg — hip pivot rotation + 3-tone hose + boot.
@@ -1257,7 +1420,7 @@ class CharacterRenderer {
 
   /// Shaded tunic — kıyafet rengi, kemer kuşağı.
   static void _shadedTunic(Canvas c, Color cloth) {
-    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 32), cloth);
+    _shadedTorso(c, const Rect.fromLTWH(-12, -68, 24, 32), cloth);
     // Kemer
     _shadedRect(c, const Rect.fromLTWH(-12, -50, 24, 5), _leather);
     // Toka — sabit küçük detay
@@ -1409,10 +1572,10 @@ class CharacterRenderer {
   // [child] true ise kafa büyük çizilir (çocuk oranı).
   static void _peasantNpc(Canvas c, _Anim anim, NpcVisual v, double time,
       {bool child = false}) {
-    final tunicBase = tintCloth(_linen,     v.clothingShift);
-    final hoseBase  = tintCloth(_woolBrown, v.clothingShift * 0.6);
+    final tunicBase = _cloth(_linen,     v.clothingShift);
+    final hoseBase  = _cloth(_woolBrown, v.clothingShift * 0.6);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1437,11 +1600,11 @@ class CharacterRenderer {
   // ─── ÇIFTÇI (yeni — per-NPC görsel + akıcı hareket) ───────────────────────
   static void _farmerNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
     // Kıyafet renkleri — baz + tint shift per-NPC
-    final tunicBase = tintCloth(_linen,     v.clothingShift);
-    final hoseBase  = tintCloth(_woolBrown, v.clothingShift * 0.6);
-    final hatStraw  = tintCloth(_straw,     v.clothingShift * 0.5);
+    final tunicBase = _cloth(_linen,     v.clothingShift);
+    final hoseBase  = _cloth(_woolBrown, v.clothingShift * 0.6);
+    final hatStraw  = _cloth(_straw,     v.clothingShift * 0.5);
 
-    _shadow(c);
+    _shadow(c, anim);
     // Bacaklar gövde lean/sway'ından bağımsız — ayak yerde sabit
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
@@ -1465,11 +1628,11 @@ class CharacterRenderer {
 
   // ─── TÜCCAR (yeni — shaded + per-NPC görsel) ──────────────────────────────
   static void _merchantNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final cloakBase = tintCloth(const Color(0xFF4A5030), v.clothingShift);
-    final hoseBase  = tintCloth(_woolDark, v.clothingShift * 0.6);
+    final cloakBase = _cloth(const Color(0xFF4A5030), v.clothingShift);
+    final hoseBase  = _cloth(_woolDark, v.clothingShift * 0.6);
     final hoodBase  = darker(cloakBase, 0.06);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1477,7 +1640,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Pelerin (gövde)
-    _shadedRect(c, const Rect.fromLTWH(-14, -68, 28, 32), cloakBase);
+    _shadedTorso(c, const Rect.fromLTWH(-14, -68, 28, 32), cloakBase);
     // Yaka linen
     _shadedRect(c, const Rect.fromLTWH(-8, -42, 16, 6), _linen);
     // Broş
@@ -1501,11 +1664,11 @@ class CharacterRenderer {
 
   // ─── DEMIRCI (yeni — shaded + per-NPC görsel) ──────────────────────────────
   static void _blacksmithNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final shirtBase = tintCloth(const Color(0xFF5A3818), v.clothingShift);
-    final hoseBase  = tintCloth(const Color(0xFF3A3028), v.clothingShift * 0.5);
+    final shirtBase = _cloth(const Color(0xFF5A3818), v.clothingShift);
+    final hoseBase  = _cloth(const Color(0xFF3A3028), v.clothingShift * 0.5);
     final apronBase = _leather;
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1513,7 +1676,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Tunik
-    _shadedRect(c, const Rect.fromLTWH(-14, -68, 28, 32), shirtBase);
+    _shadedTorso(c, const Rect.fromLTWH(-14, -68, 28, 32), shirtBase);
     // Önlük (deri)
     _shadedRect(c, const Rect.fromLTWH(-9, -66, 18, 30), apronBase);
     // Askılar
@@ -1532,11 +1695,11 @@ class CharacterRenderer {
 
   // ─── MUHAFIZ (yeni — shaded + per-NPC görsel) ──────────────────────────────
   static void _guardNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final gambBase  = tintCloth(const Color(0xFFB8A878), v.clothingShift);
-    final hoseBase  = tintCloth(const Color(0xFF504838), v.clothingShift * 0.4);
+    final gambBase  = _cloth(const Color(0xFFB8A878), v.clothingShift);
+    final hoseBase  = _cloth(const Color(0xFF504838), v.clothingShift * 0.4);
     final gambStripe = darker(gambBase, 0.20);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, const Color(0xFF303028), legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, const Color(0xFF303028), legLift: anim.legLiftR);
 
@@ -1544,7 +1707,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Gambeson
-    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), gambBase);
+    _shadedTorso(c, const Rect.fromLTWH(-13, -68, 26, 32), gambBase);
     // Yatay dikiş çizgileri
     for (final y in [-62.0, -55.0, -48.0, -41.0]) {
       c.drawRect(Rect.fromLTWH(-12, y, 24, 1), _f(gambStripe));
@@ -1596,7 +1759,7 @@ class CharacterRenderer {
 
   static void _imperialSoldierNpc(Canvas c, _Anim anim, NpcVisual v, double time,
       {bool commander = false, bool attacking = false}) {
-    final hose = tintCloth(_impSteelDk, v.clothingShift * 0.3);
+    final hose = _cloth(_impSteelDk, v.clothingShift * 0.3);
 
     // Saldırı modunda mızrak ileri DÜRTÜLÜR (jab) + gövde öne saldırgan eğilir.
     // ~1.5 rad mızrağı yatay-ileri çevirir; jab salınımı içeri/dışarı dürtme.
@@ -1604,7 +1767,7 @@ class CharacterRenderer {
     final spearArm = attacking ? 1.5 + jab * 0.30 : anim.armR;
     final atkLean = attacking ? 0.18 + jab.clamp(0.0, 1.0) * 0.07 : 0.0;
 
-    _shadow(c);
+    _shadow(c, anim);
 
     // Komutan pelerini — gövdenin ARKASINA (bacaklardan önce) düşer.
     if (commander) {
@@ -1636,7 +1799,7 @@ class CharacterRenderer {
     }
 
     // Çelik kürişit (göğüs plakası).
-    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), _impSteel);
+    _shadedTorso(c, const Rect.fromLTWH(-13, -68, 26, 32), _impSteel);
     // Plaka katman çizgileri (lamel).
     for (final y in [-60.0, -52.0, -44.0]) {
       c.drawRect(Rect.fromLTWH(-12, y, 24, 1.4), _f(_impSteelDk));
@@ -1700,10 +1863,10 @@ class CharacterRenderer {
   /// Silüet imzası: uzun çivit cüppe + krem omuz atkısı (stola) + kukuleta +
   /// belde tespih. Büyü değil, inanç: ölçülü ve ağır.
   static void _priestNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final robeBase = tintCloth(_kPriestRobe, v.clothingShift);
+    final robeBase = _cloth(_kPriestRobe, v.clothingShift);
     const stole = Color(0xFFDCD2BA); // krem atkı
 
-    _shadow(c);
+    _shadow(c, anim);
     // Uzun cüppe → bacak salınımı bastırılmış (ağır kumaş)
     _shadedLeg(c, -5, anim.legL * 0.5, robeBase, _leatherDk, legLift: anim.legLiftL * 0.5);
     _shadedLeg(c,  5, anim.legR * 0.5, robeBase, _leatherDk, legLift: anim.legLiftR * 0.5);
@@ -1712,7 +1875,10 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Uzun cüppe (yere kadar)
-    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 62), robeBase);
+    // Cüppe eteğe doğru AÇILIR (waist > 1) — diğer meslekler bele daralırken
+    // rahibin silueti tersine genişler, uzaktan bile ayrışır.
+    _shadedTorso(c, const Rect.fromLTWH(-12, -68, 24, 62), robeBase,
+        waist: 1.22);
     // Krem stola — iki omuzdan aşağı inen atkı (rahibin imzası)
     _shadedRect(c, const Rect.fromLTWH(-7, -68, 4, 40), stole);
     _shadedRect(c, const Rect.fromLTWH( 3, -68, 4, 40), stole);
@@ -1744,11 +1910,11 @@ class CharacterRenderer {
   /// Silüet imzası: ham yün tunik + kahve POST yelek (omuzları kabartır) +
   /// uzun kıvrık DEĞNEK (crook) + kenarlı hasır şapka.
   static void _shepherdNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final woolBase = tintCloth(_kShepherdWool, v.clothingShift);
-    final peltBase = tintCloth(const Color(0xFF6E5236), v.clothingShift * 0.5);
-    final hoseBase = tintCloth(_woolBrown, v.clothingShift * 0.4);
+    final woolBase = _cloth(_kShepherdWool, v.clothingShift);
+    final peltBase = _cloth(const Color(0xFF6E5236), v.clothingShift * 0.5);
+    final hoseBase = _cloth(_woolBrown, v.clothingShift * 0.4);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1756,7 +1922,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Ham yün tunik
-    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 32), woolBase);
+    _shadedTorso(c, const Rect.fromLTWH(-12, -68, 24, 32), woolBase);
     // Post yelek — omuzdan aşağı, kenarları tırtıklı (kürk hissi)
     _shadedRect(c, const Rect.fromLTWH(-13, -70, 26, 18), peltBase);
     for (double x = -13; x < 13; x += 4) {
@@ -1787,10 +1953,10 @@ class CharacterRenderer {
   /// Silüet imzası: koyu orman yeşili KUKULETA (sivri uçlu) + çapraz sadak
   /// (oklar omzundan çıkar) + elde YAY. Kalabalıkta anında okunur.
   static void _hunterNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final cloakBase = tintCloth(_kHunterGreen, v.clothingShift);
-    final hoseBase  = tintCloth(const Color(0xFF3E3628), v.clothingShift * 0.4);
+    final cloakBase = _cloth(_kHunterGreen, v.clothingShift);
+    final hoseBase  = _cloth(const Color(0xFF3E3628), v.clothingShift * 0.4);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1798,7 +1964,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Yeşil tunik/pelerin
-    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 32), cloakBase);
+    _shadedTorso(c, const Rect.fromLTWH(-12, -68, 24, 32), cloakBase);
     // Çapraz deri kayış (sadak askısı)
     c.drawLine(const Offset(-11, -64), const Offset(11, -44), _s(_leather, 3.0));
     // Kemer
@@ -1839,11 +2005,11 @@ class CharacterRenderer {
   /// Silüet imzası: UNLU BEYAZ önlük (köyde tek beyaz kütle) + omuzda un çuvalı
   /// + bez başlık. Uzaktan bile "beyaz" olan tek meslek.
   static void _millerNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final clothBase = tintCloth(_kMillerCloth, v.clothingShift);
-    final hoseBase  = tintCloth(const Color(0xFF5E584C), v.clothingShift * 0.4);
+    final clothBase = _cloth(_kMillerCloth, v.clothingShift);
+    final hoseBase  = _cloth(const Color(0xFF5E584C), v.clothingShift * 0.4);
     const sack      = Color(0xFFBFAE86);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1851,7 +2017,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // İş gömleği
-    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), clothBase);
+    _shadedTorso(c, const Rect.fromLTWH(-13, -68, 26, 32), clothBase);
     // UNLU BEYAZ önlük — göğüsten aşağı, imza kütle
     _shadedRect(c, const Rect.fromLTWH(-9, -62, 18, 26), _kFlourWhite);
     // Önlük askıları
@@ -1883,11 +2049,11 @@ class CharacterRenderer {
   /// Silüet imzası: şarap kırmızısı yelek + beyaz önlük + elde KÖPÜKLÜ MAŞRAPA.
   /// Köyün tek kırmızısı — hanın sıcaklığını taşır.
   static void _innkeeperNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final shirtBase = tintCloth(const Color(0xFFC8B9A0), v.clothingShift * 0.6);
-    final vestBase  = tintCloth(_kInnkeeperWine, v.clothingShift);
-    final hoseBase  = tintCloth(const Color(0xFF4A3A32), v.clothingShift * 0.4);
+    final shirtBase = _cloth(const Color(0xFFC8B9A0), v.clothingShift * 0.6);
+    final vestBase  = _cloth(_kInnkeeperWine, v.clothingShift);
+    final hoseBase  = _cloth(const Color(0xFF4A3A32), v.clothingShift * 0.4);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1895,7 +2061,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Krem gömlek (kollar sıvalı → geniş omuz)
-    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), shirtBase);
+    _shadedTorso(c, const Rect.fromLTWH(-13, -68, 26, 32), shirtBase);
     // Şarap kırmızısı yelek — ortada, iki yandan gömlek görünür
     _shadedRect(c, const Rect.fromLTWH(-9, -68, 18, 24), vestBase);
     // Yelek düğmeleri
@@ -1926,11 +2092,11 @@ class CharacterRenderer {
 
   // ─── MADENCI (idle, yeni — shaded + per-NPC görsel) ────────────────────────
   static void _minerNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final shirtBase = tintCloth(const Color(0xFF4A4840), v.clothingShift);
-    final vestBase  = tintCloth(const Color(0xFF6A4A28), v.clothingShift * 0.6);
-    final hoseBase  = tintCloth(const Color(0xFF3A3028), v.clothingShift * 0.4);
+    final shirtBase = _cloth(const Color(0xFF4A4840), v.clothingShift);
+    final vestBase  = _cloth(const Color(0xFF6A4A28), v.clothingShift * 0.6);
+    final hoseBase  = _cloth(const Color(0xFF3A3028), v.clothingShift * 0.4);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1938,7 +2104,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Gömlek
-    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), shirtBase);
+    _shadedTorso(c, const Rect.fromLTWH(-13, -68, 26, 32), shirtBase);
     // Deri yelek (gömleğin üstüne)
     _shadedRect(c, const Rect.fromLTWH(-10, -67, 20, 30), vestBase);
     // Yelek tokası
@@ -1960,13 +2126,13 @@ class CharacterRenderer {
 
   // ─── BALIKÇI (idle, yeni — shaded + per-NPC görsel) ────────────────────────
   static void _fisherNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
-    final shirtBase = tintCloth(const Color(0xFF5A7888), v.clothingShift);
-    final vestBase  = tintCloth(const Color(0xFF2A3840), v.clothingShift * 0.5);
-    final hoseBase  = tintCloth(const Color(0xFF3A5060), v.clothingShift * 0.4);
+    final shirtBase = _cloth(const Color(0xFF5A7888), v.clothingShift);
+    final vestBase  = _cloth(const Color(0xFF2A3840), v.clothingShift * 0.5);
+    final hoseBase  = _cloth(const Color(0xFF3A5060), v.clothingShift * 0.4);
     final hatBrim   = const Color(0xFF4A3A20);
     final hatDome   = const Color(0xFF5A4A28);
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -1974,7 +2140,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Gömlek
-    _shadedRect(c, const Rect.fromLTWH(-12, -68, 24, 32), shirtBase);
+    _shadedTorso(c, const Rect.fromLTWH(-12, -68, 24, 32), shirtBase);
     // Yelek
     _shadedRect(c, const Rect.fromLTWH(-9, -67, 18, 30), vestBase);
 
@@ -1997,17 +2163,17 @@ class CharacterRenderer {
   static void _builder(Canvas c, _Anim anim,
       {bool working = false, NpcVisual? v, double time = 0}) {
     final tunicBase = v != null
-        ? tintCloth(const Color(0xFF9A7840), v.clothingShift)
+        ? _cloth(const Color(0xFF9A7840), v.clothingShift)
         : const Color(0xFF9A7840);
     final hoseBase = v != null
-        ? tintCloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
+        ? _cloth(_woolBrown, v.clothingShift * 0.5) : _woolBrown;
     // Terracotta kasket — bej tunikte kaybolan eski bereden farklı, siluet imzası.
     final capBase = v != null
-        ? tintCloth(const Color(0xFF9A4A30), v.clothingShift * 0.5)
+        ? _cloth(const Color(0xFF9A4A30), v.clothingShift * 0.5)
         : const Color(0xFF9A4A30);
     final skin = v?.skin ?? _skin1;
 
-    _shadow(c);
+    _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
     _shadedLeg(c,  6, anim.legR, hoseBase, _leatherDk, legLift: anim.legLiftR);
 
@@ -2015,7 +2181,7 @@ class CharacterRenderer {
     _applyTorsoTransform(c, anim);
 
     // Çalışma tuniği
-    _shadedRect(c, const Rect.fromLTWH(-13, -68, 26, 32), tunicBase);
+    _shadedTorso(c, const Rect.fromLTWH(-13, -68, 26, 32), tunicBase);
     // Deri iş önlüğü (göğüsten aşağı)
     _shadedRect(c, const Rect.fromLTWH(-9, -64, 18, 28), _leather);
     // Çapraz askılar — önlüğü omuza bağlar (demircinin V'sinden ayrışır)

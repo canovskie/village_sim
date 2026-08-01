@@ -16,59 +16,22 @@ const List<String> _kTopicWeather = ['☀', '🌧', '🌬', '🌈'];
 /// değerlendirme. Pazar/taverna/ateş/akşam/yağmur çarpanları kullanır.
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneNpcActivity on _VillageSceneState {
-  void _tryStartChats() {
-    if (_villagers.length < 2) return;
-    final rainy = _cycle.rainIntensity > 0.30;
-    final t = _cycle.timeOfDay;
-    final eveningBoost = (t > 0.62 && t < 0.88) ? 1.4 : 1.0;
-    final night = _cycle.dayLight < 0.45;
-
-    final markets  = _spotsOf(BuildingType.market);
-    final taverns  = _spotsOf(BuildingType.tavern);
-    final firepits = _spotsOf(BuildingType.firepit);
-
-    for (final v in _villagers) {
-      if (v.isInsideBuilding || v.isSleeping || !v.hasProfession) continue;
-      if (v.activity != VillagerActivity.none) continue;
-      if (v.socialCooldown > 0) continue;
-      if (v.isCarrying || v.isWalking) {
-        if (_rng.nextDouble() > 0.20) continue;
-      }
-
-      double ctx = 1.0;
-      final atMarket  = _nearAny(v.gridX, v.gridY, markets,  3.0);
-      final atTavern  = _nearAny(v.gridX, v.gridY, taverns,  3.5);
-      final atFire    = _nearAny(v.gridX, v.gridY, firepits, 4.0);
-      if (atMarket) ctx *= 3.0;
-      if (atTavern) ctx *= 3.5;
-      if (atFire && night) ctx *= 2.5;
-      ctx *= eveningBoost;
-      if (rainy) ctx *= 0.35;
-
-      final base = 0.006 * ctx;
-      if (_rng.nextDouble() > base) continue;
-
-      final r = _rng.nextDouble();
-      bool started = false;
-      if (!rainy && (atTavern || (atFire && night)) && r < 0.25) {
-        started = _tryStartDanceFor(v);
-      } else if (!rainy && (atTavern || (atFire && night)) && r < 0.50) {
-        started = _tryStartMusicFor(v);
-      } else {
-        started = _tryStartChatFor(v);
-      }
-      if (started) {
-        v.socialCooldown = 40 + _rng.nextDouble() * 80;
-      }
-    }
-  }
+  // NOT: eski `_tryStartChats` toplu taraması SİLİNDİ. Sosyalleşme kararı artık
+  // köylünün YALNIZLIK dürtüsünden doğuyor (bkz. scene_mind `_bidSocial`);
+  // buradaki yardımcılar yalnız KAZANAN teklifin yürütmesidir.
 
   bool _tryStartChatFor(VillagerEntity v) {
     final partner = _findNearbyIdle(v);
     if (partner == null) return false;
+    // DEDİKODU — sohbet artık gerçekten bir şey TAŞIYOR. İki köylü hafıza
+    // alışverişi yapar; aktarılan anı "kulaktan" sayılır (dinleyen ihbar
+    // edemez, yalnız kanaati değişir ve dedikoduyu sürdürür). Köyde şüphenin
+    // sosyal yoldan birikmesi bu zincirledir — sayaçla değil.
+    final gossiped = _exchangeGossip(v, partner);
     // Konuya bağlı replik dizisi + karşılıklı sıra (turn-taking). Daha uzun
-    // süre → birkaç replik gidip gelir.
-    final icons = _convoTopic(v, partner);
+    // süre → birkaç replik gidip gelir. Gerçek bir haber aktarıldıysa konu
+    // dedikodudur; baloncuk uydurma bir konu göstermez.
+    final icons = gossiped ? _kTopicGossip : _convoTopic(v, partner);
     final dur   = 6.0 + _rng.nextDouble() * 3.0;
     _beginConvo(v, partner, icons, dur, starter: true);
     _beginConvo(partner, v, icons, dur, starter: false);
@@ -205,12 +168,18 @@ extension _SceneNpcActivity on _VillageSceneState {
   }
 
   /// [v]'ye yakın (≤2.5 tile), boş, yetişkin başka bir NPC.
+  ///
+  /// KANAAT KAPISI: suçunu gördüğün ya da hakkında kötü kanaat beslediğin
+  /// biriyle sohbete oturmazsın. Bu, hafızanın en sessiz ama en okunur
+  /// sonucudur — bir suçtan sonra köyde konuşmalar seyrelir, fail yalnız kalır.
   VillagerEntity? _findNearbyIdle(VillagerEntity v) {
     for (final o in _villagers) {
       if (identical(o, v)) continue;
-      if (o.isInsideBuilding || o.isSleeping || !o.hasProfession) continue;
+      if (o.isInsideBuilding || o.isSleeping || o.isLeaving || !o.hasProfession) continue;
       if (o.activity != VillagerActivity.none) continue;
       if (o.socialCooldown > 0) continue;
+      if (v.memory.suspects(o) || v.memory.opinionOf(o) < -0.40) continue;
+      if (o.memory.suspects(v) || o.memory.opinionOf(v) < -0.40) continue;
       final dx = v.gridX - o.gridX;
       final dy = v.gridY - o.gridY;
       if (dx * dx + dy * dy <= 2.5 * 2.5) return o;

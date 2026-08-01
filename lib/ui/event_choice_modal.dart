@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 
 /// Karar gerektiren olaylar için tam-ekran modal. Arka planı karartır,
 /// ortada koyu rafine kart: ikon + başlık + olay mesajı + seçenek kartları.
@@ -32,34 +33,92 @@ class EventChoiceModal extends StatelessWidget {
     return ColoredBox(
       // Tüm arkayı karart — oyuncu odağı modal'a.
       color: AppUi.scrim,
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: AppReveal(
-              child: AppPanel(
-                accent: _accent,
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _header(),
-                    const SizedBox(height: 14),
-                    Text(event.message,
-                        textAlign: TextAlign.center,
-                        style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5)),
-                    const AppDivider(),
-                    for (final c in event.choices!) ...[
-                      _ChoiceCard(
-                        choice: c,
-                        accent: _accent,
-                        onTap: () => onChoose(c),
-                      ),
-                      if (c != event.choices!.last) const SizedBox(height: 9),
+      child: useCompactGameUi(context) ? _compactBody(context) : _wideBody(),
+    );
+  }
+
+  List<Widget> _choiceCards() => [
+        for (final c in event.choices!) ...[
+          _ChoiceCard(choice: c, accent: _accent, onTap: () => onChoose(c)),
+          if (c != event.choices!.last) const SizedBox(height: 9),
+        ],
+      ];
+
+  /// TELEFON YATAY — solda olay, sağda seçenekler. Tek sütunda üç seçenekli
+  /// bir olay 414dp'lik ekranın altından taşıyordu; iki sütun hem taşmayı hem
+  /// de iki yandaki ~340dp'lik ölü alanı bitirir.
+  Widget _compactBody(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: MobileUi.left(context),
+        right: MobileUi.right(context),
+        top: MobileUi.top(context),
+        bottom: MobileUi.bottom(context),
+      ),
+      child: AppReveal(
+        child: AppPanel(
+          accent: _accent,
+          padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                flex: 5,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _header(),
+                      const SizedBox(height: 12),
+                      Text(event.message,
+                          style:
+                              AppUi.body.copyWith(fontSize: 12, height: 1.5)),
                     ],
-                  ],
+                  ),
                 ),
+              ),
+              const SizedBox(width: 14),
+              Container(width: 1, color: AppUi.line),
+              const SizedBox(width: 14),
+              Expanded(
+                flex: 4,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _choiceCards(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _wideBody() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: AppReveal(
+            child: AppPanel(
+              accent: _accent,
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _header(),
+                  const SizedBox(height: 14),
+                  Text(event.message,
+                      textAlign: TextAlign.center,
+                      style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5)),
+                  const AppDivider(),
+                  ..._choiceCards(),
+                ],
               ),
             ),
           ),

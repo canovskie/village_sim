@@ -26,6 +26,9 @@ const mature = LawContext(
   animals: 7,
   deaths: 2,
   crimesSeen: 4,
+  // Kırılganlık hükümlerinin kapıları: köy hastalık ve kan da gördü.
+  illnessSeen: 3,
+  feudsSeen: 1,
   knownCrafts: {Craft.carpentry, Craft.farming, Craft.husbandry, Craft.faith},
   buildings: {
     BuildingType.well,
@@ -33,6 +36,7 @@ const mature = LawContext(
     BuildingType.barn,
     BuildingType.lumberCamp,
     BuildingType.church,
+    BuildingType.firepit, // Ocak Nöbeti Fermanı'nın kapısı
   },
 );
 
@@ -47,9 +51,18 @@ void main() {
   group('yeni köy defteri', () {
     test('yeni köy hükümlerin ezici çoğunluğunu GÖRMEZ', () {
       final vis = visibleIds(fresh);
-      // Ağır iki hüküm ufukta kilitli durur; geri kalan görünenler avuç içi.
-      expect(vis.length, lessThan(6),
-          reason: 'yeni köy neredeyse boş bir defterle başlamalı: $vis');
+      // Görünenlerin neredeyse tamamı AĞIR hüküm: ufukta kilitli dururlar
+      // (gerekçesiyle) ama dokunulamazlar. Gerçek gündem avuç içi kalmalı.
+      final actionable = LawBook.openAgenda(noSeal, fresh);
+      expect(actionable.length, lessThan(4),
+          reason: 'yeni köyün gündemi avuç içi olmalı: '
+              '${actionable.map((l) => l.id).toList()}');
+      final nonGrave = [
+        for (final id in vis)
+          if (!law(id).grave) id
+      ];
+      expect(nonGrave.length, lessThan(4),
+          reason: 'ağır olmayan görünür hüküm çok fazla: $nonGrave');
       expect(kLawBook.length, greaterThan(25));
     });
 
@@ -89,13 +102,20 @@ void main() {
           reason: 'olgun köyde kapalı kalan hüküm var: $missing');
     });
 
-    test('rejim fermanları yemin edilmeden olgun köyde bile açılmaz', () {
+    test('rejim fermanları yemin edilmeden olgun köyde bile AÇILMAZ ama görünür',
+        () {
+      // Kapı yeminle açılır, olgunlukla değil. Ama hepsi `grave`: defterde
+      // gerekçesiyle DURURLAR. Aksi hâlde yeminin ödülü, yemin edilene kadar
+      // hiç görünmüyordu — oyuncu neyi kazanacağını bilmeden yemin ediyordu.
       final regimeLaws =
           [for (final l in kLawBook) if (l.id.startsWith('rejim.')) l];
       expect(regimeLaws, isNotEmpty);
       for (final l in regimeLaws) {
+        expect(l.grave, isTrue, reason: l.id);
+        expect(l.binding, isTrue, reason: l.id);
         expect(LawBook.available(l, noSeal, mature), isFalse, reason: l.id);
-        expect(LawBook.visible(l, noSeal, mature), isFalse, reason: l.id);
+        expect(LawBook.visible(l, noSeal, mature), isTrue, reason: l.id);
+        expect(l.gateReason, isNotEmpty, reason: l.id);
       }
     });
 

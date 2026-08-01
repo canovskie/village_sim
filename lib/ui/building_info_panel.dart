@@ -8,13 +8,12 @@ import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
-import '../entities/miner_entity.dart';
-import '../entities/shepherd_entity.dart';
 import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 
 /// Bir binaya tıklanınca açılan yönetim kartı. Modern koyu panel: başlık +
 /// portre, animasyonlu durum çubukları, vektör ikonlu aksiyon butonları.
@@ -22,9 +21,7 @@ import 'app_ui.dart';
 class BuildingInfoPanel extends StatelessWidget {
   final BuildingEntity building;
   final List<VillagerEntity> residents;
-  final List<MinerEntity> activeMiners;
   final List<AnimalEntity> barnCows;
-  final ShepherdEntity? barnShepherd;
   final ResourceBundle stockpile;
   final VillageStats stats;
 
@@ -59,9 +56,7 @@ class BuildingInfoPanel extends StatelessWidget {
     super.key,
     required this.building,
     required this.residents,
-    required this.activeMiners,
     this.barnCows = const [],
-    this.barnShepherd,
     required this.stockpile,
     required this.stats,
     required this.population,
@@ -82,22 +77,31 @@ class BuildingInfoPanel extends StatelessWidget {
   });
 
   BuildingFunction? get _fn => building.fn;
-  Color get _accent => _accentFor(_fn);
+  Color get _accent => _accentFor(_fn, building.type);
 
   @override
   Widget build(BuildContext context) {
     final meta = kBuildingMeta[building.type]!;
+    // MOBİL: köylü paneliyle aynı sayfa dili — yuvanın genişliğini alır ve
+    // yüksekliğini DOLDURUR (min olsaydı içerik azken havada asılı küçük bir
+    // kutu, çokken alttan kesik bir kutu olurdu; ikisi de temanın dışında).
+    final compact = useCompactGameUi(context);
     return GestureDetector(
       onTap: () {},
       behavior: HitTestBehavior.opaque,
       child: AppReveal(
         child: SizedBox(
-          width: 326,
+          width: compact
+              ? MobileUi.sheetWidth(MediaQuery.sizeOf(context))
+              : 326,
           child: AppPanel(
             accent: _accent,
             padding: EdgeInsets.zero,
+            borderRadius: compact
+                ? BorderRadius.circular(MobileUi.radius)
+                : null,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: compact ? MainAxisSize.max : MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _header(meta.label),
@@ -183,7 +187,7 @@ class BuildingInfoPanel extends StatelessWidget {
   }
 
   Widget _roleTag() {
-    final label = _roleLabel(_fn);
+    final label = _roleLabel(_fn, building.type);
     if (label.isEmpty) return const SizedBox.shrink();
     return AppChip(label: label.toUpperCase(), color: _accent);
   }
@@ -194,6 +198,11 @@ class BuildingInfoPanel extends StatelessWidget {
     if (fn == null) {
       return [_row('Boyut', '${building.cols}×${building.rows}')];
     }
+    // Ocağın yakıtı: bugüne dek yalnız alevin boyundan sezilebiliyordu. Sönmek
+    // moral kırdığı için sayı görünür olmalı — sim'in okuduğu değerin ta kendisi.
+    if (building.type == BuildingType.firepit) {
+      return _firepitVital();
+    }
     switch (fn.role) {
       case BuildingRole.housing:
         return _housingVital(fn);
@@ -202,7 +211,7 @@ class BuildingInfoPanel extends StatelessWidget {
       case BuildingRole.processing:
         return _processingVital();
       case BuildingRole.trade:
-        return _tradeVital(fn);
+        return _tradeVital();
       case BuildingRole.storage:
         return _storageVital(fn);
       case BuildingRole.civic:
@@ -212,10 +221,79 @@ class BuildingInfoPanel extends StatelessWidget {
     }
   }
 
+  /// MÜLKÜN SAHİBİ — bu mülk kimin? Açıkça yazılmışsa (bağış / kamulaştırma)
+  /// o okunur; yazılmamışsa SAKİNLERDEN türetilir (kimin evinde kim oturuyorsa
+  /// hane odur). Oyuncu bir eve tıkladığında karşısında bir isim bulmalı.
+  (String label, Color tint) _ownerOf() {
+    if (building.ownerSurname == kPublicOwner) {
+      return ('Köy — kamulaştırıldı', AppUi.rust);
+    }
+    if (building.ownerSurname.isNotEmpty) {
+      return ('${building.ownerSurname} Hanesi', AppUi.gold);
+    }
+    if (residents.isEmpty) return ('Sahipsiz — boş duruyor', AppUi.textLo);
+    // Sakinlerin baskın hanesi.
+    final count = <String, int>{};
+    for (final v in residents) {
+      if (v.surname.isEmpty) continue;
+      count[v.surname] = (count[v.surname] ?? 0) + 1;
+    }
+    if (count.isEmpty) return ('Adsız sakinler', AppUi.textLo);
+    final top = count.entries.reduce((a, b) => b.value > a.value ? b : a);
+    final shared = count.length > 1;
+    return (
+      '${top.key} Hanesi${shared ? ' (+${count.length - 1} hane daha)' : ''}',
+      AppUi.textHi
+    );
+  }
+
+  /// Ocak — yanıyor mu, yakıtı ne kadar, ambarda yakacak var mı.
+  List<Widget> _firepitVital() {
+    final fuel = building.fireFuel;
+    final pct = (fuel * 100).round();
+    final (label, tint) = switch (fuel) {
+      <= 0.001 => ('Sönük', AppUi.rust),
+      < 0.30 => ('$pct% · yakıt az', AppUi.gold),
+      _ => ('$pct%', AppUi.sage),
+    };
+    return [
+      _row('Yakıt', label, valueColor: tint),
+      _row('Ocaklık', '${stockpile.wood} odun · ${stockpile.coal} kömür'),
+    ];
+  }
+
+  Widget _ownerRow() {
+    final (label, tint) = _ownerOf();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: tint.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: tint.withValues(alpha: 0.32)),
+      ),
+      child: Row(
+        children: [
+          const Text('⌂', style: TextStyle(fontSize: 12)),
+          const SizedBox(width: 8),
+          Text('SAHİBİ', style: AppUi.label.copyWith(color: AppUi.textLo)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: AppUi.bodyHi.copyWith(fontSize: 11.5, color: tint)),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _housingVital(BuildingFunction fn) {
     final water = building.waterLevel.clamp(0.0, 1.0);
     final occ = residents.length / fn.housingCapacity.clamp(1, 99);
     return [
+      _ownerRow(),
+      const SizedBox(height: 10),
       AppStatBar(
         label: 'SAKİNLER',
         value: occ,
@@ -241,15 +319,15 @@ class BuildingInfoPanel extends StatelessWidget {
   }
 
   List<Widget> _gatheringVital() {
-    final isMine = building.type == BuildingType.mineBuilding;
     final isBarn = building.type == BuildingType.barn;
     final isCoop = building.type == BuildingType.chickenCoop;
     final out = <Widget>[_statusRow(building.isActive)];
-    if (isMine && activeMiners.isNotEmpty) {
-      out.add(_row('Madenci', '${activeMiners.length} içeride'));
-    }
     if (isBarn) out.addAll(_barnVital());
     if (isCoop) out.addAll(_coopVital());
+    // Bal üst şeritte durmaz (lüks, omurga değil) — sayacın yeri kovandır.
+    if (building.type == BuildingType.beehive) {
+      out.add(_row('Bal', '${stockpile.honey} kavanoz'));
+    }
     return out;
   }
 
@@ -324,16 +402,40 @@ class BuildingInfoPanel extends StatelessWidget {
   List<Widget> _processingVital() => [
         _statusRow(building.isActive),
         const SizedBox(height: 6),
-        _row('Balya verimi', '+2 yem / balya', icon: GameIconData.wheat),
+        _row('Balya verimi', '+$kMillBaleBonus yem / balya',
+            icon: GameIconData.wheat),
+        const SizedBox(height: 6),
+        _row(
+            'Değirmenci',
+            building.staffed
+                ? 'başında  +${(kMillerYieldBonus * 100).round()}%'
+                : 'yok',
+            accent: building.staffed),
       ];
 
-  List<Widget> _tradeVital(BuildingFunction fn) => [
-        _row('Kasa', '${stockpile.gold}',
-            icon: GameIconData.coin, accent: true),
-        const SizedBox(height: 6),
-        _row('Pasif gelir',
-            '+${fn.civicValue.round()} / ${kMarketIncomeInterval.toStringAsFixed(0)}sn'),
-      ];
+  List<Widget> _tradeVital() {
+    // Pasif gelir artık sabit değil — köyün taban üstü fazlasından türer.
+    final income = marketBaseIncome(stockpile);
+    return [
+      _row('Kasa', '${stockpile.gold}',
+          icon: GameIconData.coin, accent: true),
+      const SizedBox(height: 6),
+      _row(
+          'Pasif gelir',
+          income > 0
+              ? '+$income / ${kMarketIncomeInterval.toStringAsFixed(0)}sn'
+              : 'tezgâh boş'),
+      const SizedBox(height: 8),
+      Text(
+        income > 0
+            ? 'Ambar taştıkça tezgâh döner; ihtiyaç payı ($kMarketSurplusFloor) '
+                'satılığa çıkmaz.'
+            : 'Satacak fazla yok — her kaynaktan $kMarketSurplusFloor birimin '
+                'üstü pazara iner.',
+        style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+      ),
+    ];
+  }
 
   List<Widget> _storageVital(BuildingFunction fn) {
     return [
@@ -346,68 +448,33 @@ class BuildingInfoPanel extends StatelessWidget {
   }
 
   List<Widget> _civicVital(BuildingFunction fn) {
+    // Belediye köy-çapı sayısal bir etki taşımaz — yönetişimin koltuğudur.
+    // Paneli nüfus defteri + Divan kapısı; ayrı bir CivicEffect gerektirmez.
+    if (building.type == BuildingType.townhall) return _townhallVital();
     switch (fn.civicEffect) {
-      case CivicEffect.populationGrowth:
-        final p = planning;
-        if (p == null) return [_row('Nüfus', '$population')];
-        final total = p.children + p.adults + p.elders;
-        final foodColor = p.daysOfFoodLeft >= 6.0
-            ? AppUi.sage
-            : p.daysOfFoodLeft >= 3.0
-                ? AppUi.accent
-                : AppUi.rust;
-        return [
-          Text('Köyünde $total kişi yaşıyor.',
-              style: AppUi.bodyHi.copyWith(fontSize: 14, height: 1.25)),
-          const SizedBox(height: 14),
-          _miniSection('YAŞ', [
-            _ledgerRow('Yetişkin', '${p.adults}'),
-            _ledgerRow('Çocuk', '${p.children}'),
-            _ledgerRow('Yaşlı', '${p.elders}'),
-          ]),
-          _miniSection('AİLE', [
-            _ledgerRow('Çift', '${p.couples}'),
-            if (p.pregnantSoon > 0)
-              _ledgerRow('Yakında bebek', '${p.pregnantSoon}',
-                  accent: AppUi.accent),
-          ]),
-          _miniSection('KONUT', [
-            _ledgerRow('Dolu', '${p.housedSlots} / ${p.totalHousing}',
-                accent: p.housedSlots < p.totalHousing ? null : AppUi.rust),
-          ]),
-          _miniSection('YİYECEK', [
-            _ledgerRow('Günlük tüketim', p.foodPerDay.toStringAsFixed(0)),
-            _ledgerRow(
-                'Stok yeter',
-                p.daysOfFoodLeft.isFinite
-                    ? '${p.daysOfFoodLeft.toStringAsFixed(1)} gün'
-                    : '∞',
-                accent: foodColor),
-          ]),
-          const SizedBox(height: 10),
-          AppStatBar(
-              label: 'MORAL',
-              value: stats.morale,
-              trailing: '${(stats.morale * 100).round()}%',
-              color: stats.morale > 0.6 ? AppUi.sage : foodColor),
-          // Yönetişim (KARAR DEFTERİ + hane nabzı) 2026-07-13'te DİVAN'a taşındı
-          // — bu panel yalnızca binanın kendi işini anlatır. Belediye yönetişimin
-          // koltuğu olduğundan buradan Divan'a bir kapı bırakıyoruz.
-          if (onOpenDivan != null) ...[
-            const SizedBox(height: 16),
-            _divanLink(),
-          ],
-        ];
       case CivicEffect.morale:
+        // DÜRÜST GÖSTERİM: "ağırlık" binanın tablodaki civicValue'su, "amenite
+        // morali" ise bütün civic binaların doyuma sokulmuş TOPLAMI — yani
+        // köylülerin moral hedefine gerçekten eklenen sayı (villager_morale).
         return [
-          _row('Moral katkısı', '+${(fn.civicValue * 100).round()}%',
+          _row('Bu binanın ağırlığı', '+${(fn.civicValue * 100).round()}',
               accent: true),
           const SizedBox(height: 6),
+          _row('Köy amenite morali',
+              '+${(stats.amenityMorale * 100).round()}%'),
+          const SizedBox(height: 6),
           _row('Köy morali', '${(stats.morale * 100).round()}%'),
+          const SizedBox(height: 8),
+          Text(
+            stats.amenityMorale >= kAmenityMoraleCap * 0.9
+                ? 'Köy bu yönden doymuş — yeni bir amenite artık az şey katar.'
+                : 'Farklı türde amenite, aynısının ikincisinden çok katar.',
+            style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+          ),
         ];
       case CivicEffect.carrierSpeed:
         return [
-          _row('Bu ahırın katkısı', '+${(fn.civicValue * 100).round()}%'),
+          _row('Bu binanın katkısı', '+${(fn.civicValue * 100).round()}%'),
           const SizedBox(height: 6),
           _row('Taşıyıcı hızı',
               '×${stats.carrierSpeedMultiplier.toStringAsFixed(2)}',
@@ -416,6 +483,60 @@ class BuildingInfoPanel extends StatelessWidget {
       case CivicEffect.none:
         return [_row('Boyut', '${building.cols}×${building.rows}')];
     }
+  }
+
+  /// Belediye paneli — nüfus defteri + Divan kapısı.
+  List<Widget> _townhallVital() {
+    final p = planning;
+    if (p == null) return [_row('Nüfus', '$population')];
+    final total = p.children + p.adults + p.elders;
+    final foodColor = p.daysOfFoodLeft >= 6.0
+        ? AppUi.sage
+        : p.daysOfFoodLeft >= 3.0
+            ? AppUi.accent
+            : AppUi.rust;
+    return [
+      Text('Köyünde $total kişi yaşıyor.',
+          style: AppUi.bodyHi.copyWith(fontSize: 14, height: 1.25)),
+      const SizedBox(height: 14),
+      _miniSection('YAŞ', [
+        _ledgerRow('Yetişkin', '${p.adults}'),
+        _ledgerRow('Çocuk', '${p.children}'),
+        _ledgerRow('Yaşlı', '${p.elders}'),
+      ]),
+      _miniSection('AİLE', [
+        _ledgerRow('Çift', '${p.couples}'),
+        if (p.pregnantSoon > 0)
+          _ledgerRow('Yakında bebek', '${p.pregnantSoon}',
+              accent: AppUi.accent),
+      ]),
+      _miniSection('KONUT', [
+        _ledgerRow('Dolu', '${p.housedSlots} / ${p.totalHousing}',
+            accent: p.housedSlots < p.totalHousing ? null : AppUi.rust),
+      ]),
+      _miniSection('YİYECEK', [
+        _ledgerRow('Günlük tüketim', p.foodPerDay.toStringAsFixed(0)),
+        _ledgerRow(
+            'Stok yeter',
+            p.daysOfFoodLeft.isFinite
+                ? '${p.daysOfFoodLeft.toStringAsFixed(1)} gün'
+                : '∞',
+            accent: foodColor),
+      ]),
+      const SizedBox(height: 10),
+      AppStatBar(
+          label: 'MORAL',
+          value: stats.morale,
+          trailing: '${(stats.morale * 100).round()}%',
+          color: stats.morale > 0.6 ? AppUi.sage : foodColor),
+      // Yönetişim (KARAR DEFTERİ + hane nabzı) 2026-07-13'te DİVAN'a taşındı
+      // — bu panel yalnızca binanın kendi işini anlatır. Belediye yönetişimin
+      // koltuğu olduğundan buradan Divan'a bir kapı bırakıyoruz.
+      if (onOpenDivan != null) ...[
+        const SizedBox(height: 16),
+        _divanLink(),
+      ],
+    ];
   }
 
   /// Divan'a açılan kapı — belediye yönetişimin koltuğu; yasalar/gündem/Meclis
@@ -482,10 +603,12 @@ class BuildingInfoPanel extends StatelessWidget {
 
     if (onFestival != null) {
       final role = fn?.role;
+      // Şenlik evlerde, moral binalarında ve belediyede kurulur — ahır/handa
+      // (lojistik) değil.
       final ok = role == BuildingRole.housing ||
           (role == BuildingRole.civic &&
               (fn?.civicEffect == CivicEffect.morale ||
-                  fn?.civicEffect == CivicEffect.populationGrowth));
+                  building.type == BuildingType.townhall));
       if (ok) {
         final canAfford = stockpile.food >= festivalFoodCost &&
             stockpile.gold >= festivalGoldCost;
@@ -512,8 +635,7 @@ class BuildingInfoPanel extends StatelessWidget {
       ));
     }
 
-    if (onCollectTax != null &&
-        fn?.civicEffect == CivicEffect.populationGrowth) {
+    if (onCollectTax != null && building.type == BuildingType.townhall) {
       out.add(_Action(
         icon: GameIconData.tax,
         label: 'Vergi',
@@ -588,7 +710,7 @@ class BuildingInfoPanel extends StatelessWidget {
       };
 
   Widget _row(String label, String value,
-          {bool accent = false, GameIconData? icon}) =>
+          {bool accent = false, GameIconData? icon, Color? valueColor}) =>
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
@@ -602,7 +724,8 @@ class BuildingInfoPanel extends StatelessWidget {
             Text(value,
                 style: AppUi.number.copyWith(
                     fontSize: 13,
-                    color: accent ? AppUi.gold : AppUi.textHi)),
+                    color: valueColor ??
+                        (accent ? AppUi.gold : AppUi.textHi))),
           ],
         ),
       );
@@ -699,7 +822,8 @@ class _Action {
 
 // ─── Renk + etiket eşlemeleri ──────────────────────────────────────────────
 
-Color _accentFor(BuildingFunction? fn) {
+Color _accentFor(BuildingFunction? fn, [BuildingType? type]) {
+  if (type == BuildingType.townhall) return AppUi.sage;
   if (fn == null) return AppUi.accentSoft;
   switch (fn.role) {
     case BuildingRole.housing:
@@ -714,7 +838,6 @@ Color _accentFor(BuildingFunction? fn) {
       return AppUi.accentSoft;
     case BuildingRole.civic:
       return switch (fn.civicEffect) {
-        CivicEffect.populationGrowth => AppUi.sage,
         CivicEffect.morale => AppUi.accentSoft,
         CivicEffect.carrierSpeed => AppUi.info,
         CivicEffect.none => AppUi.accentSoft,
@@ -724,7 +847,8 @@ Color _accentFor(BuildingFunction? fn) {
   }
 }
 
-String _roleLabel(BuildingFunction? fn) {
+String _roleLabel(BuildingFunction? fn, [BuildingType? type]) {
+  if (type == BuildingType.townhall) return 'Yönetim';
   if (fn == null) return '';
   switch (fn.role) {
     case BuildingRole.housing:
@@ -739,7 +863,6 @@ String _roleLabel(BuildingFunction? fn) {
       return 'Depo';
     case BuildingRole.civic:
       return switch (fn.civicEffect) {
-        CivicEffect.populationGrowth => 'Yönetim',
         CivicEffect.morale => 'Moral',
         CivicEffect.carrierSpeed => 'Lojistik',
         CivicEffect.none => '',

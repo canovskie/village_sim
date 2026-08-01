@@ -51,6 +51,10 @@ class LawBookView extends StatefulWidget {
   final VillageRegime? sworn;
   final VoidCallback? onSwearOath;
 
+  /// Çürüme (Faz 3) + imanın mekanik karşılığı — kadran bunları da çizer.
+  final double rot;
+  final FaithEffect? faith;
+
   /// Mühürlü bir hükmü BEDELLE feshet. null = fesih kapalı (harness).
   final void Function(LawDef law)? onRepeal;
 
@@ -68,6 +72,8 @@ class LawBookView extends StatefulWidget {
     this.sworn,
     this.onSwearOath,
     this.onRepeal,
+    this.rot = 0,
+    this.faith,
   });
 
   @override
@@ -92,6 +98,10 @@ class _LawBookViewState extends State<LawBookView>
   final TextEditingController _search = TextEditingController();
   String _query = '';
   LawTheme? _open; // null = çiçek görünümü
+
+  /// Kısa ekranda pusula kartı açık mı (bkz. [LawCompassCard.compact]).
+  /// Masaüstünde okunmaz — kart orada zaten hep tam çizilir.
+  bool _compassOpen = false;
 
   bool get _inkWet => widget.inkDrySec > 0.5;
 
@@ -135,6 +145,11 @@ class _LawBookViewState extends State<LawBookView>
 
   @override
   Widget build(BuildContext context) {
+    // TELEFON YATAY: defterin gövdesine ~300dp kalıyor. Pusula kartı (150) +
+    // idame (40) + arama (40) + boşluklar peteği tamamen fold altına itiyordu —
+    // kanun defteri açıldığında TEK ferman görünmüyordu. Kısa ekranda pusula
+    // tek satırlık künyeye iner (dokununca açılır) ve boşluklar daralır.
+    final compact = useCompactGameUi(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -149,10 +164,35 @@ class _LawBookViewState extends State<LawBookView>
           unrest: widget.unrest,
           sworn: widget.sworn,
           onSwearOath: widget.onSwearOath,
+          rot: widget.rot,
+          faith: widget.faith,
+          compact: compact,
+          expanded: _compassOpen,
+          onToggleExpand: () => setState(() => _compassOpen = !_compassOpen),
         ),
-        const SizedBox(height: 12),
-        _searchBar(),
-        const SizedBox(height: 12),
+        // Kısa ekranda idame + arama TEK satır: ikisi de tek satırlık şerit,
+        // alt alta konunca 48dp'yi peteğin payından yiyorlardı.
+        if (compact) ...[
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Flexible(child: _searchBar()),
+                if (totalUpkeepLabel(widget.sealed) != null) ...[
+                  const SizedBox(width: 8),
+                  _totalUpkeepBar(topPad: 0),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+        ] else ...[
+          _totalUpkeepBar(),
+          const SizedBox(height: 12),
+          _searchBar(),
+          const SizedBox(height: 12),
+        ],
         if (_query.isNotEmpty)
           _searchResults()
         else if (_open != null)
@@ -160,6 +200,58 @@ class _LawBookViewState extends State<LawBookView>
         else
           _flowerView(),
       ],
+    );
+  }
+
+  /// DEFTERİN GÜNLÜK HESABI — mühürlü fermanların toplam idamesi. Defter
+  /// kabardıkça köyün sırtındaki yük de kabarır; oyuncu bu toplamı görmeden
+  /// öşür + kutsal gün + gece bekçisini üst üste mühürleyip ambarın neden
+  /// eridiğini anlayamıyordu. Hiçbir idame yoksa satır hiç çizilmez.
+  /// [topPad] 0 verilirse şerit kendi üst boşluğunu koymaz — kısa ekranda
+  /// arama kutusuyla aynı satıra girdiği için gerekli. Aynı yerleşimde
+  /// "Defterin günlük idamesi" açıklaması da düşer; kalan yalnız rakamdır
+  /// (satırın tamamı zaten idame şeridi olarak okunuyor).
+  Widget _totalUpkeepBar({double topPad = 10}) {
+    final label = totalUpkeepLabel(widget.sealed);
+    if (label == null) return const SizedBox.shrink();
+    final (gold, food) = LawBook.dailyUpkeep(widget.sealed);
+    final drain = gold < 0 || food < 0;
+    final c = drain ? AppUi.rust : AppUi.sage;
+    final inline = topPad == 0;
+    return Padding(
+      padding: EdgeInsets.only(top: topPad),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppUi.surface0,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: c.withValues(alpha: 0.28)),
+        ),
+        child: Row(
+            // Expanded yalnız tam-genişlik hâlinde kullanılabilir; satır içi
+            // hâlde Row kendi içeriği kadar dar kalmalı.
+            mainAxisSize: inline ? MainAxisSize.min : MainAxisSize.max,
+            children: [
+          Icon(drain ? Icons.trending_down : Icons.trending_up,
+              size: 14, color: c),
+          const SizedBox(width: 8),
+          if (inline)
+            Text(label,
+                style: AppUi.bodyHi.copyWith(
+                    fontSize: 12, color: c, fontWeight: FontWeight.w700))
+          else ...[
+            Expanded(
+              child: Text('Defterin günlük idamesi',
+                  style:
+                      AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textMid)),
+            ),
+            Text(label,
+                style: AppUi.bodyHi.copyWith(
+                    fontSize: 12, color: c, fontWeight: FontWeight.w700)),
+          ],
+        ]),
+      ),
     );
   }
 
@@ -606,6 +698,10 @@ class _LawBookViewState extends State<LawBookView>
                               color: tagColor,
                               letterSpacing: 0.5)),
                     ),
+                    if (upkeepLabel(l) != null) ...[
+                      _upkeepChip(l),
+                      const SizedBox(width: 6),
+                    ],
                     if (st == _LawState.enacted &&
                         widget.onRepeal != null &&
                         LawBook.repealable(l))
@@ -617,6 +713,27 @@ class _LawBookViewState extends State<LawBookView>
           ]),
         ),
       ),
+    );
+  }
+
+  /// GÜNLÜK İDAME rozeti — bir ferman imzalandığı gün bitmiyor; her sabah
+  /// köyün sırtında. [LawBook.dailyUpkeep] bunu her gün ambardan/keseden
+  /// sessizce kesiyordu ve hiçbir yüzeyde yazmıyordu: oyuncu neden açlığa
+  /// girdiğini göremiyordu. Artık rakam, kesildiği yerin yanında duruyor.
+  Widget _upkeepChip(LawDef l) {
+    final label = upkeepLabel(l)!;
+    final drain = l.goldPerDay < 0 || l.foodPerDay < 0;
+    final c = drain ? AppUi.rust : AppUi.sage;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: c.withValues(alpha: 0.10),
+        border: Border.all(color: c.withValues(alpha: 0.35)),
+      ),
+      child: Text(label,
+          style: AppUi.label.copyWith(
+              fontSize: 7.5, letterSpacing: 0.4, color: c)),
     );
   }
 
@@ -970,6 +1087,29 @@ Color branchColor(LawBranch b) => switch (b) {
       LawBranch.dergah => AppUi.info,
     };
 
+/// Bir fermanın GÜNLÜK idamesi, okunur tek satır — yoksa null.
+/// "her gün" bilerek yazılı: tek seferlik bedelle karışmasın.
+String? upkeepLabel(LawDef l) {
+  final parts = <String>[];
+  if (l.goldPerDay != 0) {
+    parts.add('${l.goldPerDay > 0 ? '+' : ''}${l.goldPerDay} akçe');
+  }
+  if (l.foodPerDay != 0) {
+    parts.add('${l.foodPerDay > 0 ? '+' : ''}${l.foodPerDay} kile');
+  }
+  return parts.isEmpty ? null : '${parts.join(' · ')}/gün';
+}
+
+/// Mühürlü fermanların TOPLAM günlük idamesi — defterin altında duran hesap.
+String? totalUpkeepLabel(Set<String> sealed) {
+  final (gold, food) = LawBook.dailyUpkeep(sealed);
+  if (gold == 0 && food == 0) return null;
+  final parts = <String>[];
+  if (gold != 0) parts.add('${gold > 0 ? '+' : ''}$gold akçe');
+  if (food != 0) parts.add('${food > 0 ? '+' : ''}$food kile');
+  return '${parts.join(' · ')} / gün';
+}
+
 // ─── MÜHÜR RİTÜELİ (meclis) ─────────────────────────────────────────────────
 
 class LawSealRitual extends StatefulWidget {
@@ -1055,6 +1195,10 @@ class _LawSealRitualState extends State<LawSealRitual>
                           _kicker(),
                           const SizedBox(height: 10),
                           _effectLine(),
+                          // GÜNLÜK İDAME — kararın verildiği yerde dursun.
+                          // Tek seferlik bedel `_council`/özet içinde geçiyor;
+                          // bu satır "her sabah" olanı söyler.
+                          _upkeepLine(),
                           // NE YAPAR'ın hemen altında NEREYE GÖTÜRÜR: mühür
                           // basmadan önce oyuncu ibrenin nereye kayacağını
                           // görür (kimlik değişecekse eski → yeni).
@@ -1125,6 +1269,31 @@ class _LawSealRitualState extends State<LawSealRitual>
                   fontSize: 11.5, height: 1.35, color: AppUi.textMid)),
         ),
       ],
+    );
+  }
+
+  /// HER SABAH NE OLUR — mühürlü kaldığı sürece keseden/ambardan akan.
+  /// Yoksa hiç yer kaplamaz.
+  Widget _upkeepLine() {
+    final label = upkeepLabel(law);
+    if (label == null) return const SizedBox.shrink();
+    final drain = law.goldPerDay < 0 || law.foodPerDay < 0;
+    final c = drain ? AppUi.rust : AppUi.sage;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(drain ? Icons.trending_down : Icons.trending_up,
+              size: 13, color: c),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text('Günlük idame: $label',
+                style: AppUi.body.copyWith(
+                    fontSize: 11.5, height: 1.35, color: c)),
+          ),
+        ],
+      ),
     );
   }
 

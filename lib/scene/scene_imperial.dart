@@ -34,7 +34,9 @@ extension _SceneImperial on _VillageSceneState {
     }
     if (_imperialDemand != null) return; // güvenlik (parley dışında olmamalı)
     if (!_hasFire || _villagers.length < _kMinPop) return;
-    final prosp = _prosperity();
+    // Rejim köyün GÖRÜNÜRLÜĞÜNÜ büker: mülkçü köy iştah kabartır, ortakçı köy
+    // gözden ırak kalır (bkz. scene_regime._imperialAttentionMul).
+    final prosp = _prosperity() * _imperialAttentionMul;
     if (prosp < _kProsperityGate) {
       // Fakir/küçük köy — gözden uzak. Sayaç yavaş işler, baskı yok.
       _imperialTimer -= dt * 0.3;
@@ -476,6 +478,13 @@ extension _SceneImperial on _VillageSceneState {
     }
     _imperialFavor = (_imperialFavor + 0.05).clamp(0.0, 1.0);
     _feelVillage(NpcEmotion.grief, 4, -0.04);
+    // İç politik dalga + huzursuzluk: tam ödeme köyün sabrını yer, kesenin/
+    // harmanın/ocağın sahibi zümre daha çok hisseder.
+    _imperialInternalToll(d, d.isConscript ? 0.7 : 0.55);
+    // Hür rejim: meclis pazarlık/direniş isterken sen ödediysen meşruiyet bedeli.
+    if (_defiesCouncil(ImperialVerdict.comply)) {
+      _payCouncilOverride(violent: false);
+    }
     _chronicle('Öşür ödendi: ${d.label}. Komutan satırın yanına bir çentik attı.',
         icon: '⚔️');
     _showNotification('⚔️ ${Voice.pick(const [
@@ -493,6 +502,10 @@ extension _SceneImperial on _VillageSceneState {
     if (_stockpile.gold < cost) return;
     _stockpile.gold -= cost;
     _imperialFavor = (_imperialFavor + 0.03).clamp(0.0, 1.0);
+    _imperialInternalToll(d, 0.4); // fidye hafif fatura (evlat kaldı)
+    if (_defiesCouncil(ImperialVerdict.comply)) {
+      _payCouncilOverride(violent: false);
+    }
     _chronicle('Bir gencin yerine kese verildi ($cost★); çocuk ocağında kaldı.',
         icon: '★');
     _showNotification('★ ${Voice.pick([
@@ -505,12 +518,18 @@ extension _SceneImperial on _VillageSceneState {
   void _imperialHaggle(double frac) {
     final d = _imperialDemand;
     if (d == null || d.isConscript) return;
-    // Eşik itibara bağlı: itibar yüksekse düşük teklif bile tutar.
-    final threshold = 0.85 - _imperialFavor * 0.45; // favor 1→0.40, 0→0.85
+    // Eşik itibara + REJİME bağlı: tüccar köy daha ucuza anlaşır (haggleEase).
+    final threshold =
+        (0.85 - _imperialFavor * 0.45 - _imperialPosture.haggleEase)
+            .clamp(0.0, 1.0);
     if (frac >= threshold) {
       final pay = (d.amount * frac).round();
       _spendResource(d.kind, pay);
       _imperialFavor = (_imperialFavor + 0.04).clamp(0.0, 1.0);
+      _imperialInternalToll(d, 0.35 * frac); // pazarlık: hafifletilmiş fatura
+      if (_defiesCouncil(ImperialVerdict.haggle)) {
+        _payCouncilOverride(violent: false);
+      }
       _chronicle('Komutan rakamı çizip $pay yazdı; köy o kadarını ödedi.',
           icon: '🤝');
       _showNotification('🤝 ${Voice.pick([
@@ -522,6 +541,7 @@ extension _SceneImperial on _VillageSceneState {
       _spendResource(d.kind, d.amount);
       _imperialFavor = (_imperialFavor - 0.12).clamp(0.0, 1.0);
       _feelVillage(NpcEmotion.fear, 6, -0.06);
+      _imperialInternalToll(d, 0.7); // ağır fatura: hem ödedi hem küçük düştü
       _chronicle(
           'Teklif komutanı güldürmedi. Rakam olduğu gibi tahsil edildi.',
           icon: '⚔️');
@@ -548,11 +568,16 @@ extension _SceneImperial on _VillageSceneState {
   double _resistChance() {
     final guards = _guardCount();
     final pop = _villagers.length;
-    if (guards < 1 && pop < 14) return 0.0; // savunacak güç yok
+    // Militan rejim (Mühürlü El/Demir Sofra) direniş elini güçlendirir; tüccar
+    // köy zayıflatır (bkz. scene_regime._imperialPosture.resistBonus).
+    // İMAN da eklenir: inancı için direnen köy, canı için direnenden farklıdır.
+    final regimeBonus = _imperialPosture.resistBonus + _faithEffect.resistBonus;
+    if (guards < 1 && pop < 14 && regimeBonus <= 0) return 0.0; // güç yok
     final base = 0.12 +
         guards * 0.20 +
         (pop - 10).clamp(0, 20) * 0.015 +
-        (_imperialFavor - 0.5) * 0.10; // dostluk pazarlık gücü de verir
+        (_imperialFavor - 0.5) * 0.10 + // dostluk pazarlık gücü de verir
+        regimeBonus;
     return base.clamp(0.0, 0.85);
   }
 
@@ -565,6 +590,11 @@ extension _SceneImperial on _VillageSceneState {
     // Sonuç ne olursa olsun eşikte kan/gurur kaldı — bir daha geldiklerinde
     // usul bozulmuş olur, o dönüş sahnelenir (bkz. _startImperialParley).
     _impGrudge = true;
+    // Hür rejim: meclis ödeme/pazarlık isterken sen köyü kumara sürdüysen
+    // (meclis direnmek istemiyordu) meşruiyet bedeli — sonuç ne olursa olsun.
+    if (_defiesCouncil(ImperialVerdict.resist)) {
+      _payCouncilOverride(violent: false);
+    }
     if (_rng.nextDouble() < chance) {
       // BAŞARI — heyet kovuldu. Ölüm yok; köy gururla doğrulur. İtibar düşer
       // (imparatorluk aşağılandı) ama bir muhafız yara alabilir (bedelsiz değil).
@@ -573,6 +603,10 @@ extension _SceneImperial on _VillageSceneState {
       pushPolicyMorale(0.08, 4.0);
       _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.06, swayGain: 0.05);
       _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.04, swayGain: 0.03);
+      // Başarılı direniş huzursuzluğu YATIŞTIRIR: köy dışa karşı kenetlendi,
+      // içerideki homurtu bir süre unutuldu (gurur = meşruiyet).
+      _unrest = (_unrest - 0.14).clamp(0.0, 1.0);
+      _unrestStirShown = false;
       // Bir muhafız yaralanabilir — direniş bedavaya gelmez.
       final guards = _villagers
           .where((v) => !v.isDying && v.type == VillagerType.guard)
@@ -612,6 +646,7 @@ extension _SceneImperial on _VillageSceneState {
       _imperialFavor = (_imperialFavor - 0.25).clamp(0.0, 1.0);
       _feelVillage(NpcEmotion.fear, 16, -0.22);
       pushPolicyMorale(-0.15, 6.0);
+      _imperialInternalToll(d, 1.0, raid: true); // ezilen direniş: huzursuzluk sıçrar
       _chronicle(
           'Direniş eşikte kırıldı. $killed köylü yerde kaldı, ambar boşaltıldı.',
           icon: '⚔️', milestone: true);
@@ -642,6 +677,10 @@ extension _SceneImperial on _VillageSceneState {
     _imperialFavor = (_imperialFavor - 0.25).clamp(0.0, 1.0);
     _feelVillage(NpcEmotion.fear, 16, -0.22);
     pushPolicyMorale(-0.15, 6.0);
+    _imperialInternalToll(d, 1.0, raid: true); // yağma: huzursuzluk sıçrar
+    // Hür rejim: meclis hangi duruşu önermiş olursa olsun, "reddet" (bilinçli
+    // kıyım) meclisin önerisi değildir → her zaman en ağır meşruiyet çelişkisi.
+    if (_imperialCouncilVerdict != null) _payCouncilOverride(violent: true);
     AudioManager.instance.playSfx(Sfx.thunderClap); // reddetme gümbürtüsü
     _chronicle(
         'Köy ödemedi. Komutan defteri kapattı ve $killed kişiyi bedel olarak aldı.',
@@ -662,6 +701,9 @@ extension _SceneImperial on _VillageSceneState {
       c.parents.remove(v);
     }
     _villagers.remove(v);
+    // Devşirilen köylü `startDying`/`startLeaving`'den geçmez → merkezî
+    // temizleme turuna hiç düşmez; referansları burada elle koparılmalı.
+    _forgetVillager(v);
     _feelVillage(NpcEmotion.grief, 8, -0.08);
     // Adın eki elle yapıştırılmaz: {ad-i}/{ad-in} ünlü uyumunu Voice çözer.
     _chronicle(
@@ -708,37 +750,12 @@ extension _SceneImperial on _VillageSceneState {
     _setMarchDir(_impExitCol - _impAnchorCol, _impExitRow - _impAnchorRow);
   }
 
-  /// Zümre nabzı tabelası için İmparatorluk özeti — köyün İÇ zümrelerinin yanına
-  /// eklenen DIŞ güç madalyonunu besler (bkz. [EstateBanner]). Köy iştah çekecek
-  /// kadar zengin/kalabalık değilse heyet "uykuda" (watching=false); öyleyse
-  /// sayaç tükendikçe ziyaretin yakınlığı (imminence) dolar.
-  ImperialSnapshot _imperialSnapshot() {
-    final visiting = _imperialPhase != ImperialVisitPhase.idle;
-    final watching = _hasFire &&
-        _villagers.length >= _kMinPop &&
-        _prosperity() >= _kProsperityGate;
-    // Yakınlık: ziyaret sürerken dolu; yoksa sayaç ne kadar tükendi (≈8 gün ref).
-    const refDays = 8.0;
-    final days = _imperialTimer / kGameDaySeconds;
-    final imminence = visiting
-        ? 1.0
-        : (watching ? (1.0 - days / refDays).clamp(0.0, 1.0) : 0.0);
-    return ImperialSnapshot(
-      favor: _imperialFavor,
-      watching: watching || visiting,
-      imminence: imminence,
-      // Kızıl alarm: heyet yaklaşırken, yağma dalışında veya talep masada.
-      active: _imperialPhase == ImperialVisitPhase.approaching ||
-          _imperialPhase == ImperialVisitPhase.raiding ||
-          _imperialDemand != null,
-    );
-  }
-
   /// Pazarlık modal'ı — build Stack'ten çağrılır (_imperialDemand != null iken).
   Widget buildImperialModal() {
     final d = _imperialDemand!;
     final ransom = _imperialRansomCost();
     final canFull = d.isConscript ? true : _resourceOf(d.kind) >= d.amount;
+    final verdict = _imperialCouncilVerdict;
     return ImperialModal(
       demand: d,
       favor: _imperialFavor,
@@ -746,6 +763,14 @@ extension _SceneImperial on _VillageSceneState {
       canAcceptFull: canFull,
       canRansom: _stockpile.gold >= ransom,
       resistChance: _resistChance(),
+      // REJİM: köyün dış-güç duruşu + hür rejimde meclisin önerisi. Meclis
+      // öneriyse, dışına çıkan seçenek "meşruiyet bedeli" etiketiyle işaretlenir.
+      haggleEase: _imperialPosture.haggleEase,
+      postureNote: _imperialPosture.note,
+      councilVerdict: verdict,
+      councilLine: verdict == null
+          ? ''
+          : Regime.verdictLine(verdict, conscript: d.isConscript),
       onAccept: _imperialAccept,
       onRefuse: _imperialRefuse,
       onRansom: _imperialRansom,

@@ -9,7 +9,21 @@
 /// miner/fisher/shepherd/farmer'da baz meslek eşleşmesi tercih edilir. Böylece
 /// yeni VillagerType eklemenin 9-yer checklist'i tetiklenmez ve panelde çift
 /// kimlik okunur: "Çiftçi — şu an ambar inşa ediyor".
-enum JobRole { none, builder, farmer, miner, fisher, florist, shepherd, woodcutter }
+enum JobRole {
+  none,
+  builder,
+  farmer,
+  miner,
+  fisher,
+  florist,
+  shepherd,
+  woodcutter,
+  /// Böğürtlen çalılarını toplar → ham yiyecek. Bina istemez: ilk günden
+  /// yapılabilen tek üretim işi, kuruluş kademesinin omurgası.
+  forager,
+  /// Ocak başında ham yiyeceği pişirir → doyuran yiyecek. Ateş yeri ister.
+  cook,
+}
 
 extension JobRoleLabel on JobRole {
   /// Aktif işin oyuncu-yüzü etiketi (panel/hover). none = boş.
@@ -22,6 +36,22 @@ extension JobRoleLabel on JobRole {
         JobRole.florist   => 'Çiçekçi',
         JobRole.shepherd  => 'Çoban',
         JobRole.woodcutter => 'Oduncu',
+        JobRole.forager   => 'Toplayıcı',
+        JobRole.cook      => 'Aşçı',
+      };
+
+  /// Panel/künye ikonu — elle atama yüzeyinde rolü bir bakışta okutur.
+  String get icon => switch (this) {
+        JobRole.none      => '🚫',
+        JobRole.builder   => '🔨',
+        JobRole.farmer    => '🌾',
+        JobRole.miner     => '⛏️',
+        JobRole.fisher    => '🎣',
+        JobRole.florist   => '🌷',
+        JobRole.shepherd  => '🐄',
+        JobRole.woodcutter => '🪓',
+        JobRole.forager   => '🧺',
+        JobRole.cook      => '🍲',
       };
 }
 

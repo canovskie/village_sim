@@ -15,12 +15,22 @@ class EventBanner extends StatelessWidget {
   final double duration;
   final VoidCallback onClose;
 
+  /// Olayın dünyadaki NPC sahnesinin kısa adı ("Kova zinciri"). null ise sahne
+  /// yok/bitti → "İzle" düğmesi hiç çizilmez. Oyuncuya olmayan bir şeyi
+  /// vaat etmemek için nullable: sahne kadro bulamazsa düğme de olmaz.
+  final String? watchLabel;
+
+  /// "İzle" — kamerayı sahnenin odağına kaydırır.
+  final VoidCallback? onWatch;
+
   const EventBanner({
     super.key,
     required this.event,
     required this.timeLeft,
     required this.duration,
     required this.onClose,
+    this.watchLabel,
+    this.onWatch,
   });
 
   Color get _accent => switch (event.category) {
@@ -118,6 +128,23 @@ class EventBanner extends StatelessWidget {
               child: Text(event.message,
                   style: AppUi.body.copyWith(height: 1.4)),
             ),
+            // İZLE — olayın dünyadaki NPC sahnesine kamerayı götürür. Banner'ın
+            // en önemli düğmesi: olayı okunan bir metin olmaktan çıkarıp
+            // izlenen bir ana bağlayan tek bağ.
+            if (watchLabel != null && onWatch != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(11, 1, 11, 9),
+                child: AppButton(
+                  label: 'İzle',
+                  sub: watchLabel,
+                  icon: GameIconData.eye,
+                  kind: AppButtonKind.tonal,
+                  tint: _accent,
+                  expand: true,
+                  height: 40,
+                  onTap: onWatch,
+                ),
+              ),
             // Etki kutucukları
             if (deltas.isNotEmpty)
               Padding(
