@@ -228,7 +228,20 @@ class _HouseActionCard extends StatelessWidget {
 /// çerçeve, ayrı gövde): bu bir hüküm değil, rejim değişikliğidir.
 class _MassSeizureCard extends StatelessWidget {
   final HouseActionEntry entry;
-  const _MassSeizureCard({required this.entry});
+
+  /// TAHTA KİPİ (telefon) — kart SABİT [boardHeight] boyunda durur.
+  ///
+  /// Normalde boyu metne bağlı: gerekçe cümlesi dar sütunda üç satıra çıkıyor,
+  /// bedel rozetleri ikinci sıraya sarıyor. Tahtada bu kabul edilemez — sütunun
+  /// geri kalanı (meclis masası) kalan yerden hesaplanıyor ve "kalan yer"
+  /// bilinmiyorsa 640×360'ta 6dp taşıyor. Kipte gerekçe iki, bedeller tek
+  /// satırla sınırlanır ve kart bilinen bir yer kaplar.
+  final bool compact;
+
+  /// Tahtada kartın kapladığı sabit yükseklik.
+  static const boardHeight = 92.0;
+
+  const _MassSeizureCard({required this.entry, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -240,7 +253,10 @@ class _MassSeizureCard extends StatelessWidget {
         onTap: on ? entry.onTap : null,
         behavior: HitTestBehavior.opaque,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          height: compact ? boardHeight : null,
+          padding: compact
+              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
+              : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: on
                 ? AppUi.rust.withValues(alpha: 0.10)
@@ -257,39 +273,27 @@ class _MassSeizureCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(entry.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: AppUi.bodyHi.copyWith(
                             fontSize: 12,
                             letterSpacing: 0.6,
                             color: tint)),
-                    const SizedBox(height: 3),
+                    SizedBox(height: compact ? 2 : 3),
                     Text(entry.detail,
+                        maxLines: compact ? 2 : null,
+                        overflow: compact ? TextOverflow.ellipsis : null,
                         style: AppUi.body
                             .copyWith(fontSize: 10.5, color: AppUi.textLo)),
                     if (entry.effects.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 5,
-                        runSpacing: 4,
-                        children: [
-                          for (final f in entry.effects)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppUi.rust.withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: AppUi.rust.withValues(alpha: 0.3)),
-                              ),
-                              child: Text(f,
-                                  style: AppUi.label.copyWith(
-                                      fontSize: 8.5, color: AppUi.rust)),
-                            ),
-                        ],
-                      ),
+                      SizedBox(height: compact ? 4 : 6),
+                      // Tahtada bedeller TEK satır: sarınca kartın boyu
+                      // hesaplanamaz hâle geliyor (bkz. [compact]).
+                      _effects(single: compact),
                     ],
                   ],
                 ),
@@ -298,6 +302,30 @@ class _MassSeizureCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _effects({required bool single}) {
+    final chips = [
+      for (final f in entry.effects)
+        Container(
+          margin: single ? const EdgeInsets.only(right: 5) : EdgeInsets.zero,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppUi.rust.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: AppUi.rust.withValues(alpha: 0.3)),
+          ),
+          child: Text(f,
+              maxLines: 1,
+              style: AppUi.label.copyWith(fontSize: 8.5, color: AppUi.rust)),
+        ),
+    ];
+    if (!single) {
+      return Wrap(spacing: 5, runSpacing: 4, children: chips);
+    }
+    return ClipRect(
+      child: Row(mainAxisSize: MainAxisSize.min, children: chips),
     );
   }
 }

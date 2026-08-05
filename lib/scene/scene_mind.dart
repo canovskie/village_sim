@@ -238,8 +238,16 @@ extension _SceneMind on _VillageSceneState {
     if (_cycle.rainIntensity > 0.3) cold += 0.4;
     if (v.isSeatedAtFire && _fireBurning) {
       m.satisfy(Drive.chill, 0.45 * dt);
+    } else if (v.isSleeping && _sleepsWarm(v)) {
+      // BARINAĞIN İŞİ BU: duvarlı ev (kendi ocağı var) ya da ateşin dibindeki
+      // çadır uykuda ısıtır. Önceden barınağın üşümeye hiçbir etkisi yoktu —
+      // herkes sabaha aynı üşümüş çıkıyordu, yani "damın altı" bir şey ifade
+      // etmiyordu. Çadır ↔ ocak mesafesinin anlamlı olduğu yer burası.
+      m.satisfy(Drive.chill, 0.22 * dt);
     } else if (cold > 0) {
-      m.pushDrive(Drive.chill, r.perDay(2.2) * cold, dt);
+      // Ocaktan uzak çadırda üşüme daha hızlı birikir (bkz. scene_shelter):
+      // uykuda bile dinmez, doldukça köylüyü gecenin ortasında kaldırır.
+      m.pushDrive(Drive.chill, r.perDay(2.2) * cold * _chillDriveMultiplierOf(v), dt);
     } else {
       m.satisfy(Drive.chill, r.decay * dt);
     }

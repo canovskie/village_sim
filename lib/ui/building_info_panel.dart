@@ -2,18 +2,24 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../buildings/building_entity.dart';
 import '../buildings/building_function.dart';
+import '../buildings/building_lore.dart';
 import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
 import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
+import '../entities/work_site.dart';
 import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
+import '../systems/hearth_warmth.dart';
+import '../systems/winter.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
+import 'work_crew.dart';
+import 'winter_section.dart';
 
 /// Bir binaya tıklanınca açılan yönetim kartı. Modern koyu panel: başlık +
 /// portre, animasyonlu durum çubukları, vektör ikonlu aksiyon butonları.
@@ -21,6 +27,25 @@ import 'mobile_ui.dart';
 class BuildingInfoPanel extends StatelessWidget {
   final BuildingEntity building;
   final List<VillagerEntity> residents;
+
+  /// Bu binanın barındırdığı İŞ YERLERİ — panelin kadro bölümü buradan çizilir.
+  /// Bir bina birden fazla iş doğurabilir (ocak: aşçı + —ambar yoksa—
+  /// dokumacı), o yüzden liste. Boşsa bölüm hiç görünmez (ev, pazar, kuyu…).
+  final List<WorkSite> workSites;
+
+  /// Boş yuvaya el ver — en yakın uygun köylü işe koşulur.
+  final void Function(WorkSite)? onAddHand;
+
+  /// Dolu yuvadan el çek.
+  final void Function(WorkSite, VillagerEntity)? onRemoveHand;
+
+  /// Yuvadaki isme dokunuldu — o köylünün kartına geç.
+  final void Function(VillagerEntity)? onSelectVillager;
+
+  /// Öğreticinin şu an gösterdiği iş yeri kimliği — o yerin ilk boş yuvası
+  /// spot hedefi olarak işaretlenir.
+  final String? guidedSiteId;
+
   final List<AnimalEntity> barnCows;
   final ResourceBundle stockpile;
   final VillageStats stats;
@@ -47,15 +72,43 @@ class BuildingInfoPanel extends StatelessWidget {
 
   final PopulationPlanning? planning;
 
+  /// ÇADIRIN OCAKTAN ALDIĞI SICAKLIK (0..1) — simin okuduğu değerin ta kendisi
+  /// (bkz. hearth_warmth). Yalnız çadırda anlamlı; null = ocak yok/sönük ya da
+  /// bu bina zaten kendi ocağına sahip. [winter] o an kış mı — bedelin ne zaman
+  /// gerçek olduğunu panel de söylesin.
+  final double? hearthWarmth;
+  final bool winter;
+
   /// Divan'ı aç — YÖNETİŞİM (Karar Defteri + hane nabzı) 2026-07-13'te bu
   /// panelden Divan'a taşındı; belediye yönetişimin koltuğu olduğu için burada
   /// yalnızca oraya açılan bir kapı kalır. null = kapı gösterilmez.
   final VoidCallback? onOpenDivan;
 
+  /// KIŞ TABLOSU — yalnız tezgâhın durduğu binada (ambar; ambar yoksa ocak
+  /// başı) ve yalnız sonbahar/kışta dolu gelir. null = bu panelin kışla işi yok.
+  ///
+  /// Kış göstergesi HUD'da sürekli duran bir karttı ve oyunu olduğundan sert
+  /// gösteriyordu (bkz. [WinterSection]); artık köy konuşur, sayı ise dokunanın
+  /// önüne gelir.
+  final WinterReadiness? winterReadiness;
+
+  /// Kışlık giysi kime — köyün tek dağıtım kararı. [onCoatPriority] null ise
+  /// bölüm salt gösterimdir (önizleme/capture).
+  final CoatPriority coatPriority;
+  final ValueChanged<CoatPriority>? onCoatPriority;
+
+  /// Tezgâhta bekleyen, henüz dağıtılmamış kışlık.
+  final int undistributedCoats;
+
   const BuildingInfoPanel({
     super.key,
     required this.building,
     required this.residents,
+    this.workSites = const [],
+    this.onAddHand,
+    this.onRemoveHand,
+    this.onSelectVillager,
+    this.guidedSiteId,
     this.barnCows = const [],
     required this.stockpile,
     required this.stats,
@@ -74,6 +127,12 @@ class BuildingInfoPanel extends StatelessWidget {
     this.festivalGoldCost = 5,
     this.planning,
     this.onOpenDivan,
+    this.hearthWarmth,
+    this.winter = false,
+    this.winterReadiness,
+    this.coatPriority = CoatPriority.frail,
+    this.onCoatPriority,
+    this.undistributedCoats = 0,
   });
 
   BuildingFunction? get _fn => building.fn;
@@ -114,6 +173,12 @@ class BuildingInfoPanel extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ..._vital(_fn),
+                        ..._winterBlock(),
+                        // KADRO — oyuncunun köye dokunduğu yer. Vital'in
+                        // altında, eylem şeridinin ÜSTÜNDE: "bu yapı ne hâlde"
+                        // ile "bunu yıkayım mı" arasındaki asıl soru "burada
+                        // kim çalışıyor".
+                        ..._crewSections(),
                         if (_actions().isNotEmpty) ...[
                           const SizedBox(height: 14),
                           _actionStrip(),
@@ -125,6 +190,11 @@ class BuildingInfoPanel extends StatelessWidget {
                                   color: AppUi.textLo,
                                   fontStyle: FontStyle.italic)),
                         ],
+                        // TATLI NOT — binanın kendi ağzından bir cümle (inşa
+                        // künyesiyle aynı havuz). Tohum binanın KONUMU: aynı
+                        // binaya her bakışta aynı not çıkar (kare kare
+                        // titremez), ama iki ev aynı cümleyi söylemez.
+                        ..._sweetNote(),
                       ],
                     ),
                   ),
@@ -135,6 +205,54 @@ class BuildingInfoPanel extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// KADRO bölümleri — bu binanın doğurduğu her iş için bir yuva şeridi.
+  ///
+  /// Boş liste = burada iş yok (ev, kuyu, pazar). O binalarda bölüm HİÇ
+  /// çizilmez; boş bir "KADRO — 0 el" başlığı, olmayan bir işi varmış gibi
+  /// gösterirdi.
+  List<Widget> _crewSections() {
+    if (workSites.isEmpty) return const [];
+    final out = <Widget>[];
+    for (final site in workSites) {
+      out.add(const SizedBox(height: 14));
+      out.add(
+        WorkCrewSection(
+          site: site,
+          guided: guidedSiteId == site.id,
+          onAddHand: onAddHand == null ? null : () => onAddHand!(site),
+          onRemoveHand: (v) => onRemoveHand?.call(site, v),
+          onSelect: onSelectVillager,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// Binanın tatlı notu — inşa künyesindeki havuzdan (bkz. building_lore),
+  /// konumdan türeyen sabit bir tohumla. Havuzu boş olan bina hiç göstermez.
+  List<Widget> _sweetNote() {
+    final note = sweetNote(building.type, building.col * 31 + building.row * 7);
+    if (note == null) return const [];
+    return [
+      const SizedBox(height: 10),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('—', style: AppUi.body.copyWith(fontSize: 11, color: AppUi.gold)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(note,
+                style: AppUi.body.copyWith(
+                    fontSize: 11.5,
+                    height: 1.3,
+                    color: AppUi.textLo,
+                    fontStyle: FontStyle.italic)),
+          ),
+        ],
+      ),
+    ];
   }
 
   // ─── Başlık ───────────────────────────────────────────────────────────────
@@ -190,6 +308,27 @@ class BuildingInfoPanel extends StatelessWidget {
     final label = _roleLabel(_fn, building.type);
     if (label.isEmpty) return const SizedBox.shrink();
     return AppChip(label: label.toUpperCase(), color: _accent);
+  }
+
+  // ─── Kış ────────────────────────────────────────────────────────────────
+
+  /// Kış bölümü — sahne bu binayı kışın adresi saydıysa (bkz. scene_ui
+  /// `_winterPanelFor`) vitalin altına ince bir ayraçla girer.
+  List<Widget> _winterBlock() {
+    final r = winterReadiness;
+    if (r == null) return const [];
+    return [
+      const SizedBox(height: 14),
+      Container(height: 1, color: AppUi.line),
+      const SizedBox(height: 12),
+      WinterSection(
+        readiness: r,
+        isWinter: winter,
+        priority: coatPriority,
+        onPriority: onCoatPriority ?? (_) {},
+        undistributed: undistributedCoats,
+      ),
+    ];
   }
 
   // ─── Vital ──────────────────────────────────────────────────────────────
@@ -311,10 +450,36 @@ class BuildingInfoPanel extends StatelessWidget {
                 ? AppUi.accentSoft
                 : AppUi.rust,
       ),
+      ..._hearthRow(),
       if (residents.isNotEmpty) ...[
         const SizedBox(height: 12),
         _residentRow(),
       ],
+    ];
+  }
+
+  /// ÇADIR ↔ OCAK — çadırın kendi ocağı olmadığı için kışın ısınmasının tek yolu
+  /// köyün ateşine yakın kurulmuş olmasıdır. Oyuncu bu çadırın hangi tarafta
+  /// kaldığını buradan okur; sim de aynı sayıyı okur (bkz. hearth_warmth).
+  List<Widget> _hearthRow() {
+    final w = hearthWarmth;
+    if (building.type != BuildingType.tent || w == null) return const [];
+    final cold = w < kColdShelterThreshold;
+    final (label, tint) = shelterAtHearth(w)
+        ? ('ocağın dibinde', AppUi.sage)
+        : !cold
+            ? ('sıcak yetişiyor', AppUi.accentSoft)
+            : w > 0
+                ? (winter ? 'uzak — üşütüyor' : 'uzak', AppUi.gold)
+                : (winter ? 'ocaksız — üşütüyor' : 'ocaktan uzak', AppUi.rust);
+    return [
+      const SizedBox(height: 8),
+      AppStatBar(
+        label: 'OCAĞIN SICAĞI',
+        value: w,
+        trailing: label,
+        color: tint,
+      ),
     ];
   }
 
@@ -706,6 +871,7 @@ class BuildingInfoPanel extends StatelessWidget {
         ResourceKind.food => GameIconData.wheat,
         ResourceKind.gold => GameIconData.coin,
         ResourceKind.honey => GameIconData.honey,
+        ResourceKind.wool => GameIconData.wool,
         ResourceKind.reed => GameIconData.reed,
       };
 

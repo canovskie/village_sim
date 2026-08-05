@@ -17,6 +17,7 @@ import 'petition_scene_card.dart';
 /// bekleyen kalır (HUD rozeti durur). [onChoose] kararı uygular.
 class PetitionModal extends StatelessWidget {
   final Petition petition;
+
   /// Karar anındaki köy durumu — bağlam şeridinde gösterilir (oyuncu
   /// moral/nüfus/yiyecek/altını görerek karar versin). null = şerit gizli.
   final ({double morale, int population, int food, int gold})? state;
@@ -30,12 +31,14 @@ class PetitionModal extends StatelessWidget {
   /// Dilekçeyi getiren gerçek köylü — portre + ad + meslek gösterilir. null ise
   /// eski stil glif + zümre adı kullanılır.
   final VillagerEntity? author;
+
   /// Portreye/yazara dokununca — bilgi & aile paneli açılır.
   final VoidCallback? onAuthorTap;
 
   /// Hero künyesi — köyden gelen dilekçe için 'DİLEKÇE', oyuncunun çağırdığı
   /// proaktif meclis oturumu için 'MECLİS'. Aynı pano iki bağlamı taşır.
   final String kicker;
+
   /// Alt ipucu (ambient kapatma) — bağlama göre değişir ("kararı sonraya bırak"
   /// / "meclisi dağıt"). forced iken gösterilmez.
   final String dismissHint;
@@ -66,40 +69,46 @@ class PetitionModal extends StatelessWidget {
   /// VETO satırı — seçeneklerin ALTINDA, bilerek sönük: bu bir şık değil,
   /// şıkları reddetmek. Meşruiyeti olan bir rejimde bunun bir faturası var.
   Widget _vetoRow() => GestureDetector(
-        onTap: onVeto,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(color: AppUi.rust.withValues(alpha: 0.35)),
+    onTap: onVeto,
+    behavior: HitTestBehavior.opaque,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.rust.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '✋  DİLEKÇEYİ REDDET',
+            style: AppUi.label.copyWith(
+              fontSize: 9.5,
+              color: AppUi.rust,
+              letterSpacing: 1.3,
+            ),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('✋  DİLEKÇEYİ REDDET',
-                  style: AppUi.label.copyWith(
-                      fontSize: 9.5, color: AppUi.rust, letterSpacing: 1.3)),
-              if (vetoNote.isNotEmpty) ...[
-                const SizedBox(height: 3),
-                Text(vetoNote,
-                    textAlign: TextAlign.center,
-                    style: AppUi.body
-                        .copyWith(fontSize: 9.5, color: AppUi.textLo)),
-              ],
-            ],
-          ),
-        ),
-      );
+          if (vetoNote.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              vetoNote,
+              textAlign: TextAlign.center,
+              style: AppUi.body.copyWith(fontSize: 9.5, color: AppUi.textLo),
+            ),
+          ],
+        ],
+      ),
+    ),
+  );
 
   /// Dilekçe tonuna göre vurgu rengi — etiket/stakes/aksan renklendirmesi.
   Color get _toneAccent => switch (petition.tone) {
-        PetitionTone.warm => AppUi.sage,
-        PetitionTone.solemn => AppUi.textMid,
-        PetitionTone.ominous => AppUi.rust,
-        PetitionTone.neutral => AppUi.accent,
-      };
+    PetitionTone.warm => AppUi.sage,
+    PetitionTone.solemn => AppUi.textMid,
+    PetitionTone.ominous => AppUi.rust,
+    PetitionTone.neutral => AppUi.accent,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +120,8 @@ class PetitionModal extends StatelessWidget {
           child: GestureDetector(
             onTap: forced ? null : onDismiss,
             child: ColoredBox(
-                color: forced ? const Color(0xF20E0A06) : AppUi.scrim),
+              color: forced ? const Color(0xF20E0A06) : AppUi.scrim,
+            ),
           ),
         ),
         if (useCompactGameUi(context)) _compactBody(context) else _wideBody(),
@@ -128,108 +138,116 @@ class PetitionModal extends StatelessWidget {
   /// karar göremiyordu. Yatay telefonda kıt olan yükseklik, bol olan
   /// genişliktir; pano da o eksene açılır. Kararlar artık daima görünür.
   Widget _compactBody(BuildContext context) {
+    final window = MobileUi.windowSize(context);
     return Positioned.fill(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: MobileUi.left(context),
-          right: MobileUi.right(context),
-          top: MobileUi.top(context),
-          bottom: MobileUi.bottom(context),
-        ),
-        child: GestureDetector(
-          onTap: () {}, // pano içi dokunuş arkadaki dismiss'i tetiklemesin
-          child: AppReveal(
-            child: _GildedFrame(
-              accent: _toneAccent,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // SOL — anlatı: hero + gerilim + gövde + köyün hâli.
-                  Expanded(
-                    flex: 5,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _PetitionHero(
-                            petition: petition,
-                            accent: _toneAccent,
-                            author: author,
-                            onAuthorTap: onAuthorTap,
-                            kicker: kicker,
-                            height: 150,
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(13, 11, 13, 13),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (petition.stakes != null) ...[
-                                  _StakesLine(
+      child: Center(
+        child: SizedBox(
+          width: window.width,
+          height: window.height,
+          child: GestureDetector(
+            onTap: () {}, // pano içi dokunuş arkadaki dismiss'i tetiklemesin
+            child: AppReveal(
+              child: _GildedFrame(
+                accent: _toneAccent,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // SOL — anlatı: hero + gerilim + gövde + köyün hâli.
+                    Expanded(
+                      flex: 5,
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _PetitionHero(
+                              petition: petition,
+                              accent: _toneAccent,
+                              author: author,
+                              onAuthorTap: onAuthorTap,
+                              kicker: kicker,
+                              height: 128,
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (petition.stakes != null) ...[
+                                    _StakesLine(
                                       text: petition.stakes!,
-                                      accent: _toneAccent),
-                                  const SizedBox(height: 9),
-                                ],
-                                Text(
-                                  petition.body,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 4,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppUi.body.copyWith(
+                                      accent: _toneAccent,
+                                    ),
+                                    const SizedBox(height: 9),
+                                  ],
+                                  Text(
+                                    petition.body,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 4,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppUi.body.copyWith(
                                       fontSize: 11,
                                       height: 1.5,
-                                      color: AppUi.textLo),
-                                ),
-                                if (state != null) ...[
-                                  const SizedBox(height: 10),
-                                  _VillageStateStrip(state: state!),
+                                      color: AppUi.textLo,
+                                    ),
+                                  ),
+                                  if (state != null) ...[
+                                    const SizedBox(height: 10),
+                                    _VillageStateStrip(state: state!),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Container(width: 1, color: AppUi.line),
-                  // SAĞ — kararlar: dikey liste, panonun kendi kaydırması.
-                  Expanded(
-                    flex: 4,
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(11, 11, 11, 9),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _OptionStrip(
-                              options: petition.options,
-                              accent: _toneAccent,
-                              onChoose: onChoose,
-                              vertical: true,
+                    Container(width: 1, color: AppUi.line),
+                    // SAĞ — kararlar: dikey liste, panonun kendi kaydırması.
+                    Expanded(
+                      flex: 4,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(10, 9, 10, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _OptionStrip(
+                                options: petition.options,
+                                accent: _toneAccent,
+                                onChoose: onChoose,
+                                vertical: true,
+                              ),
                             ),
-                          ),
-                          if (onVeto != null) ...[
-                            const SizedBox(height: 8),
-                            _vetoRow(),
-                          ],
-                          const SizedBox(height: 7),
-                          forced
-                              ? Text('mühlet doldu — köy yanıtını bekliyor',
-                                  textAlign: TextAlign.center,
-                                  style: AppUi.label.copyWith(
+                            if (onVeto != null) ...[
+                              const SizedBox(height: 8),
+                              _vetoRow(),
+                            ],
+                            const SizedBox(height: 7),
+                            forced
+                                ? Text(
+                                    'mühlet doldu — köy yanıtını bekliyor',
+                                    textAlign: TextAlign.center,
+                                    style: AppUi.label.copyWith(
                                       color: AppUi.rust,
                                       fontSize: 9,
-                                      letterSpacing: 1.0))
-                              : Text(dismissHint,
-                                  textAlign: TextAlign.center,
-                                  style: AppUi.label.copyWith(
-                                      fontSize: 8.5, letterSpacing: 1.0)),
-                        ],
+                                      letterSpacing: 1.0,
+                                    ),
+                                  )
+                                : Text(
+                                    dismissHint,
+                                    textAlign: TextAlign.center,
+                                    style: AppUi.label.copyWith(
+                                      fontSize: 8.5,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -241,94 +259,104 @@ class PetitionModal extends StatelessWidget {
   /// Masaüstü / geniş ekran — klasik dikey pano.
   Widget _wideBody() {
     return Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 516),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              // Modalın içine dokununca arkadaki dismiss tetiklenmesin.
-              child: GestureDetector(
-                onTap: () {},
-                child: AppReveal(
-                  child: _GildedFrame(
-                    accent: _toneAccent,
-                    // Hero illüstrasyon panelin tam genişliğini kaplasın diye
-                    // panelin kendi padding'i sıfır; iç bloklar kendi boşluğunu verir.
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // ── HERO: sinematik illüstrasyon + madalyon portre +
-                        // oyma başlık (Total War ikilem panosu) ──────────────
-                        _PetitionHero(
-                          petition: petition,
-                          accent: _toneAccent,
-                          author: author,
-                          onAuthorTap: onAuthorTap,
-                          kicker: kicker,
-                        ),
-                        // ── Gövde + kararlar bloğu ───────────────────────────
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Stakes = vurucu tek-satır gerilim (varsa başrol).
-                              if (petition.stakes != null) ...[
-                                _StakesLine(
-                                    text: petition.stakes!, accent: _toneAccent),
-                                const SizedBox(height: 10),
-                              ],
-                              // Gövde — ikincil, kısa flavor (metin minimumda).
-                              Text(
-                                petition.body,
-                                textAlign: TextAlign.center,
-                                maxLines: 4,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppUi.body.copyWith(
-                                    fontSize: 11,
-                                    height: 1.5,
-                                    color: AppUi.textLo),
-                              ),
-                              if (state != null) ...[
-                                const SizedBox(height: 12),
-                                _VillageStateStrip(state: state!),
-                              ],
-                              const SizedBox(height: 14),
-                              // Kararlar YATAY kart şeridi — her kart eylemi
-                              // canlandıran 2B sahneyle taçlanır (Reigns/Total
-                              // War kart hissi). 2 seçenekte yan yana sığar,
-                              // 4-5'te yatay kaydırılır.
-                              _OptionStrip(
-                                options: petition.options,
-                                accent: _toneAccent,
-                                onChoose: onChoose,
-                              ),
-                              if (onVeto != null) ...[
-                                const SizedBox(height: 10),
-                                _vetoRow(),
-                              ],
-                              const SizedBox(height: 12),
-                              // Ambient'te ertelenebilir; zorunlu huzurda köy
-                              // yanıt bekler (kapatılamaz) — ipucu yerine uyarı.
-                              forced
-                                  ? Text('mühlet doldu — köy yanıtını bekliyor',
-                                      textAlign: TextAlign.center,
-                                      style: AppUi.label.copyWith(
-                                          color: AppUi.rust,
-                                          fontSize: 9,
-                                          letterSpacing: 1.0))
-                                  : Text(dismissHint,
-                                      style: AppUi.label.copyWith(
-                                          fontSize: 8.5, letterSpacing: 1.0)),
-                            ],
-                          ),
-                        ),
-                      ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 516),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          // Modalın içine dokununca arkadaki dismiss tetiklenmesin.
+          child: GestureDetector(
+            onTap: () {},
+            child: AppReveal(
+              child: _GildedFrame(
+                accent: _toneAccent,
+                // Hero illüstrasyon panelin tam genişliğini kaplasın diye
+                // panelin kendi padding'i sıfır; iç bloklar kendi boşluğunu verir.
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // ── HERO: sinematik illüstrasyon + madalyon portre +
+                    // oyma başlık (Total War ikilem panosu) ──────────────
+                    _PetitionHero(
+                      petition: petition,
+                      accent: _toneAccent,
+                      author: author,
+                      onAuthorTap: onAuthorTap,
+                      kicker: kicker,
                     ),
-                  ),
+                    // ── Gövde + kararlar bloğu ───────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Stakes = vurucu tek-satır gerilim (varsa başrol).
+                          if (petition.stakes != null) ...[
+                            _StakesLine(
+                              text: petition.stakes!,
+                              accent: _toneAccent,
+                            ),
+                            const SizedBox(height: 10),
+                          ],
+                          // Gövde — ikincil, kısa flavor (metin minimumda).
+                          Text(
+                            petition.body,
+                            textAlign: TextAlign.center,
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppUi.body.copyWith(
+                              fontSize: 11,
+                              height: 1.5,
+                              color: AppUi.textLo,
+                            ),
+                          ),
+                          if (state != null) ...[
+                            const SizedBox(height: 12),
+                            _VillageStateStrip(state: state!),
+                          ],
+                          const SizedBox(height: 14),
+                          // Kararlar YATAY kart şeridi — her kart eylemi
+                          // canlandıran 2B sahneyle taçlanır (Reigns/Total
+                          // War kart hissi). 2 seçenekte yan yana sığar,
+                          // 4-5'te yatay kaydırılır.
+                          _OptionStrip(
+                            options: petition.options,
+                            accent: _toneAccent,
+                            onChoose: onChoose,
+                          ),
+                          if (onVeto != null) ...[
+                            const SizedBox(height: 10),
+                            _vetoRow(),
+                          ],
+                          const SizedBox(height: 12),
+                          // Ambient'te ertelenebilir; zorunlu huzurda köy
+                          // yanıt bekler (kapatılamaz) — ipucu yerine uyarı.
+                          forced
+                              ? Text(
+                                  'mühlet doldu — köy yanıtını bekliyor',
+                                  textAlign: TextAlign.center,
+                                  style: AppUi.label.copyWith(
+                                    color: AppUi.rust,
+                                    fontSize: 9,
+                                    letterSpacing: 1.0,
+                                  ),
+                                )
+                              : Text(
+                                  dismissHint,
+                                  style: AppUi.label.copyWith(
+                                    fontSize: 8.5,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
+        ),
+      ),
     );
   }
 }
@@ -354,7 +382,10 @@ class _GildedFrame extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(r),
         // İnce altın metalik kenar (üst parlak → alt sönük → ince çizgi hissi).
-        border: Border.all(color: AppUi.gold.withValues(alpha: 0.32), width: 1.2),
+        border: Border.all(
+          color: AppUi.gold.withValues(alpha: 0.32),
+          width: 1.2,
+        ),
         boxShadow: [
           ...AppUi.softShadow,
           BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 26),
@@ -373,7 +404,9 @@ class _GildedFrame extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(r - 4),
                     border: Border.all(
-                        color: AppUi.gold.withValues(alpha: 0.12), width: 1),
+                      color: AppUi.gold.withValues(alpha: 0.12),
+                      width: 1,
+                    ),
                   ),
                 ),
               ),
@@ -456,10 +489,9 @@ class _PetitionHero extends StatelessWidget {
                     // hero satırını taşırıyordu (RenderFlex overflow). Bu rozet
                     // ellipsis yapar → dar hero'da güvenle sığar.
                     child: _noteChip(
-                        petition.note!,
-                        petition.note!.startsWith('✦')
-                            ? AppUi.gold
-                            : AppUi.rust),
+                      petition.note!,
+                      petition.note!.startsWith('✦') ? AppUi.gold : AppUi.rust,
+                    ),
                   ),
               ],
             ),
@@ -485,16 +517,18 @@ class _PetitionHero extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(petition.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppUi.title.copyWith(
-                            fontSize: 18,
-                            height: 1.08,
-                            shadows: const [
-                              Shadow(color: Color(0xCC000000), blurRadius: 8)
-                            ],
-                          )),
+                      Text(
+                        petition.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.title.copyWith(
+                          fontSize: 18,
+                          height: 1.08,
+                          shadows: const [
+                            Shadow(color: Color(0xCC000000), blurRadius: 8),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 3),
                       if (a != null)
                         GestureDetector(
@@ -504,27 +538,35 @@ class _PetitionHero extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppUi.body.copyWith(
-                                fontSize: 11,
-                                color: accent,
-                                fontWeight: FontWeight.w700),
+                              fontSize: 11,
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         )
                       else
-                        Text(petition.petitioner,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppUi.body
-                                .copyWith(fontSize: 11, color: AppUi.textMid)),
+                        Text(
+                          petition.petitioner,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.body.copyWith(
+                            fontSize: 11,
+                            color: AppUi.textMid,
+                          ),
+                        ),
                       // Yazar hanesi adına konuşur — politik katman hane-bazlı.
                       if (a != null && a.houseLabel.isNotEmpty) ...[
                         const SizedBox(height: 2),
-                        Text('⌂ ${a.houseLabel} adına',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppUi.body.copyWith(
-                                fontSize: 10,
-                                color: AppUi.textMid,
-                                fontStyle: FontStyle.italic)),
+                        Text(
+                          '⌂ ${a.houseLabel} adına',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.body.copyWith(
+                            fontSize: 10,
+                            color: AppUi.textMid,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -538,34 +580,35 @@ class _PetitionHero extends StatelessWidget {
   }
 
   Widget _kicker(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xB3100E0B),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: accent.withValues(alpha: 0.55), width: 1),
-        ),
-        child: Text(text,
-            style: AppUi.label.copyWith(color: accent, fontSize: 9)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xB3100E0B),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: accent.withValues(alpha: 0.55), width: 1),
+    ),
+    child: Text(text, style: AppUi.label.copyWith(color: accent, fontSize: 9)),
+  );
 
   /// Hero not rozeti — AppChip'in kırpılmayan Text'i yerine ellipsis'li sürüm
   /// (uzun bağlam notu dar hero satırını taşırmasın).
   Widget _noteChip(String text, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withValues(alpha: 0.7), width: 1),
-        ),
-        child: Text(text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: AppUi.button.copyWith(
-              fontSize: 9.5,
-              letterSpacing: 1.0,
-              color: AppUi.textHi,
-            )),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.16),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withValues(alpha: 0.7), width: 1),
+    ),
+    child: Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: AppUi.button.copyWith(
+        fontSize: 9.5,
+        letterSpacing: 1.0,
+        color: AppUi.textHi,
+      ),
+    ),
+  );
 }
 
 /// Hero üzerindeki dairesel madalyon — dilekçeyi getiren köylünün portresi ya
@@ -595,7 +638,10 @@ class _Medallion extends StatelessWidget {
         shape: BoxShape.circle,
         color: AppUi.surface0,
         // Çift halka: dış ince altın + iç ton-aksan (oyma madalyon hissi).
-        border: Border.all(color: AppUi.gold.withValues(alpha: 0.55), width: 1.6),
+        border: Border.all(
+          color: AppUi.gold.withValues(alpha: 0.55),
+          width: 1.6,
+        ),
         boxShadow: [
           BoxShadow(color: accent.withValues(alpha: 0.45), blurRadius: 14),
           const BoxShadow(color: Color(0x99000000), blurRadius: 6),
@@ -606,7 +652,10 @@ class _Medallion extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            border: Border.all(color: accent.withValues(alpha: 0.8), width: 1.2),
+            border: Border.all(
+              color: accent.withValues(alpha: 0.8),
+              width: 1.2,
+            ),
           ),
           child: ClipOval(
             child: v != null
@@ -619,8 +668,10 @@ class _Medallion extends StatelessWidget {
                     ),
                   )
                 : Center(
-                    child: Text(glyph ?? '📜',
-                        style: const TextStyle(fontSize: _size * 0.44)),
+                    child: Text(
+                      glyph ?? '📜',
+                      style: const TextStyle(fontSize: _size * 0.44),
+                    ),
                   ),
           ),
         ),
@@ -657,17 +708,33 @@ class _VillageStateStrip extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _cell(emoji: _moraleFace, value: '${(state.morale * 100).round()}%',
-              label: 'moral', color: AppUi.accent),
+          _cell(
+            emoji: _moraleFace,
+            value: '${(state.morale * 100).round()}%',
+            label: 'moral',
+            color: AppUi.accent,
+          ),
           _div(),
-          _cell(icon: GameIconData.people, value: '${state.population}',
-              label: 'nüfus', color: AppUi.textMid),
+          _cell(
+            icon: GameIconData.people,
+            value: '${state.population}',
+            label: 'nüfus',
+            color: AppUi.textMid,
+          ),
           _div(),
-          _cell(icon: GameIconData.wheat, value: '${state.food}',
-              label: 'yiyecek', color: AppUi.sage),
+          _cell(
+            icon: GameIconData.wheat,
+            value: '${state.food}',
+            label: 'yiyecek',
+            color: AppUi.sage,
+          ),
           _div(),
-          _cell(icon: GameIconData.coin, value: '${state.gold}',
-              label: 'altın', color: AppUi.gold),
+          _cell(
+            icon: GameIconData.coin,
+            value: '${state.gold}',
+            label: 'altın',
+            color: AppUi.gold,
+          ),
         ],
       ),
     );
@@ -697,8 +764,10 @@ class _VillageStateStrip extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 2),
-        Text(label,
-            style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 0.8)),
+        Text(
+          label,
+          style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 0.8),
+        ),
       ],
     );
   }
@@ -717,11 +786,13 @@ class _StakesLine extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [
-          accent.withValues(alpha: 0.04),
-          accent.withValues(alpha: 0.16),
-          accent.withValues(alpha: 0.04),
-        ]),
+        gradient: LinearGradient(
+          colors: [
+            accent.withValues(alpha: 0.04),
+            accent.withValues(alpha: 0.16),
+            accent.withValues(alpha: 0.04),
+          ],
+        ),
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
         border: Border.all(color: accent.withValues(alpha: 0.35), width: 1),
       ),
@@ -731,13 +802,16 @@ class _StakesLine extends StatelessWidget {
           GameIcon(GameIconData.scroll, size: 13, color: accent),
           const SizedBox(width: 9),
           Flexible(
-            child: Text(text,
-                textAlign: TextAlign.center,
-                style: AppUi.body.copyWith(
-                    fontSize: 11.5,
-                    height: 1.35,
-                    fontWeight: FontWeight.w700,
-                    color: AppUi.textHi)),
+            child: Text(
+              text,
+              textAlign: TextAlign.center,
+              style: AppUi.body.copyWith(
+                fontSize: 11.5,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: AppUi.textHi,
+              ),
+            ),
           ),
         ],
       ),
@@ -783,11 +857,11 @@ class _OptionStripState extends State<_OptionStrip> {
     final fits = opts.length <= 3;
 
     Widget card(PetitionOption o, {bool dense = false}) => _OptionCard(
-          option: o,
-          accent: widget.accent,
-          dense: dense,
-          onTap: () => widget.onChoose(o),
-        );
+      option: o,
+      accent: widget.accent,
+      dense: dense,
+      onTap: () => widget.onChoose(o),
+    );
 
     if (widget.vertical) {
       return ListView.separated(
@@ -884,7 +958,9 @@ class _OptionCardState extends State<_OptionCard> {
           decoration: BoxDecoration(
             color: _hover
                 ? Color.alphaBlend(
-                    accent.withValues(alpha: 0.12), AppUi.surface2)
+                    accent.withValues(alpha: 0.12),
+                    AppUi.surface2,
+                  )
                 : AppUi.surface1,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
@@ -892,7 +968,12 @@ class _OptionCardState extends State<_OptionCard> {
               width: _hover ? 1.5 : 1,
             ),
             boxShadow: _hover
-                ? [BoxShadow(color: accent.withValues(alpha: 0.28), blurRadius: 12)]
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.28),
+                      blurRadius: 12,
+                    ),
+                  ]
                 : null,
           ),
           child: ClipRRect(
@@ -900,77 +981,87 @@ class _OptionCardState extends State<_OptionCard> {
             child: widget.dense
                 ? _denseBody(o, chips)
                 : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Üst: eylem sahnesi (kartın başrolü).
-                Stack(
-                  children: [
-                    OptionSceneCard(scene: optionSceneFor(o), height: 84),
-                    // Alt okunaklılık zemini (başlık sahneye binmesin).
-                    const Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      height: 34,
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Color(0x00000000), Color(0xCC14171C)],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: 10,
-                      right: 10,
-                      bottom: 7,
-                      child: Text(
-                        o.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.bodyHi.copyWith(
-                          fontSize: 13.5,
-                          shadows: const [
-                            Shadow(color: Color(0xCC000000), blurRadius: 6)
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(11, 8, 11, 11),
-                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        o.detail,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.body.copyWith(
-                            fontSize: 10, height: 1.35, color: AppUi.textLo),
+                      // Üst: eylem sahnesi (kartın başrolü).
+                      Stack(
+                        children: [
+                          OptionSceneCard(scene: optionSceneFor(o), height: 84),
+                          // Alt okunaklılık zemini (başlık sahneye binmesin).
+                          const Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: 34,
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Color(0x00000000),
+                                      Color(0xCC14171C),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 10,
+                            right: 10,
+                            bottom: 7,
+                            child: Text(
+                              o.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppUi.bodyHi.copyWith(
+                                fontSize: 13.5,
+                                shadows: const [
+                                  Shadow(
+                                    color: Color(0xCC000000),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      if (chips.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 5,
-                          runSpacing: 5,
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(11, 8, 11, 11),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            for (final d in chips) _effectTablet(d.$1, d.$2)
+                            Text(
+                              o.detail,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppUi.body.copyWith(
+                                fontSize: 10,
+                                height: 1.35,
+                                color: AppUi.textLo,
+                              ),
+                            ),
+                            if (chips.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 5,
+                                runSpacing: 5,
+                                children: [
+                                  for (final d in chips)
+                                    _effectTablet(d.$1, d.$2),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
-                      ],
+                      ),
                     ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -1008,7 +1099,10 @@ class _OptionCardState extends State<_OptionCard> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppUi.body.copyWith(
-                        fontSize: 9.5, height: 1.3, color: AppUi.textLo),
+                      fontSize: 9.5,
+                      height: 1.3,
+                      color: AppUi.textLo,
+                    ),
                   ),
                   if (chips.isNotEmpty) ...[
                     const SizedBox(height: 6),
@@ -1016,7 +1110,7 @@ class _OptionCardState extends State<_OptionCard> {
                       spacing: 4,
                       runSpacing: 4,
                       children: [
-                        for (final d in chips) _effectTablet(d.$1, d.$2)
+                        for (final d in chips) _effectTablet(d.$1, d.$2),
                       ],
                     ),
                   ],
@@ -1045,8 +1139,7 @@ class _OptionCardState extends State<_OptionCard> {
         children: [
           Text(icon, style: const TextStyle(fontSize: 12.5)),
           const SizedBox(width: 4),
-          Text(label,
-              style: AppUi.number.copyWith(fontSize: 11, color: color)),
+          Text(label, style: AppUi.number.copyWith(fontSize: 11, color: color)),
         ],
       ),
     );
@@ -1084,11 +1177,11 @@ class PetitionSeal extends StatefulWidget {
 class _PetitionSealState extends State<PetitionSeal>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl = AnimationController(
-      vsync: this, duration: _pulseDur())
-    ..repeat(reverse: true);
+    vsync: this,
+    duration: _pulseDur(),
+  )..repeat(reverse: true);
 
-  Duration _pulseDur() =>
-      Duration(milliseconds: widget.urgent ? 620 : 1500);
+  Duration _pulseDur() => Duration(milliseconds: widget.urgent ? 620 : 1500);
 
   @override
   void didUpdateWidget(PetitionSeal old) {
@@ -1109,11 +1202,11 @@ class _PetitionSealState extends State<PetitionSeal>
   }
 
   Color get _toneAccent => switch (widget.tone) {
-        PetitionTone.warm => AppUi.sage,
-        PetitionTone.solemn => AppUi.textMid,
-        PetitionTone.ominous => AppUi.rust,
-        PetitionTone.neutral => AppUi.accent,
-      };
+    PetitionTone.warm => AppUi.sage,
+    PetitionTone.solemn => AppUi.textMid,
+    PetitionTone.ominous => AppUi.rust,
+    PetitionTone.neutral => AppUi.accent,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -1128,7 +1221,8 @@ class _PetitionSealState extends State<PetitionSeal>
           builder: (context, _) {
             final t = _ctrl.value;
             final glow =
-                (widget.urgent ? 0.30 : 0.22) + t * (widget.urgent ? 0.46 : 0.34);
+                (widget.urgent ? 0.30 : 0.22) +
+                t * (widget.urgent ? 0.46 : 0.34);
             final scale = 1.0 + t * (widget.urgent ? 0.06 : 0.04);
             return Transform.scale(
               scale: scale,
@@ -1144,13 +1238,16 @@ class _PetitionSealState extends State<PetitionSeal>
                   ),
                   borderRadius: BorderRadius.circular(AppUi.radius),
                   border: Border.all(
-                      color: AppUi.gold.withValues(alpha: 0.34), width: 1.1),
+                    color: AppUi.gold.withValues(alpha: 0.34),
+                    width: 1.1,
+                  ),
                   boxShadow: [
                     ...AppUi.softShadow,
                     BoxShadow(
-                        color: accent.withValues(alpha: glow),
-                        blurRadius: widget.urgent ? 20 : 15,
-                        spreadRadius: 1),
+                      color: accent.withValues(alpha: glow),
+                      blurRadius: widget.urgent ? 20 : 15,
+                      spreadRadius: 1,
+                    ),
                   ],
                 ),
                 child: Row(
@@ -1166,7 +1263,9 @@ class _PetitionSealState extends State<PetitionSeal>
                           CustomPaint(
                             size: const Size(42, 42),
                             painter: _MuhletRing(
-                                progress: widget.progress, accent: accent),
+                              progress: widget.progress,
+                              accent: accent,
+                            ),
                           ),
                           _SealMedallion(accent: accent),
                         ],
@@ -1177,9 +1276,13 @@ class _PetitionSealState extends State<PetitionSeal>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('DİLEKÇE',
-                            style: AppUi.title.copyWith(
-                                fontSize: 14, letterSpacing: 1.6)),
+                        Text(
+                          'DİLEKÇE',
+                          style: AppUi.title.copyWith(
+                            fontSize: 14,
+                            letterSpacing: 1.6,
+                          ),
+                        ),
                         const SizedBox(height: 3),
                         // Durum satırı — nabız atan nokta + terse etiket.
                         Row(
@@ -1193,22 +1296,27 @@ class _PetitionSealState extends State<PetitionSeal>
                                 color: accent,
                                 boxShadow: [
                                   BoxShadow(
-                                      color: accent.withValues(alpha: 0.5 + t * 0.4),
-                                      blurRadius: 6),
+                                    color: accent.withValues(
+                                      alpha: 0.5 + t * 0.4,
+                                    ),
+                                    blurRadius: 6,
+                                  ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 6),
                             Text(
-                                widget.urgent
-                                    ? 'AZ KALDI — yanıt bekliyor'
-                                    : 'köy söz bekliyor',
-                                style: AppUi.label.copyWith(
-                                    color: widget.urgent
-                                        ? AppUi.rust
-                                        : AppUi.textLo,
-                                    fontSize: 8,
-                                    letterSpacing: widget.urgent ? 1.2 : 0.9)),
+                              widget.urgent
+                                  ? 'AZ KALDI — yanıt bekliyor'
+                                  : 'köy söz bekliyor',
+                              style: AppUi.label.copyWith(
+                                color: widget.urgent
+                                    ? AppUi.rust
+                                    : AppUi.textLo,
+                                fontSize: 8,
+                                letterSpacing: widget.urgent ? 1.2 : 0.9,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1238,11 +1346,16 @@ class _SealMedallion extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [
-          Color.alphaBlend(accent.withValues(alpha: 0.22), AppUi.surface0),
-          AppUi.surface0,
-        ]),
-        border: Border.all(color: AppUi.gold.withValues(alpha: 0.6), width: 1.2),
+        gradient: RadialGradient(
+          colors: [
+            Color.alphaBlend(accent.withValues(alpha: 0.22), AppUi.surface0),
+            AppUi.surface0,
+          ],
+        ),
+        border: Border.all(
+          color: AppUi.gold.withValues(alpha: 0.6),
+          width: 1.2,
+        ),
         boxShadow: [
           BoxShadow(color: accent.withValues(alpha: 0.35), blurRadius: 6),
         ],
@@ -1277,37 +1390,44 @@ class _MuhletRing extends CustomPainter {
     final sweep = 6.2831853 * p;
     // Yumuşak glow alt-katmanı.
     canvas.drawArc(
-        rect,
-        start,
-        sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4.0
-          ..strokeCap = StrokeCap.round
-          ..color = accent.withValues(alpha: 0.30)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5));
+      rect,
+      start,
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4.0
+        ..strokeCap = StrokeCap.round
+        ..color = accent.withValues(alpha: 0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+    );
     // Renkli yay.
     canvas.drawArc(
-        rect,
-        start,
-        sweep,
-        false,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2.6
-          ..strokeCap = StrokeCap.round
-          ..color = accent);
+      rect,
+      start,
+      sweep,
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6
+        ..strokeCap = StrokeCap.round
+        ..color = accent,
+    );
     // Yayın ucunda parlayan ibre noktası.
     final a = start + sweep;
     final head = Offset(c.dx + r * cos(a), c.dy + r * sin(a));
-    canvas.drawCircle(head, 2.4, Paint()..color = Color.lerp(accent, Colors.white, 0.5)!);
     canvas.drawCircle(
-        head,
-        4.5,
-        Paint()
-          ..color = accent.withValues(alpha: 0.5)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3));
+      head,
+      2.4,
+      Paint()..color = Color.lerp(accent, Colors.white, 0.5)!,
+    );
+    canvas.drawCircle(
+      head,
+      4.5,
+      Paint()
+        ..color = accent.withValues(alpha: 0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
   }
 
   @override

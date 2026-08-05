@@ -69,6 +69,11 @@ class AnimalEntity {
   /// Cinsiyet — çift bazlı üreme için (aynı ağılda dişi+erkek yetişkin gerek).
   final bool isMale;
 
+  /// BU SONBAHAR KIRKILDI MI (yalnız koyun). Yün yılda bir kez alınır:
+  /// bayrak olmasaydı çoban aynı koyunu döngü boyunca kırkar, yün musluğa
+  /// dönerdi. Mevsim sonbahara dönünce sıfırlanır (bkz. scene_winter).
+  bool shorn = false;
+
   /// Yaş (oyun günü). Zamanla yaşam evresi ilerler; [lifespanDays]'i geçince
   /// hayvan sakince hayata veda eder (chill: kaynak cezası yok).
   double ageDays;

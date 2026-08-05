@@ -27,7 +27,7 @@ pubspec düzenlemesi gerekmez, `flutter pub get` yeter.
 | `rain_light.mp3` | ortam | yağmur |
 | `thunderstorm.mp3` | ortam | fırtına (yağmur > 0.6) |
 | `campfire.mp3` | ortam | köyde yanan ateş varken |
-| `bell_chime.mp3` | efekt | görev tamamlanır / dilekçe açılır / meclis reddeder |
+| `bell_chime.mp3` | efekt | görev tamamlanır / meclis reddeder |
 | `rooster_crow.mp3` | efekt | şafak |
 | `owl.mp3` | efekt | gece aksanı (seyrek) |
 | `birds_singing.mp3` | efekt | gündüz aksanı (seyrek) |
@@ -36,29 +36,71 @@ pubspec düzenlemesi gerekmez, `flutter pub get` yeter.
 | `cow_moo.mp3` / `chicken_cluck.mp3` | efekt | hayvan alımı, kümes |
 | `imperial_march.mp3` | efekt | vergici kolonu yaklaşır |
 
+### İnsan sesleri (2026-08-03)
+
+Köyde bugüne dek hiç insan sesi yoktu: çan, hayvan ve hava vardı, ağız yoktu.
+Hepsi **kelimesiz** — metni `voice.dart` yazıyor, ses ayrıca cümle kurarsa
+ikisi çelişir ve dil eklenince kadro çöpe gider.
+
+| Dosya | Katman | Nerede |
+|---|---|---|
+| `child_laugh_1.mp3` / `child_laugh_2.mp3` | efekt | gündüz seyrek aksan, köyde 1-2 çocuk varken (varyant çifti) |
+| `children_play.mp3` | efekt | aynı aksan, köyde **3+** çocuk varken (kıkırdama yerine oyun uğultusu) |
+| `cough_1.mp3` / `cough_2.mp3` | efekt | hastalık başlar + hasta varken seyrek (`scene_illness`) |
+| `throat_clear.mp3` | efekt | dilekçe sunulur (`_presentPetition`) — çandan devraldı |
+| `seal_stamp.mp3` | efekt | ferman mühürlenir (`scene_law`) — sert ahşap vuruş, 0.42 sn |
+| `funeral_toll.mp3` | efekt | cenaze töreni (`_holdFuneral`) — çan kaydının ilk 2 sn'si + fade |
+| `crowd_applause.mp3` | efekt | düğün alayı (`_reactWedding`) |
+| `build_start.mp3` | efekt | şantiye kurulur, aletler çıkar (`scene_placement`) |
+| `build_done.mp3` | efekt | bina tamamlanır (`scene_jobs`) — kalas yığını iner |
+| `fight_scuffle.mp3` | efekt | yumruklaşma (`scene_conflict`, yalnız brawl) — gövde yere düşer |
+| `birth_joy.mp3` | efekt | bebek doğar (`_spawnBabyFromParents`) — marimba, 2 sn'ye kırpıldı + fade |
+
+**Varyant desteği:** `_sfxFile` artık `Map<Sfx, List<String>>`. Listede birden
+çok dosya varsa her çalışta rastgele biri seçilir ve **aynı varyant üst üste
+gelmez** (ikilikte saf rastgelelik %50 tekrar demek, kulak onu tek ses sanar).
+Yeni varyant eklemek = listeye bir dosya adı yazmak.
+
 ## BEKLENEN (bağlandı, dosya yok)
 
-Uzunluk önerileri kabaca; asıl ölçüt **tekrar duyulduğunda yormaması**.
-Oyunun tonu cozy/ağırbaşlı: vurucu değil, yumuşak ataklı sesler.
+Şu an **boş** — bağlanmış her kancanın dosyası düştü.
 
-| Dosya | Süre | Nerede çalar | Ton |
-|---|---|---|---|
-| `seal_stamp.mp3` | ~1 sn | Kanunname'de ferman mühürlenir (`scene_law._sealLaw`) | Ahşap masaya basılan mühür; tok, tek vuruş. Kararın ağırlığı. |
-| `birth_joy.mp3` | ~2 sn | Bebek doğar (`_spawnBabyFromParents`) | Yumuşak, ılık, küçük. Fanfar DEĞİL. |
-| `funeral_toll.mp3` | ~3 sn | Cenaze töreni başlar (`_holdFuneral`) | Tek, uzak, sönen çan. Ağıt değil. |
-| `wedding_joy.mp3` | ~3 sn | Düğün alayı (`_reactWedding`) | Kısa halk ezgisi kıvamı; def/ney tınısı olabilir. |
-| `fight_scuffle.mp3` | ~1.5 sn | Yumruklaşma (`scene_conflict`, yalnız brawl) | Boğuk itiş kakış; kan/şiddet efekti değil. |
-| `build_done.mp3` | ~1 sn | Bina tamamlanır (`scene_jobs`) | Son çekiç + oturma tınısı. Sık duyulur → alçak. |
-| `ui_tap.mp3` | ~0.15 sn | Her `AppButton` dokunuşu | Çok kısa, çok alçak, tok. En sık duyulan ses; parlak olursa yorar. |
-| `music_menu.mp3` | 1-2 dk döngü | Ana menü (şafak sahnesi) | Sakin, tek enstrüman ağırlıklı, döngüsü belli olmayan. |
-| `music_village.mp3` | 2-4 dk döngü | Oyun sahnesi | Arka planda kalan, melodisi öne çıkmayan; ortam sesini boğmamalı (motor zaten 0.55 tavanla serer). |
+Yeni bir kanca eklerken buraya satır yaz. Uzunluk önerileri kabaca; asıl ölçüt
+**tekrar duyulduğunda yormaması**. Oyunun tonu cozy/ağırbaşlı: vurucu değil,
+yumuşak ataklı sesler.
+
+## Ham kayıttan dosyaya
+
+İndirilen kayıt genelde uzun kuyruklu (marimba'nın son 1.3 sn'si -35 dB altı,
+duyulmuyor ama her doğumda çalınıyor). Kırpma ölçüsü kulak değil ölçüm:
+
+```
+ffmpeg -i ham.wav -af "atrim=0:2.0,asetpts=N/SR/TB,afade=t=out:st=1.6:d=0.4" \
+       -ar 44100 -ac 2 -codec:a libmp3lame -q:a 4 assets/audio/hedef.mp3
+```
+
+Seviye normalize ETME: süitin bütünleşik gürlüğü -11..-19 LUFS bandında
+dağınık, tek dosyayı hizalamak onu komşularından ayırır. Ses fazla/az geliyorsa
+`_sfxGain` tablosundan ayarla — seviye kararı kodda tek yerde dursun.
+
+## İSTENMEDİ (kanca duruyor, dosya aranmayacak)
+
+Kullanıcı kararı (2026-08-03) — kanca kodda kalıyor, sessiz duruyor. Fikir
+değişirse dosyayı bırakmak yeter; yeniden ÖNERME.
+
+| Dosya | Nerede olurdu |
+|---|---|
+| `ui_tap.mp3` | her `AppButton` dokunuşu |
+| `music_menu.mp3` / `music_village.mp3` | menü + oyun müziği |
 
 ## Kanca eklerken
 
 1. `Sfx` (ya da `MusicTrack`) enum'una gir.
-2. `_sfxFile` tablosuna dosya adını yaz.
+2. `_sfxFile` tablosuna dosya adı **listesi** yaz (tek dosya da liste).
 3. `_sfxGain` tablosuna taban seviye ver (sık duyulan ses = alçak).
 4. Bu tabloya bir satır ekle.
 
-Aynı sesi iki farklı olaya bağlama: `bell_chime` bugün dört ayrı olayı
-karşılıyor ve bu, oyunun bütün önemli anlarının aynı duyulmasının sebebi.
+Aynı sesi iki farklı olaya bağlama: `bell_chime` bir ara dört ayrı olayı
+karşılıyordu ve oyunun bütün önemli anları aynı duyuluyordu. Dilekçe
+`throat_clear`'a, düğün `crowd_applause`'a ayrıldı; çanda görev + meclis reddi
+kaldı.

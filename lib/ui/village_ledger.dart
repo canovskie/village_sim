@@ -16,6 +16,7 @@ import '../systems/law_book.dart';
 import '../systems/law_compass.dart';
 import '../systems/regime.dart';
 import 'app_ui.dart';
+import 'ledger_board.dart';
 import 'mobile_ui.dart';
 import 'law_book_panel.dart';
 import 'petition_scene_card.dart';
@@ -23,6 +24,7 @@ import 'villager_roster_view.dart';
 
 part 'ledger_council.dart';
 part 'ledger_house_cards.dart';
+part 'ledger_mobile.dart';
 
 /// KÖY DEFTERİ — köy içi işlerin TEK kapısı.
 ///
@@ -46,11 +48,11 @@ part 'ledger_house_cards.dart';
 
 /// Defterin bölümleri — sol raf sırası bu enum sırasıdır.
 enum LedgerSection {
-  divan('⚖', 'DİVAN', 'gündem ve gerilimler'),
-  kanun('📜', 'KANUNNAME', 'pusula ve hükümler'),
-  nufus('👥', 'NÜFUS', 'köylüler ve haneler'),
-  tuzuk('🎯', 'TÜZÜK', 'kademe ve görevler'),
-  kronik('📖', 'KRONİK', 'köyün hikâyesi');
+  divan('⚖', 'DİVAN', 'gündem ve gerilimler', 'DİVAN'),
+  kanun('📜', 'KANUNNAME', 'pusula ve hükümler', 'KANUN'),
+  nufus('👥', 'NÜFUS', 'köylüler ve haneler', 'NÜFUS'),
+  tuzuk('🎯', 'TÜZÜK', 'kademe ve görevler', 'TÜZÜK'),
+  kronik('📖', 'KRONİK', 'köyün hikâyesi', 'KRONİK');
 
   final String icon;
   final String label;
@@ -58,7 +60,11 @@ enum LedgerSection {
   /// Raf öğesinin altındaki tek satırlık künye — bölümün ne olduğunu söyler.
   final String blurb;
 
-  const LedgerSection(this.icon, this.label, this.blurb);
+  /// Telefonun sol rayı için KISA etiket. Ray 116dp; "KANUNNAME" 11px yazı
+  /// tabanıyla oraya sığmıyor, üç noktaya düşüyordu (bkz. ui/ledger_board.dart).
+  final String short;
+
+  const LedgerSection(this.icon, this.label, this.blurb, this.short);
 }
 
 /// Gündeme düşmüş ya da mayalanan tek bir mesele.
@@ -162,6 +168,12 @@ class VillageLedger extends StatelessWidget {
   /// Köyün kaydığı kimlik adı.
   final String identity;
 
+  /// KÖYÜN ADI — defterin künyesinde durur ("PINARBAŞI DEFTERİ"). Oyuncunun
+  /// kuruluşta verdiği ad oyun içinde hiçbir yüzeyde görünmüyordu; defter köy
+  /// içi işlerin tek kapısı olduğu için adın evi burasıdır. Boş ya da
+  /// varsayılan ("Köy") ise jenerik künyeye düşer.
+  final String village;
+
   /// Kimlik mekanik bonusu özeti (varsa).
   final String? identityBonus;
 
@@ -198,6 +210,7 @@ class VillageLedger extends StatelessWidget {
 
   /// Kararların kalıcı izleri (hafıza bayrakları → okunur rozet).
   final List<DivanFact> marks;
+
   /// Köyün bildiği zanaatlar — "köyün eli" (kademeli gelişmenin görünür yüzü).
   final List<DivanFact> crafts;
 
@@ -277,6 +290,7 @@ class VillageLedger extends StatelessWidget {
     super.key,
     this.seed = 0,
     required this.identity,
+    this.village = '',
     this.identityBonus,
     required this.morale,
     required this.population,
@@ -320,17 +334,21 @@ class VillageLedger extends StatelessWidget {
   });
 
   static Color toneColor(PetitionTone t) => switch (t) {
-        PetitionTone.warm => AppUi.sage,
-        PetitionTone.solemn => AppUi.info,
-        PetitionTone.ominous => AppUi.rust,
-        PetitionTone.neutral => AppUi.accent,
-      };
+    PetitionTone.warm => AppUi.sage,
+    PetitionTone.solemn => AppUi.info,
+    PetitionTone.ominous => AppUi.rust,
+    PetitionTone.neutral => AppUi.accent,
+  };
 
   /// Moralin sürekli renge çevrimi (estate_banner moodTone ile aynı dil).
   static Color moodTone(double m) {
-    const ember = Color(0xFFE8934A); // mood sıcaklık kodu, UI accent'ten bağımsız
+    const ember = Color(
+      0xFFE8934A,
+    ); // mood sıcaklık kodu, UI accent'ten bağımsız
     const gold = Color(0xFFD9C088);
-    if (m < 0.32) return Color.lerp(AppUi.rust, ember, (m / 0.32).clamp(0.0, 1.0))!;
+    if (m < 0.32) {
+      return Color.lerp(AppUi.rust, ember, (m / 0.32).clamp(0.0, 1.0))!;
+    }
     if (m < 0.50) {
       return Color.lerp(ember, gold, ((m - 0.32) / 0.18).clamp(0.0, 1.0))!;
     }
@@ -345,8 +363,8 @@ class VillageLedger extends StatelessWidget {
   PetitionTone get _heroTone => morale >= 0.6
       ? PetitionTone.warm
       : morale >= 0.4
-          ? PetitionTone.neutral
-          : PetitionTone.ominous;
+      ? PetitionTone.neutral
+      : PetitionTone.ominous;
 
   /// Köyün hâli — kademe başına küçük bir havuz, güne göre bir varyant. Sıfat
   /// yığmak yerine köyün o gün NEYE benzediğini söyler (ses, koku, gövde).
@@ -397,11 +415,12 @@ class VillageLedger extends StatelessWidget {
     // demekti — defterin dikey bütçesi zaten kritik (hero + raf + şerit üst
     // üste binince listeye tek satır kalıyordu). Kenar ızgarasının gutter'ı
     // dışında her pikseli al.
+    final mobileWindow = compact ? MobileUi.windowSize(context) : null;
     final w = compact
-        ? size.width - 2 * MobileUi.gutter
+        ? mobileWindow!.width
         : math.min(size.width * 0.95, 1040.0);
     final h = compact
-        ? size.height - 2 * MobileUi.gutter
+        ? mobileWindow!.height
         : math.min(size.height * 0.93, 760.0);
     return Stack(
       children: [
@@ -438,24 +457,39 @@ class VillageLedger extends StatelessWidget {
                 height: h,
                 child: _GildedFrame(
                   accent: AppUi.accent,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _hero(context),
-                      Expanded(
-                        child: _LedgerShell(
+                  // Politika bağlanmamışsa Kanunname bölümü yok.
+                  child: compact
+                      // TELEFON: hero bandı YOK. Künye rayın tepesine taşındı;
+                      // gezinme dikeye döndü (bkz. ui/ledger_board.dart). Böylece
+                      // 360dp'lik pencerede kroma yalnız kimlik satırı kadar
+                      // yükseklik yer — kalan her piksel içeriğe gider.
+                      ? _LedgerBoardShell(
                           initial: initialSection,
                           badges: badges,
-                          // Politika bağlanmamışsa Kanunname bölümü yok.
                           hidden: {
                             if (onOpenLaw == null) LedgerSection.kanun,
                           },
-                          strip: _villageStrip(),
-                          bodyFor: _bodyFor,
+                          identityHeader: mobileIdentity(),
+                          boardFor: mobileBoardFor,
+                          onClose: onClose,
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _hero(context),
+                            Expanded(
+                              child: _LedgerShell(
+                                initial: initialSection,
+                                badges: badges,
+                                hidden: {
+                                  if (onOpenLaw == null) LedgerSection.kanun,
+                                },
+                                strip: _villageStrip(),
+                                bodyFor: _bodyFor,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
@@ -468,69 +502,72 @@ class VillageLedger extends StatelessWidget {
   /// Bölüm gövdesi. Liste taşıyan bölümler (NÜFUS) kendi scroll'unu yürütür ve
   /// alanı doldurur; diğerleri tek bir dikey scroll içinde akar.
   Widget _bodyFor(LedgerSection s) => switch (s) {
-        LedgerSection.divan => _scrollBody(_meclisTab()),
-        LedgerSection.kanun => _scrollBody(_kararTab()),
-        LedgerSection.nufus => VillagerRosterView(
-            rows: rosterRows,
-            houses: houses,
-            onSelect: onSelectVillager,
-          ),
-        LedgerSection.tuzuk => _scrollBody(_tuzukTab()),
-        LedgerSection.kronik => _scrollBody(_kronikTab()),
-      };
+    LedgerSection.divan => _scrollBody(_meclisTab()),
+    LedgerSection.kanun => _scrollBody(_kararTab()),
+    LedgerSection.nufus => VillagerRosterView(
+      rows: rosterRows,
+      houses: houses,
+      onSelect: onSelectVillager,
+    ),
+    LedgerSection.tuzuk => _scrollBody(_tuzukTab()),
+    LedgerSection.kronik => _scrollBody(_kronikTab()),
+  };
 
   Widget _scrollBody(Widget child) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [child],
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [child],
+    ),
+  );
 
   // ── Bölüm içerikleri ───────────────────────────────────────────────────────
 
   /// GÜNDEM sekmesi — köyün senden ne istediği + zümre gerilimleri.
   Widget _meclisTab() {
-    return Builder(builder: (context) {
-      // Meclis masası — hanelerin gerçek reisleri, yuvarlak masada karşıda.
-      final council = <Widget>[
-        if (seats.isNotEmpty) ...[
-          const AppSectionLabel('MECLİS HALKASI'),
-          const SizedBox(height: 6),
-          CouncilTable(
+    return Builder(
+      builder: (context) {
+        // Meclis masası — hanelerin gerçek reisleri, yuvarlak masada karşıda.
+        final council = <Widget>[
+          if (seats.isNotEmpty) ...[
+            const AppSectionLabel('MECLİS HALKASI'),
+            const SizedBox(height: 6),
+            CouncilTable(
               seats: seats,
               actionsFor: houseActionsFor,
-              initiallySelected: openHouseCard),
-          if (massSeizure != null) ...[
-            const SizedBox(height: 10),
-            _MassSeizureCard(entry: massSeizure!),
+              initiallySelected: openHouseCard,
+            ),
+            if (massSeizure != null) ...[
+              const SizedBox(height: 10),
+              _MassSeizureCard(entry: massSeizure!),
+            ],
+            const SizedBox(height: 16),
           ],
+        ];
+        final agenda = <Widget>[
+          const AppSectionLabel('GÜNDEM'),
+          _agendaSection(),
           const SizedBox(height: 16),
-        ],
-      ];
-      final agenda = <Widget>[
-        const AppSectionLabel('GÜNDEM'),
-        _agendaSection(),
-        const SizedBox(height: 16),
-        const AppSectionLabel('GERİLİMLER'),
-        _tensions(),
-        if (identityBonus != null) ...[
-          const SizedBox(height: 8),
-          _identityBonusRow(),
-        ],
-      ];
-      // TELEFON YATAY: defterin gövdesine ~300dp kalıyor; masa + künye ilk
-      // ekranı doldurunca Divan açıldığında YANIT BEKLEYEN İŞ görünmüyordu.
-      // Divan'ın işi gündemdir, halka atmosferdir — kısa ekranda sıra değişir.
-      final compact = useCompactGameUi(context);
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: compact
-            ? [...agenda, const SizedBox(height: 16), ...council]
-            : [...council, ...agenda],
-      );
-    });
+          const AppSectionLabel('GERİLİMLER'),
+          _tensions(),
+          if (identityBonus != null) ...[
+            const SizedBox(height: 8),
+            _identityBonusRow(),
+          ],
+        ];
+        // TELEFON YATAY: defterin gövdesine ~300dp kalıyor; masa + künye ilk
+        // ekranı doldurunca Divan açıldığında YANIT BEKLEYEN İŞ görünmüyordu.
+        // Divan'ın işi gündemdir, halka atmosferdir — kısa ekranda sıra değişir.
+        final compact = useCompactGameUi(context);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: compact
+              ? [...agenda, const SizedBox(height: 16), ...council]
+              : [...council, ...agenda],
+        );
+      },
+    );
   }
 
   /// KANUNNAME sekmesi — yasa defteri + kararların köyde bıraktığı kalıcı iz.
@@ -604,9 +641,10 @@ class VillageLedger extends StatelessWidget {
         const SizedBox(height: 8),
         if (quests.isEmpty)
           Text(
-              'Bu kademede iş kalmadı — yeni bir berat çıkar, köy bir üst '
-              'basamağa geçsin.',
-              style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.sage))
+            'Bu kademede iş kalmadı — yeni bir berat çıkar, köy bir üst '
+            'basamağa geçsin.',
+            style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.sage),
+          )
         else
           for (final q in quests) _questRow(q),
         if (active != null) ...[
@@ -616,8 +654,7 @@ class VillageLedger extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppUi.accent.withValues(alpha: 0.10),
               borderRadius: BorderRadius.circular(AppUi.radiusSm),
-              border:
-                  Border.all(color: AppUi.accent.withValues(alpha: 0.38)),
+              border: Border.all(color: AppUi.accent.withValues(alpha: 0.38)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,9 +662,14 @@ class VillageLedger extends StatelessWidget {
                 const Text('👉', style: TextStyle(fontSize: 12)),
                 const SizedBox(width: 9),
                 Expanded(
-                  child: Text(active.quest.hint,
-                      style: AppUi.body.copyWith(
-                          fontSize: 11.5, color: AppUi.textHi, height: 1.45)),
+                  child: Text(
+                    active.quest.hint,
+                    style: AppUi.body.copyWith(
+                      fontSize: 11.5,
+                      color: AppUi.textHi,
+                      height: 1.45,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -656,8 +698,8 @@ class VillageLedger extends StatelessWidget {
     final c = current
         ? AppUi.gold
         : passed
-            ? AppUi.sage
-            : AppUi.textLo;
+        ? AppUi.sage
+        : AppUi.textLo;
     // Kilitli kademede eşiğe ne kadar kaldığı yazılır — ilerleme somut olsun.
     final needPol = (t.minPolicies - enactedPolicies).clamp(0, 99);
     final needQ = (t.minQuests - doneCount).clamp(0, 99);
@@ -665,12 +707,16 @@ class VillageLedger extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(11, 9, 11, 9),
       decoration: BoxDecoration(
         color: current
-            ? Color.alphaBlend(AppUi.gold.withValues(alpha: 0.10), AppUi.surface1)
+            ? Color.alphaBlend(
+                AppUi.gold.withValues(alpha: 0.10),
+                AppUi.surface1,
+              )
             : AppUi.surface0,
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
         border: Border.all(
-            color: current ? AppUi.gold.withValues(alpha: 0.5) : AppUi.line,
-            width: current ? 1.3 : 1),
+          color: current ? AppUi.gold.withValues(alpha: 0.5) : AppUi.line,
+          width: current ? 1.3 : 1,
+        ),
       ),
       child: Row(
         children: [
@@ -684,34 +730,40 @@ class VillageLedger extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(t.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppUi.body.copyWith(
-                        fontSize: 12.5,
-                        color: current ? AppUi.textHi : AppUi.textMid,
-                        fontWeight:
-                            current ? FontWeight.w800 : FontWeight.w600)),
+                Text(
+                  t.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.body.copyWith(
+                    fontSize: 12.5,
+                    color: current ? AppUi.textHi : AppUi.textMid,
+                    fontWeight: current ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
                 if (!passed && !current && (needPol > 0 || needQ > 0)) ...[
                   const SizedBox(height: 2),
                   Text(
-                      [
-                        if (needPol > 0) '$needPol berat',
-                        if (needQ > 0) '$needQ görev',
-                      ].join(' · '),
-                      style: AppUi.body
-                          .copyWith(fontSize: 10, color: AppUi.textLo)),
+                    [
+                      if (needPol > 0) '$needPol berat',
+                      if (needQ > 0) '$needQ görev',
+                    ].join(' · '),
+                    style: AppUi.body.copyWith(
+                      fontSize: 10,
+                      color: AppUi.textLo,
+                    ),
+                  ),
                 ],
               ],
             ),
           ),
           Text(
-              passed
-                  ? '✓'
-                  : current
-                      ? 'ŞİMDİ'
-                      : 'kilitli',
-              style: AppUi.label.copyWith(fontSize: 8.5, color: c)),
+            passed
+                ? '✓'
+                : current
+                ? 'ŞİMDİ'
+                : 'kilitli',
+            style: AppUi.label.copyWith(fontSize: 8.5, color: c),
+          ),
         ],
       ),
     );
@@ -729,15 +781,21 @@ class VillageLedger extends StatelessWidget {
             child: Text(s.quest.icon, style: const TextStyle(fontSize: 12)),
           ),
           Expanded(
-            child: Text(s.quest.label,
-                style: on
-                    ? AppUi.bodyHi.copyWith(fontSize: 12)
-                    : AppUi.body.copyWith(fontSize: 12, color: AppUi.textLo)),
+            child: Text(
+              s.quest.label,
+              style: on
+                  ? AppUi.bodyHi.copyWith(fontSize: 12)
+                  : AppUi.body.copyWith(fontSize: 12, color: AppUi.textLo),
+            ),
           ),
           if (on)
-            Text('SIRADAKİ',
-                style: AppUi.label
-                    .copyWith(fontSize: 7.5, color: AppUi.accentSoft)),
+            Text(
+              'SIRADAKİ',
+              style: AppUi.label.copyWith(
+                fontSize: 7.5,
+                color: AppUi.accentSoft,
+              ),
+            ),
         ],
       ),
     );
@@ -750,21 +808,24 @@ class VillageLedger extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Text(
-            Voice.pick(const [
-              'Defterin bu sayfası boş. Köy henüz anlatılacak bir şey yaşamadı.',
-              'Henüz yazılacak bir şey yok — ilk büyük gün gelmedi.',
-              'Kronik sayfası temiz. Bu da bir başlangıç.',
-            ], seed),
-            style: AppUi.body.copyWith(color: AppUi.textLo)),
+          Voice.pick(const [
+            'Defterin bu sayfası boş. Köy henüz anlatılacak bir şey yaşamadı.',
+            'Henüz yazılacak bir şey yok — ilk büyük gün gelmedi.',
+            'Kronik sayfası temiz. Bu da bir başlangıç.',
+          ], seed),
+          style: AppUi.body.copyWith(color: AppUi.textLo),
+        ),
       );
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppSectionLabel(milestoneCount > 0
-            ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
-            : 'BÜYÜK ANLAR'),
+        AppSectionLabel(
+          milestoneCount > 0
+              ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
+              : 'BÜYÜK ANLAR',
+        ),
         const SizedBox(height: 6),
         for (final e in chronicle.reversed) _chronicleRow(e),
       ],
@@ -788,17 +849,24 @@ class VillageLedger extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (e.day > 0)
-                  Text('${e.day}. Gün',
-                      style: AppUi.label
-                          .copyWith(color: AppUi.textLo, fontSize: 10)),
-                Text(e.text,
-                    style: e.milestone
-                        ? AppUi.body.copyWith(
-                            fontSize: 12.5,
-                            height: 1.4,
-                            fontWeight: FontWeight.w700,
-                            color: AppUi.gold)
-                        : AppUi.body.copyWith(fontSize: 12, height: 1.4)),
+                  Text(
+                    '${e.day}. Gün',
+                    style: AppUi.label.copyWith(
+                      color: AppUi.textLo,
+                      fontSize: 10,
+                    ),
+                  ),
+                Text(
+                  e.text,
+                  style: e.milestone
+                      ? AppUi.body.copyWith(
+                          fontSize: 12.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w700,
+                          color: AppUi.gold,
+                        )
+                      : AppUi.body.copyWith(fontSize: 12, height: 1.4),
+                ),
               ],
             ),
           ),
@@ -849,7 +917,7 @@ class VillageLedger extends StatelessWidget {
               padding: const EdgeInsets.only(left: 12, right: 4),
               child: Row(
                 children: [
-                  _kicker('KÖY DEFTERİ'),
+                  _kicker(_ledgerKicker),
                   const SizedBox(width: 10),
                   Flexible(
                     child: Text(
@@ -860,7 +928,7 @@ class VillageLedger extends StatelessWidget {
                         fontSize: 15,
                         color: AppUi.gold,
                         shadows: const [
-                          Shadow(color: Color(0xCC000000), blurRadius: 8)
+                          Shadow(color: Color(0xCC000000), blurRadius: 8),
                         ],
                       ),
                     ),
@@ -868,9 +936,13 @@ class VillageLedger extends StatelessWidget {
                   const Spacer(),
                   GameIcon(GameIconData.heart, size: 14, color: _moraleTone),
                   const SizedBox(width: 5),
-                  Text('${(morale * 100).round()}%',
-                      style: AppUi.number
-                          .copyWith(fontSize: 13, color: _moraleTone)),
+                  Text(
+                    '${(morale * 100).round()}%',
+                    style: AppUi.number.copyWith(
+                      fontSize: 13,
+                      color: _moraleTone,
+                    ),
+                  ),
                   const SizedBox(width: 4),
                   GestureDetector(
                     onTap: onClose,
@@ -879,8 +951,11 @@ class VillageLedger extends StatelessWidget {
                       width: MobileUi.tap,
                       height: MobileUi.tap,
                       child: Center(
-                        child: GameIcon(GameIconData.close,
-                            size: 17, color: AppUi.textMid),
+                        child: GameIcon(
+                          GameIconData.close,
+                          size: 17,
+                          color: AppUi.textMid,
+                        ),
                       ),
                     ),
                   ),
@@ -937,7 +1012,7 @@ class VillageLedger extends StatelessWidget {
             top: 12,
             child: Row(
               children: [
-                _kicker('KÖY DEFTERİ'),
+                _kicker(_ledgerKicker),
                 const Spacer(),
                 GestureDetector(
                   onTap: onClose,
@@ -955,10 +1030,14 @@ class VillageLedger extends StatelessWidget {
                           color: const Color(0xB3100E0B),
                           shape: BoxShape.circle,
                           border: Border.all(
-                              color: AppUi.gold.withValues(alpha: 0.3)),
+                            color: AppUi.gold.withValues(alpha: 0.3),
+                          ),
                         ),
-                        child: const GameIcon(GameIconData.close,
-                            size: 13, color: AppUi.textMid),
+                        child: const GameIcon(
+                          GameIconData.close,
+                          size: 13,
+                          color: AppUi.textMid,
+                        ),
                       ),
                     ),
                   ),
@@ -981,26 +1060,31 @@ class VillageLedger extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(identity,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppUi.title.copyWith(
-                            fontSize: 19,
-                            color: AppUi.gold,
-                            shadows: const [
-                              Shadow(color: Color(0xCC000000), blurRadius: 8)
-                            ],
-                          )),
+                      Text(
+                        identity,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.title.copyWith(
+                          fontSize: 19,
+                          color: AppUi.gold,
+                          shadows: const [
+                            Shadow(color: Color(0xCC000000), blurRadius: 8),
+                          ],
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text(_moraleWord,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppUi.body.copyWith(
-                              fontSize: 11,
-                              color: AppUi.textMid,
-                              shadows: const [
-                                Shadow(color: Color(0xCC000000), blurRadius: 6)
-                              ])),
+                      Text(
+                        _moraleWord,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.body.copyWith(
+                          fontSize: 11,
+                          color: AppUi.textMid,
+                          shadows: const [
+                            Shadow(color: Color(0xCC000000), blurRadius: 6),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1011,9 +1095,13 @@ class VillageLedger extends StatelessWidget {
                   children: [
                     GameIcon(GameIconData.heart, size: 15, color: _moraleTone),
                     const SizedBox(width: 5),
-                    Text('${(morale * 100).round()}%',
-                        style: AppUi.number
-                            .copyWith(fontSize: 14, color: _moraleTone)),
+                    Text(
+                      '${(morale * 100).round()}%',
+                      style: AppUi.number.copyWith(
+                        fontSize: 14,
+                        color: _moraleTone,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -1024,16 +1112,26 @@ class VillageLedger extends StatelessWidget {
     );
   }
 
+  /// Defterin künyesi — köyün adıyla. Ad yoksa (ya da hiç verilmediyse)
+  /// jenerik "KÖY DEFTERİ" kalır; künye asla boş görünmez.
+  String get _ledgerKicker {
+    final v = village.trim();
+    if (v.isEmpty || v.toLowerCase() == 'köy') return 'KÖY DEFTERİ';
+    return '${upperTr(v)} DEFTERİ';
+  }
+
   Widget _kicker(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-        decoration: BoxDecoration(
-          color: const Color(0xB3100E0B),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
-        ),
-        child: Text(text,
-            style: AppUi.label.copyWith(color: AppUi.accent, fontSize: 9)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+    decoration: BoxDecoration(
+      color: const Color(0xB3100E0B),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
+    ),
+    child: Text(
+      text,
+      style: AppUi.label.copyWith(color: AppUi.accent, fontSize: 9),
+    ),
+  );
 
   /// ⚖ mühür madalyonu — hero'nun alt köşesinde, gilded halka.
   Widget _sealMedallion() {
@@ -1043,11 +1141,19 @@ class VillageLedger extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: RadialGradient(colors: [
-          Color.alphaBlend(AppUi.accent.withValues(alpha: 0.22), AppUi.surface0),
-          AppUi.surface0,
-        ]),
-        border: Border.all(color: AppUi.gold.withValues(alpha: 0.6), width: 1.6),
+        gradient: RadialGradient(
+          colors: [
+            Color.alphaBlend(
+              AppUi.accent.withValues(alpha: 0.22),
+              AppUi.surface0,
+            ),
+            AppUi.surface0,
+          ],
+        ),
+        border: Border.all(
+          color: AppUi.gold.withValues(alpha: 0.6),
+          width: 1.6,
+        ),
         boxShadow: [
           BoxShadow(color: AppUi.accent.withValues(alpha: 0.4), blurRadius: 12),
           const BoxShadow(color: Color(0x99000000), blurRadius: 6),
@@ -1075,8 +1181,12 @@ class VillageLedger extends StatelessWidget {
           // rengini/ağırlığını dayatıyor ve tam da altındaki nüfus KPI şeridi
           // aynı veriyi düzgün ikonla gösterdiği için ekranda iki farklı görsel
           // dil yan yana duruyordu.
-          _stripCell(GameIconData.heart, '${(morale * 100).round()}%', 'moral',
-              _moraleTone),
+          _stripCell(
+            GameIconData.heart,
+            '${(morale * 100).round()}%',
+            'moral',
+            _moraleTone,
+          ),
           _stripDiv(),
           _stripCell(GameIconData.people, '$population', 'nüfus', AppUi.info),
           _stripDiv(),
@@ -1093,11 +1203,15 @@ class VillageLedger extends StatelessWidget {
   Color get _moraleTone => morale >= 0.6
       ? AppUi.sage
       : morale >= 0.4
-          ? AppUi.accentSoft
-          : AppUi.rust;
+      ? AppUi.accentSoft
+      : AppUi.rust;
 
   Widget _stripCell(
-      GameIconData icon, String value, String label, Color color) {
+    GameIconData icon,
+    String value,
+    String label,
+    Color color,
+  ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1110,8 +1224,10 @@ class VillageLedger extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 2),
-        Text(label.toUpperCase(),
-            style: AppUi.label.copyWith(fontSize: 8.5, letterSpacing: 0.8)),
+        Text(
+          label.toUpperCase(),
+          style: AppUi.label.copyWith(fontSize: 8.5, letterSpacing: 0.8),
+        ),
       ],
     );
   }
@@ -1131,12 +1247,13 @@ class VillageLedger extends StatelessWidget {
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
-                      Voice.pick(const [
-                        'Kapıya kimse gelmedi. Köy bugün kendi işine bakıyor.',
-                        'Ne şikâyet var ne dilekçe. Bu da bir hâl.',
-                        'Dilekçe kâğıdı masada, dokunulmadan duruyor.',
-                      ], seed),
-                      style: AppUi.body.copyWith(color: AppUi.textLo)),
+                    Voice.pick(const [
+                      'Kapıya kimse gelmedi. Köy bugün kendi işine bakıyor.',
+                      'Ne şikâyet var ne dilekçe. Bu da bir hâl.',
+                      'Dilekçe kâğıdı masada, dokunulmadan duruyor.',
+                    ], seed),
+                    style: AppUi.body.copyWith(color: AppUi.textLo),
+                  ),
                 ),
               ],
             ),
@@ -1161,63 +1278,73 @@ class VillageLedger extends StatelessWidget {
         child: Stack(
           children: [
             Container(
-        padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
-        decoration: BoxDecoration(
-          color: pending
-              ? Color.alphaBlend(c.withValues(alpha: 0.10), AppUi.surface1)
-              : AppUi.surface0,
-          borderRadius: BorderRadius.circular(AppUi.radiusSm),
-          // UNIFORM kenar ŞART: non-uniform renkli Border + borderRadius Flutter'da
-          // paint assert'i atar ("borderRadius … uniform colors") → panel çizilmez.
-          // Ton rengi bu yüzden ayrı bir sol şerit katmanı olarak çizilir (aşağıda).
-          border: Border.all(color: AppUi.line),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(m.icon, style: const TextStyle(fontSize: 16)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(14, 9, 11, 9),
+              decoration: BoxDecoration(
+                color: pending
+                    ? Color.alphaBlend(
+                        c.withValues(alpha: 0.10),
+                        AppUi.surface1,
+                      )
+                    : AppUi.surface0,
+                borderRadius: BorderRadius.circular(AppUi.radiusSm),
+                // UNIFORM kenar ŞART: non-uniform renkli Border + borderRadius Flutter'da
+                // paint assert'i atar ("borderRadius … uniform colors") → panel çizilmez.
+                // Ton rengi bu yüzden ayrı bir sol şerit katmanı olarak çizilir (aşağıda).
+                border: Border.all(color: AppUi.line),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(m.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppUi.bodyHi.copyWith(
-                                fontSize: 12.5,
-                                color: pending ? AppUi.textHi : AppUi.textMid)),
-                      ),
-                      if (pending) ...[
-                        const SizedBox(width: 7),
-                        _pendingTag(m),
+                  Text(m.icon, style: const TextStyle(fontSize: 16)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                m.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppUi.bodyHi.copyWith(
+                                  fontSize: 12.5,
+                                  color: pending ? AppUi.textHi : AppUi.textMid,
+                                ),
+                              ),
+                            ),
+                            if (pending) ...[
+                              const SizedBox(width: 7),
+                              _pendingTag(m),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          m.sub,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.body.copyWith(
+                            fontSize: 10.5,
+                            color: AppUi.textLo,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // Mayalanma fitili / mühlet — ince bar (ton renginde).
+                        _pressureBar(
+                          pending ? (1.0 - m.graceProgress) : m.pressure,
+                          pending && m.urgent ? AppUi.rust : c,
+                        ),
                       ],
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(m.sub,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppUi.body
-                          .copyWith(fontSize: 10.5, color: AppUi.textLo)),
-                  const SizedBox(height: 6),
-                  // Mayalanma fitili / mühlet — ince bar (ton renginde).
-                  _pressureBar(
-                    pending ? (1.0 - m.graceProgress) : m.pressure,
-                    pending && m.urgent ? AppUi.rust : c,
-                  ),
+                  if (pending) ...[
+                    const SizedBox(width: 8),
+                    GameIcon(GameIconData.chevron, size: 13, color: c),
+                  ],
                 ],
               ),
-            ),
-            if (pending) ...[
-              const SizedBox(width: 8),
-              GameIcon(GameIconData.chevron, size: 13, color: c),
-            ],
-          ],
-        ),
             ),
             // Sol ton şeridi — meselenin duygusal rengi (uniform-border kısıtı
             // yüzünden Border yerine ayrı katman; satırın boyuna uzar).
@@ -1236,7 +1363,6 @@ class VillageLedger extends StatelessWidget {
     );
   }
 
-
   Widget _pendingTag(DivanMatter m) {
     final urgent = m.urgent;
     return Container(
@@ -1245,13 +1371,17 @@ class VillageLedger extends StatelessWidget {
         color: (urgent ? AppUi.rust : AppUi.accent).withValues(alpha: 0.20),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-            color: (urgent ? AppUi.rust : AppUi.accent).withValues(alpha: 0.7)),
+          color: (urgent ? AppUi.rust : AppUi.accent).withValues(alpha: 0.7),
+        ),
       ),
-      child: Text(urgent ? 'AZ KALDI' : 'YANIT BEKLER',
-          style: AppUi.label.copyWith(
-              fontSize: 7.5,
-              letterSpacing: 0.8,
-              color: urgent ? AppUi.rust : AppUi.accentSoft)),
+      child: Text(
+        urgent ? 'AZ KALDI' : 'YANIT BEKLER',
+        style: AppUi.label.copyWith(
+          fontSize: 7.5,
+          letterSpacing: 0.8,
+          color: urgent ? AppUi.rust : AppUi.accentSoft,
+        ),
+      ),
     );
   }
 
@@ -1270,10 +1400,12 @@ class VillageLedger extends StatelessWidget {
             widthFactor: v.clamp(0.04, 1.0),
             child: Container(
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  c.withValues(alpha: 0.7),
-                  Color.lerp(c, Colors.white, 0.25)!,
-                ]),
+                gradient: LinearGradient(
+                  colors: [
+                    c.withValues(alpha: 0.7),
+                    Color.lerp(c, Colors.white, 0.25)!,
+                  ],
+                ),
               ),
             ),
           ),
@@ -1289,12 +1421,13 @@ class VillageLedger extends StatelessWidget {
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
-            Voice.pick(const [
-              'Ortada hane yok, isimler var. Soylar daha kök salmadı.',
-              'Kimse kendi adını bir soyadın arkasına yazdırmadı henüz.',
-              'Köy genç: ne hane var, ne husumet.',
-            ], seed),
-            style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo)),
+          Voice.pick(const [
+            'Ortada hane yok, isimler var. Soylar daha kök salmadı.',
+            'Kimse kendi adını bir soyadın arkasına yazdırmadı henüz.',
+            'Köy genç: ne hane var, ne husumet.',
+          ], seed),
+          style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+        ),
       );
     }
     // Salience sıralı gelir; en fazla 4 açık göster, gerisi özet (sadelik).
@@ -1310,11 +1443,13 @@ class VillageLedger extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: Text(
-                '…ve ${houses.length - shown} hane, seslerini çıkarmadan',
-                style: AppUi.body.copyWith(
-                    fontSize: 10,
-                    color: AppUi.textLo,
-                    fontStyle: FontStyle.italic)),
+              '…ve ${houses.length - shown} hane, seslerini çıkarmadan',
+              style: AppUi.body.copyWith(
+                fontSize: 10,
+                color: AppUi.textLo,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
           ),
         ],
       ],
@@ -1322,8 +1457,14 @@ class VillageLedger extends StatelessWidget {
   }
 
   static const List<Color> _kHousePalette = [
-    Color(0xFF8FB255), Color(0xFFE0954A), Color(0xFF9E86C9), Color(0xFFD8AE56),
-    Color(0xFF6FA9B8), Color(0xFFC57B6B), Color(0xFF8DA0C0), Color(0xFFB0A24E),
+    Color(0xFF8FB255),
+    Color(0xFFE0954A),
+    Color(0xFF9E86C9),
+    Color(0xFFD8AE56),
+    Color(0xFF6FA9B8),
+    Color(0xFFC57B6B),
+    Color(0xFF8DA0C0),
+    Color(0xFFB0A24E),
   ];
 
   static Color _houseColor(String surname) {
@@ -1350,20 +1491,24 @@ class VillageLedger extends StatelessWidget {
           child: Row(
             children: [
               Flexible(
-                child: Text(s.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppUi.body.copyWith(
-                        fontSize: 11.5,
-                        color: s.ascendant ? AppUi.gold : AppUi.textMid,
-                        fontWeight:
-                            s.ascendant ? FontWeight.w800 : FontWeight.w600)),
+                child: Text(
+                  s.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.body.copyWith(
+                    fontSize: 11.5,
+                    color: s.ascendant ? AppUi.gold : AppUi.textMid,
+                    fontWeight: s.ascendant ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
               ),
               if (s.ascendant)
                 const Padding(
                   padding: EdgeInsets.only(left: 3),
-                  child: Text('★',
-                      style: TextStyle(color: AppUi.gold, fontSize: 9)),
+                  child: Text(
+                    '★',
+                    style: TextStyle(color: AppUi.gold, fontSize: 9),
+                  ),
                 ),
             ],
           ),
@@ -1389,10 +1534,12 @@ class VillageLedger extends StatelessWidget {
                     widthFactor: v,
                     child: Container(
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [
-                          tone.withValues(alpha: 0.8),
-                          Color.lerp(tone, Colors.white, 0.25)!,
-                        ]),
+                        gradient: LinearGradient(
+                          colors: [
+                            tone.withValues(alpha: 0.8),
+                            Color.lerp(tone, Colors.white, 0.25)!,
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -1405,11 +1552,14 @@ class VillageLedger extends StatelessWidget {
         Text(s.tier.face, style: const TextStyle(fontSize: 12)),
         SizedBox(
           width: 34,
-          child: Text('%${(s.swayShare * 100).round()}',
-              textAlign: TextAlign.right,
-              style: AppUi.number.copyWith(
-                  fontSize: 10,
-                  color: s.ascendant ? AppUi.gold : AppUi.textLo)),
+          child: Text(
+            '%${(s.swayShare * 100).round()}',
+            textAlign: TextAlign.right,
+            style: AppUi.number.copyWith(
+              fontSize: 10,
+              color: s.ascendant ? AppUi.gold : AppUi.textLo,
+            ),
+          ),
         ),
       ],
     );
@@ -1428,9 +1578,10 @@ class VillageLedger extends StatelessWidget {
           const Text('★', style: TextStyle(color: AppUi.gold, fontSize: 12)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(identityBonus!,
-                style: AppUi.body
-                    .copyWith(fontSize: 11, color: AppUi.gold)),
+            child: Text(
+              identityBonus!,
+              style: AppUi.body.copyWith(fontSize: 11, color: AppUi.gold),
+            ),
           ),
         ],
       ),
@@ -1457,13 +1608,13 @@ class VillageLedger extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-                pos
-                    ? 'Verdiğin hükümler köyün gönlünde sıcak bir iz bıraktı'
-                    : 'Verdiğin hükümlerin gölgesi köyün üstünden kalkmıyor',
-                style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textMid)),
+              pos
+                  ? 'Verdiğin hükümler köyün gönlünde sıcak bir iz bıraktı'
+                  : 'Verdiğin hükümlerin gölgesi köyün üstünden kalkmıyor',
+              style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textMid),
+            ),
           ),
-          Text(pct,
-              style: AppUi.number.copyWith(fontSize: 12.5, color: c)),
+          Text(pct, style: AppUi.number.copyWith(fontSize: 12.5, color: c)),
         ],
       ),
     );
@@ -1493,11 +1644,14 @@ class VillageLedger extends StatelessWidget {
         children: [
           Text(f.icon, style: const TextStyle(fontSize: 11)),
           const SizedBox(width: 5),
-          Text(f.label,
-              style: AppUi.body.copyWith(
-                  fontSize: 10.5,
-                  color: AppUi.textMid,
-                  fontWeight: FontWeight.w600)),
+          Text(
+            f.label,
+            style: AppUi.body.copyWith(
+              fontSize: 10.5,
+              color: AppUi.textMid,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );
@@ -1522,7 +1676,10 @@ class _GildedFrame extends StatelessWidget {
           colors: [AppUi.surface2, AppUi.surface1],
         ),
         borderRadius: BorderRadius.circular(r),
-        border: Border.all(color: AppUi.gold.withValues(alpha: 0.32), width: 1.2),
+        border: Border.all(
+          color: AppUi.gold.withValues(alpha: 0.32),
+          width: 1.2,
+        ),
         boxShadow: [
           ...AppUi.softShadow,
           BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 26),
@@ -1541,7 +1698,9 @@ class _GildedFrame extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(r - 4),
                     border: Border.all(
-                        color: AppUi.gold.withValues(alpha: 0.12), width: 1),
+                      color: AppUi.gold.withValues(alpha: 0.12),
+                      width: 1,
+                    ),
                   ),
                 ),
               ),
@@ -1585,8 +1744,9 @@ class LedgerSeal extends StatefulWidget {
 class _LedgerSealState extends State<LedgerSeal>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl = AnimationController(
-      vsync: this, duration: _dur())
-    ..repeat(reverse: true);
+    vsync: this,
+    duration: _dur(),
+  )..repeat(reverse: true);
 
   bool _hover = false;
 
@@ -1638,7 +1798,9 @@ class _LedgerSealState extends State<LedgerSeal>
           builder: (context, _) {
             final t = alive ? _ctrl.value : 0.0;
             final glow = (alive ? 0.20 : 0.08) + t * 0.34 + (_hover ? 0.18 : 0);
-            final scale = 1.0 + t * (widget.pendingPetition ? 0.05 : 0.03) +
+            final scale =
+                1.0 +
+                t * (widget.pendingPetition ? 0.05 : 0.03) +
                 (_hover ? 0.03 : 0);
             return Transform.scale(
               scale: scale,
@@ -1652,14 +1814,16 @@ class _LedgerSealState extends State<LedgerSeal>
                   ),
                   borderRadius: BorderRadius.circular(AppUi.radius),
                   border: Border.all(
-                      color: AppUi.gold.withValues(alpha: _hover ? 0.5 : 0.34),
-                      width: 1.1),
+                    color: AppUi.gold.withValues(alpha: _hover ? 0.5 : 0.34),
+                    width: 1.1,
+                  ),
                   boxShadow: [
                     ...AppUi.softShadow,
                     BoxShadow(
-                        color: accent.withValues(alpha: glow),
-                        blurRadius: 16,
-                        spreadRadius: 1),
+                      color: accent.withValues(alpha: glow),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    ),
                   ],
                 ),
                 child: Row(
@@ -1675,22 +1839,30 @@ class _LedgerSealState extends State<LedgerSeal>
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: RadialGradient(colors: [
-                              Color.alphaBlend(
-                                  accent.withValues(alpha: 0.22), AppUi.surface0),
-                              AppUi.surface0,
-                            ]),
+                            gradient: RadialGradient(
+                              colors: [
+                                Color.alphaBlend(
+                                  accent.withValues(alpha: 0.22),
+                                  AppUi.surface0,
+                                ),
+                                AppUi.surface0,
+                              ],
+                            ),
                             border: Border.all(
-                                color: AppUi.gold.withValues(alpha: 0.6),
-                                width: 1.2),
+                              color: AppUi.gold.withValues(alpha: 0.6),
+                              width: 1.2,
+                            ),
                             boxShadow: [
                               BoxShadow(
-                                  color: accent.withValues(alpha: 0.35),
-                                  blurRadius: 6),
+                                color: accent.withValues(alpha: 0.35),
+                                blurRadius: 6,
+                              ),
                             ],
                           ),
-                          child: const Text('📖',
-                              style: TextStyle(fontSize: 16)),
+                          child: const Text(
+                            '📖',
+                            style: TextStyle(fontSize: 16),
+                          ),
                         ),
                         if (widget.agendaCount > 0)
                           Positioned(
@@ -1698,19 +1870,26 @@ class _LedgerSealState extends State<LedgerSeal>
                             right: -5,
                             child: Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 1),
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
                               decoration: BoxDecoration(
                                 color: accent,
                                 borderRadius: BorderRadius.circular(10),
                                 boxShadow: [
                                   BoxShadow(
-                                      color: accent.withValues(alpha: 0.6),
-                                      blurRadius: 6),
+                                    color: accent.withValues(alpha: 0.6),
+                                    blurRadius: 6,
+                                  ),
                                 ],
                               ),
-                              child: Text('${widget.agendaCount}',
-                                  style: AppUi.number.copyWith(
-                                      fontSize: 9, color: AppUi.ink)),
+                              child: Text(
+                                '${widget.agendaCount}',
+                                style: AppUi.number.copyWith(
+                                  fontSize: 9,
+                                  color: AppUi.ink,
+                                ),
+                              ),
                             ),
                           ),
                       ],
@@ -1720,9 +1899,13 @@ class _LedgerSealState extends State<LedgerSeal>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('KÖY DEFTERİ',
-                            style: AppUi.title
-                                .copyWith(fontSize: 13, letterSpacing: 1.5)),
+                        Text(
+                          'KÖY DEFTERİ',
+                          style: AppUi.title.copyWith(
+                            fontSize: 13,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
                         const SizedBox(height: 3),
                         Row(
                           mainAxisSize: MainAxisSize.min,
@@ -1735,20 +1918,25 @@ class _LedgerSealState extends State<LedgerSeal>
                                 color: accent,
                                 boxShadow: [
                                   BoxShadow(
-                                      color: accent
-                                          .withValues(alpha: 0.4 + t * 0.4),
-                                      blurRadius: 5),
+                                    color: accent.withValues(
+                                      alpha: 0.4 + t * 0.4,
+                                    ),
+                                    blurRadius: 5,
+                                  ),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 5),
-                            Text(_status,
-                                style: AppUi.label.copyWith(
-                                    fontSize: 7.5,
-                                    letterSpacing: 0.8,
-                                    color: widget.pendingPetition
-                                        ? AppUi.rust
-                                        : AppUi.textLo)),
+                            Text(
+                              _status,
+                              style: AppUi.label.copyWith(
+                                fontSize: 7.5,
+                                letterSpacing: 0.8,
+                                color: widget.pendingPetition
+                                    ? AppUi.rust
+                                    : AppUi.textLo,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1798,9 +1986,9 @@ class _LedgerShellState extends State<_LedgerShell> {
       : widget.initial;
 
   List<LedgerSection> get _sections => [
-        for (final s in LedgerSection.values)
-          if (!widget.hidden.contains(s)) s,
-      ];
+    for (final s in LedgerSection.values)
+      if (!widget.hidden.contains(s)) s,
+  ];
 
   /// Sahne defteri "şu bölüm açılsın" diye yeniden açtığında (ör. HUD nüfus
   /// düğmesi) rafın seçimi de oraya kaysın — widget aynı ağaçta kalıyor olabilir.
@@ -1863,8 +2051,9 @@ class _LedgerShellState extends State<_LedgerShell> {
                   opacity: anim,
                   child: SlideTransition(
                     position: Tween<Offset>(
-                            begin: const Offset(0.04, 0), end: Offset.zero)
-                        .animate(anim),
+                      begin: const Offset(0.04, 0),
+                      end: Offset.zero,
+                    ).animate(anim),
                     child: child,
                   ),
                 ),
@@ -1933,15 +2122,18 @@ class _LedgerShellState extends State<_LedgerShell> {
           decoration: BoxDecoration(
             color: on
                 ? Color.alphaBlend(
-                    AppUi.accent.withValues(alpha: 0.16), AppUi.surface1)
+                    AppUi.accent.withValues(alpha: 0.16),
+                    AppUi.surface1,
+                  )
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             // UNIFORM kenar ŞART (non-uniform + borderRadius = paint assert →
             // hiç çizilmez). Seçili işareti bu yüzden ayrı bir katman değil,
             // eşit kenar + ikon rengiyle verilir.
             border: Border.all(
-                color: on ? AppUi.accent.withValues(alpha: 0.55) : AppUi.line,
-                width: on ? 1.3 : 1),
+              color: on ? AppUi.accent.withValues(alpha: 0.55) : AppUi.line,
+              width: on ? 1.3 : 1,
+            ),
           ),
           child: Row(
             children: [
@@ -1955,20 +2147,26 @@ class _LedgerShellState extends State<_LedgerShell> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(s.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.label.copyWith(
-                          fontSize: 10,
-                          letterSpacing: 1.2,
-                          color: on ? AppUi.textHi : AppUi.textMid,
-                        )),
+                    Text(
+                      s.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.label.copyWith(
+                        fontSize: 10,
+                        letterSpacing: 1.2,
+                        color: on ? AppUi.textHi : AppUi.textMid,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(s.blurb,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.body
-                            .copyWith(fontSize: 9, color: AppUi.textLo)),
+                    Text(
+                      s.blurb,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.body.copyWith(
+                        fontSize: 9,
+                        color: AppUi.textLo,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1988,8 +2186,10 @@ class _LedgerShellState extends State<_LedgerShell> {
         color: AppUi.accent.withValues(alpha: on ? 0.9 : 0.7),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Text('$n',
-          style: AppUi.number.copyWith(fontSize: 9, color: AppUi.ink)),
+      child: Text(
+        '$n',
+        style: AppUi.number.copyWith(fontSize: 9, color: AppUi.ink),
+      ),
     );
   }
 
@@ -2028,24 +2228,29 @@ class _LedgerShellState extends State<_LedgerShell> {
         decoration: BoxDecoration(
           color: on
               ? Color.alphaBlend(
-                  AppUi.accent.withValues(alpha: 0.16), AppUi.surface1)
+                  AppUi.accent.withValues(alpha: 0.16),
+                  AppUi.surface1,
+                )
               : AppUi.surface0,
           borderRadius: BorderRadius.circular(AppUi.radiusSm),
           border: Border.all(
-              color: on ? AppUi.accent.withValues(alpha: 0.55) : AppUi.line,
-              width: on ? 1.3 : 1),
+            color: on ? AppUi.accent.withValues(alpha: 0.55) : AppUi.line,
+            width: on ? 1.3 : 1,
+          ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(s.icon, style: const TextStyle(fontSize: 13)),
             const SizedBox(width: 7),
-            Text(s.label,
-                style: AppUi.label.copyWith(
-                  fontSize: 9.5,
-                  letterSpacing: 1.1,
-                  color: on ? AppUi.textHi : AppUi.textLo,
-                )),
+            Text(
+              s.label,
+              style: AppUi.label.copyWith(
+                fontSize: 9.5,
+                letterSpacing: 1.1,
+                color: on ? AppUi.textHi : AppUi.textLo,
+              ),
+            ),
             if (badge > 0) _badge(badge, on),
           ],
         ),
@@ -2058,8 +2263,14 @@ class _LedgerShellState extends State<_LedgerShell> {
 
 /// Hane renk paleti — [_houseColor] ile aynı, masa katmanında da erişilebilsin.
 const List<Color> _kCouncilPalette = [
-  Color(0xFF8FB255), Color(0xFFE0954A), Color(0xFF9E86C9), Color(0xFFD8AE56),
-  Color(0xFF6FA9B8), Color(0xFFC57B6B), Color(0xFF8DA0C0), Color(0xFFB0A24E),
+  Color(0xFF8FB255),
+  Color(0xFFE0954A),
+  Color(0xFF9E86C9),
+  Color(0xFFD8AE56),
+  Color(0xFF6FA9B8),
+  Color(0xFFC57B6B),
+  Color(0xFF8DA0C0),
+  Color(0xFFB0A24E),
 ];
 Color _councilHouseColor(String surname) {
   var h = 0;

@@ -5,6 +5,7 @@ import '../buildings/building_renderer.dart';
 import '../core/resources.dart';
 import '../rendering/asset_style.dart';
 import 'app_ui.dart';
+import 'guide_spotlight.dart';
 
 /// İnşa katalogu — alt araç çubuğundaki bina seçim menüsü. Her bina temiz koyu
 /// bir kart; seçilince ember kenar+halo, karşılanamayan maliyet kırmızı.
@@ -62,13 +63,16 @@ class BuildingPanel extends StatelessWidget {
           separatorBuilder: (_, _) => const SizedBox(width: 6),
           itemBuilder: (_, index) {
             final type = types[index];
-            return _BuildingTile(
-              hinted: type == hintType,
-              type: type,
-              selected: selected == type,
-              stockpile: stockpile,
-              compact: true,
-              onTap: () => onSelect(type),
+            return GuideTarget(
+              id: GuideAnchors.build(type.name),
+              child: _BuildingTile(
+                hinted: type == hintType,
+                type: type,
+                selected: selected == type,
+                stockpile: stockpile,
+                compact: true,
+                onTap: () => onSelect(type),
+              ),
             );
           },
         ),
@@ -83,13 +87,16 @@ class BuildingPanel extends StatelessWidget {
           for (final type in types)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: _BuildingTile(
-                type: type,
-                hinted: type == hintType,
-                selected: selected == type,
-                stockpile: stockpile,
-                compact: false,
-                onTap: () => onSelect(type),
+              child: GuideTarget(
+                id: GuideAnchors.build(type.name),
+                child: _BuildingTile(
+                  type: type,
+                  hinted: type == hintType,
+                  selected: selected == type,
+                  stockpile: stockpile,
+                  compact: false,
+                  onTap: () => onSelect(type),
+                ),
               ),
             ),
         ],
@@ -403,6 +410,7 @@ GameIconData _resIcon(ResourceKind k) => switch (k) {
   ResourceKind.food => GameIconData.wheat,
   ResourceKind.gold => GameIconData.coin,
   ResourceKind.honey => GameIconData.honey,
+  ResourceKind.wool => GameIconData.wool,
   ResourceKind.reed => GameIconData.reed,
 };
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/resources.dart';
+import '../world/season.dart';
 import '../scene/scene_data.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
@@ -67,6 +68,25 @@ class DevPanel extends StatelessWidget {
   final VoidCallback onSetDusk;
   final VoidCallback onSetNight;
   final VoidCallback onToggleRain;
+
+  /// Kar yağışı zorlanıyor mu + düğmesi. Yağmur toggle'ının kar karşılığı:
+  /// karı görmek için takvimi kışa sarmak gerekiyordu. YALNIZ görsel katman —
+  /// mevsim/hız/tarla değişmez (onun için Kış düğmesi var).
+  final bool snowOn;
+  final VoidCallback onToggleSnow;
+
+  /// Köyün ŞU ANKİ mevsimi — düğmelerden hangisinin "dolu" duracağını söyler.
+  final Season season;
+
+  /// MEVSİMLİK REFERANS KÖY — dördü de aynı planı kurar, yalnız takvimi
+  /// (ve tarlanın hâlini) mevsime göre değişir. Her biri KENDİ kayıt slotuna
+  /// yazılır, yani Kayıtlı Köyler'den geri dönülebilir.
+  final void Function(Season) onSeedReference;
+
+  /// MEVSİME ATLA. Konsolda `season.jump` vardı ama godmode panelinde yoktu;
+  /// kışın bedelini (çadır ↔ ocak, büyüme durması, yakıt) görmek için oyuncunun
+  /// backtick konsolunu bilmesi gerekiyordu. Takvim hep İLERİ sarar.
+  final void Function(Season) onJumpSeason;
   final VoidCallback onAllPolicies;
   final VoidCallback onClearPolicies;
   /// Test: köyün bildiği tüm zanaatları aç (kilitli binaları menüde göster).
@@ -137,6 +157,11 @@ class DevPanel extends StatelessWidget {
     required this.onSetDusk,
     required this.onSetNight,
     required this.onToggleRain,
+    required this.snowOn,
+    required this.onToggleSnow,
+    required this.season,
+    required this.onJumpSeason,
+    required this.onSeedReference,
     required this.onAllPolicies,
     required this.onClearPolicies,
     required this.onUnlockAllCrafts,
@@ -215,6 +240,25 @@ class DevPanel extends StatelessWidget {
                         const SizedBox(height: 4),
                         // Kalan her şey katlanabilir bölümlerde — panel uzun bir
                         // liste değil, ihtiyaç oldukça açılan başlıklar.
+                        // MEVSİMLİK REFERANS KÖYLER — showcase "her şeyi
+                        // görmek" için, referans "ortalama bir köyde ne oluyor"
+                        // için. Dördü aynı köy, dört ayrı mevsim; tek farkın
+                        // mevsim olması karşılaştırmayı anlamlı kılıyor.
+                        const SizedBox(height: 7),
+                        const AppSectionLabel('REFERANS KÖY — MEVSİMLİK'),
+                        const SizedBox(height: 5),
+                        _wrapButtons([
+                          for (final s in Season.values)
+                            AppButton(
+                                label: '${s.icon} ${s.label}',
+                                icon: GameIconData.home,
+                                kind: AppButtonKind.tonal,
+                                tint: s == Season.winter
+                                    ? AppUi.info
+                                    : AppUi.sage,
+                                onTap: () => onSeedReference(s)),
+                        ]),
+                        const SizedBox(height: 10),
                         _CollapsibleSection(
                           title: 'GODMODE & GÖRSEL',
                           initiallyOpen: true,
@@ -243,6 +287,31 @@ class DevPanel extends StatelessWidget {
                                         : AppButtonKind.tonal,
                                     tint: AppUi.info,
                                     onTap: onToggleRain),
+                                AppButton(
+                                    label: snowOn ? 'Kar KAPAT' : 'Kar AÇ',
+                                    icon: GameIconData.snow,
+                                    kind: snowOn
+                                        ? AppButtonKind.filled
+                                        : AppButtonKind.tonal,
+                                    tint: AppUi.info,
+                                    onTap: onToggleSnow),
+                              ]),
+                              const SizedBox(height: 7),
+                              // MEVSİM — saat düğmeleriyle aynı mantık, ayrı sıra.
+                              // Yürürlükteki mevsim dolu çizilir; ona basmak
+                              // takvimi bir TAM YIL ileri sarar (mevsim gün
+                              // sayacından türüyor, geri alınmıyor).
+                              _wrapButtons([
+                                for (final s in Season.values)
+                                  AppButton(
+                                      label: '${s.icon} ${s.label}',
+                                      kind: s == season
+                                          ? AppButtonKind.filled
+                                          : AppButtonKind.tonal,
+                                      tint: s == Season.winter
+                                          ? AppUi.info
+                                          : AppUi.accent,
+                                      onTap: () => onJumpSeason(s)),
                               ]),
                               const SizedBox(height: 7),
                               _wrapButtons([

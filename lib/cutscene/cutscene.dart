@@ -58,7 +58,11 @@ class CutsceneLine {
 enum CutsceneGate {
   none,         // serbest akış (dokun = ilerle)
   tapToIgnite,  // ateşi yakmak için dokun (yanana dek bekler)
-  nameVillage,  // köye ad ver (metin girişi onaylanana dek bekler)
+  nameVillage,  // köye + haneye ad ver (iki alan onaylanana dek bekler)
+  /// Kafilenin yükünü seç — üç kart, biri seçilene dek bekler. Sinematiğin
+  /// içine gömülü İLK gerçek karar; kadroyu ve stoğu değiştirir
+  /// (bkz. [FoundingChoice]).
+  chooseCaravan,
 }
 
 /// Çekimin ölçeği — kamerayı özneye göre konumlandırır. Diyalog kutusu +
@@ -130,24 +134,15 @@ class Cutscene {
 /// tehdidine (scene_imperial) tohum bırakır: gölge bir gün geri gelecek.
 /// Hikâye YALNIZ açılışta yüklüdür; sonra pasifleşir (dünya sessizce açılır).
 /// Sakin tempolu; kafile ekranda yürüyüp DURUR (amaçsız kayma yok).
+///
+/// ÜÇ ÇEKİM (eskiden altıydı, on bir replikle). Açılış "izlenen" bir film
+/// olmaktan çıkıp KARAR VERİLEN bir eşik oldu: kısalan her çekimin sonunda
+/// oyuncunun eli var — kafilenin yükü (kadro + stok) ve köyün/hanenin adı.
+/// Üçüncü çekim biter bitmez oyuncu gerçek haritada ateşin yerini seçer.
 const Cutscene kOpeningCutscene = Cutscene([
-  // 1) NEDEN yola düştüler — vergi eli. Bağlamı kuran açılış (aktörsüz).
-  CutsceneShot(
-    bg: CutsceneBg.valleyDusk,
-    framing: CutsceneFraming.wide,
-    panFrom: 0.0,
-    panTo: 0.03,
-    zoomFrom: 1.0,
-    zoomTo: 1.06,
-    lines: [
-      CutsceneLine(
-          'Vergiciler her harmanda gelirdi. İlk yıl tahılın üçte birini aldılar. Sonra yarısını.'),
-      CutsceneLine(
-          'Son gelişlerinde ambarda ölçecek bir şey kalmamıştı. Yine de deftere bir şey yazdılar.'),
-    ],
-  ),
-
-  // 2) Kaçış / yol — kafile soldan girer, ekranda gruplanıp DURUR.
+  // 1) NEDEN yola düştük + YOL — tek çekim. Eskiden bu ikisi ayrı iki çekimdi
+  //    (dört replik); anlattıkları tek şeydi: vergi eli sıkınca yürüdük.
+  //    Kafile bu çekimde ekrana girer, gruplanır ve DURUR.
   CutsceneShot(
     bg: CutsceneBg.road,
     panFrom: 0.0,
@@ -168,74 +163,53 @@ const Cutscene kOpeningCutscene = Cutscene([
     ],
     lines: [
       CutsceneLine(
-          'Bir gece, birkaç hane kapısını çekip kilitlemedi bile. Kilitlenecek ne kalmıştı ki.'),
+          'Vergiciler her harmanda geldi. Son gelişlerinde ambarda ölçecek bir şey yoktu; yine de deftere bir şey yazdılar.'),
       CutsceneLine(
-          'Günlerce yürüdüler. Yaşlılar arabada, çocuklar arkada, bir de topal keçi. Kimse nereye gittiğini bilmiyordu; herkes neden gittiğini biliyordu.'),
+          'O gece birkaç hane kapısını kilitlemedi bile. Kimse nereye gittiğini bilmiyordu; herkes neden gittiğini biliyordu.'),
     ],
   ),
 
-  // 3) Varış — şafakta vadi görünür. İlk kez nefes.
+  // 2) VARIŞ + İLK KARAR — kafilenin yükü. Maple sorar, oyuncu SEÇER.
+  //    Bu kapı gerçek bir karardır: kurucu meslekler, nüfus ve başlangıç stoğu
+  //    buradan çıkar (bkz. systems/founding_choice.dart).
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
-    framing: CutsceneFraming.wide,
     panFrom: 0.0,
-    panTo: 0.04,
-    // Sis çekilirken kamera yerden ufka doğru kalkar.
-    tiltFrom: 0.08,
-    tiltTo: -0.03,
-    zoomFrom: 1.06,
+    panTo: 0.03,
+    tiltFrom: 0.06,
+    tiltTo: -0.02,
+    zoomFrom: 1.05,
     zoomTo: 1.0,
+    gate: CutsceneGate.chooseCaravan,
+    actors: [
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.46, y: 0.80, scale: 1.45),
+    ],
     lines: [
-      CutsceneLine(
-          'Şafakta sis çekildi ve vadi göründü. Önce suyun sesi geldi, sonra çayırın kokusu.'),
-      CutsceneLine(
-          'Ne bir sınır taşı vardı burada, ne bir vergi defteri. Kimsenin adı yazılı değildi bu toprağa.'),
+      CutsceneLine('Ben Maple. Bu kafileyi yıllardır ben yürütüyorum; bu vadiyi ben de ilk kez görüyorum.',
+          speaker: 'Maple'),
+      CutsceneLine('Yola çıkarken arabaya her şey sığmadı. Söyle bakalım — biz neyi yükledik?',
+          speaker: 'Maple'),
     ],
   ),
 
-  // 4) MAPLE TANIŞMA — rehber söz alır; imparatorluğun gölgesini anar (yay tohumu).
+  // 3) AD — köyün ve hanenin adı tek kapıda. Soyad kurucuların hepsine işlenir
+  //    ("X Hanesi" her yerde görünür), köyün adı kayıt slotuna geçer.
+  //    Kapanış repliği ateş yerleştirmeye devrettiği için ayrı bir çekim yok.
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
-    zoomFrom: 1.0,
-    zoomTo: 1.05,
-    actors: [
-      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.42, y: 0.80, scale: 1.6),
-    ],
-    lines: [
-      CutsceneLine('Ben Maple. Bu kafileyi yıllardır ben yürütüyorum. Bu vadiyi ben de ilk kez görüyorum.',
-          speaker: 'Maple'),
-      CutsceneLine('İmparatorluk buraya uzak. Şimdilik. Burada yakacağın ateşin dumanını kimse saymayacak.',
-          speaker: 'Maple'),
-    ],
-  ),
-
-  // 5) ADLANDIRMA — ETKİLEŞİM: Maple sorar, oyuncu köye ad verir (kimlik/günce).
-  CutsceneShot(
-    bg: CutsceneBg.valleyDawn,
     zoomFrom: 1.0,
     zoomTo: 1.04,
     gate: CutsceneGate.nameVillage,
     actors: [
-      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
+      // Maple SAĞDA durur: ad panosu iki alanlı olduğu için ekranın ortasını
+      // kaplıyor ve merkezdeki aktörün yüzünü yutuyordu (soruyu soran kişi
+      // sorusu ekranda dururken görünmeli).
+      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.72, y: 0.80, scale: 1.5),
     ],
     lines: [
-      CutsceneLine('Adı olmayan yere kimse dönmez. Söyle, buraya ne diyeceğiz?',
+      CutsceneLine('İmparatorluk buraya uzak. Şimdilik. Burada yakacağın ateşin dumanını kimse saymayacak.',
           speaker: 'Maple'),
-    ],
-  ),
-
-  // 6) Kapanış — ateş yerini SEÇMEYE yönlendirir. Son satır, dünyanın ateşin
-  // ışığından büyüyeceğini söyler → zoom-reveal'ın (kamera reach'i) anlatısı.
-  CutsceneShot(
-    bg: CutsceneBg.valleyDawn,
-    zoomFrom: 1.0,
-    zoomTo: 1.04,
-    actors: [
-      CutsceneActor(type: VillagerType.priest, name: 'Maple', seed: 7, fromX: 0.5, y: 0.80, scale: 1.5),
-    ],
-    lines: [
-      CutsceneLine('Güzel ad. Şimdi geriye tek iş kaldı: ısınmak.', speaker: 'Maple'),
-      CutsceneLine('İlk ateşi nereye kuracağımızı sen seç. Işığı nereye düşerse, vadi oradan açılır.',
+      CutsceneLine('Adı olmayan yere kimse dönmez. Bu yuvanın ve bu ocağın adını sen koy; ateşi de sen kur.',
           speaker: 'Maple'),
     ],
   ),

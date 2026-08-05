@@ -93,10 +93,15 @@ class ImperialSnapshot {
 /// SAF fonksiyon — sahne state'i tutmaz ki animasyon odası da AYNI sahneyi
 /// oynatabilsin. Odanın kendi kopyasını tutması, sahnede yapılan düzeltmelerin
 /// odaya yansımaması demek (bu tuzağa capture bobininde bir kez düşüldü).
-/// [seed] metin varyantlarını sabitler (aynı gün aynı cümle).
+/// [seed] metin varyantlarını sabitler (aynı gün aynı cümle). [village] köyün
+/// ADI — komutan onu defterden okur; imparatorluk için burası bir yurt değil,
+/// kayıtlı bir yer adıdır. Boş bırakılırsa cümleler jenerik "bu köy"e düşer
+/// (animasyon odası/capture köy adı olmadan da bu sahneyi oynatabilsin).
 Cutscene imperialArrivalCutscene(ImperialDemand d,
-    {required double favor, required int seed}) {
+    {required double favor, required int seed, String village = ''}) {
   final f = favor;
+  final named = village.trim().isNotEmpty && village.trim().toLowerCase() != 'köy';
+  final vName = village.trim();
   // İlişki tonuna göre giriş anlatımı.
   final arrival = Voice.pick(
       f < 0.3
@@ -121,8 +126,9 @@ Cutscene imperialArrivalCutscene(ImperialDemand d,
       '${d.amount} kile tahıl. Ambarınızı ben saymam, siz doldurursunuz.',
     ImperialDemandKind.woodLevy =>
       '${d.amount} kütük. Kalenin duvarı bir yerden yükselecek.',
-    ImperialDemandKind.conscript =>
-      'Bu köyden bir genç. Adını siz verin, yoksa ben seçerim.',
+    ImperialDemandKind.conscript => named
+        ? '$vName bir genç verecek. Adını siz koyun, yoksa ben seçerim.'
+        : 'Bu köyden bir genç. Adını siz verin, yoksa ben seçerim.',
   };
   // İtibara göre komutanın tonu: yüksek itibarda neredeyse nazik, düşükte
   // sıkılmış ve ölümcül. Sesini hiç yükseltmez.
@@ -173,12 +179,24 @@ Cutscene imperialArrivalCutscene(ImperialDemand d,
         CutsceneActor(type: VillagerType.guard, name: 'Komutan', seed: 31, fromX: 0.5, y: 0.80, scale: 1.6, flip: true),
       ],
       lines: [
+        // Komutanın AÇILIŞ satırı köyün adını okur: defterde bir satırsınız
+        // ve o satırın bir adı var. Adı ilk kez bir yabancının ağzından
+        // duymak, adı ekranda bir etiket olmaktan çıkarır.
         CutsceneLine(
-            Voice.pick(const [
-              'Bu köy defterde kayıtlı. Kayıtlı olan öder.',
-              'Adınızı deftere ben yazmadım. Ben yalnız karşısındaki haneyi doldurmaya geldim.',
-              'Sayfayı açıyorum. Bakalım bu yıl ne yazmışlar size.',
-            ], seed + 2),
+            Voice.pick(
+                named
+                    ? [
+                        '$vName. Defterde kayıtlı. Kayıtlı olan öder.',
+                        'Sayfayı açıyorum: $vName. Bakalım bu yıl ne yazmışlar size.',
+                        '$vName adını deftere ben yazmadım. Ben yalnız karşısındaki '
+                            'haneyi doldurmaya geldim.',
+                      ]
+                    : const [
+                        'Bu köy defterde kayıtlı. Kayıtlı olan öder.',
+                        'Adınızı deftere ben yazmadım. Ben yalnız karşısındaki haneyi doldurmaya geldim.',
+                        'Sayfayı açıyorum. Bakalım bu yıl ne yazmışlar size.',
+                      ],
+                seed + 2),
             speaker: 'Komutan'),
         CutsceneLine(order, speaker: 'Komutan'),
         CutsceneLine(d.bite, speaker: 'Komutan'),

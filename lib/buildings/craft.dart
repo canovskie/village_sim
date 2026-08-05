@@ -58,6 +58,7 @@ const Map<BuildingType, String?> kBuildingCraft = {
   BuildingType.warehouse: null,
   BuildingType.lumberCamp: null,
   BuildingType.lamppost: null,
+  BuildingType.tailor: null,
   // ── Yapı zanaatları (birikim) ─────────────────────────────────────────────
   BuildingType.woodenHouse: Craft.carpentry,
   BuildingType.tavern: Craft.carpentry,

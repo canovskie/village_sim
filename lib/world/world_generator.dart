@@ -189,20 +189,82 @@ class WorldGenerator {
       final rx = 3.5 + _rng.nextDouble() * 4.0; // 3.5–7.5
       final ry = 2.5 + _rng.nextDouble() * 3.0; // 2.5–5.5
 
-      for (int c = (cx - rx).floor() - 1; c <= (cx + rx).ceil() + 1; c++) {
-        for (int r = (cy - ry).floor() - 1; r <= (cy + ry).ceil() + 1; r++) {
+      // KIYI GÜRÜLTÜSÜ AÇISAL VE SÜREKLİ — kare kare zar DEĞİL.
+      //
+      // Eskiden sınır testi her tile için ayrı `_rng.nextDouble()` çekiyordu.
+      // Sonuç tırtıklı bir kıyıydı: göle sokulan TEK KARE kara dilleri (ve
+      // üstlerinde duran çamlar, ki uzaktan "denizin ortasında ağaç" gibi
+      // görünüyor) + suyun içinde kalan tek kare kum elmasları. Kullanıcının
+      // "yüzeyi bozmuş" dediği şeyin yarısı buydu.
+      //
+      // Şimdi sapma açının fonksiyonu: iki harmonik → göl elips değil ORGANİK
+      // loblu bir şekil alır, ama sınır KOMŞUDAN KOMŞUYA yavaş değişir, yani
+      // tek kare girinti/çıkıntı üretmez.
+      final p1 = _rng.nextDouble() * 2 * pi;
+      final p2 = _rng.nextDouble() * 2 * pi;
+
+      for (int c = (cx - rx).floor() - 2; c <= (cx + rx).ceil() + 2; c++) {
+        for (int r = (cy - ry).floor() - 2; r <= (cy + ry).ceil() + 2; r++) {
           if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
           if (_inSafe(c, r, margin: 2)) continue; // başlangıç bölgesini koru
           final dx = (c - cx) / rx;
           final dy = (r - cy) / ry;
-          final noise = (_rng.nextDouble() - 0.5) * 0.45;
-          if (dx * dx + dy * dy < 1.0 + noise) {
+          final ang = atan2(dy, dx);
+          final wobble = sin(ang * 3 + p1) * 0.13 + sin(ang * 5 + p2) * 0.07;
+          if (dx * dx + dy * dy < 1.0 + wobble) {
             tiles.add((c, r));
           }
         }
       }
     }
+
+    _smoothShoreline(tiles);
     return tiles;
+  }
+
+  /// KIYI TEMİZLİĞİ — tek kare girinti/çıkıntıları yut.
+  ///
+  /// Açısal gürültü sınırı zaten yumuşattı, ama iki göl kesiştiğinde ya da
+  /// güvenli bölge bir gölü kestiğinde hâlâ yalnız kare kalabiliyor. İzometride
+  /// tek kare kara, etrafı suyla çevrili bir "ada" gibi değil, suyun içine
+  /// düşmüş bir hata gibi okunur (üstünde bir ağaç varsa daha da beter).
+  ///
+  /// Morfolojik açma/kapama: üç ya da dört komşusu su olan kara suya döner;
+  /// üç ya da dört komşusu kara olan su karaya döner. İki geçiş yeter —
+  /// üçüncüsü gölleri gereksiz yuvarlaklaştırıyor.
+  void _smoothShoreline(Set<(int, int)> tiles) {
+    for (int pass = 0; pass < 2; pass++) {
+      final add = <(int, int)>[];
+      final remove = <(int, int)>[];
+
+      int waterNeighbors(int c, int r) {
+        var n = 0;
+        if (tiles.contains((c - 1, r))) n++;
+        if (tiles.contains((c + 1, r))) n++;
+        if (tiles.contains((c, r - 1))) n++;
+        if (tiles.contains((c, r + 1))) n++;
+        return n;
+      }
+
+      // Suyun içinde kalan kara kareleri (girinti) — suya kat.
+      for (final (c, r) in tiles) {
+        for (final (nc, nr) in [(c - 1, r), (c + 1, r), (c, r - 1), (c, r + 1)]) {
+          if (nc < 1 || nc >= kCols - 1 || nr < 1 || nr >= kRows - 1) continue;
+          if (tiles.contains((nc, nr))) continue;
+          // Başlangıç bölgesi korunur: köyün ortasına göl taşırmayalım.
+          if (_inSafe(nc, nr, margin: 2)) continue;
+          if (waterNeighbors(nc, nr) >= 3) add.add((nc, nr));
+        }
+      }
+      // Karaya sarkan tek su kareleri (çıkıntı) — karaya döndür.
+      for (final (c, r) in tiles) {
+        if (waterNeighbors(c, r) <= 1) remove.add((c, r));
+      }
+
+      if (add.isEmpty && remove.isEmpty) break;
+      tiles.addAll(add);
+      tiles.removeAll(remove);
+    }
   }
 
   bool _inSafe(int c, int r, {int margin = 0}) =>

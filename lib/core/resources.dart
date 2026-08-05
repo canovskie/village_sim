@@ -9,6 +9,10 @@ enum ResourceKind {
   food('🌾', 'Yiyecek', 'food'),
   honey('🍯', 'Bal', 'honey'),
   reed('🌿', 'Saz', 'reed'),
+  /// Kışlık giysinin hammaddesi — sonbaharda koyundan kırkılır, dokumacı
+  /// giysiye çevirir (bkz. systems/winter.dart, scene_winter.dart). Omurga
+  /// kaynağı DEĞİL: HUD'ın ikincil panelinde bal/sazın yanında durur.
+  wool('🧶', 'Yün', 'wool'),
   gold('★', 'Altın', 'gold');
 
   final String icon;
@@ -27,6 +31,7 @@ class ResourceBundle {
   int food;
   int honey;
   int reed;
+  int wool;
   int gold;
 
   ResourceBundle({
@@ -37,6 +42,7 @@ class ResourceBundle {
     this.food  = 0,
     this.honey = 0,
     this.reed  = 0,
+    this.wool  = 0,
     this.gold  = 0,
   });
 
@@ -48,6 +54,7 @@ class ResourceBundle {
         ResourceKind.food  => food,
         ResourceKind.honey => honey,
         ResourceKind.reed  => reed,
+        ResourceKind.wool  => wool,
         ResourceKind.gold  => gold,
       };
 
@@ -60,6 +67,7 @@ class ResourceBundle {
       case ResourceKind.food:  food  += amount;
       case ResourceKind.honey: honey += amount;
       case ResourceKind.reed:  reed  += amount;
+      case ResourceKind.wool:  wool  += amount;
       case ResourceKind.gold:  gold  += amount;
     }
   }
@@ -72,6 +80,7 @@ class ResourceBundle {
       food  >= c.food  &&
       honey >= c.honey &&
       reed  >= c.reed  &&
+      wool  >= c.wool  &&
       gold  >= c.gold;
 
   void spend(ResourceCost c) {
@@ -82,11 +91,12 @@ class ResourceBundle {
     food  -= c.food;
     honey -= c.honey;
     reed  -= c.reed;
+    wool  -= c.wool;
     gold  -= c.gold;
   }
 
   void clear() {
-    wood = stone = iron = coal = food = honey = reed = gold = 0;
+    wood = stone = iron = coal = food = honey = reed = wool = gold = 0;
   }
 
   /// Eksik kaynakları "12 🪵 + 3 🪨" gibi gösterilebilir biçimde döner.
@@ -102,6 +112,7 @@ class ResourceBundle {
     check(ResourceKind.food,  food,  c.food);
     check(ResourceKind.honey, honey, c.honey);
     check(ResourceKind.reed,  reed,  c.reed);
+    check(ResourceKind.wool,  wool,  c.wool);
     check(ResourceKind.gold,  gold,  c.gold);
     return parts.join(' ');
   }
@@ -116,6 +127,10 @@ class ResourceCost {
   final int food;
   final int honey;
   final int reed;
+  /// Yün hiçbir binanın maliyetinde YOK (giysiye gider). Alan yine de duruyor:
+  /// ResourceKind üzerinden dönen ortak kod (canAfford/spend/formatMissing)
+  /// simetri olmadan sessizce yün'ü atlar.
+  final int wool;
   final int gold;
 
   const ResourceCost({
@@ -126,6 +141,7 @@ class ResourceCost {
     this.food  = 0,
     this.honey = 0,
     this.reed  = 0,
+    this.wool  = 0,
     this.gold  = 0,
   });
 
@@ -133,7 +149,8 @@ class ResourceCost {
 
   bool get isFree =>
       wood == 0 && stone == 0 && iron == 0 &&
-      coal == 0 && food == 0 && honey == 0 && reed == 0 && gold == 0;
+      coal == 0 && food == 0 && honey == 0 && reed == 0 && wool == 0 &&
+      gold == 0;
 
   /// Sıfır olmayan kaynakları (kind, amount) listesi olarak döner.
   List<(ResourceKind, int)> get entries => [

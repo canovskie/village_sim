@@ -244,6 +244,9 @@ extension _SceneWork on _VillageSceneState {
   /// (2) olmasaydı çoban çoğu zaman "işsiz" sayılıp rutine düşer, sürüyü bırakıp
   /// köyde volta atardı — mesleğin bütün kimliği kaybolurdu.
   void _workShepherd(VillagerEntity v) {
+    // SONBAHARDA KIRKIM ÖNCELİKLİ: yün yılda bir kez alınır ve kışlık giysinin
+    // tek kaynağıdır (bkz. scene_winter). Otlatma bekleyebilir, mevsim bekleyemez.
+    if (_tryShear(v)) return;
     final hungry = v.workCooldown <= 0 ? _hungriestAnimal(v) : null;
     if (hungry != null) {
       if (_wdist(v.gridX, v.gridY, hungry.gridX, hungry.gridY) < 1.7) {

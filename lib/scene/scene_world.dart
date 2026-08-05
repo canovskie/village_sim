@@ -301,6 +301,9 @@ extension _SceneWorld on _VillageSceneState {
     _anchorSystem.rebuild(const []); // tüm slot rezervasyonlarını sil
     _cows.clear();
     _villagers.clear();
+    // Yeni harita → kafile yeni bir yandan girsin (giriş noktası bu üretimde
+    // bir kez seçilir; kuruluş kararı kadroyu değiştirirse AYNI nokta kullanılır).
+    _caravanEntrySet = false;
     _resourceBoxes.clear();
     _eggs.clear();
     _lootCaches.clear();
@@ -330,6 +333,9 @@ extension _SceneWorld on _VillageSceneState {
     // Ateş yeri ücretsiz; sonrasında oduncu kulübesi (12 odun) veya bir ev
     // (18 odun + 4 taş) ya da kuyu (4 odun + 8 taş) kurabilir.
     // 25/15/25: ilk 1-2 binayı kurmak + ilk günü atlatmak için yeterli.
+    // YENİ OYUNDA bunu kuruluş kararı EZER (bkz. FoundingChoice / açılış
+    // sinematiğinin ilk kapısı); burada duran değer showcase/referans/dev
+    // haritalarının tabanı ve sinematik atlanırsa gelen varsayılanla aynıdır.
     _stockpile.wood = 25;
     _stockpile.stone = 15;
     _stockpile.food = 25;

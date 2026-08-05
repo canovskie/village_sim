@@ -67,6 +67,9 @@ abstract final class VillageCustom {
         JobRole.forager => false,
         JobRole.cook => false,
         JobRole.florist => false,
+        // Dokuma tezgâhı köyün kadına yakıştırdığı işlerden — ama yine KURAL
+        // değil huy: kışın giysi yetişsin diye herkes tezgâha oturur.
+        JobRole.weaver => false,
         // Ortak emek — âdet karışmaz.
         JobRole.farmer => null,
         JobRole.shepherd => null,

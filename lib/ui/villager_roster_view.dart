@@ -10,6 +10,7 @@ import '../rendering/portrait_renderer.dart';
 import '../systems/estate_system.dart' show EstateMoodTier;
 import '../systems/house_system.dart';
 import 'app_ui.dart';
+import 'ledger_board.dart';
 import 'mobile_ui.dart';
 
 /// Bir köylünün defter satırı için önceden hesaplanmış görünüm modeli — barınma
@@ -114,6 +115,7 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
 
   @override
   Widget build(BuildContext context) {
+    if (useCompactGameUi(context)) return _boardLayout();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -123,6 +125,371 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
         Container(height: 1, color: AppUi.line),
         Expanded(child: _tab == 0 ? _villagerTab() : _houseTab()),
       ],
+    );
+  }
+
+  // ── TAHTA DİZİLİMİ (telefon yatay) ──────────────────────────────────────────
+  //
+  // Ölçülen hâl: iPhone 11'de bu bölüm ÜST ÜSTE DÖRT yatay bant çiziyordu —
+  // sekmeler (55) · köylüler/haneler (55) · KPI şeridi (60) · sırala (45) —
+  // ve 334dp'lik gövdeden geriye ~90dp kalıyordu. 18 kişilik köyde oyuncu BİR
+  // BUÇUK köylü görüyordu; geri kalanı bulmak için kaydırmak, kaydırırken de
+  // nerede olduğunu unutmak gerekiyordu.
+  //
+  // Tahtada dört bandın hepsi TEK 44dp'lik satıra girer: sekme · sıralama ·
+  // KPI aynı hatta, çünkü yatay telefonda genişlik bol. Kalan 280dp de liste
+  // değil IZGARA olur: üç sütun × dört satır = bir karede 12 köylü, hepsi tam,
+  // hiçbiri yarım. Köy 12'yi aşarsa kaydırma değil SAYFA gelir.
+
+  Widget _boardLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: MobileUi.tap, child: _boardBar()),
+        const SizedBox(height: 8),
+        Expanded(child: _tab == 0 ? _boardVillagers() : _boardHouses()),
+      ],
+    );
+  }
+
+  /// TEK satır: sekme + sıralama.
+  ///
+  /// KPI şeridi burada YOK. Gösterdiği dört sayının üçü (nüfus · ort. moral ·
+  /// varlık) defterin arkasında duran oyun HUD'ında zaten sürekli görünüyor;
+  /// dördüncüsü (hane sayısı) HANELER sekmesinin kendisi. Denendi: dördünü bu
+  /// satıra eklemek onu 8dp taşırdı ve sıralama chip'lerinin son ikisini ekran
+  /// dışına attı — yani tekrar eden bir sayı için işleyen bir kontrol gitti.
+  Widget _boardBar() {
+    return LayoutBuilder(
+      builder: (context, c) => Row(
+        children: [
+          _tabButton('KÖYLÜLER', 0),
+          const SizedBox(width: 6),
+          _tabButton('HANELER', 1),
+          const SizedBox(width: 14),
+          // Sıralama yalnız köylü listesinde anlamlı.
+          if (_tab == 0)
+            // Beş chip yan yana ~300dp ister; sekmelerle birlikte ~520dp eder.
+            // iPhone 11'de (tahta 600dp) rahat, iPhone SE ve 640×360 Android'de
+            // (tahta 464-491dp) son iki chip ekran dışına düşüyordu. Dar
+            // ekranda beş chip yerine TEK döngü düğmesi: aynı beş anahtar,
+            // sırayla. Chip'i kırpmaktansa şeklini değiştirmek doğrusu —
+            // kırpılan "Ad" hiç dokunulamaz hâle geliyordu.
+            c.maxWidth >= 540 ? _sortChips() : _sortCycle(),
+          const Spacer(),
+        ],
+      ),
+    );
+  }
+
+  Widget _sortChips() => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _sortChip('Servet', _SortKey.wealth),
+          _sortChip('Moral', _SortKey.morale),
+          _sortChip('Hane', _SortKey.house),
+          _sortChip('Meslek', _SortKey.profession),
+          _sortChip('Ad', _SortKey.name),
+        ],
+      );
+
+  static const _sortLabels = {
+    _SortKey.wealth: 'Servet',
+    _SortKey.morale: 'Moral',
+    _SortKey.house: 'Hane',
+    _SortKey.profession: 'Meslek',
+    _SortKey.name: 'Ad',
+  };
+
+  Widget _sortCycle() {
+    return GestureDetector(
+      onTap: () => setState(() {
+        const keys = _SortKey.values;
+        _sort = keys[(keys.indexOf(_sort) + 1) % keys.length];
+      }),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        alignment: Alignment.center,
+        constraints: _tapFloor(context),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppUi.accent.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppUi.accent.withValues(alpha: 0.7)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text('SIRALA',
+              style: AppUi.label.copyWith(fontSize: 8, color: AppUi.textLo)),
+          const SizedBox(width: 7),
+          Text(_sortLabels[_sort]!,
+              style: AppUi.button.copyWith(fontSize: 10, color: AppUi.textHi)),
+          const SizedBox(width: 5),
+          const GameIcon(GameIconData.chevron, size: 11, color: AppUi.accentSoft),
+        ]),
+      ),
+    );
+  }
+
+  Widget _boardVillagers() {
+    final rows = _sortedRows;
+    final maxW = _maxWealth;
+    return BoardPager(
+      count: rows.length,
+      columns: 3,
+      rowH: 58,
+      rowGap: 6,
+      emptyText: 'Köyde henüz kimse yok.',
+      itemBuilder: (_, i) => _boardVillagerCard(rows[i], maxW),
+    );
+  }
+
+  /// Köylü kartı — 58dp × ~195dp. Masaüstü satırı 76dp yüksek ve 720dp genişti;
+  /// aynı bilgi (kim · hangi hane/meslek · ne kadar varlıklı · ne kadar mutlu)
+  /// buraya sığıyor çünkü oradaki genişliğin çoğu boşluktu. Meslek ve ev
+  /// rozetleri tek satırlık künyeye indi, iki ölçü çubuğu yan yana geçti.
+  Widget _boardVillagerCard(VillagerStatRow r, double maxW) {
+    final v = r.v;
+    final stage = v.lifeStage;
+    final job = v.hasProfession ? v.type.displayName : stage.label;
+    final wf = (v.wealth / maxW).clamp(0.0, 1.0);
+    return BoardTile(
+      onTap: widget.onSelect == null ? null : () => widget.onSelect!(v),
+      padding: const EdgeInsets.fromLTRB(6, 5, 8, 5),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppUi.surface1,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: AppUi.line, width: 1),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: CustomPaint(
+                painter: PortraitPainter(
+                  visual: v.visual,
+                  stage: stage,
+                  type: v.type,
+                  hasProfession: v.hasProfession,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Flexible(
+                    child: Text(v.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.bodyHi.copyWith(fontSize: 12)),
+                  ),
+                  if (v.isFavorite) ...[
+                    const SizedBox(width: 4),
+                    const GameIcon(GameIconData.heart,
+                        size: 9, color: AppUi.rust),
+                  ],
+                  const Spacer(),
+                  GameIcon(GameIconData.coin,
+                      size: _iconSize(context, 9), color: AppUi.gold),
+                  const SizedBox(width: 3),
+                  Text(v.wealth.round().toString(),
+                      style:
+                          AppUi.number.copyWith(fontSize: 11, color: AppUi.gold)),
+                ]),
+                const SizedBox(height: 1),
+                Row(children: [
+                  GameIcon(_profIcon(v.type),
+                      size: _iconSize(context, 9), color: _profColor(v.type)),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      '$job · ${r.housingLabel}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.body
+                          .copyWith(fontSize: 10, color: AppUi.textLo),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 4),
+                Row(children: [
+                  Expanded(child: BoardBar(wf, AppUi.gold, height: 3)),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: BoardBar(v.morale.clamp(0.0, 1.0),
+                        _moraleColor(v.morale),
+                        height: 3),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _boardHouses() {
+    final byName = <String, List<VillagerStatRow>>{};
+    for (final r in widget.rows) {
+      byName.putIfAbsent(r.v.surname, () => []).add(r);
+    }
+    final ordered = <String>[];
+    for (final h in widget.houses) {
+      if (byName.containsKey(h.surname)) ordered.add(h.surname);
+    }
+    for (final k in byName.keys) {
+      if (k.isNotEmpty && !ordered.contains(k)) ordered.add(k);
+    }
+    if (byName.containsKey('')) ordered.add('');
+    final snapByName = {for (final h in widget.houses) h.surname: h};
+    return BoardPager(
+      count: ordered.length,
+      columns: 2,
+      // 92 idi: üç üye satırına ~13dp düşüyordu, okunmuyordu. 104'te satır
+      // başına ~17dp var ve sayfa başına yine iki satır (dört hane) sığıyor.
+      rowH: 104,
+      rowGap: 8,
+      emptyText: 'Henüz hane yok.',
+      itemBuilder: (_, i) => _boardHouseCard(
+        ordered[i],
+        snapByName[ordered[i]],
+        byName[ordered[i]] ?? const [],
+      ),
+    );
+  }
+
+  /// Hane kartı — 104dp sabit. Üyelerin TAMAMI değil ilk üçü yazılır; gerisi
+  /// sayı olarak. Tam liste zaten KÖYLÜLER sekmesinde "Hane"ye göre sıralı
+  /// duruyor — sabit boy uğruna kaybedilen bilgi başka bir yerde tam hâliyle
+  /// var, sadece bir dokunuş uzakta.
+  Widget _boardHouseCard(
+      String surname, HouseSnapshot? snap, List<VillagerStatRow> members) {
+    final hanesiz = surname.isEmpty;
+    final label = hanesiz ? 'Hanesizler' : '$surname Hanesi';
+    final mood = snap?.mood ?? 0.55;
+    final sway = snap?.swayShare ?? 0.0;
+    final ascendant = snap?.ascendant ?? false;
+    final wealthSum = members.fold<double>(0, (s, r) => s + r.v.wealth);
+    final shown = members.take(3).toList(growable: false);
+    return BoardTile(
+      highlight: ascendant,
+      tint: ascendant ? AppUi.gold : null,
+      padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            if (ascendant) ...[
+              const GameIcon(GameIconData.star, size: 11, color: AppUi.gold),
+              const SizedBox(width: 5),
+            ],
+            Expanded(
+              child: Text(label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.title.copyWith(fontSize: 12.5)),
+            ),
+            if (!hanesiz)
+              Text(_moodWord(snap?.tier),
+                  style: AppUi.label
+                      .copyWith(fontSize: 8, color: _moraleColor(mood))),
+          ]),
+          const SizedBox(height: 4),
+          if (!hanesiz)
+            // Sütun dar olduğunda (640×360'ta hane sütunu ~227dp) çubuk + üç
+            // sayı satıra sığmıyordu. Sayılar scaleDown ile küçülür, çubuk da
+            // payını korur: kırpma yok, taşma yok.
+            Row(children: [
+              Expanded(flex: 3, child: BoardBar(mood, _moraleColor(mood))),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 7,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    _boardStat('${members.length}', 'ÜYE'),
+                    const SizedBox(width: 8),
+                    _boardStat('${(sway * 100).round()}%', 'NÜFUZ'),
+                    const SizedBox(width: 8),
+                    _boardStat(wealthSum.round().toString(), 'VARLIK',
+                        color: AppUi.gold),
+                  ]),
+                ),
+              ),
+            ]),
+          const SizedBox(height: 4),
+          Container(height: 1, color: AppUi.lineSoft),
+          const SizedBox(height: 3),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final r in shown)
+                  Expanded(child: _boardMemberLine(r)),
+                if (members.length > shown.length)
+                  Text('+${members.length - shown.length} kişi daha',
+                      style: AppUi.body
+                          .copyWith(fontSize: 9.5, color: AppUi.textLo)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _boardStat(String value, String label, {Color? color}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(value,
+              style: AppUi.number
+                  .copyWith(fontSize: 11, color: color ?? AppUi.textHi)),
+          const SizedBox(width: 3),
+          Text(label,
+              style: AppUi.label.copyWith(fontSize: 7, color: AppUi.textLo)),
+        ],
+      );
+
+  /// Hane kartındaki üye satırı — DOKUNULAMAZ, salt gösterim.
+  ///
+  /// 92dp'lik kartta üç üye satırına ~13dp düşüyor; oraya dokunma hedefi
+  /// koymak 44dp eşiğinin üçte biri demek — parmak ıskalar, ıskalayınca da
+  /// yanlış üyeyi açar. Köylü detayına giden yol KÖYLÜLER sekmesindeki 58dp'lik
+  /// kartlar; orada "Hane"ye göre sıralayınca aynı gruplama zaten var.
+  Widget _boardMemberLine(VillagerStatRow r) {
+    final v = r.v;
+    final job = v.hasProfession ? v.type.displayName : v.lifeStage.label;
+    return IgnorePointer(
+      child: Row(children: [
+        GameIcon(_profIcon(v.type),
+            size: _iconSize(context, 9), color: _profColor(v.type)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(v.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textHi)),
+        ),
+        Text(job,
+            style: AppUi.body.copyWith(fontSize: 9.5, color: AppUi.textLo)),
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 30,
+          child: Text(v.wealth.round().toString(),
+              textAlign: TextAlign.right,
+              style: AppUi.number.copyWith(fontSize: 10, color: AppUi.gold)),
+        ),
+      ]),
     );
   }
 

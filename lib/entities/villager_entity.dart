@@ -174,6 +174,18 @@ class VillagerEntity extends WorkerEntity {
   /// muaf) — `null` ile aynı şey DEĞİL.
   JobRole? assignedRole;
 
+  /// Oyuncunun mühürlediği İŞ YERİ ([WorkSite.id]) — "hangi maden, hangi
+  /// kereste kampı". [assignedRole] "ne iş" der, bu "nerede" der.
+  ///
+  /// Neden ayrı bir alan: iki maden ocağı olan bir köyde rol tek başına yetmez
+  /// — panel dolu yuvayı yanlış ocağın altında gösterir, oyuncu birine koyduğu
+  /// adamı öbüründe görürdü. Rol yerden türetilebilir ama yer rolden
+  /// türetilemez; bu yüzden mühür yere basılır.
+  ///
+  /// `null` + [assignedRole] dolu = eski kayıttan gelen atama (yer bilinmiyor);
+  /// ilk kadro senkronunda köylü rolüne uyan en yakın yere yazılır.
+  String? assignedSiteId;
+
   /// Oyuncu bu köylünün işini elle mi belirledi — okunabilirlik kısayolu.
   bool get isPlayerAssigned => assignedRole != null;
 
@@ -304,7 +316,15 @@ class VillagerEntity extends WorkerEntity {
       injuryFactor *
       hasteFactor *
       propFactor *
-      paceFactor;
+      paceFactor *
+      groundFactor;
+
+  /// ZEMİN ÇARPANI — kışın kar (bkz. winter.kSnowSpeedMultiplier). Mevsim
+  /// döndükçe sahne yazar; transient (kaydedilmez, ilk tick'te yeniden kurulur).
+  ///
+  /// Neden ayrı bir alan: hız getter'ının mevsimi sorgulaması, varlığı dünya
+  /// durumuna bağlardı. Köylü zemini bilmez, ona söylenir.
+  double groundFactor = 1.0;
 
   /// Telaş çarpanı — kaçan suçlu / kovalayan muhafız kısa süreliğine hızlanır.
   /// scene_crime yazar, iş bitince 1.0'a döner. Transient (kaydedilmez).
@@ -338,6 +358,11 @@ class VillagerEntity extends WorkerEntity {
   /// Şafakta kademeli uyanış için kişisel gecikme (sn) — köy dalga dalga
   /// uyansın, herkes aynı karede kapıdan fırlamasın. <0 = henüz kurulmadı.
   double _wakeDelay = -1.0;
+  /// UYKUSUZ KALAN SÜRE (sn) — soğuktan kalkan köylü bu süre boyunca uyku
+  /// akışına dönmez. Olmasaydı gece uyanmak imkânsızdı: `isNight` bir sonraki
+  /// karede köylüyü yeniden yatağa yollardı (bkz. [rouseShivering]).
+  double sleepRestless = 0;
+
   /// Nereye gidip uyuyacak (main.dart tarafından her gece atanır)
   (double, double)? sleepTarget;
   /// true → eve girmiş sayılır (render edilmez)
@@ -807,6 +832,29 @@ class VillagerEntity extends WorkerEntity {
 
   bool get isSleeping => state == VillagerState.sleeping;
 
+  /// SOĞUKTAN UYANMA — ocağın sıcağı ulaşmayan çadırda kışı geçiren köylü
+  /// gecenin ortasında titreyerek kalkar ([_SceneShelter] çağırır).
+  ///
+  /// Uyanmak burada bilerek "yatağı terk etmek"tir: köylü dışarı çıkar, akıl
+  /// devralır ve üşüme dürtüsü onu ateş başına götürür ([_bidHearth]). Rahatsız
+  /// olduğunu anlatan şey baş üstünde bir ikon değil, gecenin ortasında ateşin
+  /// çevresinde biriken insanlardır.
+  ///
+  /// [restlessFor] süresince uyku akışı kapalı kalır; sonra köylü — hâlâ geceyse
+  /// — yatağına döner. Zaten uyanıksa hiçbir şey yapmaz.
+  void rouseShivering({double restlessFor = 95.0}) {
+    if (state != VillagerState.sleeping && state != VillagerState.walkingToSleep) {
+      return;
+    }
+    state            = VillagerState.idle;
+    idleTimer        = 0.3 + (personalitySeed % 7) * 0.1; // herkes aynı anda doğrulmasın
+    isInsideBuilding = false;
+    isWalking        = false;
+    _wasSleeping     = false;
+    _wakeDelay       = -1.0;
+    sleepRestless    = restlessFor;
+  }
+
   /// Villager torch eligibility: yetişkin/yaşlı, dışarıda, uyumuyor, ateşte
   /// oturmuyor. walkingToSleep eligible — eve yürürken torch yansın.
   /// sitClaimed olup henüz oturmamış da eligible (ateşe yürürken torch).
@@ -830,6 +878,13 @@ class VillagerEntity extends WorkerEntity {
 
   /// Çocuk mu? Taşıma/iş ataması dışı tutulur, oyuncu davranış uygular.
   bool get isChild => lifeStage == LifeStage.child;
+
+  /// KIŞLIK GİYSİ — dokumacının ürettiği yün giysiyi giyiyor mu.
+  ///
+  /// Üşümeyi bitirmez, yavaşlatır (bkz. systems/winter.dart kCoatChillRelief):
+  /// bitirseydi bir kış dokuyan köy mevsimi tamamen çözer, ocağın ve damın
+  /// anlamı kalmazdı. Kayıtta tutulur — köyün emeği yüklenince kaybolmasın.
+  bool hasCoat = false;
 
   /// O anki etkin dolaşma davranışı. Çocukken tipinin davranışı yerine
   /// [WanderBehavior.playful]; büyüyünce kendi tip davranışına döner.
@@ -1037,7 +1092,9 @@ class VillagerEntity extends WorkerEntity {
     // ── Ateş başı oturma — wander'dan önce ama uyku'dan önce kontrol edilir.
     // Uyku geldiyse sit iptal edilip sleep akışı devralır.
     if (sitClaimed) {
-      if (isNight && !_wasSleeping) {
+      // Soğuktan kalkmış köylü ateş başına oturmak İÇİN kalktı — gece diye onu
+      // hemen yatağa geri yollamak tüm mekanizmayı boşa çıkarırdı.
+      if (isNight && !_wasSleeping && sleepRestless <= 0) {
         _cancelSit();
         // fall through → aşağıdaki isNight bloğu sleep'i başlatsın
       } else {
@@ -1068,8 +1125,11 @@ class VillagerEntity extends WorkerEntity {
       }
     }
 
+    // Soğuktan kalkma sayacı — bitince köylü kaldığı yerden uykuya döner.
+    if (sleepRestless > 0) sleepRestless = max(0.0, sleepRestless - dt);
+
     // Nöbetçi geceyi uyanık geçirir — uyku akışına hiç girmez.
-    if (isNight && !_wasSleeping && !nightDuty) {
+    if (isNight && !_wasSleeping && !nightDuty && sleepRestless <= 0) {
       _wasSleeping = true;
       if (sleepTarget != null) {
         state     = VillagerState.walkingToSleep;

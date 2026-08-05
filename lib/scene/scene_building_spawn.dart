@@ -192,7 +192,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   /// sahnede beş insan var ve bir yere gidiyorlar.
   ///
   /// [_generateWorld] sonunda çağrılır (ateş yeri henüz YOK).
-  void _spawnFoundingCaravan() {
+  /// [roster] verilmezse varsayılan kadro, [lineage] verilmezse rastgele soyad
+  /// kullanılır. İkisi de kuruluş kararının ([FoundingChoice]) sahnedeki karşılığı.
+  void _spawnFoundingCaravan({
+    List<(VillagerType, bool)>? roster,
+    String? lineage,
+  }) {
     final cx = kCols / 2.0, cy = kRows / 2.0;
     // Giriş yönü — kafile haritanın rastgele bir yanından girer, hep aynı
     // yerden gelmesin. Mesafe kısa tutuldu (~16 tile): açılış kamerasının
@@ -213,8 +218,17 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     //
     // ±7 tile: iki ekran ekseninde de rahat pay. Yön yine rastgele — kafile
     // hep aynı yandan girmez, sadece görünmeyen bir yandan girmez.
-    final u0 = (_rng.nextDouble() * 2 - 1) * 7.0;
-    final v0 = (_rng.nextDouble() * 2 - 1) * 7.0;
+    //
+    // Nokta BİR KEZ seçilir ve saklanır: kuruluş kararı kadroyu değiştirince
+    // kafile yeniden doğar, ama AYNI yerden doğmalı — kamera kilidi (aşağıdaki
+    // clamp notu) bir kez takıldıktan sonra köyün kalbi yer değiştiremez.
+    if (!_caravanEntrySet) {
+      _caravanEntrySet = true;
+      _caravanU = (_rng.nextDouble() * 2 - 1) * 7.0;
+      _caravanV = (_rng.nextDouble() * 2 - 1) * 7.0;
+    }
+    final u0 = _caravanU;
+    final v0 = _caravanV;
     final ex = cx + (v0 + u0) / 2;
     final ey = cy + (v0 - u0) / 2;
     // Yürüyüş yönü seçilen noktadan türer (kafile merkeze doğru dizilir).
@@ -222,23 +236,29 @@ extension _SceneBuildingSpawn on _VillageSceneState {
 
     // TEK SOYAD — köy tek hane ile kurulur; kurucular birbirinin kan bağı
     // DEĞİL (parents boş), o yüzden aralarında çift olabilirler.
-    final lineage = randomVillagerSurname(_rng);
+    final family = lineage ?? randomVillagerSurname(_rng);
+    final crew = roster ?? _kFounderRoster;
     final founders = <VillagerEntity>[];
 
-    for (int i = 0; i < _kFounderRoster.length; i++) {
-      final (type, male) = _kFounderRoster[i];
+    for (int i = 0; i < crew.length; i++) {
+      final (type, male) = crew[i];
       final elder = i == 4;
+      // Beşinciden SONRASI "fazladan can" — kuruluş kararıyla gelen bekâr
+      // (bkz. FoundingChoice). Çift değildir; eşi dışarıdan gelir.
+      final spare = i > 4;
       // Çiftler yaşça yakın, yaşlı belirgin biçimde ileri yaşta — köy ilk
       // günden bir kuşak farkı taşısın (hikâye saati bundan besleniyor).
       final age = elder
           ? kElderStartDay + _rng.nextDouble() * 6
-          : kAdultStartDay + (i < 2 ? 12 : 2) + _rng.nextDouble() * 5;
+          : spare
+              ? kAdultStartDay + _rng.nextDouble() * 3
+              : kAdultStartDay + (i < 2 ? 12 : 2) + _rng.nextDouble() * 5;
       // Kafile TEK SIRA yürür: arkadakiler öndekinin izinde, hafif yalpayla.
       final back = i * 1.15;
       final v = VillagerEntity(
         type: type,
         name: randomVillagerName(_rng, male: male),
-        surname: lineage,
+        surname: family,
         male: male,
         // Kişilik mesleğiyle uyumlu — çağrı sistemiyle tutarlı köy.
         personalitySeed: _seedForCalling(type),
@@ -249,11 +269,18 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       );
       // Evli sayılırlar — düğün adayı havuzuna düşmesinler (yaşlı dul, o da
       // `wed` kalır: cozy kural gereği kimse zorla yeniden evlendirilmez).
-      v.wed = true;
+      // Fazladan can BEKÂRDIR: köyün ilk düğünü onunla olur.
+      v.wed = !spare;
       v.lastStageSeen = v.lifeStage;
       founders.add(v);
       _villagers.add(v);
-      _lifeEvent(v, elder ? 'Kafileyle bu topraklara geldi' : 'Köyü kurmaya geldi',
+      _lifeEvent(
+          v,
+          elder
+              ? 'Kafileyle bu topraklara geldi'
+              : spare
+                  ? 'Kafile onu geride bırakmadı'
+                  : 'Köyü kurmaya geldi',
           icon: '🧭', milestone: true);
     }
 
@@ -268,6 +295,39 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     }
 
     _fixNpcSpawns();
+  }
+
+  /// KURULUŞ KARARI dünyaya işlenir — kafilenin yükü (bkz. [FoundingChoice]).
+  ///
+  /// Kurucular sinematik başlamadan önce doğmuştu (kafile `_generateWorld`
+  /// sonunda kurulur; kamera kadrajı buna bağlı). Karar kadroyu değiştirdiği
+  /// için kafile YENİDEN doğar — meslek başına kişilik tohumu `final`, yani
+  /// yerinde meslek değiştirmek köylüyü kendi çağrısına yabancılaştırırdı
+  /// (kuruluşun ilk beş kişisi kırgın başlamamalı).
+  ///
+  /// Güvenli olmasının sebebi zamanlama: sinematik oynarken sim DURUR, kimse
+  /// bir işe/eve/çapaya bağlanmamıştır. Ateş kurulduktan sonra çağrılmaz.
+  void _applyFoundingChoice(FoundingChoice c) {
+    if (_hasFire) return; // kuruluş geçti — kadro artık köyün kendi malı
+    // Soyad korunur: ad kapısı (bir sonraki çekim) henüz açılmadı, kuruluşta
+    // atanan rastgele soyad burada kaybolmamalı.
+    final family = _villagers.isNotEmpty ? _villagers.first.surname : null;
+    _villagers.clear();
+    _spawnFoundingCaravan(roster: c.roster, lineage: family);
+
+    _stockpile.wood = c.wood;
+    _stockpile.stone = c.stone;
+    _stockpile.food = c.food;
+  }
+
+  /// Hanenin adını oyuncu koydu — kurucuların hepsine soyad olarak işlenir.
+  /// ("… Hanesi" hane kartlarında, meclis masasında, dilekçelerde konuşur.)
+  void _renameFoundingLineage(String house) {
+    final name = house.trim();
+    if (name.isEmpty) return;
+    for (final v in _villagers) {
+      v.surname = name;
+    }
   }
 
   /// Ateş yakıldı — kurucular ocağın başına toplanır.

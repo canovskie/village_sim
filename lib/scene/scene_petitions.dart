@@ -97,7 +97,11 @@ extension _ScenePetitions on _VillageSceneState {
   /// (`{suçlu}`, `{suç}` gibi dilekçeye özel yer tutucular).
   void _presentPetition(Petition rawPetition,
       {VillagerEntity? author, Map<String, String> extra = const {}}) {
-    AudioManager.instance.playSfx(Sfx.bellChime);
+    // Dilekçenin sesi ÇAN DEĞİL, boğaz temizleme: köy kapına gelmiştir, biri
+    // öne çıkıp söze başlar. Çan buradan alındı çünkü aynı çan görevi de,
+    // mührü de, reddi de karşılıyordu — oyunun bütün önemli anları aynı
+    // duyuluyordu (bkz. assets/audio/README.md).
+    AudioManager.instance.playSfx(Sfx.throatClear);
     if (author != null && !author.isDying) {
       _petitionAuthor = author;
       final (cc, cr) = _villageCenter();

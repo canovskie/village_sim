@@ -68,6 +68,8 @@ flutter:
     - assets/trees/
     - assets/tools/
     - assets/nature/
+    # Dizin girdisi ÖZYİNELEMELİ DEĞİL — alt klasör ayrıca yazılmalı.
+    - assets/nature/mud/
     - assets/effects/
     - assets/animals/
     - assets/ui/

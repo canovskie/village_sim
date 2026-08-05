@@ -37,11 +37,21 @@ void main() {
       expect(isHarmanArea(bales.first.gridX, bales.first.gridY), isTrue);
     });
 
+    test('new bale inherits scene time for its settle animation', () {
+      final hay = [
+        for (int i = 0; i < 6; i++)
+          HayEntity(type: HayType.pile, gridX: 16.0, gridY: 3.0)
+            ..spawnTime = i.toDouble(),
+      ];
+      processHayPiles(hay, farm, time: 42.5);
+      expect(hay.single.spawnTime, 42.5);
+    });
+
     test('distant piles still combine (no cluster requirement)', () {
       final hay = [
-        HayEntity(type: HayType.pile, gridX: 0,  gridY: 0)..spawnTime = 0,
+        HayEntity(type: HayType.pile, gridX: 0, gridY: 0)..spawnTime = 0,
         HayEntity(type: HayType.pile, gridX: 30, gridY: 0)..spawnTime = 1,
-        HayEntity(type: HayType.pile, gridX: 0,  gridY: 30)..spawnTime = 2,
+        HayEntity(type: HayType.pile, gridX: 0, gridY: 30)..spawnTime = 2,
         HayEntity(type: HayType.pile, gridX: 30, gridY: 30)..spawnTime = 3,
         HayEntity(type: HayType.pile, gridX: 15, gridY: 15)..spawnTime = 4,
         HayEntity(type: HayType.pile, gridX: 20, gridY: 5)..spawnTime = 5,
@@ -68,8 +78,10 @@ void main() {
       final hay = <HayEntity>[];
       for (int round = 0; round < 4; round++) {
         for (int i = 0; i < 6; i++) {
-          hay.add(HayEntity(type: HayType.pile, gridX: 16.0, gridY: 3.0)
-            ..spawnTime = (round * 6 + i).toDouble());
+          hay.add(
+            HayEntity(type: HayType.pile, gridX: 16.0, gridY: 3.0)
+              ..spawnTime = (round * 6 + i).toDouble(),
+          );
         }
         processHayPiles(hay, farm);
       }
@@ -80,8 +92,11 @@ void main() {
         for (int j = i + 1; j < bales.length; j++) {
           final dx = bales[i].gridX - bales[j].gridX;
           final dy = bales[i].gridY - bales[j].gridY;
-          expect(dx * dx + dy * dy, greaterThanOrEqualTo(0.45 * 0.45),
-              reason: 'bale $i and $j overlap');
+          expect(
+            dx * dx + dy * dy,
+            greaterThanOrEqualTo(0.45 * 0.45),
+            reason: 'bale $i and $j overlap',
+          );
         }
       }
     });
@@ -104,8 +119,10 @@ void main() {
             ..spawnTime = i.toDouble(),
       ];
       processHayPiles(hay, farm);
-      final remaining =
-          hay.where((h) => !h.isBale).map((h) => h.spawnTime).toList();
+      final remaining = hay
+          .where((h) => !h.isBale)
+          .map((h) => h.spawnTime)
+          .toList();
       expect(remaining, [6.0, 7.0]);
     });
   });

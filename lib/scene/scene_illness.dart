@@ -39,8 +39,10 @@ extension _SceneIllness on _VillageSceneState {
     final cx = church == null ? 0.0 : church.col + church.cols / 2.0;
     final cy = church == null ? 0.0 : church.row + church.rows / 2.0;
 
+    var anySick = false;
     for (final v in _villagers) {
       if (v.sickDays <= 0 || v.isDying) continue;
+      anySick = true;
 
       // ── İyileşme — tok köy + mabet hızlandırır ──────────────────────────────
       double rate = 1.0;
@@ -93,6 +95,13 @@ extension _SceneIllness on _VillageSceneState {
     _illnessScan += dt;
     if (_illnessScan >= _kIllnessScan) {
       _illnessScan = 0;
+      // Hastalığın SESİ — köyde hasta varken seyrek bir öksürük. Baş üstünde
+      // ikon yok, sokakta öksüren biri var: hastalık göze değil kulağa da
+      // görünsün. Tarama 5 sn'de bir dönüyor → ~40 sn'de bir duyulur.
+      // Zar MOTORUN rastgelesiyle atılır (`playSfxChance`): sahnenin `_rng`'si
+      // sim'in deterministik akışıdır, ses ondan sayı tüketirse aynı tohumlu
+      // köy başka bir yola girer.
+      if (anySick) AudioManager.instance.playSfxChance(Sfx.cough, 0.12);
       _maybeOnsetIllness(winter, foodShort);
     }
   }
@@ -151,7 +160,13 @@ extension _SceneIllness on _VillageSceneState {
         LifeStage.child => 0.0,
       };
       cands.add(v);
-      weights.add(ageW * (1.4 - v.morale.clamp(0.0, 1.0)));
+      // İHMALİN AĞIRLIĞI — kış tek başına öldürmez, ihmal öldürür
+      // (bkz. systems/winter.dart coldNeglect). Sönmüş ocak + soğuk barınak +
+      // giysisizlik + boş ambar ÜST ÜSTE binerse o köylü hastalanma
+      // kurasında öne çıkar. İki ihmale kadar çarpan 1.0'dır: kışın bir gece
+      // ocağın sönmesi kimseyi hasta etmez.
+      final neglectW = neglectIllnessMultiplier(_coldNeglectOf(v));
+      weights.add(ageW * (1.4 - v.morale.clamp(0.0, 1.0)) * neglectW);
     }
     if (cands.isEmpty) return;
 
@@ -174,6 +189,7 @@ extension _SceneIllness on _VillageSceneState {
     chosen.sickDays =
         _kSickDaysMin + _rng.nextDouble() * (_kSickDaysMax - _kSickDaysMin);
     chosen.feel(NpcEmotion.fear, 2.5, moodDelta: -0.04);
+    AudioManager.instance.playSfx(Sfx.cough); // hastalığın ilk işareti
     _illnessSeen++; // köyün hafızası — Tecrit Fermanı'nın kapısı bunu okur
     // TECRİT — hüküm yürürlükteyse hasta olduğu yerde kalmaz, doğrudan kendi
     // damına yürür. Fermanın GÖRÜNÜR yüzü budur: sokakta öksüren kimse yok,

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1f24"/>
+      <stop offset="1" stop-color="#0c0d0f"/>
+    </linearGradient>
+    <radialGradient id="ember" cx="50%" cy="52%" r="43%">
+      <stop offset="0" stop-color="#e49139" stop-opacity="0.42"/>
+      <stop offset="0.48" stop-color="#e49139" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#e49139" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flame" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f3b978"/>
+      <stop offset="0.58" stop-color="#e49139"/>
+      <stop offset="1" stop-color="#b0611e"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#background)"/>
+  <circle cx="512" cy="532" r="440" fill="url(#ember)"/>
+
+  <!-- Phosphor Icons / flame-fill: loading ekranındaki GameIconData.flame. -->
+  <path
+    fill="url(#flame)"
+    transform="translate(115 115) scale(3.1015625)"
+    d="M173.79,51.48a221.25,221.25,0,0,0-41.67-34.34,8,8,0,0,0-8.24,0A221.25,221.25,0,0,0,82.21,51.48C54.59,80.48,40,112.47,40,144a88,88,0,0,0,176,0C216,112.47,201.41,80.48,173.79,51.48ZM96,184c0-27.67,22.53-47.28,32-54.3,9.48,7,32,26.63,32,54.3a32,32,0,0,1-64,0Z"
+  />
+</svg>

@@ -25,8 +25,12 @@ Future<void> main() async {
   kCaptureMode = true;
   // Gece 0.92 — dev konsolun 'night' değeriyle aynı. Karanlık tam oturmuş,
   // bütün ışık katmanları (cutout + warm wash + halo) devrede.
-  kCaptureTimeOfDay = 0.92;
-  kCaptureZoom = 0.85;
+  // Vakit ve zoom dışarıdan ayarlanabilir: aynı harness hem gece ışık
+  // karşılaştırması hem de gündüz "geniş plan" (ufuk/su yüzeyi) incelemesi
+  // için kullanılır.
+  kCaptureTimeOfDay =
+      double.tryParse(Platform.environment['TOD'] ?? '') ?? 0.92;
+  kCaptureZoom = double.tryParse(Platform.environment['ZOOM'] ?? '') ?? 0.85;
 
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,

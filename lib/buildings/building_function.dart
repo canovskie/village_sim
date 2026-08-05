@@ -128,7 +128,9 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.tent: BuildingFunction(
     role: BuildingRole.housing,
     summary: 'Derme çatma barınak. Bir köylüyü sokağın soğuğundan alır ama '
-        'gerçek bir ev kadar huzur vermez. Köy ev dikecek hâle gelene kadar.',
+        'gerçek bir ev kadar huzur vermez. Kendi ocağı da yoktur: kışın '
+        'ısınmasının tek yolu köyün ateşine yakın kurulmuş olmaktır — uzağa '
+        'kurulan çadırda geceler titreyerek geçer. Köy ev dikecek hâle gelene kadar.',
     housingCapacity: 1,
   ),
 
@@ -246,6 +248,12 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
         'yaşamak morali sürekli ayakta tutar.',
     civicEffect: CivicEffect.morale,
     civicValue: 0.10,
+  ),
+
+  BuildingType.tailor: BuildingFunction(
+    role: BuildingRole.none,
+    summary: 'Terzi kurulana kadar köylüler kaba post ve bezlerle dolaşır. '
+        'Atölye tamamlandığında köyün günlük giysileri dikilir.',
   ),
 
   BuildingType.chickenCoop: BuildingFunction(

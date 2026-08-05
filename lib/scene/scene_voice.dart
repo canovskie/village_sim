@@ -29,6 +29,18 @@ extension _SceneVoice on _VillageSceneState {
     );
   }
 
+  /// KÖYÜN ADI, Türkçe ekiyle — "Pınarbaşı'na", "Pınarbaşı'nın".
+  ///
+  /// Havuzlu metinlerde `{köy-e}` yer tutucusu kullanılır; bu yardımcı, havuzu
+  /// olmayan tek cümlelik yerler (bildirim başlığı, kronik satırı) içindir.
+  /// Naif `'$_villageName\'e'` yapıştırması ünlü uyumunu bozar.
+  ///
+  /// KURAL — adı KİM söylerse o anlamlı: köylü kendi yurduna "köy" der, adını
+  /// söyleyen DIŞARIDANDIR (tüccar, vergici, göçmen, elçi) ya da an TÖRENSELDİR
+  /// (kuruluş, kademe, yemin, vakayiname). Her cümleye ad sıkıştırmak metni
+  /// makineleştirir; ad seyrek geçtiği için ağırlığını korur.
+  String _villageWith(Suffix s) => withSuffix(_villageName, s);
+
   /// Bir dilekçenin metin tohumu: gün + dilekçe kimliği. Aynı gün aynı dilekçe
   /// → aynı varyant (modalı kapatıp açınca metin değişmesin).
   int _petitionSeed(Petition p) => _stableSeed(p.id, _dayCount);

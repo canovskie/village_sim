@@ -23,6 +23,10 @@ enum JobRole {
   forager,
   /// Ocak başında ham yiyeceği pişirir → doyuran yiyecek. Ateş yeri ister.
   cook,
+
+  /// Yünü kışlık giysiye çevirir. KIŞIN İŞİ: tarla donunca kadro boşa
+  /// düşmesin diye var — bina istemez, ocağın ya da ambarın başında dokunur.
+  weaver,
 }
 
 extension JobRoleLabel on JobRole {
@@ -38,6 +42,7 @@ extension JobRoleLabel on JobRole {
         JobRole.woodcutter => 'Oduncu',
         JobRole.forager   => 'Toplayıcı',
         JobRole.cook      => 'Aşçı',
+        JobRole.weaver    => 'Dokumacı',
       };
 
   /// Panel/künye ikonu — elle atama yüzeyinde rolü bir bakışta okutur.
@@ -52,6 +57,7 @@ extension JobRoleLabel on JobRole {
         JobRole.woodcutter => '🪓',
         JobRole.forager   => '🧺',
         JobRole.cook      => '🍲',
+        JobRole.weaver    => '🧶',
       };
 }
 

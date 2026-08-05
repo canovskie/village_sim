@@ -124,6 +124,9 @@ class CharacterRenderer {
   /// kapüşon). Köylünün `bearingTense` değerinden gelir.
   static double _shroud = 0;
 
+  /// Terzi kurulmadan önce bütün yerleşiklerin giydiği kaba post/bez kılığı.
+  static bool _primitiveClothing = false;
+
   /// Bir NPC çizmeden ÖNCE köyün hâlini yaz. Yabancı (imparatorluk) için
   /// sıfır geçilir: köyün ambarı onun kumaşını soldurmaz.
   ///
@@ -131,9 +134,11 @@ class CharacterRenderer {
   /// Argümansız çağrı nötre döner ve oyun-dışı çağıranlar (künye portresi,
   /// animasyon odası, yakalama harness'ları) hiçbir şey bilmeden doğru sonucu
   /// alır — yazmayan çağıran son çizilen köylünün kıtlığını miras alırdı.
-  static void beginNpc({double provision = 0, double shroud = 0}) {
+  static void beginNpc({double provision = 0, double shroud = 0,
+      bool primitiveClothing = false}) {
     _provision = provision.clamp(-1.0, 1.0);
     _shroud = shroud.clamp(0.0, 1.0);
+    _primitiveClothing = primitiveClothing;
   }
 
   /// GİYSİ RENGİ — tek kapı. Kişisel ton ([NpcVisual.clothingShift]) üstüne
@@ -144,6 +149,7 @@ class CharacterRenderer {
   /// Ölçek bilinçli ölçülü: en kötü günde bile kumaş TANINIR kalır — amaç
   /// "kostüm değişti" değil, "bu köy bugün yorgun" hissi.
   static Color _cloth(Color base, double shift) {
+    if (_primitiveClothing) base = const Color(0xFF8A6945);
     final c = tintCloth(base, shift);
     final p = _provision;
     if (p.abs() < 0.02) return c;
@@ -218,6 +224,7 @@ class CharacterRenderer {
     /// Oyun-dışı çağıranlar geçmez → nötr görünüm.
     double provision = 0,
     double shroud = 0,
+    bool primitiveClothing = false,
   }) {
     // İmparatorluk askeri köyün YABANCISI — hane kuşağı takmaz. Aksi halde
     // dışarıdan gelen vergici bir köy hanesinin rengiyle görünürdü.
@@ -226,6 +233,7 @@ class CharacterRenderer {
     beginNpc(
       provision: foreign ? 0 : provision,
       shroud: foreign ? 0 : shroud,
+      primitiveClothing: foreign ? false : primitiveClothing,
     );
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
@@ -249,6 +257,14 @@ class CharacterRenderer {
       final v = stage == LifeStage.elder ? visual.elderly() : visual;
       _imperialSoldierNpc(canvas, anim, v, time,
           commander: commander, attacking: attacking);
+    }
+    else if (primitiveClothing) {
+      final baseVisual = visual ?? _fallbackVisual;
+      final v = stage == LifeStage.elder
+          ? baseVisual.elderly()
+          : baseVisual;
+      _primitiveNpc(canvas, anim, v, time,
+          child: stage == LifeStage.child);
     }
     // Çocuk/genç henüz meslek edinmemiş → standart köylü görünümü, tipten
     // bağımsız. Yetişkin/yaşlı meslek görünür; yaşlıda saç kıra döner.
@@ -413,17 +429,20 @@ class CharacterRenderer {
   static void drawSleeping(Canvas c, VillagerType type, {
     double walkPhase = 0,
     bool flipX = false,
+    bool primitiveClothing = false,
   }) {
     // Uyuyan gövde battaniye altında — kuşak görünmez, ama bir önceki NPC'nin
     // rengi sızmasın diye invariant burada da uygulanır. Köyün hâli de nötre
     // döner: battaniye altındaki gövdede kılık okunmaz.
     _accent = null;
-    beginNpc();
+    beginNpc(primitiveClothing: primitiveClothing);
     c.save();
     if (flipX) c.scale(-1, 1);
 
     final breath = sin(walkPhase * 0.6) * 0.6;
-    final tunicCol = _sleepTunicColor(type);
+    final tunicCol = primitiveClothing
+        ? const Color(0xFF80603E)
+        : _sleepTunicColor(type);
     final skinCol  = _sleepSkinColor(type);
 
     // Battaniye / minder
@@ -523,8 +542,10 @@ class CharacterRenderer {
     double torchPhase = 0,
     /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
     Color? houseAccent,
+    bool primitiveClothing = false,
   }) {
     _accent = houseAccent;
+    _primitiveClothing = primitiveClothing;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -547,6 +568,19 @@ class CharacterRenderer {
     final showTorch = torchLevel > 0.02 && !carryingWater && !harvesting;
     if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
 
+    if (primitiveClothing) {
+      _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
+          rightItem: carryingWater
+              ? (arm) => ToolRenderer.drawWaterbucket(arm)
+              : null);
+      if (showTorch) {
+        _torchInLeftHand(canvas, torchLevel,
+            time: time, torchPhase: torchPhase);
+      }
+      canvas.restore();
+      return;
+    }
+
     _farmer(canvas, anim, carryingWater: carryingWater, v: visual, time: time);
     if (showTorch) {
       _torchInLeftHand(canvas, torchLevel,
@@ -566,8 +600,10 @@ class CharacterRenderer {
     double torchPhase = 0,
     /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
     Color? houseAccent,
+    bool primitiveClothing = false,
   }) {
     _accent = houseAccent;
+    _primitiveClothing = primitiveClothing;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
     _Anim anim;
@@ -579,6 +615,18 @@ class CharacterRenderer {
     }
     final showTorch = torchLevel > 0.02 && !working;
     if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
+    if (primitiveClothing) {
+      _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
+          rightItem: working
+              ? (arm) => ToolRenderer.drawHammer(arm, scale: 1.15)
+              : null);
+      if (showTorch) {
+        _torchInLeftHand(canvas, torchLevel,
+            time: time, torchPhase: torchPhase);
+      }
+      canvas.restore();
+      return;
+    }
     _builder(canvas, anim, working: working, v: visual, time: time);
     if (showTorch) {
       _torchInLeftHand(canvas, torchLevel,
@@ -931,8 +979,10 @@ class CharacterRenderer {
     double torchPhase = 0,
     /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
     Color? houseAccent,
+    bool primitiveClothing = false,
   }) {
     _accent = houseAccent;
+    _primitiveClothing = primitiveClothing;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -955,6 +1005,17 @@ class CharacterRenderer {
     if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
     final armRAngle = anim.armR;
     final armLAngle = anim.armL;
+
+    if (primitiveClothing) {
+      _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
+          rightItem: (arm) => ToolRenderer.drawPickaxe(arm));
+      if (showTorch) {
+        _torchInLeftHand(canvas, torchLevel,
+            shoulderX: -16, time: time, torchPhase: torchPhase);
+      }
+      canvas.restore();
+      return;
+    }
 
     final shirtCol  = visual != null
         ? _cloth(const Color(0xFF4A4840), visual.clothingShift)
@@ -1013,8 +1074,10 @@ class CharacterRenderer {
     double torchPhase = 0,
     /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
     Color? houseAccent,
+    bool primitiveClothing = false,
   }) {
     _accent = houseAccent;
+    _primitiveClothing = primitiveClothing;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -1039,6 +1102,17 @@ class CharacterRenderer {
     if (showTorch) anim = anim.copyWith(armL: _kTorchArmAngle);
     final armRAngle = anim.armR;
     final armLAngle = anim.armL;
+
+    if (primitiveClothing) {
+      _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
+          rightItem: (arm) => ToolRenderer.drawAxe(arm));
+      if (showTorch) {
+        _torchInLeftHand(canvas, torchLevel,
+            shoulderX: -16, time: time, torchPhase: torchPhase);
+      }
+      canvas.restore();
+      return;
+    }
 
     final hoseCol = visual != null
         ? _cloth(_woolDark, visual.clothingShift * 0.5) : _woolDark;
@@ -1119,8 +1193,10 @@ class CharacterRenderer {
     double torchPhase = 0,
     /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
     Color? houseAccent,
+    bool primitiveClothing = false,
   }) {
     _accent = houseAccent;
+    _primitiveClothing = primitiveClothing;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
     final shirtCol = visual != null
@@ -1161,6 +1237,18 @@ class CharacterRenderer {
     if (showTorch) {
       anim = anim.copyWith(armL: _kTorchArmAngle);
       leftSwing = _kTorchArmAngle;
+    }
+
+    if (primitiveClothing) {
+      _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
+          rightItem: (arm) => ToolRenderer.drawRod(arm,
+              castAngle: castAngle));
+      if (showTorch) {
+        _torchInLeftHand(canvas, torchLevel,
+            shoulderX: -15, time: time, torchPhase: torchPhase);
+      }
+      canvas.restore();
+      return;
     }
 
     _shadow(canvas, anim);
@@ -1223,8 +1311,10 @@ class CharacterRenderer {
     double torchPhase = 0,
     /// Hane aksan rengi — göğüsteki çapraz kuşak (bkz. [houseAccentColor]).
     Color? houseAccent,
+    bool primitiveClothing = false,
   }) {
     _accent = houseAccent;
+    _primitiveClothing = primitiveClothing;
     canvas.save();
     if (flipX) canvas.scale(-1, 1);
 
@@ -1246,6 +1336,22 @@ class CharacterRenderer {
     if (showTorch) {
       anim = anim.copyWith(armL: _kTorchArmAngle);
       armLAngle = _kTorchArmAngle;
+    }
+
+    if (primitiveClothing) {
+      _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
+          rightItem: milking ? null : (arm) {
+            arm.drawRect(const Rect.fromLTWH(-1, -32, 3, 56),
+                _f(const Color(0xFF6A4A20)));
+            arm.drawRect(const Rect.fromLTWH(-3, -34, 6, 6),
+                _f(const Color(0xFF6A4A20)));
+          });
+      if (showTorch) {
+        _torchInLeftHand(canvas, torchLevel,
+            shoulderX: -16, time: time, torchPhase: torchPhase);
+      }
+      canvas.restore();
+      return;
     }
 
     final hoseCol = visual != null
@@ -1378,6 +1484,7 @@ class CharacterRenderer {
   /// bilgisi kozmetik değil, gözle okunan oyun bilgisi.
   static void _houseSash(
       Canvas c, Rect r, double cx, double ht, double hb) {
+    if (_primitiveClothing) return;
     final acc = _accent;
     if (acc == null) return;
     // Kuşak GÖĞÜSTE durur: uzun gövdelerde (rahip cüppesi 62px) bitişe kadar
@@ -1570,6 +1677,52 @@ class CharacterRenderer {
   // ─── KÖYLÜ (mesleksiz — çocuk/genç evresi) ────────────────────────────────
   // Tipten bağımsız standart keten tunik + yün pantolon, alet/şapka yok.
   // [child] true ise kafa büyük çizilir (çocuk oranı).
+  static void _primitiveNpc(Canvas c, _Anim anim, NpcVisual v, double time,
+      {bool child = false, void Function(Canvas)? rightItem}) {
+    final hide = _cloth(const Color(0xFF8A6945), v.clothingShift * 0.35);
+    final hideDark = darker(hide, 0.24);
+    final legWrap = _cloth(const Color(0xFF5C4932), v.clothingShift * 0.20);
+
+    _shadow(c, anim);
+    _shadedLeg(c, -6, anim.legL, legWrap, _leatherDk,
+        legLift: anim.legLiftL);
+    _shadedLeg(c, 6, anim.legR, legWrap, _leatherDk,
+        legLift: anim.legLiftR);
+
+    c.save();
+    _applyTorsoTransform(c, anim);
+    final tunic = Path()
+      ..moveTo(-14, -68)
+      ..lineTo(13, -68)
+      ..lineTo(12, -38)
+      ..lineTo(5, -35)
+      ..lineTo(-1, -39)
+      ..lineTo(-7, -35)
+      ..lineTo(-13, -38)
+      ..close();
+    c.drawPath(tunic, _f(hide));
+    c.drawPath(tunic, _s(_outline));
+    c.drawRect(const Rect.fromLTWH(-13, -51, 25, 5), _f(_leatherDk));
+    c.drawLine(const Offset(-10, -68), const Offset(9, -43),
+        _s(const Color(0xFFB49364), 2.0));
+    // Ayrı tonlu yamalar kaba, elde birleştirilmiş silueti okunur kılar.
+    c.drawRect(const Rect.fromLTWH(-10, -61, 7, 6), _f(hideDark));
+    c.drawRect(const Rect.fromLTWH(4, -45, 6, 5),
+        _f(lighter(hide, 0.12)));
+    _shadedArm(c, -16, anim.armL, hide, v.skin);
+    _shadedArm(c, 16, anim.armR, hide, v.skin, rightItem);
+    if (child) {
+      c.save();
+      c.translate(0, -80);
+      c.scale(1.28, 1.28);
+      _shadedHead(c, v, time, y: 0);
+      c.restore();
+    } else {
+      _shadedHead(c, v, time);
+    }
+    c.restore();
+  }
+
   static void _peasantNpc(Canvas c, _Anim anim, NpcVisual v, double time,
       {bool child = false}) {
     final tunicBase = _cloth(_linen,     v.clothingShift);

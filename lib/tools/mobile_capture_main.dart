@@ -109,6 +109,11 @@ final List<String> _overflowErrors = <String>[];
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   kCaptureMode = true; // açılış sinematiği + ses motoru yok
+  // Giriş animasyonları SON karesiyle başlasın. Harness kareyi adımdan ~200ms
+  // sonra alıyor; Kanunname'nin petek açılışı (720ms) o anda yarıda kalıyor ve
+  // yedi altıgenden üçü görünüyordu — yerleşim doğruyken bile kare "eksik"
+  // okunuyor, doğrulama aracı kendi gecikmesini hata gibi raporluyordu.
+  AppUi.captureStatic = true;
   _installErrorHook();
 
   // İlk cihazla AÇ: sahne bir ölçüde kurulup sonra yeniden boyutlanırsa
@@ -739,20 +744,31 @@ List<Step> _script() => <Step>[
 
   // Bölüm başlıkları Defter'in İÇİNDE aranır: "NÜFUS" hem komuta çubuğunda
   // hem bölüm rafında var, kısıtlamazsak yanlış hedefe dokunur.
+  // Etiket cihaza göre değişir: telefonun sol rayı KISA etiketi yazar
+  // (KANUN), tablet/masaüstü rafı tam adı (KANUNNAME). İkisini de dene.
   Step('14_ledger_kanun', 'Köy Defteri — Kanunname', (d) async {
+    final short =
+        await _tapText(LedgerSection.kanun.short, within: 'VillageLedger');
+    if (short == null) return null;
     return _tapText(LedgerSection.kanun.label, within: 'VillageLedger');
   }, closeLedger: false),
 
   Step('15_ledger_nufus', 'Köy Defteri — Nüfus', (d) async {
-    return _tapText(LedgerSection.nufus.label, within: 'VillageLedger');
+    return _tapText(LedgerSection.nufus.short, within: 'VillageLedger');
+  }, closeLedger: false),
+
+  // Nüfus'un İKİNCİ sekmesi (haneler) ayrı bir ızgara dizilimi — kendi sabit
+  // boylu kartı var, ayrıca ölçülmeli.
+  Step('15b_ledger_haneler', 'Köy Defteri — Haneler', (d) async {
+    return _tapText('HANELER', within: 'VillageLedger');
   }, closeLedger: false),
 
   Step('16_ledger_tuzuk', 'Köy Defteri — Tüzük', (d) async {
-    return _tapText(LedgerSection.tuzuk.label, within: 'VillageLedger');
+    return _tapText(LedgerSection.tuzuk.short, within: 'VillageLedger');
   }, closeLedger: false),
 
   Step('17_ledger_kronik', 'Köy Defteri — Kronik', (d) async {
-    return _tapText(LedgerSection.kronik.label, within: 'VillageLedger');
+    return _tapText(LedgerSection.kronik.short, within: 'VillageLedger');
   }, closeLedger: false),
 
   Step('18_ledger_close', 'Defteri kapat (boşluğa dokun)', (d) async {

@@ -144,6 +144,12 @@ class VoiceCtx {
       );
 }
 
+/// TÜRKÇE BÜYÜK HARF. `toUpperCase()` Unicode varsayılanını uygular ve "i"yi
+/// noktasız "I" yapar: köyün adı "Değirmenli" ise başlıkta "DEĞIRMENLI" yazar —
+/// oyuncunun yazdığı ad ekranda yanlış okunur. Nokta önce elle taşınır.
+String upperTr(String s) =>
+    s.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
+
 /// Mevsimin metinde geçen adı.
 String seasonWord(Season s) => switch (s) {
       Season.spring => 'ilkbahar',

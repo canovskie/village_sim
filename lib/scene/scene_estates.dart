@@ -257,6 +257,10 @@ extension _SceneEstates on _VillageSceneState {
       final homeless = homeType == null;
       // Çadırda yaşıyor: evi var ama derme çatma → hafif hoşnutsuzluk.
       final poorHousing = homeType == BuildingType.tent;
+      // ...ve o çadır kışın ocaktan uzaktaysa üstüne bir de üşür. Mesafe TEK
+      // kaynaktan okunur (bkz. hearth_warmth): panelde gösterilen halka ile
+      // simin okuduğu sayı asla ayrışmasın.
+      final coldShelter = poorHousing && _inColdShelter(v);
       // Taş konut: Köy Evi'nden konforlu → hafif moral bonusu.
       final comfortHousing = homeType == BuildingType.stoneHouseBlue ||
           homeType == BuildingType.stoneHouseGreen;
@@ -299,6 +303,7 @@ extension _SceneEstates on _VillageSceneState {
       final ev = evaluateVillagerMorale(
         homeless: homeless,
         poorHousing: poorHousing,
+        coldShelter: coldShelter,
         comfortHousing: comfortHousing,
         luxuryHousing: luxuryHousing,
         starving: starving,
@@ -506,4 +511,7 @@ const _kEmigrateLines = [
   '{ad} çıkınını bağladı, kimseye söylemeden yola çıktı.',
   '{ad} gitti. Uzun zamandır burada değildi zaten.',
   '{ad-in} kapısı bu sabah açık kaldı. Geri dönmeyecek.',
+  // Ayrılık, yeri bir ad hâline getirir: gidenin ardında bıraktığı artık
+  // "köy" değil, adı olan bir yerdir.
+  '{ad} {köy-den} ayrıldı. Yol göründü, arkasına bakmadı.',
 ];

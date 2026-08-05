@@ -238,7 +238,7 @@ class _ScenesTabState extends State<_ScenesTab> {
                         setState(() => _elapsed = elapsed);
                       },
                       onDone: () {},
-                      onNameChosen: (_) {},
+                      onNameChosen: (_, _) {},
                     ),
                   ),
                 ),

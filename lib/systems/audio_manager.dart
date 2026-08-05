@@ -25,10 +25,21 @@ enum Sfx {
   sealStamp,   // mühür vurulur — Kanunname'nin sesi
   birthJoy,    // doğum
   funeralToll, // cenaze
-  weddingJoy,  // düğün alayı
   fightScuffle,// yumruklaşma / çekişme
   buildDone,   // inşaat biter, gövde tamamlanır
   uiTap,       // panel/düğme dokunuşu
+
+  // ── İNSAN SESLERİ ────────────────────────────────────────────────────────
+  // Köyde bugüne dek hiç insan sesi yoktu: çan, hayvan ve hava vardı, ağız
+  // yoktu. Bunlar o boşluğu kapatır. Hepsi KELİMESİZ — metni `voice.dart`
+  // yazıyor, ses ayrıca cümle kurarsa ikisi çelişir ve dil eklenince kadro
+  // çöpe gider.
+  childLaugh,    // çocuk kıkırdaması — gündüz seyrek aksan (çocuk varsa)
+  childrenPlay,  // çocuk kalabalığı uğultusu — köyde 3+ çocuk varken
+  cough,         // hastalık: onset + hastalık sürerken seyrek
+  throatClear,   // dilekçe sahibi söze başlar ("öhöm")
+  crowdApplause, // düğün alayı — köy ölçeğinde küçük grup alkışı
+  buildStart,    // şantiye kurulur, aletler çıkar
 }
 
 /// Müzik parçaları — ortamdan AYRI katman (bkz. [AudioManager.playMusic]).
@@ -85,33 +96,52 @@ class AudioManager {
     Sfx.imperialMarch: 0.95, // dramatik varış anı — öne çıksın
     // Beklenenler: tören sesleri öne, UI dokunuşu geriye. UI sesi yüksek
     // olursa panel açıp kapayan oyuncuyu yorar — en sık duyulan ses odur.
-    Sfx.sealStamp: 0.8,
+    // Mühür kaydı tepesi -2.4 dB, çandan ~5 dB sıcak (ölçüldü). Tabanı 0.8'de
+    // bırakmak onu köyün en sert sesi yapardı; 0.6 mührü çandan AĞIR ama
+    // çatlamayan yerde tutar (0.42 sn'lik keskin transient kulakta büyür).
+    Sfx.sealStamp: 0.6,
     Sfx.birthJoy: 0.75,
     Sfx.funeralToll: 0.7,
-    Sfx.weddingJoy: 0.75,
     Sfx.fightScuffle: 0.6,
     Sfx.buildDone: 0.55,
     Sfx.uiTap: 0.25,
+    // İnsan sesleri ARKA PLANDA kalır: köyün gürültüsü değil, dokusu. Ağız
+    // sesi öne çıkarsa 40 kişilik köy çorbaya döner.
+    Sfx.childLaugh: 0.5,
+    Sfx.childrenPlay: 0.45,
+    Sfx.cough: 0.55,
+    Sfx.throatClear: 0.5,
+    Sfx.crowdApplause: 0.7,
+    Sfx.buildStart: 0.5,
   };
-  static const Map<Sfx, String> _sfxFile = {
-    Sfx.bellChime: 'bell_chime.mp3',
-    Sfx.chickenCluck: 'chicken_cluck.mp3',
-    Sfx.cowMoo: 'cow_moo.mp3',
-    Sfx.roosterCrow: 'rooster_crow.mp3',
-    Sfx.crowdFair: 'crowd_fair.mp3',
-    Sfx.owl: 'owl.mp3',
-    Sfx.birds: 'birds_singing.mp3',
-    Sfx.thunderClap: 'thunder_clap.mp3',
-    Sfx.imperialMarch: 'imperial_march.mp3',
-    // ── Henüz assets/audio'da OLMAYAN dosyalar ────────────────────────────
-    // Bunlar bilerek önden bağlandı; dosya düşene kadar sessizler.
-    Sfx.sealStamp: 'seal_stamp.mp3',
-    Sfx.birthJoy: 'birth_joy.mp3',
-    Sfx.funeralToll: 'funeral_toll.mp3',
-    Sfx.weddingJoy: 'wedding_joy.mp3',
-    Sfx.fightScuffle: 'fight_scuffle.mp3',
-    Sfx.buildDone: 'build_done.mp3',
-    Sfx.uiTap: 'ui_tap.mp3',
+
+  /// Efekt → DOSYA(LAR). Birden çok dosya varsa her çalışta rastgele biri
+  /// seçilir — aynı sesin arka arkaya aynı duyulması, sık tetiklenen
+  /// efektlerde (öksürük, çocuk kahkahası) tek başına yorucudur.
+  static const Map<Sfx, List<String>> _sfxFile = {
+    Sfx.bellChime: ['bell_chime.mp3'],
+    Sfx.chickenCluck: ['chicken_cluck.mp3'],
+    Sfx.cowMoo: ['cow_moo.mp3'],
+    Sfx.roosterCrow: ['rooster_crow.mp3'],
+    Sfx.crowdFair: ['crowd_fair.mp3'],
+    Sfx.owl: ['owl.mp3'],
+    Sfx.birds: ['birds_singing.mp3'],
+    Sfx.thunderClap: ['thunder_clap.mp3'],
+    Sfx.imperialMarch: ['imperial_march.mp3'],
+    Sfx.fightScuffle: ['fight_scuffle.mp3'],
+    Sfx.buildDone: ['build_done.mp3'],
+    Sfx.childLaugh: ['child_laugh_1.mp3', 'child_laugh_2.mp3'],
+    Sfx.childrenPlay: ['children_play.mp3'],
+    Sfx.cough: ['cough_1.mp3', 'cough_2.mp3'],
+    Sfx.throatClear: ['throat_clear.mp3'],
+    Sfx.crowdApplause: ['crowd_applause.mp3'],
+    Sfx.buildStart: ['build_start.mp3'],
+    Sfx.sealStamp: ['seal_stamp.mp3'],
+    Sfx.birthJoy: ['birth_joy.mp3'],
+    Sfx.funeralToll: ['funeral_toll.mp3'],
+    // ── Dosyası BİLEREK yok ────────────────────────────────────────────────
+    // Kanca duruyor, ses istenmedi (README "İSTENMEDİ"); sessiz kalır.
+    Sfx.uiTap: ['ui_tap.mp3'],
   };
 
   static const Map<MusicTrack, String> _musicFile = {
@@ -128,6 +158,11 @@ class AudioManager {
 
   double _owlTimer = 22.0;  // gece baykuş aksanı sayacı (sn)
   double _birdsTimer = 18.0; // gündüz kuş cıvıltısı aksanı sayacı (sn)
+  double _childTimer = 30.0; // gündüz çocuk sesi aksanı sayacı (sn)
+
+  // Varyant seçimi — aynı efektin arka arkaya aynı dosyayla çalmaması için.
+  final Random _sfxRng = Random();
+  final Map<Sfx, int> _lastVariant = {};
 
   // ── MÜZİK ────────────────────────────────────────────────────────────────
   // Tek oynatıcı: iki parça aynı anda çalmaz, geçiş "kıs → değiştir → aç"
@@ -214,7 +249,12 @@ class AudioManager {
 
   /// Her tick (gerçek-zaman dt). Ortam + müzik seviyelerini hedefe yumuşatır
   /// ve gece baykuş / gündüz kuş aksanını tetikler.
-  void update(double dt, {double dayLight = 1.0, Random? rng}) {
+  ///
+  /// [children] köydeki çocuk sayısı — gündüz çocuk sesi aksanını açar. Sıfırsa
+  /// hiç duyulmaz: çocuğu olmayan köyden çocuk sesi gelmesi, sesin dünyayla
+  /// bağını koparan tam olarak o "arka planda teyp çalıyor" hissini verir.
+  void update(double dt,
+      {double dayLight = 1.0, Random? rng, int children = 0}) {
     if (!_started) return;
     final ambient = SettingsModel.instance.effectiveAmbientVolume;
     final k = (dt * 1.5).clamp(0.0, 1.0); // ~0.7s crossfade
@@ -257,6 +297,16 @@ class AudioManager {
         playSfx(Sfx.birds);
       }
     }
+    // Çocuk sesi — gündüz, köyde çocuk varken seyrek aksan. Kuş aksanından
+    // AYRI sayaç: ikisi aynı dala bağlansa biri diğerini hep bastırırdı.
+    // Köy kalabalıklaşınca tek kıkırdama yerine oyun uğultusu duyulur.
+    if (children > 0 && dayLight > 0.5) {
+      _childTimer -= dt;
+      if (_childTimer <= 0) {
+        _childTimer = 50.0 + (rng?.nextDouble() ?? 0.5) * 70.0;
+        playSfx(children >= 3 ? Sfx.childrenPlay : Sfx.childLaugh);
+      }
+    }
   }
 
   /// Tek-atış efekt çal — havuzdan sıradaki oynatıcıyla (üst üste binebilir).
@@ -264,9 +314,33 @@ class AudioManager {
     if (!_started || _sfxPool.isEmpty) return;
     final vol = (_sfxGain[s] ?? 0.8) * SettingsModel.instance.effectiveSfxVolume;
     if (vol <= 0.001) return;
+    final files = _sfxFile[s];
+    if (files == null || files.isEmpty) return;
+    String file = files.first;
+    if (files.length > 1) {
+      // Saf rastgelelik ikilikte %50 tekrar demek; kulak iki kez üst üste
+      // duyduğu varyantı "tek ses" sanır ve varyantın anlamı kalmaz.
+      final last = _lastVariant[s] ?? -1;
+      int i = _sfxRng.nextInt(files.length);
+      if (i == last) i = (i + 1) % files.length;
+      _lastVariant[s] = i;
+      file = files[i];
+    }
     final p = _sfxPool[_sfxIdx];
     _sfxIdx = (_sfxIdx + 1) % _sfxPool.length;
-    _safe(p.play(AssetSource('$_dir/${_sfxFile[s]}'), volume: vol));
+    _safe(p.play(AssetSource('$_dir/$file'), volume: vol));
+  }
+
+  /// Olasılıklı tek atış — zarı MOTORUN kendi rastgelesi atar.
+  ///
+  /// Sahnenin `_rng`'siyle ses zarı atmak sim'in deterministik akışını kaydırır:
+  /// aynı tohumla açılan köy, sırf bir öksürük sesi bir sayı tükettiği için
+  /// başka bir yola girer (kayıt/yükleme ve tohumlu testler bunu görür).
+  /// Ses simülasyonu asla bükemez.
+  void playSfxChance(Sfx s, double chance) {
+    if (chance <= 0) return;
+    if (chance < 1.0 && _sfxRng.nextDouble() >= chance) return;
+    playSfx(s);
   }
 
   void _safe(Future<void> f) {

@@ -1,4 +1,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
+//  ⚠️ YARIN İLK İŞ (not: 4 Ağustos 2026 akşamı bırakıldı)
+//
+//  EL SALLAMA'YI SOHBET BALONUNDAN ÇIKAR.
+//  Şu an komşuluk selamı bir 👋 emoji baloncuğu olarak çiziliyor; balon değil,
+//  köylünün gövdesinde gerçek bir el sallama hareketi olmalı.
+//  Yer: scene_tick.dart → _tickNeighborGreet()  (chatBubbleIcon = '👋')
+//  Çizim tarafı: game_drawables.dart → statik baloncuk ikonları (📖/👋/🌠/❤️)
+//  Bu blok iş bitince SİLİNECEK.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  KÖY SİMÜLASYONU — HARİTA
 //
 //  main.dart tek bir devasa dosya DEĞİL: `VillageScene` durumunu paylaşan 43
@@ -31,6 +42,7 @@
 //   scene_work           sivil meslek döngüleri (değirmenci/hancı/rahip/avcı)
 //   scene_craft          zanaatın doğuşu/kaybı; scene_reed evsizin geçimi
 //   scene_fire           ateşin yakıtı; scene_firepit_gather akşam toplanması
+//   scene_shelter        çadır ↔ ocak mesafesi: kışın üşüyen çadır, gece uyanma
 //
 //  ── YÖNETİŞİM ─────────────────────────────────────────────────────────────
 //   scene_law            KANUNNAME: kapılar + mühür + günlük idame
@@ -68,6 +80,7 @@ import 'entities/villager_entity.dart';
 import 'entities/merchant_entity.dart';
 import 'entities/imperial_soldier.dart';
 import 'entities/villager_job.dart';
+import 'entities/work_site.dart';
 import 'entities/build_order.dart';
 import 'entities/road_order.dart';
 import 'systems/road_route.dart';
@@ -115,6 +128,9 @@ import 'world/decor_entity.dart';
 import 'world/grave.dart';
 import 'world/reed_bed.dart';
 import 'rendering/nature_renderer.dart';
+import 'rendering/mud_renderer.dart';
+import 'rendering/snow_ground_renderer.dart';
+import 'rendering/ground_weather_renderer.dart';
 import 'rendering/decor_renderer.dart';
 import 'rendering/animal_renderer.dart';
 import 'world/world_generator.dart';
@@ -128,9 +144,11 @@ import 'dev/dev_command.dart';
 import 'dev/dev_script_store.dart';
 import 'dev/dev_console.dart';
 import 'ui/building_panel.dart';
+import 'ui/building_brief.dart';
 import 'ui/command_bar.dart';
 import 'ui/road_panel.dart';
 import 'ui/building_info_panel.dart';
+import 'ui/work_site_panel.dart';
 import 'ui/villager_info_panel.dart';
 import 'ui/villager_roster_view.dart';
 import 'ui/event_banner.dart';
@@ -145,14 +163,18 @@ import 'systems/house_head.dart';
 import 'systems/house_system.dart';
 import 'systems/chronicle.dart';
 import 'systems/villager_morale.dart';
+import 'systems/hearth_warmth.dart';
+import 'systems/winter.dart';
 import 'ui/dev_panel.dart';
 import 'ui/objective_panel.dart';
 import 'ui/village_ledger.dart';
 import 'systems/quest_book.dart';
+import 'systems/founding_choice.dart';
 import 'systems/village_custom.dart';
 import 'ui/loading_screen.dart';
 import 'ui/mode_button.dart';
 import 'ui/world_tag.dart';
+import 'ui/guide_spotlight.dart';
 import 'world/resource_box.dart';
 import 'world/resource_placement.dart';
 import 'world/hay_entity.dart';
@@ -172,6 +194,7 @@ import 'systems/audio_manager.dart';
 import 'systems/imperial.dart';
 import 'ui/imperial_modal.dart';
 import 'buildings/building_function.dart';
+import 'buildings/building_lore.dart';
 import 'characters/life_stage.dart';
 import 'scene/scene_data.dart';
 import 'save/save_manager.dart';
@@ -186,6 +209,7 @@ part 'scene/scene_npc_routine.dart';
 part 'scene/scene_reed.dart';
 part 'scene/scene_work.dart';
 part 'scene/scene_jobs.dart';
+part 'scene/scene_work_sites.dart';
 part 'scene/scene_custom.dart';
 part 'scene/scene_forage.dart';
 part 'scene/scene_events.dart';
@@ -202,11 +226,14 @@ part 'scene/scene_petitions.dart';
 part 'scene/scene_estates.dart';
 part 'scene/scene_divan.dart';
 part 'scene/scene_fire.dart';
+part 'scene/scene_shelter.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_wedding.dart';
 part 'scene/scene_chronicle.dart';
 part 'scene/scene_reactions.dart';
 part 'scene/scene_flow.dart';
+part 'scene/scene_guide.dart';
+part 'scene/scene_winter.dart';
 part 'scene/scene_save.dart';
 part 'scene/scene_personality.dart';
 part 'scene/scene_craft.dart';
@@ -266,6 +293,7 @@ class _AppRootState extends State<_AppRoot> {
   Map<String, dynamic>? _loadWorld;
   String _slotId = '';
   String _slotName = 'Köy';
+
   /// Bu oturum referans köy mü (sabit test zemini) — bkz. scene_reference_village.
   bool _reference = false;
 
@@ -341,36 +369,56 @@ class _AppRootState extends State<_AppRoot> {
 /// modunu atlar, sim doğrudan akar (scene_capture_main.dart bunu set eder).
 bool kCaptureMode = false;
 double kCaptureZoom = 1.0;
-int kCaptureCarve = 0; // capture: başlangıçta bu kadar halka ön-hattı "oy" (kütük/recede demo)
-bool kCaptureSceneReady = false; // asset yüklenip sahne hazır olunca true (harness bekler)
+int kCaptureCarve =
+    0; // capture: başlangıçta bu kadar halka ön-hattı "oy" (kütük/recede demo)
+bool kCaptureSceneReady =
+    false; // asset yüklenip sahne hazır olunca true (harness bekler)
 /// capture: günün vaktini DONDUR (0..1; negatif = kapalı, saat normal akar).
 /// Işıklandırma gibi vakte bağlı katmanların "önce/sonra" karşılaştırmasını
 /// yapabilmek için şart: iki kare farklı saatte çekilirse fark ölçülemez.
 double kCaptureTimeOfDay = -1;
 
+/// capture: referans köy hangi MEVSİMDE kurulsun (bkz. kReferenceDayFor).
+/// Kışın çadır/yakıt/tarla davranışını çekmek için harness'ın köyü yazın kurup
+/// takvimi elle sarmasına gerek kalmasın — köy doğrudan o mevsimde doğar.
+Season kCaptureReferenceSeason = kReferenceBaseSeason;
+
 /// capture/teşhis: akış tik'inin nabzı. `_tickFlow` her taramada yazar —
 /// harness kareyi çekmeden önce okur. "Adım şeridi bazen hiç görünmüyor"
 /// şikâyetinde ilk soru şudur: tarama koştu mu, koştuysa ne buldu?
 String kFlowDebug = '';
-bool kCaptureShowcase = false; // capture: showcase köyünü kur (meslek iş döngüsü testi)
+
+/// capture/teşhis: sim'i DURDURAN modalın adı ('' = akıyor). Harness'te
+/// "köy neden ilerlemedi" sorusunun tek satırlık cevabı — donmuş bir sahnede
+/// kFlowDebug artık güncellenmediği için son değeri yalan söyler.
+String kProbePause = '';
+bool kCaptureShowcase =
+    false; // capture: showcase köyünü kur (meslek iş döngüsü testi)
 /// capture: iş döngüsü telemetrisi — harness bunu okuyup davranışı doğrular.
 String kCaptureWorkReport = '';
+
 /// capture: suç test yatağı — suç yoksa sürekli yenisini zorlar (olasılık kapısı
 /// atlanır) ki bütün evreler (sokulma/eylem/kaçış/yakalanma) gözlenebilsin.
 bool kCaptureCrime = false;
+
 /// capture: suç telemetrisi — harness evreleri + muhafız tepkisini buradan okur.
 String kCaptureCrimeReport = '';
+
 /// capture: yalnız BU suçu tetikle (null = rastgele) — riskli yolları hedefli test et.
 CrimeKind? kCaptureCrimeKind;
+
 /// capture: İmparatorluk varış anonsunu (buildImperialAlert) sahne hazır olunca
 /// bir kez tetikle → tasarımı harness'te görsel doğrulamak için.
 bool kCaptureImperialAlert = false;
+
 /// capture: muhafızları devre dışı bırak — suçun TAMAMLANIP kaçmasını gözle
 /// (kaçış → şüphe → asayiş dilekçesi zinciri muhafızlı köyde hiç tetiklenmez).
 bool kCaptureNoGuard = false;
+
 /// capture: NİZAM kolunu baştan mühürle — Kürek Cezası hükmü + Hane Sicili
 /// (meçhul suç yok) sim'de gerçekten yürüyor mu doğrula.
 bool kCaptureSealNizam = false;
+
 /// PROVA: köyün davranış özeti — harness ([living_probe_main]) her aralıkta
 /// buraya yazılan raporu stdout'a basar. "Tek tek NPC izleyemem" sorununun
 /// cevabı: köyün yaşadığı sayıyla görülür.
@@ -380,9 +428,11 @@ int kProbeReportSeq = 0; // her yeni raporda artar (harness "yeni mi" anlar)
 /// Harness sim hızını buradan yükseltir (0 = dokunma, normal oyun hızı).
 /// Sahne her tick bunu okur; DevPanel slider'ı yerine geçmez, onunla çarpışmaz.
 double kDevSpeedBoostOverride = 0;
+
 /// Harness bunu true yapınca sahne bir sonraki fırsatta suç tetikler (tanık →
 /// dedikodu → ihbar zincirini gözlemek için). Sahne tüketip false'a çeker.
 bool kProbeTriggerCrime = false;
+
 /// Harness bunu true yapınca sahne bir sonraki üreme taramasında doğumu ZORLAR
 /// (uygun her anneyi hazır say). Sahne tüketip false'a çeker.
 ///
@@ -391,6 +441,7 @@ bool kProbeTriggerCrime = false;
 /// `ConcurrentModificationError` fark edilmeden durabildi (bkz.
 /// `_tickReproduction`). Bu bayrak o kör noktayı kapatır.
 bool kProbeForceBirth = false;
+
 /// Prova: bu koşuda kaç bebek doğdu (doğum yolunun gerçekten koştuğunun kanıtı).
 int kProbeBirths = 0;
 
@@ -423,14 +474,29 @@ bool kCaptureAutoWatch = false;
 /// scene_vignette'in en ölümcül tuzağının alarmı.
 int kProbeCeremonyLocked = 0;
 
+/// ÇADIR & OCAK telemetrisi (scene_shelter yazar). Mekanik sessizce hiç
+/// çalışmayabilir — "kışın çadır üşütür" cümlesi ancak sayılan bir şey varsa
+/// doğrulanabilir. `_coldTents` son taramadaki üşüyen köylü sayısı, `_rouses`
+/// bu koşuda soğuktan kaç kez kalkıldığı.
+int kProbeColdTents = 0;
+
+/// PROVA: kar çarpanını TAŞIYAN köylü sayısı (bkz. scene_winter
+/// `_applySnowFooting`). Kural saf ve testli olsa bile kimse uygulamazsa kış
+/// aynı hızda geçer ve hiçbir şey patlamaz — bu sayaç o sessiz kopmayı görünür
+/// kılar (bkz. test/snow_test.dart).
+int kProbeSnowFooted = 0;
+int kProbeColdRouses = 0;
+
 /// FAZ 4 telemetrisi — hırsızlık sahnesinin ânları (`_tickProbe` her tick yazar).
 /// "İçeride" penceresi birkaç saniyedir; yarım günlük rapor aralığı onu kaçırır.
 bool kProbeTheftInside = false;
 bool kProbeTheftSack = false;
 int kProbeLootCount = 0;
 int kProbeLootTotal = 0;
+
 /// Hırsızlığın dokunduğu üç kaynağın stok toplamı.
 int kProbeStockTotal = 0;
+
 /// Bu koşuda çalınan toplam mal + zuladan geri alınan toplam mal.
 ///
 /// Korunum bunlarla ölçülür, ham stokla DEĞİL: köyün ekonomisi paralel dönüyor
@@ -438,6 +504,7 @@ int kProbeStockTotal = 0;
 /// oynar. Sözleşme: `çalınan == toprakta duran + geri alınan`.
 int kProbeTheftTaken = 0;
 int kProbeLootRecovered = 0;
+
 /// Harness bunu true yapınca sahne meydana GÖRÜLMÜŞ bir zula gömer — zulanın
 /// bulunma+iade yolunun gerçekten koştuğunu sınamak için. Sahne tüketip
 /// false'a çeker.
@@ -449,10 +516,13 @@ bool kProbePlantLoot = false;
 /// (test/mind_liveness_test.dart) "köy hâlâ yaşıyor mu" sorusunu bundan
 /// yanıtlar; ekran görüntüsü ya da widget sayısı bu soruyu yanıtlayamaz.
 bool kMindTelemetryOn = false;
+
 /// Toplam kat edilen mesafe (tile) — donmuş köyde artmaz.
 double kMindDistance = 0;
+
 /// Sahnede o an görülen farklı niyet sayısı.
 int kMindDistinctIntents = 0;
+
 /// En uzun süredir değişmemiş niyetin yaşı (sn) — kilitlenme göstergesi.
 double kMindOldestIntent = 0;
 
@@ -461,11 +531,14 @@ bool kCaptureLaborOnly = false;
 
 class VillageScene extends StatefulWidget {
   final VoidCallback? onExitToMenu;
+
   /// Kaldığı yerden devam için yüklenecek dünya (null = taze köy).
   final Map<String, dynamic>? initialWorld;
+
   /// Bu oyunun yazılacağı kayıt slotu.
   final String slotId;
   final String slotName;
+
   /// true → taze köy yerine REFERANS KÖY kurulur (sabit test zemini; açılış
   /// sinematiği/ateş yerleştirme atlanır). Bkz. scene_reference_village.dart.
   final bool referenceVillage;
@@ -506,18 +579,23 @@ class _VillageSceneState extends State<VillageScene>
   // ── Şimşek flash (fırtınada) — şekilsiz, beyaz, yumuşak gök parlaması ───────
   /// Anlık flash yoğunluğu (0..1) — buildLightningFlash beyaz overlay alfa'sı.
   double _lightningFlash = 0;
+
   /// Sonraki şimşeğe kalan süre (sn). Fırtına yokken dondurulur.
   double _lightningTimer = 6;
+
   /// Çift çakım (flicker) için ikinci darbeye kalan süre (>0 ise bekliyor).
   double _lightningPulse = 0;
+
   /// Şimşekten sonra gök gürültüsüne kalan süre (>0 bekliyor) — ışık-ses gecikmesi.
   double _thunderDelay = 0;
 
   // ── İmparatorluk (dış tehdit / vergici askerî heyet) ───────────────────────
   /// İmparatorlukla ilişki (0..1) — pazarlık şansı + talep sertliği + sıklık.
   double _imperialFavor = 0.5;
+
   /// Bir sonraki ziyarete kalan süre (sim sn). İlk ziyaret için gecikmeli.
   double _imperialTimer = 6.0 * kGameDaySeconds;
+
   /// Aktif talep (null = ziyaret yok). Non-null iken sim duraklar + modal açık.
   ImperialDemand? _imperialDemand;
 
@@ -533,12 +611,15 @@ class _VillageSceneState extends State<VillageScene>
   /// Siyasi nikâh: organik kur AYNI EVİ şart koşar, siyasi nikâh haneler
   /// arasıdır → bu bayrak o şartı gevşetir (bkz. _coupleStillValid).
   bool _betrothalForced = false;
+
   /// Kaç kez pazarlığa oturuldu — sinematik merdiveninin tabanı (ilk ziyaret
   /// tam film, sonrası rutin). Bkz. scene_imperial._startImperialParley.
   int _imperialVisits = 0;
+
   /// Bir sonraki ziyaret KİNLİ mi (ret / direniş sonrası) → ton değişti, film
   /// geri gelir. Ziyaret başlarken tüketilir.
   bool _impGrudge = false;
+
   /// "İlişki ilk kez düşmanlığa düştü" anı sahnelendi mi. İtibar toparlanınca
   /// (≥0.5) yeniden kurulur → tekrar dibe inersen an bir kez daha oynar.
   bool _impGrimShown = false;
@@ -546,34 +627,47 @@ class _VillageSceneState extends State<VillageScene>
   /// Fiziksel asker heyeti — köye formasyonla yürüyen geçici varlıklar (bkz.
   /// scene_imperial). Köyün sakini DEĞİL; kayda yazılmaz, nüfusa karışmaz.
   final List<ImperialSoldier> _soldiers = [];
+
   /// Heyet ziyaretinin evresi — yaklaşma/pazarlık/ayrılış makinesi.
   ImperialVisitPhase _imperialPhase = ImperialVisitPhase.idle;
+
   /// Formasyon çapası (komutanın hedefi) — yaklaşırken parley'e, ayrılırken
   /// çıkışa doğru kayar; askerler buna göre slotlanır.
   double _impAnchorCol = 0, _impAnchorRow = 0;
+
   /// Son yürüyüş yönü (formasyon slotlarını döndürmek için) — normalize.
   double _impDirX = 0, _impDirY = 1;
+
   /// Pazarlık noktası (köy eşiği) ve çıkış/giriş köşesi.
   double _impParleyCol = 0, _impParleyRow = 0;
   double _impExitCol = 0, _impExitRow = 0;
+
   /// Yaklaşma anında ölçülen refah — ayrılışta sonraki ziyaret aralığı için.
   double _impProsperity = 0;
+
   /// Bu ziyaret şiddetle bitti mi (reddetme / direniş ezilmesi) → ayrılış yerine
   /// önce köy merkezine YAĞMA dalışı (raiding evresi).
   bool _imperialRaid = false;
+
   /// Darbeyle düşecek kurbanlar — karar anında seçilir ama askerler merkeze
   /// VARINCA `startDying` çağrılır (ölüm darbe anıyla senkron).
   final List<VillagerEntity> _imperialRaidVictims = [];
+
   /// Yağma dalışında darbe vuruldu mu (bir kez) + dalış/bekleyiş sayacı.
   bool _impStruck = false;
   double _impRaidTimer = 0;
+
   /// Yağma dalış hedefi (köy merkezi, karaya sabit).
   double _impRaidCol = 0, _impRaidRow = 0;
 
   // ── Kayıt (otomatik + manuel) ───────────────────────────────────────────────
   /// Bu oyunun yazıldığı kayıt slotu.
   late final String _slotId = widget.slotId;
-  late final String _slotName = widget.slotName;
+
+  /// Kayıt kartında görünen ad. Açılışta köye verilen ad bunu EZER — yeni
+  /// kayıt menüde "Köy" değil, oyuncunun koyduğu adla durur.
+  late String _slotName = widget.slotName;
+
   /// Periyodik otomatik kayıt için gerçek-zaman (wall clock) birikimi.
   double _autoSaveAccum = 0;
   static const double _kAutoSaveInterval = 30.0; // sn (gerçek zaman)
@@ -602,11 +696,14 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Entities ───────────────────────────────────────────────────────────────
   final List<VillagerEntity> _villagers = [];
+
   /// Gezgin tüccarlar — köyün sakini DEĞİL, arada gelip giden ambiyans (bkz.
   /// scene_merchant). Nüfusa/eve/dilekçeye karışmaz; kayda yazılmaz.
   final List<MerchantEntity> _merchants = [];
+
   /// Sonraki tüccar ziyaretine kalan süre (sim-saniye). _tickMerchants yönetir.
   double _merchantTimer = 0.7 * kGameDaySeconds;
+
   /// Oyalanan tüccarın sonraki alımına kalan süre (sn) — ziyaret başında kurulur,
   /// browsing evresinde işler (bkz. _tickMerchants trade). Kaydedilmez (geçici).
   double _merchantTradeCd = 0.0;
@@ -624,16 +721,21 @@ class _VillageSceneState extends State<VillageScene>
   // eksende git, sonra köşeyi dön. Tahmin edilebilir, titremeye bağışık.
   final RoadSystem _roadSystem = RoadSystem();
   final List<RoadOrder> _roadOrders = [];
+
   /// Seçili yüzey (döşeme modu). [_roadErase] true iken null olur.
   RoadSurface? _placingRoad;
+
   /// Silgi modu — sürüklenen güzergâhtaki yolları/bekleyen emirleri kaldırır.
   /// Yanlış döşenmiş eski yollar için tek çare (öncesinde yol hiç silinemiyordu).
   bool _roadErase = false;
+
   /// Yol modu (döşe ya da sil) aktif mi.
   bool get _roadMode => _placingRoad != null || _roadErase;
+
   /// Sürükleme uçları — önizleme bunlardan türer.
   (int, int)? _roadDragStart;
   (int, int)? _roadDragEnd;
+
   /// Önizlenen güzergâh: (tile, uygulanabilir mi). Painter yeşil/kırmızı çizer.
   /// Yerinde mutate edilir → painter içerik karşılaştıramaz, [_roadPreviewV]
   /// sayacı repaint kararını verir.
@@ -655,20 +757,38 @@ class _VillageSceneState extends State<VillageScene>
   // ── Ateş yakıtı (scene_fire) ───────────────────────────────────────────────
   // Ateş artık beslenmek ister: yakıt tükenir, ateşçi odun ya da kömür taşır,
   // ikisi de bittiyse söner → köy çapı huzursuzluk + dilekçe.
-  bool _fireWasBurning = true;            // sönme/yeniden yanma geçişi için
-  double _firekeeperScan = 0;             // ateşçi atama poll sayacı
-  VillagerEntity? _firekeeper;            // o an ateşe yakıt taşıyan köylü
-  ResourceKind? _firekeeperFuel;          // omuzladığı yakıt (null = eli boş)
-  double _firekeeperGiveUp = 0;           // ulaşamazsa görevi bırakma sim zamanı
+  bool _fireWasBurning = true; // sönme/yeniden yanma geçişi için
+  double _firekeeperScan = 0; // ateşçi atama poll sayacı
+  VillagerEntity? _firekeeper; // o an ateşe yakıt taşıyan köylü
+  ResourceKind? _firekeeperFuel; // omuzladığı yakıt (null = eli boş)
+  double _firekeeperGiveUp = 0; // ulaşamazsa görevi bırakma sim zamanı
   // Odun azalma uyarısı için histerez: stok sağlıklı seviyeye çıkmadan uyarı
   // çıkmaz; bir kez çıkınca tekrar sağlığa dönene dek susar (spam önler).
   bool _woodHealthy = false;
+  // ── Çadır & ocak (scene_shelter) ───────────────────────────────────────────
+  // Ocaktan uzağa kurulmuş çadır kışın üşütür: köylü gece titreyerek kalkar,
+  // ateşin başına gider. Sayaçlar geçici — kayda girmez.
+  double _rouseScan = 0; // gece uyandırma poll sayacı
+  int _shelterDay = -1; // gecelik kotanın ait olduğu gün
+  final Map<VillagerEntity, int> _rousedTonight = {}; // bu gece kaç kez kalktı
+  double _shelterMurmurWait = 0; // köyün bu dertten söz etme bekleyişi (gün)
   BuildingEntity? _selectedBuilding;
   VillagerEntity? _selectedVillager;
+
+  /// Seçili BİNASIZ iş yeri ([WorkSite.id]) — tarla, böğürtlenlik, şantiye.
+  /// Bina iş yerleri `_selectedBuilding` üstünden açılır (kadro o binanın
+  /// kendi kartında durur); burası yalnız yapısı olmayan işler için.
+  ///
+  /// Kimlik tutulur, nesne değil: iş yerleri her karede sahneden yeniden
+  /// türetilir ([_workSites]) — bayat bir nesne tutsaydık sipariş tamamlanınca
+  /// panel ölü bir şantiyeyi göstermeye devam ederdi.
+  String? _selectedSiteId;
+
   /// Komuta çubuğu: seçili öğe önce ORTA segmentte kompakt görünür; tam panel
   /// (BuildingInfoPanel/VillagerInfoPanel) yalnız "Detay"a basınca açılır. Yeni
   /// seçimde sıfırlanır (setState'lerde `_selectedBuilding=` yanına eklendi).
   bool _detailExpanded = false;
+
   /// Oyuncu "Takip et" eylemini kullanırsa kamera bu NPC'ye demirlenir;
   /// her tick'te yumuşak lerp ile NPC merkeze çekilir. Manuel pan (scaleStart)
   /// otomatik iptal eder. null = serbest kamera.
@@ -688,17 +808,21 @@ class _VillageSceneState extends State<VillageScene>
   // ulaşılabilir bölge = harita elmasına içten çizilmiş ekran-hizalı dikdörtgen
   // → ÖLÜ KÖŞE YOK. Detay: scene_input._clampCamera.
   static const double _kMaxZoom = 4.0;
+
   /// Elmasın ucunda hep kalan tampon (hu+hv cinsinden) — void asla görünmez.
   /// Bu tampon "israf" değil, no-edge yanılsamasını sağlayan çerçevedir.
   static const double _kEdgeBuffer = 10.0;
+
   /// Başlangıç reach span'i (hu+hv) — kullanıcı onaylı açılış uzaklığı.
   static const double _kSpanStart = 50.0;
+
   /// Reach span'i (hu+hv). Üst sınır `_maxSpan` = min(kCols,kRows)-1-tampon.
-  double _reachSpan = _kSpanStart;     // hikâye beat'leri + organik ile büyür
-  bool _cameraCentered = false;        // ilk geçerli frame'de merkeze ortala
+  double _reachSpan = _kSpanStart; // hikâye beat'leri + organik ile büyür
+  bool _cameraCentered = false; // ilk geçerli frame'de merkeze ortala
   // "Dünya açılıyor" anı: reach genişlerken oyuncu TAM zoom-out'a yapışıksa
   // kamerayı yumuşakça geriye bırakırız (scene_land._updateLandExpansion).
   double _lastMinZoom = 0.0;
+
   /// Reach'in İLK kez kadraja aldığı cevher türleri (OreType.name) — keşif
   /// bildirimi + kronik tek sefer yazılır (scene_land._tickOreDiscovery).
   /// Kalıcı (save'e girer).
@@ -713,6 +837,14 @@ class _VillageSceneState extends State<VillageScene>
   // Akıllı yerleştirme: hayalet geçersiz tile üstündeyse SEBEP (örn. "Yakında
   // ağaç yok"); geçerli/placing yokken null. Hover'da güncellenir.
   String? _placeReason;
+  // İNŞA KÜNYESİ — hayaletin durduğu yerin ÖLÇÜMÜ (bkz. _siteFactsAt). Künye
+  // panelindeki yerleşim ipuçları bununla canlı doğrulanır ("3 ağaç ✓").
+  // Hayalet tile değiştirdiğinde yenilenir; hayalet yokken null (ipuçları
+  // nötr, yalnız metin okunur).
+  SiteFacts? _placeFacts;
+  // Tatlı not seçici — her bina seçiminde artar, künyede havuzdan başka bir
+  // cümle çıkar (tek string yazma kuralı, bkz. voice.dart).
+  int _loreNoteSeed = 0;
   // Çoklu dikim: tek tık → bir bina kur + seçimi bırak. Basılı tutup sürükle
   // (long-press) → bu mod açılır, dokunulan her tile'a bina dikilir; bırakınca
   // seçim bırakılır. _placeStrokeTiles aynı tile'a iki kez denemeyi engeller.
@@ -733,8 +865,10 @@ class _VillageSceneState extends State<VillageScene>
   VillagerEntity? _hoverVillager;
   BuildingEntity? _hoverBuilding;
   Grave? _hoverGrave;
+
   /// Künyenin belirmeye başladığı _time damgası (yumuşak fade-in için).
   double _hoverSince = 0;
+
   /// Son hit-test edilen imleç konumu — küçük titremelerde testi atlamak için.
   Offset? _hoverProbe;
 
@@ -743,13 +877,17 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Farm ───────────────────────────────────────────────────────────────────
   final List<FarmTile> _farmTiles = [];
+
   /// Ambarsız köyde balyalar harmanda çürür (carrier_system depo şartı arar) —
   /// tarla kurulu ama yiyecek gelmiyor. Sessiz kalmasın: aralıklı uyarı.
   double _baleStallWarnCd = 0.0;
+
   /// İş atama uzlaştırma throttle'ı ([_syncJobWorkforce]).
   double _jobSyncCd = 0.0;
+
   /// Kereste kampı bölge yönetimi throttle'ı ([_tickLumberCampManage]).
   double _lumberManageCd = 0.0;
+
   /// "İş var ama boş köylü yok" uyarısı throttle'ı (spam'siz).
   double _jobBlockWarnCd = 0.0;
 
@@ -765,11 +903,11 @@ class _VillageSceneState extends State<VillageScene>
   // HEP BOŞ (reveal = kamera kısıtı, örtü yok). Placement gate / obstacle /
   // painter guard'ları boş-guard'la kendiliğinden devre dışı. Tam alan temizliği
   // ayrı refactor: [scene_land].
-  final Set<(int, int)> _cleared       = {};
-  final Set<(int, int)> _wilderness    = {};
+  final Set<(int, int)> _cleared = {};
+  final Set<(int, int)> _wilderness = {};
   final Set<(int, int)> _wildTreeTiles = {};
-  final int _forestVersion = 0;              // painter repaint tokeni (sabit)
-  final List<LeafBurst> _leafBursts = [];    // devrilen ağaç yaprak patlaması (fx)
+  final int _forestVersion = 0; // painter repaint tokeni (sabit)
+  final List<LeafBurst> _leafBursts = []; // devrilen ağaç yaprak patlaması (fx)
 
   // ── Lumber (ağaç kesme) ────────────────────────────────────────────────────
   // Oduncu kulübeleri — her bina kendi LumberCampEntity'sine sahip
@@ -782,9 +920,11 @@ class _VillageSceneState extends State<VillageScene>
   final Set<(int, int)> _waterTiles = {};
   final List<LotusEntity> _lotuses = [];
   final List<ReedClump> _reeds = [];
+
   /// Böğürtlen çalıları — köyün BİNASIZ tek üretim kaynağı (bkz. [BerryBush]).
   /// Toplayıcı buradan yiyecek getirir; kışın yenilenmez.
   final List<BerryBush> _berryBushes = [];
+
   /// Ocakta pişmiş sıcak yemek adedi. Açlık tüketiminde ham yiyeceğin YERİNE
   /// geçer (aynı hasat iki katı ağız doyurur) — bkz. [_tickPopulationAndHunger].
   int _cookedMeals = 0;
@@ -799,6 +939,7 @@ class _VillageSceneState extends State<VillageScene>
   double _workScan = 0; // _tickWork throttle sayacı (meslek iş döngüleri)
   /// Showcase köyünde arazi yüzünden kurulamayan binalar (sessiz atlama olmasın).
   final List<String> _showcaseSkipped = [];
+
   /// Referans köyde plana oturmayan binalar (aynı gerekçe — sessiz düşme yok).
   final List<String> _refSkipped = [];
 
@@ -814,8 +955,10 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Ağıl: çobanlar + inekler ──────────────────────────────────────────────
   final List<AnimalEntity> _cows = [];
+
   /// Kümeslerin bıraktığı görünür yumurtalar (toplan→food / çatla→civciv).
   final List<EggEntity> _eggs = [];
+
   /// Gömülü zulalar — hırsızın toprağa verdiği çuvallar (Faz 4). Çalınan mal
   /// buharlaşmaz; burada durur ve bulunabilir.
   final List<LootCache> _lootCaches = [];
@@ -838,25 +981,34 @@ class _VillageSceneState extends State<VillageScene>
   // ── Belediye politikaları — oyuncunun nüfus üstündeki kararları ──────────
   // Default hepsi kapalı. BuildingInfoPanel toggle ile değiştirir.
   final VillagePolicies _policies = VillagePolicies();
+
   /// Misafirperverlik politikası açıkken bir sonraki gezgin spawn timer'ı.
   /// Random 3-6 oyun günü; spawn olunca yeniden roll edilir.
   double _migrationTimerSec = 0;
+
   /// Dışarıya Nikâh Fermanı yürürlükteyken bir sonraki gelin/damat timer'ı.
   /// Göçten yavaş (5-9 oyun günü) — eş bulmak akın değil, tek tek olan bir şey.
   double _marriageMigrationSec = 0;
+
   /// Komşuluk poll sayacı — 1.2s aralıkla selamlaşma scan.
   double _greetPollSec = 0;
+
   /// Gömülü zula taraması sayacı (bkz. scene_loot).
   double _lootScanSec = 0;
+
   /// Çocuk oyunu poll sayacı — yakın iki çocuk kovalamaca/oyun scan'i.
   double _childPlayPollSec = 0;
+
   /// Aile birleşimi poll sayacı — 15s aralıkla solo eşleştirme.
   double _reunionPollSec = 0;
+
   /// Bilge yaşlı emergence poll — ~60s aralıkla rastgele tetikleme şansı.
   double _sageCheckSec = 60;
+
   /// Reproduction tick throttle — fertility kontrolü her frame gerek değil.
   /// 0.5s aralıkla full villager scan, kullanıcı fark etmez.
   double _reproPollSec = 0;
+
   /// Hayvan doğum/ölüm sayaçları — zümre morali beslemesi (scene_estates)
   /// bunları tüketir: doğum Emekçi moralini ↑, ölüm/açlık ↓.
   int _animalBirthsPending = 0;
@@ -865,46 +1017,88 @@ class _VillageSceneState extends State<VillageScene>
   /// Oynayan sinematik (null = yok). Açılış/kademe/final/kriz hepsi buradan.
   /// Non-null iken sim duraklar (scene_tick) + tam ekran CutscenePlayer overlay.
   Cutscene? _activeCutscene;
+
   /// Köyün hikâye güncesi (kronik) — büyük anlar + başarımlar, yapısal kayıtlar.
   /// Köy Defteri'nin KRONİK bölümünden okunur. `_chronicle` ile yazılır;
   /// başarımlar `_award` ile (milestone:true). Kalıcı (kaydedilir).
   final List<ChronicleEntry> _storyLog = [];
+
   /// Bir kez kazanılan başarımların id kümesi — tekrar tetiklenmez (kaydedilir).
   final Set<String> _achievedMilestones = {};
+
   /// Kıtlık sinematiği bir kez gösterildi mi (nadir kalsın).
   bool _famineShown = false;
+
   /// Hangi kademeler için sinematik oynatıldı (tekrar oynamasın).
   final Set<int> _tierCutscenesShown = {};
+
   /// Açılışta oyuncunun verdiği köy adı (kimlik/günce; oynanışa etki yok).
   String _villageName = 'Köy';
+
   /// Açılış sinematiği bitince oyuncu ateş yerini haritada seçmeli mi.
   bool _introPlaceFire = false;
+
+  /// Kafilenin yükü seçildi mi (sinematiğin ilk kapısı). Sinematik atlanırsa
+  /// false kalır → kapanışta varsayılan yük uygulanır.
+  bool _foundingChoiceMade = false;
+
+  /// Kafilenin haritaya giriş noktası (EKRAN eksenlerinde: u=c−r, v=c+r).
+  /// Kuruluş kararı kadroyu değiştirdiğinde kafile yeniden doğar; aynı yerden
+  /// doğmazsa kameranın ilk-frame kilidi (bkz. scene_input `_clampCamera`)
+  /// eski kalbe takılı kalır ve kurucular kadrajın kenarına düşer.
+  double _caravanU = 0, _caravanV = 0;
+  bool _caravanEntrySet = false;
 
   // ── Düğün yaşam döngüsü (scene_wedding) ──────────────────────────────────
   /// Şu an kur yapan/nişanlı çift — aynı evde, karşı cins, kan bağı yok, ikisi
   /// de henüz evlenmemiş. Kur olgunlaşınca düğün dilekçesi bunlara bağlı sunulur.
   VillagerEntity? _brideElect;
   VillagerEntity? _groomElect;
+
   /// Kur olgunlaşma sayacı (sn) — 0'a inince düğün dilekçesi sunulur.
   double _courtshipTimer = 0;
+
   /// Kur taraması throttle'ı.
   double _weddingScan = 0;
+
   /// Düğün dilekçesi sunulurken bağlanan çift (resolution bunları sahneler).
   (VillagerEntity, VillagerEntity)? _weddingCouple;
 
   /// Yaşam-evresi geçiş taraması throttle'ı (reşit oluş/yaşlanma → yaşam öyküsü).
   double _lifeStoryScan = 0;
+
   /// İlk ateş kurulunca "ateş yakma" sinematiği oynatılsın mı (bir kez).
   bool _firstFirePending = false;
+
   /// Sinematik kapandıktan sonra kısa süre canvas yerleştirmesini yok say —
   /// "ilerle" için atılan artçı dokunuşun ateşi kazara kurmasını önler.
   double _placeGuardUntil = 0;
 
-  /// Açılış sinematiğinde köye ad verildi — kimlik + günce (oynanışa etkisiz).
-  void _onVillageNamed(String name) {
+  /// Açılış sinematiğinde köye + haneye ad verildi.
+  ///
+  /// Köyün adı artık yalnız günceye yazılan bir süs değil: KAYIT SLOTUNUN adı
+  /// olur (menüdeki kart "Köy" değil "Pınarköy" der). Hane adı ise kurucuların
+  /// soyadı olarak dünyaya işlenir — hane kartları, meclis masası, dilekçeler
+  /// hep onu konuşur. [house] boşsa kuruluşta atanan rastgele soyad korunur.
+  void _onVillageNamed(String name, String house) {
     setStateHere(() {
       _villageName = name;
+      _slotName = name;
       _chronicle('Köye bir ad verildi: "$name"', icon: '🏷️');
+      if (house.isNotEmpty) {
+        _renameFoundingLineage(house);
+        _chronicle('Ocağın adı: $house Hanesi', icon: '🏠', milestone: true);
+      }
+    });
+  }
+
+  /// Kafilenin yükü seçildi (sinematiğin ilk kapısı) — kadro + stok dünyaya
+  /// işlenir. Oyuncu seçmeden atlarsa [_onCutsceneDone] varsayılanı uygular.
+  void _onFoundingChoice(FoundingChoice c) {
+    _foundingChoiceMade = true;
+    setStateHere(() {
+      _applyFoundingChoice(c);
+      _chronicle('${c.icon} ${c.title}', icon: '🛒');
     });
   }
 
@@ -914,12 +1108,19 @@ class _VillageSceneState extends State<VillageScene>
     setStateHere(() => _activeCutscene = null);
     if (_introPlaceFire) {
       _introPlaceFire = false;
+      // Sinematik ATLANDIYSA kapılar hiç açılmamış olur; köy yine de bir
+      // kararla kurulmalı — varsayılan yük uygulanır (kadro/stok boşta kalmaz).
+      if (!_foundingChoiceMade) {
+        _foundingChoiceMade = true;
+        _applyFoundingChoice(FoundingChoice.fallback);
+      }
       _firstFirePending = true;
       setStateHere(() => _placing = BuildingType.firepit);
       _placeGuardUntil = _time + 0.7; // artçı "ilerle" dokunuşunu yut
       _showNotification('🔥 Maple: İlk ateş için bir yer seç');
     }
   }
+
   /// Geçici moral etkileri — politika olaylarından (göçmen uyumu, aile birleşimi).
   /// Her giriş (untilSim, amount). _time geçince düşer; aktiflerin toplamı
   /// `_eventMorale`'ye eklenir.
@@ -980,8 +1181,8 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Reaktif ortam (sürekli canlılık) ─────────────────────────────────────
   double _spontaneousTimer = 0; // ara sıra rastgele NPC'ye küçük gövde refleksi
-  bool   _lastRainy = false;    // yağmur geçiş tespiti (başla/dur reaksiyonu)
-  bool   _wasStarving = false;  // açlığa giriş tespiti (bir kerelik reaksiyon)
+  bool _lastRainy = false; // yağmur geçiş tespiti (başla/dur reaksiyonu)
+  bool _wasStarving = false; // açlığa giriş tespiti (bir kerelik reaksiyon)
 
   // ── Rastgele olaylar ───────────────────────────────────────────────────────
   double _eventTimer = kEventFirstDelay; // bir sonraki olaya kalan süre
@@ -1022,15 +1223,18 @@ class _VillageSceneState extends State<VillageScene>
   // Mühlet doldu → modal zorla açıldı, sim duraklı. Köy artık yanıt bekliyor;
   // bu modunda boşluğa dokunarak kapatılamaz (görmezden gelmek imkânsız).
   bool _petitionForced = false;
-  double _petitionTimer = 1.0 * kGameDaySeconds; // ilk dilekçe ~1 oyun günü sonra
+  double _petitionTimer =
+      1.0 * kGameDaySeconds; // ilk dilekçe ~1 oyun günü sonra
   double _petitionDeadline = 0;
   // Zincir: tetiklenmiş takip dilekçeleri (id + ne zaman geleceği sim time).
   /// Zincirin bir sonraki halkası: ne zaman, hangi dilekçe ve KİMİN ağzından.
   /// [actor] ilk halkayı getiren köylüdür — zincir boyunca aynı yüz konuşsun
   /// diye taşınır (ölmüş/gitmişse null'a düşer ama [actorName] metinde kalır:
   /// "yola çıkan dönmedi" cümlesi ancak adı bilinirse kurulabilir).
-  final List<({String id, double fireAtSim, VillagerEntity? actor, String actorName})>
-      _petitionFollowUps = [];
+  final List<
+    ({String id, double fireAtSim, VillagerEntity? actor, String actorName})
+  >
+  _petitionFollowUps = [];
   // Hafıza: çözülen dilekçe id → cooldown sim time (aynısı hemen random çıkmasın).
   final Map<String, double> _petitionCooldowns = {};
   // Köyün kalıcı hafızası: geçmiş kararların bıraktığı bayraklar (ör. 'cult.active').
@@ -1065,6 +1269,9 @@ class _VillageSceneState extends State<VillageScene>
   // Köyde bugüne dek görülmüş hastalık atağı (veba dahil). Tecrit Fermanı'nın
   // kapısı buna bakar — köy hastalıkla tanışmadan tecrit konuşulmaz.
   int _illnessSeen = 0;
+  // Köydeki çocuk sayısı — SES aksanı için, HUD ile aynı 10Hz'de sayılır
+  // (bkz. scene_tick). Simülasyon bu sayıyı okumaz, kayda da girmez.
+  int _childCount = 0;
   // Kan davası doğuran ölümcül kavga sayısı. Diyet Fermanı'nın kapısı.
   // Sulh olsa da düşmez: köy o kanı bir kez gördü.
   int _feudsSeen = 0;
@@ -1074,9 +1281,9 @@ class _VillageSceneState extends State<VillageScene>
   // ── PROVA SAYAÇLARI (scene_probe) — davranışın uçtan uca çalıştığını sayıyla
   // görmek için. Ucuz int'ler; harness bunları okuyup köyün yaşadığını kanıtlar
   // (tek tek NPC izlemeye gerek kalmadan). Normal oyunda yalnız artarlar.
-  int _probeWitnessed = 0;  // gözüyle suç/kavga/ölüm gören köylü-olay sayısı
-  int _probeGossip = 0;     // ağızdan ağza aktarılan haber sayısı
-  int _probeInformed = 0;   // muhafıza teslim edilen ihbar sayısı
+  int _probeWitnessed = 0; // gözüyle suç/kavga/ölüm gören köylü-olay sayısı
+  int _probeGossip = 0; // ağızdan ağza aktarılan haber sayısı
+  int _probeInformed = 0; // muhafıza teslim edilen ihbar sayısı
   // Suçüstü yakalanıp hüküm bekleyen fail (yargı dilekçesi buna bakar). Suçun
   // ADI dilekçe metnine _petitionExtra ile dokunur; hüküm faile uygulanır.
   VillagerEntity? _accusedCriminal;
@@ -1098,7 +1305,7 @@ class _VillageSceneState extends State<VillageScene>
   // bir aksiyon değil, İMZANIN KENDİSİ. Bir fermanı defterin önüne koyduğunda
   // (_lawRitual != null) dört zümre masaya oturur, yüzünü gösterir; mühür basılı
   // tutularak basılır ve GERİ ALINMAZ.
-  LawDef? _lawRitual;                   // != null → mühür ritüeli açık
+  LawDef? _lawRitual; // != null → mühür ritüeli açık
   // Son mühürün toplam müzakere süresi — defterdeki halka bunun oranını çizer.
   double _inkDryTotal = 0;
 
@@ -1107,9 +1314,11 @@ class _VillageSceneState extends State<VillageScene>
   // okunur (LawContext); bağlam pahalı olduğundan saniyede bir tazelenir.
   LawContext? _lawCtxCache;
   double _lawCtxAge = 0;
+
   /// Bugüne dek gündeme GELMİŞ hüküm id'leri — bir hüküm iki kez duyurulmaz.
   /// Kaydedilir; yoksa her yüklemede bütün defter "yeni açıldı" diye bağırır.
   final Set<String> _lawSeen = {};
+
   /// İlk tarama yapıldı mı — köyün başlangıç gündemi sessizce içeri alınır.
   bool _lawSeeded = false;
 
@@ -1119,8 +1328,8 @@ class _VillageSceneState extends State<VillageScene>
   // eşiği aşınca rejime özgü kriz doğar. Yemin edilen rejim `_villageMemory`
   // bayrağında durur (ayrı doğruluk kaynağı yok), yalnız günü burada tutulur.
   double _unrest = 0.0;
-  double _regimeScan = 0;        // huzursuzluk poll sayacı (2 sn)
-  double _crisisCooldown = 0;    // krizler arası nefes (sim sn)
+  double _regimeScan = 0; // huzursuzluk poll sayacı (2 sn)
+  double _crisisCooldown = 0; // krizler arası nefes (sim sn)
   bool _unrestStirShown = false; // "köy homurdanıyor" uyarısı bir kez
   /// Yürüyen kriz dilekçesinde şık başlığı → huzursuzluk deltası. Kriz
   /// sunulurken dolar, karar verilince tükenir (anlık, kaydedilmez).
@@ -1130,6 +1339,7 @@ class _VillageSceneState extends State<VillageScene>
   /// birikir, daha yavaş silinir; eşiği aşınca rejime özgü KRONİK hâl doğar
   /// (süregiden bedel, tek atımlık kriz değil). Oyun-sonu değil: çıkışı var.
   double _regimeRot = 0.0;
+
   /// Kronik hâl duyurusu bir kez yapılsın (girişte + çıkışta).
   bool _chronicShown = false;
 
@@ -1160,8 +1370,10 @@ class _VillageSceneState extends State<VillageScene>
   // surname'iyle bir haneye ait; hane üye moralinden doğar/güçlenir; dilekçe/
   // ferman/olay kararları hanelerin mood+sway'ini oynatır.
   final HouseSystem _houses = HouseSystem();
+
   /// Küskün hane postürü poll sayacı — ~5s aralıkla diegetik somurtma.
   double _estateMoodScan = 0;
+
   /// Köyün kimliği = baskın hanenin baskın hizbi; kimlik mekanik bonuslarını
   /// (_identityFarmMul / _identityYieldMul / _identityFoodMul /
   /// _identityMoraleBonus) besler. null = baskın hane yok (nötr, "Dengeli Köy").
@@ -1204,6 +1416,7 @@ class _VillageSceneState extends State<VillageScene>
   int _charterTier = 0;
   // _tickFlow throttle sayacı.
   double _flowScan = 0;
+
   /// HUD şeridinin gösterdiği "şu anki adım" — `_tickFlow` tazeler (build'de
   /// hesaplanmaz; bkz. scene_flow `_currentStep`).
   QuestState? _stepCache;
@@ -1215,6 +1428,72 @@ class _VillageSceneState extends State<VillageScene>
   /// bir işaret koyar (bkz. scene_flow `_refreshStepBeacon`). Kişi hedefli
   /// adımlar burayı kullanmaz, köylünün kendi halkasını yakar.
   (double, double)? _stepBeacon;
+
+  // ── Kuruluş öğreticisi (bkz. scene_guide.dart) ────────────────────────────
+  // Spot yalnız kademe 0'da çalışır ve adım başına BİR kez kendiliğinden açılır;
+  // sonrası oyuncunun "Göster" düğmesine kalır.
+
+  /// Otomatik spotu görmüş adımlar — kayıtta saklanır, yükleyince tekrarlamaz.
+  final Set<String> _guideShown = {};
+
+  /// Spot ekranda mı.
+  bool _guideOpen = false;
+
+  /// Spot AÇILMAK İSTİYOR ama hedef henüz çözülmedi (kamera kayıyor, panel
+  /// kapalı, köylü ekran dışında). İstek ile açılış ayrı tutulmazsa spot ya
+  /// hiç açılmaz ya da yanlış yere delik açar.
+  bool _guideWanted = false;
+
+  /// Sürücünün en son gördüğü adım — değişince spot sıfırlanır.
+  String _guideStepId = '';
+
+  /// Yeni adımdan sonra spotun beklediği süre (önce köyün sesi, sonra parmak).
+  double _guideDelay = 0;
+
+  // ── KIŞ (bkz. scene_winter.dart + systems/winter.dart) ────────────────────
+
+  /// Dokunmuş ama HENÜZ DAĞITILMAMIŞ kışlık giysi. Sırtlara `_distributeCoats`
+  /// dağıtır; oyuncunun önceliği ([_coatPriority]) kimin önce giyineceğini
+  /// söyler.
+  int _coatsMade = 0;
+
+  /// GİYSİ KİME? Kışın tek gerçek dağıtım kararı — köy kendiliğinden "en
+  /// doğru"yu yapmaz, oyuncunun dediğini yapar ve sonucu kışın görünür.
+  CoatPriority _coatPriority = CoatPriority.frail;
+
+  /// Yakacak yetmediği için ocağı sönen haneler (kışın, gün başına hesaplanır).
+  final Set<BuildingEntity> _coldHouses = {};
+
+  /// Kış muhasebesi sayaçları — tarama, gün ve yıl anahtarları.
+  double _winterScan = 0;
+  int _winterDay = -1;
+  int _shearYear = -1;
+  int _winterEveDay = -1;
+  int _winterMurmurDay = -1;
+
+  /// Kışın sesi: mevsim başı hatırlatmasının yılı ve kıtlık mırıltısının günü
+  /// (bkz. scene_winter `_maybeWinterVoice`). Kış artık ekranda duran bir
+  /// kartla değil köyün ağzıyla anlatılıyor; bu iki anahtar aynı şeyin iki kez
+  /// söylenmesini engeller.
+  int _winterPrepYear = -1;
+  int _winterPinchDay = -1;
+
+  /// Köyün ilk kırkımı / ilk kışlığı duyuruldu mu (bir kereye mahsus tören).
+  bool _firstShearShown = false;
+  bool _firstCoatShown = false;
+
+  /// Görev kartı açık mı — null = OTOMATİK (kuruluşta açık, köy kurulunca ince
+  /// banda döner). Oyuncu bir kez dokunduysa kararı onundur, otomatiğe dönmez.
+  bool? _questCardOverride;
+
+  // ── Köyün sesi (kuruluş) ──────────────────────────────────────────────────
+  // Adımı İSTEYEN kurucu onu dünyada söyler, biten adıma da o karşılık verir.
+  // Görev listesi bir alışveriş listesi değil, köyün insanlarının istekleri —
+  // ama bu şimdiye kadar yalnız panelde bir isim satırıydı.
+  VillagerEntity? _questVoiceWho;
+  String _questVoiceLine = '';
+  double _questVoiceLeft = 0;
+  double _questVoiceLife = 1;
 
   // ── Köyün âdeti (bkz. systems/village_custom.dart) ────────────────────────
   // Âdete aykırı atamada öğretici uyarı ROL BAŞINA bir kez çıkar; oyuncu dersi
@@ -1237,6 +1516,7 @@ class _VillageSceneState extends State<VillageScene>
   // ayarlar → nüfus arttıkça doğal olarak köy daha canlı olur, dağıtık
   // bölgeler sessiz kalır.
   double _socialScanTimer = 0;
+
   /// NPC rutin (errand) tarama sayacı — scene_npc_routine.
   double _routineScan = 0;
   static const double _kSocialScanInterval =
@@ -1307,6 +1587,7 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── God mode ───────────────────────────────────────────────────────────────
   bool _godMode = false;
+
   /// Performans modu — pahalı ambient efektleri (fireflies, polen, kuş sürüleri,
   /// gölge refinement, light pass detayı) tek tıkla kapatır. Görsel atmosfer
   /// kaybı karşılığında dev FPS kazancı. Test/oynanış sırasında zayıf donanım
@@ -1444,6 +1725,9 @@ class _VillageSceneState extends State<VillageScene>
       TreeRenderer.loadAll(),
       ToolRenderer.loadAll(),
       NatureRenderer.loadAll(),
+      MudRenderer.loadAll(),
+      SnowGroundRenderer.loadAll(),
+      GroundWeatherRenderer.loadAll(),
       DecorRenderer.loadAll(),
       AnimalRenderer.loadAll(),
       MineRenderer.loadAll(),
@@ -1460,12 +1744,15 @@ class _VillageSceneState extends State<VillageScene>
       // kancalar tetiklenir), sonra sabit slota yazılır: gerçek bir kayıt dosyası.
       if (widget.referenceVillage && widget.initialWorld == null) {
         // ignore: unnecessary_this
-        this.buildReferenceVillage();
+        this.buildReferenceVillage(season: kCaptureReferenceSeason);
         _saveNow();
       }
       if (kCaptureSealNizam) {
         for (final id in const [
-          'nizam.watch', 'nizam.registry', 'nizam.labor', 'nizam.exile',
+          'nizam.watch',
+          'nizam.registry',
+          'nizam.labor',
+          'nizam.exile',
         ]) {
           final l = LawBook.byId(id);
           if (l != null) _policies.seal(l);
@@ -1513,7 +1800,8 @@ class _VillageSceneState extends State<VillageScene>
       return true;
     }
     // Defter kısayolu — modal/sinematik varken karışma (o an odak onların).
-    final busy = _devConsoleOpen ||
+    final busy =
+        _devConsoleOpen ||
         _petitionModalOpen ||
         _activeCutscene != null ||
         _imperialDemand != null ||
@@ -1521,8 +1809,11 @@ class _VillageSceneState extends State<VillageScene>
         _lawRitual != null ||
         _exitConfirmOpen;
     if (e.logicalKey == LogicalKeyboardKey.tab && !busy) {
-      setStateHere(() => _ledgerSection =
-          _ledgerSection == null ? LedgerSection.divan : null);
+      setStateHere(
+        () => _ledgerSection = _ledgerSection == null
+            ? LedgerSection.divan
+            : null,
+      );
       return true;
     }
     if (e.logicalKey == LogicalKeyboardKey.escape && _ledgerSection != null) {
@@ -1575,7 +1866,10 @@ class _VillageSceneState extends State<VillageScene>
   /// [color] kanal rengi (varsayılan accent).
   void logDev(String text, {String tag = '', Color? color}) {
     if (!_devLogOn) return;
-    _devLog.insert(0, DevLogEntry(++_devLogSeq, tag, text, color ?? AppUi.accent));
+    _devLog.insert(
+      0,
+      DevLogEntry(++_devLogSeq, tag, text, color ?? AppUi.accent),
+    );
     if (_devLog.length > 14) _devLog.removeRange(14, _devLog.length);
     if (mounted) setState(() {});
   }
@@ -1587,7 +1881,8 @@ class _VillageSceneState extends State<VillageScene>
   @override
   Widget build(BuildContext context) {
     if (!_assetsLoaded) {
-      return LoadingScreen(onCancel: widget.onExitToMenu);
+      return LoadingScreen(
+          village: _villageName, onCancel: widget.onExitToMenu);
     }
 
     return PopScope(
@@ -1600,6 +1895,10 @@ class _VillageSceneState extends State<VillageScene>
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF234E6A), // deniz tabanı (flash önler)
+        // Ad verme kapısı kendi mobil rayını klavyenin üstüne taşır.
+        // Scaffold da aynı anda body'yi küçültürürse sinematik ezilir ve
+        // inset iki kez uygulanır. Diğer oyun içi metin alanları normal davranır.
+        resizeToAvoidBottomInset: _activeCutscene == null,
         // StackFit.expand ŞART: eski tam-ekran "gökyüzü" non-positioned katmanı
         // kaldırıldı → geriye kalan büyük çocuklar hep Positioned.fill (Stack
         // boyutuna katkısız). Loose fit'te Stack, pasif panellerin SizedBox.shrink
@@ -1610,106 +1909,123 @@ class _VillageSceneState extends State<VillageScene>
         // Masaüstünde bu sarmalayıcı hiçbir şey yapmaz.
         body: MobileTextFloor(
           child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Gökyüzü widget katmanı KALDIRILDI — adayı çevreleyen deniz artık
-            // painter içinde (OceanRenderer) çizilir; atmosfer/güneş/bulut orada.
-            Positioned.fill(child: buildGameCanvas()),
-            // Şimşek flash — dünya üstünde, HUD altında; şekilsiz beyaz parlama.
-            Positioned.fill(
-              child: RepaintBoundary(
-                child: ListenableBuilder(
-                  listenable: _frame,
-                  builder: (_, _) => IgnorePointer(
-                    child: _lightningFlash <= 0.001
-                        ? const SizedBox.shrink()
-                        : ColoredBox(
-                            color: Color.fromRGBO(
-                                255, 255, 255, _lightningFlash.clamp(0.0, 0.32))),
+            fit: StackFit.expand,
+            children: [
+              // Gökyüzü widget katmanı KALDIRILDI — adayı çevreleyen deniz artık
+              // painter içinde (OceanRenderer) çizilir; atmosfer/güneş/bulut orada.
+              Positioned.fill(child: buildGameCanvas()),
+              // Şimşek flash — dünya üstünde, HUD altında; şekilsiz beyaz parlama.
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: ListenableBuilder(
+                    listenable: _frame,
+                    builder: (_, _) => IgnorePointer(
+                      child: _lightningFlash <= 0.001
+                          ? const SizedBox.shrink()
+                          : ColoredBox(
+                              color: Color.fromRGBO(
+                                255,
+                                255,
+                                255,
+                                _lightningFlash.clamp(0.0, 0.32),
+                              ),
+                            ),
+                    ),
                   ),
                 ),
               ),
-            ),
-            Positioned.fill(child: buildHudLayer()),
-            // KOMUTA ÇUBUĞU (konsept 04) — inşa + seçim bağlamı + Defter/Divan/
-            // Nüfus kapıları tek alt hatta. Eski alt araç çubuğu + Defter mührü +
-            // ObjectivePanel + zümre bandını toplar.
-            buildCommandBar(),
-            // Görev takipçisi (sağ üst) — eski sürekli-açık ObjectivePanel yerine.
-            buildQuestTracker(),
-            // Akıllı yerleştirme: hayalet geçersiz tile üstündeyse sebep çubuğu.
-            if (_placing != null && _placeReason != null) buildPlaceReason(),
-            // Bekleyen dilekçe mührü — HUD üstünde, modal kapalıyken (ambient).
-            if (_pendingPetition != null && !_petitionModalOpen)
-              buildPetitionSeal(),
-            // Tam seçim panelleri artık YALNIZ "Detay"la açılır (komuta çubuğu
-            // ortada kompakt gösterir) — otomatik sağ-dock kalabalığı kalktı.
-            if (_selectedBuilding != null && _detailExpanded)
-              buildSelectedBuildingPanel(),
-            if (_selectedVillager != null && _detailExpanded)
-              buildSelectedVillagerPanel(),
-            // Karar bekleyen olay — modal açıkken simülasyon dt = 0 (tick
-            // yarıduraklatılır), oyuncu seçene kadar.
-            if (_pendingChoice != null) buildEventChoiceModal(),
-            // İmparatorluk vergi heyeti — karar zorunlu, sim duraklı.
-            if (_imperialDemand != null) buildImperialModal(),
-            // Dilekçe modal'ı — oyunu DURDURMAZ (ambient yönetişim).
-            if (_petitionModalOpen && _pendingPetition != null)
-              buildPetitionModal(),
-            // Mühür ritüeli — meclis burada toplanır (ambient: oyun durmaz).
-            // Divan'ın ÜSTÜNDE: defterden bir fermana dokununca öne gelir.
-            if (_devPanelOpen) buildDevPanel(),
-            // Dev komut konsolu — backtick (`) ile açılır; her şeyin üstünde.
-            if (_devConsoleOpen) buildDevConsole(),
-            // Köy Defteri — divan + kanunname + nüfus + tüzük + kronik tek
-            // çerçevede. Oyun durmaz; boşluğa dokun = kapat. Dilekçe modal'ının
-            // üstünde DEĞİL (modal açıksa deftere değil dilekçeye odaklanılır).
-            if (_ledgerSection != null && !_petitionModalOpen)
-              buildVillageLedger(),
-            if (_lawRitual != null && !_petitionModalOpen) buildLawRitual(),
-            if (_exitConfirmOpen) buildExitConfirm(),
-            if (_pendingJudgment != null) buildJudgmentConfirm(),
-            buildEventBanner(),
-            // NOT: ObjectivePanel (görev takipçisine) ve EstateBanner (Divan'a)
-            // Komuta yapısında toplandı — sürekli-açık sol/sağ yüzen panel yok.
-            // Menü kümesi Stack'te tam ekran panellerden SONRA çiziliyor, yani
-            // onların ÜSTÜNE biniyordu (Köy Defteri'nde DİVAN sekmesinin
-            // üzerine oturuyordu). Panel açıkken hiç çizme.
-            if (_ledgerSection == null &&
-                !_petitionModalOpen &&
-                _lawRitual == null &&
-                !_exitConfirmOpen &&
-                _pendingJudgment == null)
-              buildSaveButton(),
-            buildHoverLabel(),
-            if (_notification != null) buildNotificationToast(),
-            if (_devLogOn && _devLog.isNotEmpty) buildDevLogConsole(),
-            if (_placing != null ||
-                _farmMode ||
-                _lumberMode ||
-                _mineMode ||
-                _roadMode)
-              buildHintRibbon(),
-            // İmparatorluk varış anonsu — HUD üstünde ama sinematiğin altında
-            // (kolon eşiğe varınca cutscene bunu örter).
-            // Koşul İÇERİDE (_frame'e bağlı): dış ağaç her frame rebuild
-            // olmadığından buradaki bir `if` anonsu donuk bir karede dondurur.
-            buildImperialAlert(),
-            // Sinematik — her şeyin üstünde, tam ekran. Sim duraklı.
-            if (_activeCutscene != null)
-              Positioned.fill(
-                // Sinematik kimliğine bağlı key — sahne değişince oynatıcı
-                // state'i (shotIndex/done) sıfırdan kurulur; aynı widget'ın
-                // yeniden kullanılıp eski/karışık state ile yanlış oynamasını
-                // (ör. art arda iki kez görünme) engeller.
-                child: CutscenePlayer(
-                  key: ValueKey(identityHashCode(_activeCutscene)),
-                  cutscene: _activeCutscene!,
-                  onDone: _onCutsceneDone,
-                  onNameChosen: _onVillageNamed,
+              // Köyün sesi — kuruluş adımını isteyen/teşekkür eden kurucunun
+              // cümlesi. Dünyaya ait, HUD'ın ALTINDA: panelleri örtmez.
+              buildQuestSpeech(),
+              Positioned.fill(child: buildHudLayer()),
+              // KOMUTA ÇUBUĞU (konsept 04) — inşa + seçim bağlamı + Defter/Divan/
+              // Nüfus kapıları tek alt hatta. Eski alt araç çubuğu + Defter mührü +
+              // ObjectivePanel + zümre bandını toplar.
+              buildCommandBar(),
+              // Görev takipçisi (sağ üst) — eski sürekli-açık ObjectivePanel yerine.
+              buildQuestTracker(),
+              // Akıllı yerleştirme: hayalet geçersiz tile üstündeyse sebep çubuğu.
+              // İnşa künyesi — elinde bina varken hep açık (ne işe yarar, nereye
+              // kurulmalı, tatlı not + geçersizse sebep).
+              if (_placing != null) buildBuildBrief(),
+              // Bekleyen dilekçe mührü — HUD üstünde, modal kapalıyken (ambient).
+              if (_pendingPetition != null && !_petitionModalOpen)
+                buildPetitionSeal(),
+              // Tam seçim panelleri artık YALNIZ "Detay"la açılır (komuta çubuğu
+              // ortada kompakt gösterir) — otomatik sağ-dock kalabalığı kalktı.
+              if (_selectedBuilding != null && _detailExpanded)
+                buildSelectedBuildingPanel(),
+              if (_selectedVillager != null && _detailExpanded)
+                buildSelectedVillagerPanel(),
+              if (_selectedSiteId != null && _detailExpanded)
+                buildSelectedWorkSitePanel(),
+              // KURULUŞ ÖĞRETİCİSİ — karartma + hedefte delik. Tıklamayı
+              // GEÇİRİR (bkz. guide_spotlight): gösterdiği düğmeye oyuncu
+              // doğrudan basar. Panellerin üstünde, modalların altında.
+              buildGuideSpotlight(),
+              // Karar bekleyen olay — modal açıkken simülasyon dt = 0 (tick
+              // yarıduraklatılır), oyuncu seçene kadar.
+              if (_pendingChoice != null) buildEventChoiceModal(),
+              // İmparatorluk vergi heyeti — karar zorunlu, sim duraklı.
+              if (_imperialDemand != null) buildImperialModal(),
+              // Dilekçe modal'ı — oyunu DURDURMAZ (ambient yönetişim).
+              if (_petitionModalOpen && _pendingPetition != null)
+                buildPetitionModal(),
+              // Mühür ritüeli — meclis burada toplanır (ambient: oyun durmaz).
+              // Divan'ın ÜSTÜNDE: defterden bir fermana dokununca öne gelir.
+              if (_devPanelOpen) buildDevPanel(),
+              // Dev komut konsolu — backtick (`) ile açılır; her şeyin üstünde.
+              if (_devConsoleOpen) buildDevConsole(),
+              // Köy Defteri — divan + kanunname + nüfus + tüzük + kronik tek
+              // çerçevede. Oyun durmaz; boşluğa dokun = kapat. Dilekçe modal'ının
+              // üstünde DEĞİL (modal açıksa deftere değil dilekçeye odaklanılır).
+              if (_ledgerSection != null && !_petitionModalOpen)
+                buildVillageLedger(),
+              if (_lawRitual != null && !_petitionModalOpen) buildLawRitual(),
+              if (_exitConfirmOpen) buildExitConfirm(),
+              if (_pendingJudgment != null) buildJudgmentConfirm(),
+              buildEventBanner(),
+              // NOT: ObjectivePanel (görev takipçisine) ve EstateBanner (Divan'a)
+              // Komuta yapısında toplandı — sürekli-açık sol/sağ yüzen panel yok.
+              // Menü kümesi Stack'te tam ekran panellerden SONRA çiziliyor, yani
+              // onların ÜSTÜNE biniyordu (Köy Defteri'nde DİVAN sekmesinin
+              // üzerine oturuyordu). Panel açıkken hiç çizme.
+              if (_ledgerSection == null &&
+                  !_petitionModalOpen &&
+                  _lawRitual == null &&
+                  !_exitConfirmOpen &&
+                  _pendingJudgment == null)
+                buildSaveButton(),
+              buildHoverLabel(),
+              if (_notification != null) buildNotificationToast(),
+              if (_devLogOn && _devLog.isNotEmpty) buildDevLogConsole(),
+              if (_placing != null ||
+                  _farmMode ||
+                  _lumberMode ||
+                  _mineMode ||
+                  _roadMode)
+                buildHintRibbon(),
+              // İmparatorluk varış anonsu — HUD üstünde ama sinematiğin altında
+              // (kolon eşiğe varınca cutscene bunu örter).
+              // Koşul İÇERİDE (_frame'e bağlı): dış ağaç her frame rebuild
+              // olmadığından buradaki bir `if` anonsu donuk bir karede dondurur.
+              buildImperialAlert(),
+              // Sinematik — her şeyin üstünde, tam ekran. Sim duraklı.
+              if (_activeCutscene != null)
+                Positioned.fill(
+                  // Sinematik kimliğine bağlı key — sahne değişince oynatıcı
+                  // state'i (shotIndex/done) sıfırdan kurulur; aynı widget'ın
+                  // yeniden kullanılıp eski/karışık state ile yanlış oynamasını
+                  // (ör. art arda iki kez görünme) engeller.
+                  child: CutscenePlayer(
+                    key: ValueKey(identityHashCode(_activeCutscene)),
+                    cutscene: _activeCutscene!,
+                    onDone: _onCutsceneDone,
+                    onNameChosen: _onVillageNamed,
+                    onFoundingChoice: _onFoundingChoice,
+                  ),
                 ),
-              ),
-          ],
+            ],
           ),
         ),
       ),

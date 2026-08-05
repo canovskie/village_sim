@@ -112,6 +112,7 @@ const Map<BuildingType, String> _kAssets = {
   BuildingType.caravanserai:   'assets/buildings/caravanserai.png',
   BuildingType.shrine:         'assets/buildings/shrine.png',
   BuildingType.belltower:      'assets/buildings/belltower.png',
+  BuildingType.tailor:         'assets/buildings/tailor.png',
 };
 
 // ─── Screen ──────────────────────────────────────────────────────────────────

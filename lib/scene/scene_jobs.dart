@@ -28,7 +28,8 @@ extension _SceneJobs on _VillageSceneState {
       !v.isSleeping &&
       !v.isCarrying &&
       !v.sitClaimed &&
-      v.mind.intent.priority < IntentPriority.ceremony && // sahnedekine iş verme
+      v.mind.intent.priority <
+          IntentPriority.ceremony && // sahnedekine iş verme
       v.activity == VillagerActivity.none;
 
   /// Atanmış bir köylünün iş state-machine'i BU FRAME çalışmalı mı — uyku/taşıma/
@@ -78,12 +79,15 @@ extension _SceneJobs on _VillageSceneState {
     }
     final builderTarget = wantedHands.clamp(0, kMaxBuilders);
     final firstOrder = _orders.where((o) => !o.completed).firstOrNull;
-    _reconcileRole(JobRole.builder, builderTarget,
-        matchType: null,
-        near: firstOrder != null
-            ? (firstOrder.col + 0.5, firstOrder.row + 0.5)
-            : null,
-        blockMsg: '🔨 İnşa edilecek yer var ama boş usta yok.');
+    _reconcileRole(
+      JobRole.builder,
+      builderTarget,
+      matchType: null,
+      near: firstOrder != null
+          ? (firstOrder.col + 0.5, firstOrder.row + 0.5)
+          : null,
+      blockMsg: '🔨 İnşa edilecek yer var ama boş usta yok.',
+    );
 
     // FARMER: tarla ihtiyacı + emek arzı (mevcut _farmWorkforceTarget). Kış:
     // tarla donuk → kadro 0 (çiftçi kış molasına köye karışır).
@@ -92,16 +96,21 @@ extension _SceneJobs on _VillageSceneState {
       // Tarla var ama işleyecek el yok (nüfus/uygunluk) → nazik dürtme.
       if (_jobBlockWarnCd <= 0) {
         _jobBlockWarnCd = 60.0;
-        _showNotification('🌾 Tarla var ama işleyen yok — bir köylü çiftçi '
-            'olmalı ya da Ekin Seferberliği fermanı çıkmalı.');
+        _showNotification(
+          '🌾 Tarla var ama işleyen yok — bir köylü çiftçi '
+          'olmalı ya da Ekin Seferberliği fermanı çıkmalı.',
+        );
       }
     }
-    _reconcileRole(JobRole.farmer, farmerTarget,
-        matchType: VillagerType.farmer,
-        near: _farmTiles.isNotEmpty
-            ? (_farmTiles.first.col + 0.5, _farmTiles.first.row + 0.5)
-            : null,
-        blockMsg: '🌾 Tarla var ama işleyen boş köylü yok.');
+    _reconcileRole(
+      JobRole.farmer,
+      farmerTarget,
+      matchType: VillagerType.farmer,
+      near: _farmTiles.isNotEmpty
+          ? (_farmTiles.first.col + 0.5, _farmTiles.first.row + 0.5)
+          : null,
+      blockMsg: '🌾 Tarla var ama işleyen boş köylü yok.',
+    );
 
     // MADENCİ / BALIKÇI / ÇİÇEKÇİ — bina başına 1 (kaynak varken); işyerine
     // en yakın boş köylü atanır.
@@ -111,37 +120,61 @@ extension _SceneJobs on _VillageSceneState {
       final m = kBuildingMeta[t]!;
       return (b.col + m.cols / 2.0, b.row + m.rows / 2.0);
     }
-    final mines = _buildings.where((b) => b.type == BuildingType.mineBuilding).length;
-    final cabins = _buildings.where((b) => b.type == BuildingType.fisherCabin).length;
-    final cottages = _buildings.where((b) => b.type == BuildingType.floristCottage).length;
-    _reconcileRole(JobRole.miner, mines,
-        matchType: VillagerType.miner,
-        near: nearBuilding(BuildingType.mineBuilding),
-        blockMsg: '⛏️ Maden hazır ama çıkaracak boş köylü yok.');
-    _reconcileRole(JobRole.fisher, cabins,
-        matchType: VillagerType.fisher,
-        near: nearBuilding(BuildingType.fisherCabin),
-        blockMsg: '🎣 İskele boş — balığa çıkacak kimse yok.');
-    _reconcileRole(JobRole.florist, cottages,
-        matchType: null,
-        near: nearBuilding(BuildingType.floristCottage),
-        blockMsg: '🌸 Çiçekçi kulübesi boş.');
+
+    final mines = _buildings
+        .where((b) => b.type == BuildingType.mineBuilding)
+        .length;
+    final cabins = _buildings
+        .where((b) => b.type == BuildingType.fisherCabin)
+        .length;
+    final cottages = _buildings
+        .where((b) => b.type == BuildingType.floristCottage)
+        .length;
+    _reconcileRole(
+      JobRole.miner,
+      mines,
+      matchType: VillagerType.miner,
+      near: nearBuilding(BuildingType.mineBuilding),
+      blockMsg: '⛏️ Maden hazır ama çıkaracak boş köylü yok.',
+    );
+    _reconcileRole(
+      JobRole.fisher,
+      cabins,
+      matchType: VillagerType.fisher,
+      near: nearBuilding(BuildingType.fisherCabin),
+      blockMsg: '🎣 İskele boş — balığa çıkacak kimse yok.',
+    );
+    _reconcileRole(
+      JobRole.florist,
+      cottages,
+      matchType: null,
+      near: nearBuilding(BuildingType.floristCottage),
+      blockMsg: '🌸 Çiçekçi kulübesi boş.',
+    );
 
     // ÇOBAN — ağıl başına 1 (sağım + sürü). Tek çoban hem güder hem sağar
     // (eski anonim ShepherdEntity mükerrerliği kalktı).
     final barns = _buildings.where((b) => b.type == BuildingType.barn).length;
-    _reconcileRole(JobRole.shepherd, barns,
-        matchType: VillagerType.shepherd,
-        near: nearBuilding(BuildingType.barn),
-        blockMsg: '🐄 Ağıl var ama çoban yok.');
+    _reconcileRole(
+      JobRole.shepherd,
+      barns,
+      matchType: VillagerType.shepherd,
+      near: nearBuilding(BuildingType.barn),
+      blockMsg: '🐄 Ağıl var ama çoban yok.',
+    );
 
     // ODUNCU — kereste kampı başına 1 (kesim). Bölge yönetimi (işaretleme+
     // fidan) ayrı per-kamp yürür (_tickLumberCampManage).
-    final camps = _buildings.where((b) => b.type == BuildingType.lumberCamp).length;
-    _reconcileRole(JobRole.woodcutter, camps,
-        matchType: null,
-        near: nearBuilding(BuildingType.lumberCamp),
-        blockMsg: '🪓 Kereste kampı var ama oduncu yok.');
+    final camps = _buildings
+        .where((b) => b.type == BuildingType.lumberCamp)
+        .length;
+    _reconcileRole(
+      JobRole.woodcutter,
+      camps,
+      matchType: null,
+      near: nearBuilding(BuildingType.lumberCamp),
+      blockMsg: '🪓 Kereste kampı var ama oduncu yok.',
+    );
 
     // TOPLAYICI / AŞÇI — otomatik kadro hedefi 0 (bkz. aşağıdaki not).
     // Bu iki iş bilinçli olarak KENDİLİĞİNDEN dağıtılmaz: erken oyunun tek
@@ -150,10 +183,33 @@ extension _SceneJobs on _VillageSceneState {
     // Elle atanmış köylüler `_reconcileRole`'ün fazlalık kapısından zaten muaf
     // (bkz. `assignedRole` kontrolü), o yüzden burada hedefi 0 bırakmak onları
     // işten ALMAZ — yalnız yenisini otomatik atamaz.
-    _reconcileRole(JobRole.forager, 0,
-        matchType: null, blockMsg: '');
-    _reconcileRole(JobRole.cook, 0,
-        matchType: null, blockMsg: '');
+    _reconcileRole(JobRole.forager, 0, matchType: null, blockMsg: '');
+    _reconcileRole(JobRole.cook, 0, matchType: null, blockMsg: '');
+
+    // DOKUMACI — KIŞIN İŞİ. Tarla donunca çiftçi kadrosu boşa düşüyordu:
+    // köyün yarısı kış boyunca ortalıkta dolanıyor, mevsim "ölü zaman" gibi
+    // geçiyordu. Kışın ve yün varken köy kendiliğinden tezgâha oturur.
+    //
+    // Hedef sayı yünle sınırlı: iki tezgâh bir kışlık için yeter, üç dokumacı
+    // yünü bir günde bitirip yine boş kalırdı. Elle atananlar bu hedeften
+    // muaf (bkz. `assignedRole`) — oyuncunun kararı her mevsim geçerli.
+    // SONBAHAR DA DAHİL: kışlık giysi kışın değil KIŞ GELMEDEN dokunur.
+    // Yalnız kışa bağlıyken hazırlık kartı sonbahar boyunca "kışlık eksik"
+    // diyor ama oyuncunun yapabileceği hiçbir şey olmuyordu — uyarı değil
+    // sitem. Kırkım sonbaharda, tezgâh da sonbaharda başlar; kışın süren
+    // dokuma yalnız açığı kapatır.
+    final weaveSeason = _season == Season.autumn || _season == Season.winter;
+    // Eşik BİR GİYSİLİK yün: "6 yün birikince başla" dediğimizde tezgâh
+    // sonbaharın yarısını bekleyerek geçiriyordu (kırkım damla damla gelir).
+    final wantWeavers = weaveSeason && _stockpile.wool >= 3
+        ? (_stockpile.wool ~/ 9).clamp(1, 2)
+        : 0;
+    _reconcileRole(
+      JobRole.weaver,
+      wantWeavers,
+      matchType: null,
+      blockMsg: '',
+    );
   }
 
   // ── KERESTE KAMPI BÖLGE YÖNETİMİ ────────────────────────────────────────────
@@ -163,8 +219,10 @@ extension _SceneJobs on _VillageSceneState {
   void _tickLumberCampManage(double dt) {
     _lumberManageCd -= dt;
     if (_lumberManageCd > 0) return;
-    _lumberManageCd = kLumberManageMinInterval +
-        _rng.nextDouble() * (kLumberManageMaxInterval - kLumberManageMinInterval);
+    _lumberManageCd =
+        kLumberManageMinInterval +
+        _rng.nextDouble() *
+            (kLumberManageMaxInterval - kLumberManageMinInterval);
     final forbidden = _forbiddenForTrees;
     for (final b in _buildings) {
       if (b.type != BuildingType.lumberCamp) continue;
@@ -192,7 +250,10 @@ extension _SceneJobs on _VillageSceneState {
   }
 
   void _plantLumberSapling(double cx, double cy, Set<(int, int)> forbidden) {
-    final occupied = {for (final t in _trees) if (!t.isFelled) (t.col, t.row)};
+    final occupied = {
+      for (final t in _trees)
+        if (!t.isFelled) (t.col, t.row),
+    };
     for (int attempt = 0; attempt < 25; attempt++) {
       final angle = _rng.nextDouble() * 2 * pi;
       final dist = 1.5 + _rng.nextDouble() * (kLumberTerritoryRadius - 1.0);
@@ -202,7 +263,9 @@ extension _SceneJobs on _VillageSceneState {
       if (occupied.contains((col, row))) continue;
       if (_waterTiles.contains((col, row))) continue;
       if (forbidden.contains((col, row))) continue;
-      _trees.add(TreeEntity(col: col, row: row, type: TreeType.pine, isGrowing: true));
+      _trees.add(
+        TreeEntity(col: col, row: row, type: TreeType.pine, isGrowing: true),
+      );
       return;
     }
   }
@@ -223,12 +286,18 @@ extension _SceneJobs on _VillageSceneState {
       TreeEntity? best;
       double bestD = double.infinity;
       for (final t in _trees) {
-        if (!t.isMarkedForCutting || t.isBeingChopped || t.isFelled || t.isGrowing) {
+        if (!t.isMarkedForCutting ||
+            t.isBeingChopped ||
+            t.isFelled ||
+            t.isGrowing) {
           continue;
         }
         final dx = t.col + 0.5 - v.gridX, dy = t.row + 0.5 - v.gridY;
         final d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = t; }
+        if (d < bestD) {
+          bestD = d;
+          best = t;
+        }
       }
       if (best == null) return;
       best.isBeingChopped = true;
@@ -257,17 +326,27 @@ extension _SceneJobs on _VillageSceneState {
     tree.chopPhase = job.phaseAnim;
     if (job.timer >= kChopDuration) {
       final hc = tree.col, hr = tree.row;
-      tree.isFelled = true;
-      tree.isBeingChopped = false;
-      tree.chopPhase = -1;
+      // İzometrik ekran x'i (gridX-gridY) eksenidir. Ağaç oduncunun ekran
+      // tarafının tersine düşer; böylece gövde işçinin üstüne kapanmaz.
+      final workerScreenDelta =
+          (v.gridX - v.gridY) - ((tree.col + 0.5) - (tree.row + 0.5));
+      tree.beginFall(awayFromScreenDelta: -workerScreenDelta);
       job.claim = null;
       job.phase = 0;
       job.working = false;
       job.phaseAnim = 0;
       final box = ResourceBox(
-          type: ResourceBoxType.woodChunk, gridX: hc.toDouble(), gridY: hr.toDouble());
+        type: ResourceBoxType.woodChunk,
+        gridX: hc.toDouble(),
+        gridY: hr.toDouble(),
+      );
       ResourcePlacement.placeBox(
-          box, hc.toDouble(), hr.toDouble(), _resourceBoxes, _time);
+        box,
+        hc.toDouble(),
+        hr.toDouble(),
+        _resourceBoxes,
+        _time,
+      );
       _resourceBoxes.add(box);
     }
   }
@@ -294,37 +373,18 @@ extension _SceneJobs on _VillageSceneState {
     }
   }
 
-  /// Köyün BUGÜN verebileceği işler — panelin rozet listesi.
-  ///
-  /// Ölü rozet göstermeyiz: madeni olmayan köyde "Madenci" rozeti oyuncuyu
-  /// kandırır (atar, kimse bir şey yapmaz). Liste köyün elindeki iş yerlerinden
-  /// türer, böylece bina dikildikçe panel kendiliğinden zenginleşir — erken
-  /// oyunun "ilerliyorum" hissini taşıyan sessiz kanallardan biri.
-  List<JobRole> _assignableJobRoles() {
-    bool has(BuildingType t) => _buildings.any((b) => b.type == t);
-    return [
-      // TOPLAYICI en başta: bina istemeyen tek iş. Oyunun ilk saniyesinden
-      // itibaren verilebilir olması erken oyunun bütün mesele si — listenin
-      // başında durması da o yüzden.
-      if (_berryBushes.isNotEmpty) JobRole.forager,
-      if (has(BuildingType.firepit)) JobRole.cook,
-      // İnşaatçı her zaman: bekleyen sipariş yoksa köylü boşta bekler, sipariş
-      // çıkınca ilk o koşar (oyuncunun "bunu ustaya ayırdım" demesi mümkün).
-      JobRole.builder,
-      if (has(BuildingType.lumberCamp)) JobRole.woodcutter,
-      if (_farmTiles.isNotEmpty) JobRole.farmer,
-      if (has(BuildingType.mineBuilding)) JobRole.miner,
-      if (has(BuildingType.fisherCabin)) JobRole.fisher,
-      if (has(BuildingType.barn)) JobRole.shepherd,
-      if (has(BuildingType.floristCottage)) JobRole.florist,
-    ];
-  }
-
-  /// Oyuncu bir köylüye iş verdi/aldı — UI'ın tek giriş kapısı.
+  /// Oyuncu bir köylüye iş verdi/aldı — atamanın tek giriş kapısı.
   /// [role] `null` ise köylü otomatik iş gücüne GERİ DÖNER (kilit kalkar);
   /// [JobRole.none] ise elle boşa alınır (otomatik de dokunmaz).
+  ///
+  /// UI bunu artık DOĞRUDAN çağırmaz — oyuncunun yüzeyi iş yeri yuvalarıdır
+  /// (bkz. `_fillSlot` / `_emptySlot`). Burası o yüzeyin altındaki ilkel işlem
+  /// olarak kaldı; öğretici, dev konsolu ve senaryolar buradan geçer.
   void _assignVillagerJob(VillagerEntity v, JobRole? role) {
     v.assignedRole = role;
+    // Kilit kalkıyorsa YER mührü de düşer — yoksa köylü otomatik havuza döner
+    // ama panelde hâlâ o ocağın yuvasında görünürdü.
+    if (role == null || role == JobRole.none) v.assignedSiteId = null;
     // Kilit kalkarken elindeki işi de bırak: aksi halde köylü "otomatik havuzda"
     // görünür ama hâlâ eski rolde çalışır, sonraki sync'e kadar sayaçlar yalan söyler.
     if (role == null) {
@@ -333,7 +393,8 @@ extension _SceneJobs on _VillageSceneState {
       _applyPlayerAssignments();
       // Âdete aykırıysa köy duysun — engellemez, yalnız tepki verir
       // (bkz. scene_custom + systems/village_custom).
-      if (role != JobRole.none && VillageCustom.isAgainst(role, male: v.isMale)) {
+      if (role != JobRole.none &&
+          VillageCustom.isAgainst(role, male: v.isMale)) {
         _reactToCustomBreach(v, role);
       }
     }
@@ -344,8 +405,13 @@ extension _SceneJobs on _VillageSceneState {
   /// yetişkin ata ([matchType] varsa o mesleği tercih et — çoban/çiftçi/madenci
   /// gibi baz-meslek eşleşmesi), fazla ise bırak (önce çalışmayanı). Kadro
   /// kurulamadıysa (target>0 ama boş kimse yok) nazik uyarı.
-  void _reconcileRole(JobRole role, int target,
-      {VillagerType? matchType, (double, double)? near, required String blockMsg}) {
+  void _reconcileRole(
+    JobRole role,
+    int target, {
+    VillagerType? matchType,
+    (double, double)? near,
+    required String blockMsg,
+  }) {
     final assigned = _villagers.where((v) => v.job?.role == role).toList();
 
     if (assigned.length < target) {
@@ -358,6 +424,7 @@ extension _SceneJobs on _VillageSceneState {
         final dx = v.gridX - near.$1, dy = v.gridY - near.$2;
         return dx * dx + dy * dy;
       }
+
       final pool = _villagers.where(_freeForJob).toList()
         ..sort((a, b) {
           if (matchType != null) {
@@ -398,7 +465,11 @@ extension _SceneJobs on _VillageSceneState {
 
   /// Bina yakınında BU rolde çalışan (working) atanmış köylü var mı — bina
   /// "aktif" panel durumu için (eski worker.state kontrolünün yerini alır).
-  bool _jobWorkerActiveNear(JobRole role, BuildingEntity b, {double radius = 5.0}) {
+  bool _jobWorkerActiveNear(
+    JobRole role,
+    BuildingEntity b, {
+    double radius = 5.0,
+  }) {
     final cx = b.col + b.cols / 2.0, cy = b.row + b.rows / 2.0;
     final r2 = radius * radius;
     for (final v in _villagers) {
@@ -448,7 +519,9 @@ extension _SceneJobs on _VillageSceneState {
       case JobRole.forager:
         // Üstlendiği çalıyı SALIVER — yoksa o çalı kimsenin toplayamadığı
         // sessiz bir ölü nokta olarak kalır.
-        if (job.claim is BerryBush) (job.claim as BerryBush).isBeingPicked = false;
+        if (job.claim is BerryBush) {
+          (job.claim as BerryBush).isBeingPicked = false;
+        }
       default:
         break;
     }
@@ -458,7 +531,11 @@ extension _SceneJobs on _VillageSceneState {
 
   // ── YÜRÜTME (her frame) ─────────────────────────────────────────────────────
 
-  void _tickJobs(double dt, Set<(int, int)> obstacles, Set<(int, int)> softObs) {
+  void _tickJobs(
+    double dt,
+    Set<(int, int)> obstacles,
+    Set<(int, int)> softObs,
+  ) {
     final buildDt = dt * _fxBuilderMul;
     // Şantiyede o an kaç el var — bu karede yeniden sayılır, kadro şartı
     // (bkz. _runBuilder) bir önceki karenin sayısını okur. Kadro eksik kaldıkça
@@ -483,7 +560,12 @@ extension _SceneJobs on _VillageSceneState {
       // ÂDET — köyün usulüne aykırı iş AĞIR ilerler (bkz. village_custom).
       // Tek çarpan, tek yer: panelde yazan uyarı ile burada uygulanan yavaşlama
       // aynı `judge()` çağrısından çıkar, iki liste yoktur.
-      final cm = VillageCustom.speedMul(job.role, male: v.isMale);
+      // Âdet çarpanı × ÜŞÜME cezası. Titreyen el iş görmez: kışın üşümesi
+      // dolan köylü yavaşlar (bkz. systems/winter.dart chillWorkPenalty).
+      // Eşikli — hafif üşüme kimseyi yavaşlatmaz, yoksa kış boyunca köy
+      // sürekli ağır çekim olurdu.
+      final cm = VillageCustom.speedMul(job.role, male: v.isMale) *
+          chillWorkPenalty(v.mind.drive(Drive.chill));
       switch (job.role) {
         case JobRole.builder:
           _runBuilder(v, buildDt * cm, obstacles);
@@ -492,6 +574,13 @@ extension _SceneJobs on _VillageSceneState {
         case JobRole.miner:
           _runMiner(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.fisher:
+          // Göl donmuşsa olta atılmaz. Rol listeden zaten düşüyor ama ELLE
+          // atanmış balıkçı kışın buz başında bekler kalırdı — iş bu tick
+          // boş geçer, köylü köye karışır (rol elinden ALINMAZ).
+          if (waterFrozen(_season)) {
+            v.job?.working = false;
+            break;
+          }
           _runFisher(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.florist:
           _runFlorist(v, dt * _fxNpcSpeedMul * cm);
@@ -503,6 +592,8 @@ extension _SceneJobs on _VillageSceneState {
           _runForager(v, dt * _fxNpcSpeedMul * cm);
         case JobRole.cook:
           _runCook(v, dt * _fxNpcSpeedMul * cm);
+        case JobRole.weaver:
+          _runWeaver(v, dt * _fxNpcSpeedMul * cm);
         default:
           break;
       }
@@ -518,15 +609,18 @@ extension _SceneJobs on _VillageSceneState {
         // görünür — mevcut prop çizimini yeniden kullanır (yeni sprite yok).
         final (pose, prop) = switch (job.role) {
           JobRole.farmer => (
-              ActPose.stoop,
-              job.carryingWater ? PropKind.bucketFull : PropKind.none
-            ),
+            ActPose.stoop,
+            job.carryingWater ? PropKind.bucketFull : PropKind.none,
+          ),
           JobRole.florist => (ActPose.stoop, PropKind.basket),
-          JobRole.shepherd => (ActPose.stoop, PropKind.none), // sağım için çömelir
+          JobRole.shepherd => (
+            ActPose.stoop,
+            PropKind.none,
+          ), // sağım için çömelir
           JobRole.forager => (ActPose.stoop, PropKind.basket), // çalıdan sepete
-          JobRole.cook => (ActPose.stoop, PropKind.none),      // kazanı karıştırır
+          JobRole.cook => (ActPose.stoop, PropKind.none), // kazanı karıştırır
+          JobRole.weaver => (ActPose.stoop, PropKind.none), // tezgâha eğilir
           _ => (ActPose.labor, PropKind.none), // çekiç/kazma/balta/olta ritmi
-
         };
         _setWorkPose(v, pose, prop: prop);
       } else {
@@ -572,7 +666,10 @@ extension _SceneJobs on _VillageSceneState {
       job.claim = null;
       bo = null;
     }
-    if (ro != null && ro.completed) { job.claim = null; ro = null; }
+    if (ro != null && ro.completed) {
+      job.claim = null;
+      ro = null;
+    }
 
     // Claim yoksa bir sipariş kap (bina önce — büyük yatırım).
     if (bo == null && ro == null) {
@@ -680,8 +777,10 @@ extension _SceneJobs on _VillageSceneState {
     // kadrodaki her el ayrı ayrı ilerletir, bina kişi sayısı kadar hızlı çıkardı.
     if (bo.tickStamp != _time) {
       bo.tickStamp = _time;
-      bo.progress =
-          (bo.progress + dt / _buildDurationFor(bo.type)).clamp(0.0, 1.0);
+      bo.progress = (bo.progress + dt / _buildDurationFor(bo.type)).clamp(
+        0.0,
+        1.0,
+      );
     }
     job.progress = bo.progress;
     if (bo.progress >= 1.0) {
@@ -739,7 +838,10 @@ extension _SceneJobs on _VillageSceneState {
           }
         }
         // Önce hasat: olgun ekin bekletilmez.
-        final best = _nearestFarmTile(v, (t) => t.readyToHarvest && !t.beingHarvested);
+        final best = _nearestFarmTile(
+          v,
+          (t) => t.readyToHarvest && !t.beingHarvested,
+        );
         if (best != null) {
           best.beingHarvested = true;
           job.claim = best;
@@ -762,8 +864,10 @@ extension _SceneJobs on _VillageSceneState {
           job.phase = 0;
           return;
         }
-        _walkToTileThen(v, target.col + 0.5, target.row + 0.5,
-            () { job.phase = 2; job.timer = 0; });
+        _walkToTileThen(v, target.col + 0.5, target.row + 0.5, () {
+          job.phase = 2;
+          job.timer = 0;
+        });
         return;
 
       case 2: // ekiyor
@@ -780,9 +884,14 @@ extension _SceneJobs on _VillageSceneState {
         return;
 
       case 3: // hasada yürü
-        if (target == null) { job.phase = 0; return; }
-        _walkToTileThen(v, target.col + 0.5, target.row + 0.5,
-            () { job.phase = 4; job.timer = 0; });
+        if (target == null) {
+          job.phase = 0;
+          return;
+        }
+        _walkToTileThen(v, target.col + 0.5, target.row + 0.5, () {
+          job.phase = 4;
+          job.timer = 0;
+        });
         return;
 
       case 4: // biçiyor
@@ -804,9 +913,14 @@ extension _SceneJobs on _VillageSceneState {
       case 5: // kuyuya yürü
         job.carryingWater = true;
         final slot = job.claim2 is AnchorSlot ? job.claim2 as AnchorSlot : null;
-        if (slot == null) { job.phase = 0; return; }
-        _walkToTileThen(v, slot.col, slot.row,
-            () { job.phase = 6; job.timer2 = 0; });
+        if (slot == null) {
+          job.phase = 0;
+          return;
+        }
+        _walkToTileThen(v, slot.col, slot.row, () {
+          job.phase = 6;
+          job.timer2 = 0;
+        });
         return;
 
       case 6: // su alıyor
@@ -835,9 +949,14 @@ extension _SceneJobs on _VillageSceneState {
 
       case 7: // sulamaya yürü
         job.carryingWater = true;
-        if (target == null) { job.phase = 0; return; }
-        _walkToTileThen(v, target.col + 0.5, target.row + 0.5,
-            () { job.phase = 8; job.timer2 = 0; });
+        if (target == null) {
+          job.phase = 0;
+          return;
+        }
+        _walkToTileThen(v, target.col + 0.5, target.row + 0.5, () {
+          job.phase = 8;
+          job.timer2 = 0;
+        });
         return;
 
       case 8: // suluyor
@@ -873,14 +992,22 @@ extension _SceneJobs on _VillageSceneState {
       if (!pred(t)) continue;
       final dx = t.col + 0.5 - v.gridX, dy = t.row + 0.5 - v.gridY;
       final d = dx * dx + dy * dy;
-      if (d < bestD) { bestD = d; best = t; }
+      if (d < bestD) {
+        bestD = d;
+        best = t;
+      }
     }
     return best;
   }
 
   /// Köylü (tx,ty) tile'ına yeterince yaklaştıysa [onArrive]'ı çağır; değilse
   /// oraya `goTo` ver (zaten yolda değilse). İş döngülerinin ortak yürü-sonra-yap.
-  void _walkToTileThen(VillagerEntity v, double tx, double ty, void Function() onArrive) {
+  void _walkToTileThen(
+    VillagerEntity v,
+    double tx,
+    double ty,
+    void Function() onArrive,
+  ) {
     final dx = v.gridX - tx, dy = v.gridY - ty;
     if (dx * dx + dy * dy <= 0.35 * 0.35) {
       v.state = VillagerState.idle;
@@ -895,9 +1022,17 @@ extension _SceneJobs on _VillageSceneState {
   /// scene_tick harvestHayPos akışının yerini alır.
   void _spawnFarmHay(int col, int row) {
     final hay = HayEntity(
-        type: HayType.pile, gridX: col.toDouble(), gridY: row.toDouble());
+      type: HayType.pile,
+      gridX: col.toDouble(),
+      gridY: row.toDouble(),
+    );
     ResourcePlacement.placeHay(
-        hay, col.toDouble(), row.toDouble(), _hayEntities, _time);
+      hay,
+      col.toDouble(),
+      row.toDouble(),
+      _hayEntities,
+      _time,
+    );
     _hayEntities.add(hay);
   }
 
@@ -920,7 +1055,10 @@ extension _SceneJobs on _VillageSceneState {
         if (!n.isMarkedForMining || n.isBeingMined || n.isDepleted) continue;
         final dx = n.col + 0.5 - v.gridX, dy = n.row + 0.5 - v.gridY;
         final d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = n; }
+        if (d < bestD) {
+          bestD = d;
+          best = n;
+        }
       }
       if (best == null) return;
       best.isBeingMined = true;
@@ -964,9 +1102,17 @@ extension _SceneJobs on _VillageSceneState {
         _ => ResourceBoxType.stoneBox,
       };
       final box = ResourceBox(
-          type: boxType, gridX: hc.toDouble(), gridY: hr.toDouble());
+        type: boxType,
+        gridX: hc.toDouble(),
+        gridY: hr.toDouble(),
+      );
       ResourcePlacement.placeBox(
-          box, hc.toDouble(), hr.toDouble(), _resourceBoxes, _time);
+        box,
+        hc.toDouble(),
+        hr.toDouble(),
+        _resourceBoxes,
+        _time,
+      );
       _resourceBoxes.add(box);
     }
   }
@@ -987,7 +1133,12 @@ extension _SceneJobs on _VillageSceneState {
         v.state = VillagerState.idle;
         // Suya bak.
         final sc = tx.round(), sr = ty.round();
-        for (final (wc, wr) in [(sc + 1, sr), (sc - 1, sr), (sc, sr + 1), (sc, sr - 1)]) {
+        for (final (wc, wr) in [
+          (sc + 1, sr),
+          (sc - 1, sr),
+          (sc, sr + 1),
+          (sc, sr - 1),
+        ]) {
           if (_waterTiles.contains((wc, wr))) {
             v.facingRight = (wc - sc) - (wr - sr) > 0;
             break;
@@ -1019,11 +1170,19 @@ extension _SceneJobs on _VillageSceneState {
     (int, int)? best;
     double bestD = double.infinity;
     for (final (wc, wr) in _waterTiles) {
-      for (final (nc, nr) in [(wc - 1, wr), (wc + 1, wr), (wc, wr - 1), (wc, wr + 1)]) {
+      for (final (nc, nr) in [
+        (wc - 1, wr),
+        (wc + 1, wr),
+        (wc, wr - 1),
+        (wc, wr + 1),
+      ]) {
         if (_waterTiles.contains((nc, nr))) continue;
         final dx = nc - gx, dy = nr - gy;
         final d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = (nc, nr); }
+        if (d < bestD) {
+          bestD = d;
+          best = (nc, nr);
+        }
       }
     }
     return best;
@@ -1034,7 +1193,10 @@ extension _SceneJobs on _VillageSceneState {
   void _runShepherd(VillagerEntity v, double dt) {
     final job = v.job!;
     var cow = job.claim is AnimalEntity ? job.claim as AnimalEntity : null;
-    if (cow != null && !cow.isBeingMilked) { job.claim = null; cow = null; }
+    if (cow != null && !cow.isBeingMilked) {
+      job.claim = null;
+      cow = null;
+    }
     if (cow == null) {
       job.working = false;
       final barn = _nearestOf(BuildingType.barn, v);
@@ -1046,7 +1208,10 @@ extension _SceneJobs on _VillageSceneState {
         if (a.barnCol != barn.col || a.barnRow != barn.row) continue;
         final dx = a.gridX - v.gridX, dy = a.gridY - v.gridY;
         final d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = a; }
+        if (d < bestD) {
+          bestD = d;
+          best = a;
+        }
       }
       if (best == null) return;
       best.isBeingMilked = true;
@@ -1097,7 +1262,8 @@ extension _SceneJobs on _VillageSceneState {
       final cottage = _nearestOf(BuildingType.floristCottage, v);
       if (cottage == null) return;
       final meta = kBuildingMeta[BuildingType.floristCottage]!;
-      final ox = cottage.col + meta.cols / 2.0, oy = cottage.row + meta.rows / 2.0;
+      final ox = cottage.col + meta.cols / 2.0,
+          oy = cottage.row + meta.rows / 2.0;
       final r2 = meta.effectRadius * meta.effectRadius;
       DecorEntity? best;
       double bestD = double.infinity;
@@ -1108,7 +1274,10 @@ extension _SceneJobs on _VillageSceneState {
         if (rr > r2) continue;
         final vx = d.col + 0.5 - v.gridX, vy = d.row + 0.5 - v.gridY;
         final vd = vx * vx + vy * vy;
-        if (vd < bestD) { bestD = vd; best = d; }
+        if (vd < bestD) {
+          bestD = vd;
+          best = d;
+        }
       }
       if (best == null) return;
       job.claim = best;

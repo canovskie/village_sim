@@ -560,9 +560,13 @@ extension _SceneRegime on _VillageSceneState {
       }
       _ledgerSection = null; // ilan edildi; defter kapansın, köy meydanda
     });
-    _showNotification('${id.icon} $title — köy kendini ilan etti.');
+    // Yemin köyün kendini DIŞARIYA ilan ettiği andır — bu yüzden cümle "köy"
+    // demez, köyün adını söyler (bkz. scene_voice `_villageWith` kuralı).
+    _showNotification(
+        '${id.icon} $title — ${_villageWith(Suffix.genitive)} yemini.');
     _chronicle('$title  $decree', icon: id.icon, milestone: true);
-    _award('oath.${id.regime.name}', '${id.title}: köy yeminini etti', id.icon);
+    _award('oath.${id.regime.name}', '${id.title}: $_villageName yeminini etti',
+        id.icon);
   }
 
   // ── MECLİS (hür rejim) ─────────────────────────────────────────────────────

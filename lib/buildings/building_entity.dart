@@ -66,6 +66,11 @@ class BuildingEntity {
   /// çalışıyor (isActive=duman + panel "Çalışıyor"). Geçici — kaydedilmez.
   double grindPulse = 0.0;
 
+  /// Değirmen rotorunun son açısı (radyan). Değirmen duraklatılmadığı sürece
+  /// ilerler; sim durunca veya duraklatılınca kanatlar bulunduğu açıda kalır.
+  /// Kayıtta tutulur ki yükleme sırasında X pozuna sıçramasın.
+  double millRotorAngle = 0.0;
+
   BuildingEntity({required this.type, required this.col, required this.row});
 
   int get cols => kBuildingMeta[type]!.cols;

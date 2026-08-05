@@ -11,7 +11,11 @@ import '../world/hay_entity.dart';
 /// Birden çok kopuk tarla olsa bile şimdilik tek harman paylaşılır (basit).
 ///
 /// Yığın seçimi FIFO: en eski yığınlar dönüştürülür → tahmin edilebilir akış.
-void processHayPiles(List<HayEntity> hayEntities, List<FarmTile> farmTiles) {
+void processHayPiles(
+  List<HayEntity> hayEntities,
+  List<FarmTile> farmTiles, {
+  double time = 0,
+}) {
   if (farmTiles.isEmpty) return;
 
   final piles = hayEntities
@@ -24,7 +28,9 @@ void processHayPiles(List<HayEntity> hayEntities, List<FarmTile> farmTiles) {
 
   final (hc, hr) = _harmanPos(farmTiles);
   final (bx, by) = _findFreeBaleSpot(hayEntities, hc, hr);
-  hayEntities.add(HayEntity(type: HayType.bale, gridX: bx, gridY: by));
+  hayEntities.add(
+    HayEntity(type: HayType.bale, gridX: bx, gridY: by)..spawnTime = time,
+  );
 
   // Sadece tükettiğimiz yığınları sil — geniş `removeWhere(isDelivered)`
   // aynı karede taşıyıcının teslim ettiği BALYAYI da süpürebiliyordu.
@@ -65,12 +71,17 @@ const _baleSlots = <(double, double)>[
 // Harman tile'ı önce, sonra çevresi.
 const _harmanTileOffsets = <(int, int)>[
   (0, 0),
-  (1, 0), (0, 1), (1, 1),
-  (-1, 0), (0, -1), (-1, 1), (1, -1), (-1, -1),
+  (1, 0),
+  (0, 1),
+  (1, 1),
+  (-1, 0),
+  (0, -1),
+  (-1, 1),
+  (1, -1),
+  (-1, -1),
 ];
 
-(double, double) _findFreeBaleSpot(
-    List<HayEntity> all, int hc, int hr) {
+(double, double) _findFreeBaleSpot(List<HayEntity> all, int hc, int hr) {
   for (final (dc, dr) in _harmanTileOffsets) {
     final tc = hc + dc;
     final tr = hr + dr;

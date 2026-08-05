@@ -28,6 +28,9 @@ MoraleEval evaluateVillagerMorale({
   bool feudMember = false, // bir kan davasının içinde (sürekli tehdit/gerilim)
   bool injured = false, // kavgada yaralı (akut ağrı/iş göremezlik)
   bool poorHousing = false, // evi var ama çadır gibi derme çatma (düşük konfor)
+  // Kışın ocağın sıcağı ulaşmayan çadır: bezin altında ısınacak hiçbir şey yok.
+  // Yalnız [poorHousing] ile birlikte anlamlıdır (bkz. hearth_warmth).
+  bool coldShelter = false,
   bool comfortHousing = false, // taş konut: Köy Evi'nden konforlu (hafif moral+)
   bool luxuryHousing = false, // konak: en lüks yuva (güçlü moral+)
   // Köyün AMENİTE morali — civic binaların (taverna/kilise/kuyu/kütüphane…)
@@ -46,6 +49,7 @@ MoraleEval evaluateVillagerMorale({
   } else if (poorHousing) {
     // Çadır vb. derme çatma barınak: evsizlik kadar ağır değil ama gerçek
     // bir evin huzurunu da vermez. Köylü "bir çatı altında" ama hoşnutsuz.
+    // Ocağa yakınlığın karşılığı ayrı bir terimdir (bkz. [coldShelter]).
     t -= 0.10;
     neg.add((0.10, 'çadırda'));
   } else if (luxuryHousing) {
@@ -54,6 +58,14 @@ MoraleEval evaluateVillagerMorale({
   } else if (comfortHousing) {
     // Taş konut: Köy Evi'nden konforlu — ölçülü moral bonusu.
     t += 0.06;
+  }
+  // ÇADIR + KIŞ + OCAKTAN UZAK. Çadırın kendi ocağı yoktur; kışın ısınmasının
+  // tek yolu köyün ateşinin yakınında kurulmuş olmaktır. Uzaktaki çadır sabaha
+  // kadar üşür ve bu, "çadırda" olmanın üstüne biner (0.10 + 0.13 = 0.23) —
+  // ama yine de evsizlikten (0.30) hafif kalır: bir dam, kötü de olsa, damdır.
+  if (coldShelter) {
+    t -= 0.13;
+    neg.add((0.13, 'çadırı ateşten uzak'));
   }
   if (starving) {
     t -= 0.26;

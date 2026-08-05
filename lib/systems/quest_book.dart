@@ -95,6 +95,19 @@ class Quest {
   /// kalıyordu: hangi rol? Bu alan zincirin son halkası.
   final JobRole? jobTarget;
 
+  /// KURUCUNUN AĞZINDAN — adım açılınca [speaker] bunu dünyada söyler.
+  ///
+  /// Neden havuz değil de tek cümle (bkz. voice.dart'ın varyant kuralı):
+  /// kuruluş bir ANLATI, ambiyans değil. "Ateşi yak"ın gerekçesi her oyunda
+  /// aynı olmalı; rastgele varyant burada karakteri değil belirsizliği artırır.
+  /// Ambiyans cümleleri (selam, dedikodu, kutlama) havuzdan gelmeye devam eder.
+  ///
+  /// null → köylü susar, yalnız kart konuşur.
+  final String? voice;
+
+  /// Adım bitince aynı kişinin karşılığı — emek görülmeden kapanmasın.
+  final String? thanks;
+
   /// Adımın dünyadaki hedefi (bkz. [QuestPointer]). Varsayılan işaretsiz:
   /// geç oyun kademelerinde köy zaten kurulmuş, oyuncu nereye bakacağını
   /// biliyor; işaret orada yol göstermez, dırdır eder.
@@ -113,6 +126,8 @@ class Quest {
     this.pointer = QuestPointer.none,
     this.buildTarget,
     this.jobTarget,
+    this.voice,
+    this.thanks,
   });
 }
 
@@ -216,8 +231,8 @@ class QuestBook {
   /// EŞİKLER ULAŞILABİLİR OLMALI: bir kademenin `minQuests`'i, ONDAN ÖNCEKİ
   /// kademelerde açılan toplam görev sayısını AŞAMAZ (üst kademe görevleri
   /// ancak o kademeye geçilince açılır — aşarsa merdiven kilitlenir).
-  /// Bugünkü dağılım: t0:12 t1:5 t2:7 t3:4 t4:6 t5:6 → kümülatif
-  /// 12/17/24/28/34/40. (Kuruluş 5'ten 12'ye çıktı: bkz. tier 0 başlığı.)
+  /// Bugünkü dağılım: t0:9 t1:5 t2:7 t3:4 t4:6 t5:6 → kümülatif
+  /// 9/14/21/25/31/37. (Kuruluş 5→12→9: bkz. tier 0 başlığı.)
   ///
   /// Eşik ayrıca NEFES payı bırakmalı. Tavana "bir görev hariç hepsi" diye
   /// oturursa, kovan/çiçekçi gibi isteğe bağlı bir görevi atlayan oyuncu
@@ -225,15 +240,15 @@ class QuestBook {
   /// tamamlananları gizliyor). Her kademede 3-4 görevlik pay bilinçli.
   static const List<CharterTier> tiers = [
     CharterTier('Yeni Yakılan Ocak', '🔥', 0, 0),
-    CharterTier('Kapısı Açık Köy',   '🏡', 0, 8),
-    CharterTier('Davulu Duyulan Kasaba', '🎏', 2, 14),
-    CharterTier('Harmanı Taşan Kasaba', '🌟', 4, 20),
+    CharterTier('Kapısı Açık Köy',   '🏡', 0, 6),
+    CharterTier('Davulu Duyulan Kasaba', '🎏', 2, 11),
+    CharterTier('Harmanı Taşan Kasaba', '🌟', 4, 17),
     // ── GEÇ OYUN ───────────────────────────────────────────────────────────
     // Buraya kadar merdiven "köyü kur"du; bundan sonrası "köyü bir yer yap".
     // Eşikler politikaya daha ağır yaslanır: geç oyun bina dikmekle değil,
     // yönetişimin oturmasıyla ilerler (kademe adları da onu söylüyor).
-    CharterTier('Adı Duyulan Kaza', '⚖️', 6, 24),
-    CharterTier('Sancağı Olan Şehir', '👑', 8, 30),
+    CharterTier('Adı Duyulan Kaza', '⚖️', 6, 21),
+    CharterTier('Sancağı Olan Şehir', '👑', 8, 27),
   ];
 
   static int get maxTier => tiers.length - 1;
@@ -294,40 +309,38 @@ class QuestBook {
       speaker: VillagerType.priest,
       reward: VisualReward.sparkle, check: _firepit,
       pointer: QuestPointer.villageCenter,
-      buildTarget: BuildingType.firepit),
+      buildTarget: BuildingType.firepit,
+      voice: 'Yolun sonu burası. Ateşi yak da burası bir yer olsun.',
+      thanks: 'Ateş yandı. Artık dönülecek bir yerimiz var.'),
     Quest(
-      id: 'giveBasket', icon: '🧺', label: 'Sepeti birinin eline ver',
-      hint: 'Bir köylüye tıkla, İŞ bölümünden Toplayıcı de. Böğürtlen çalıları '
-          'bina istemez — köyün ilk yiyeceği oradan gelir. Köyde sepeti '
-          'kadınlar taşır; başkasına verirsen de olur, iş sadece ağır ilerler.',
+      id: 'giveBasket', icon: '🧺', label: 'Sepeti birine ver',
+      hint: 'Böğürtlenliğe tıkla, kadrosundaki boş yuvaya bir el ver; gerisini '
+          'köy halleder. Çalılar bina istemez — köyün ilk yiyeceği oradan '
+          'gelir. Köyde sepeti kadınlar taşır; eli başkası tutarsa da olur, '
+          'iş sadece ağır ilerler.',
       category: QuestCategory.production, tier: 0,
       speaker: VillagerType.shepherd,
-      reward: VisualReward.sparkle, check: _assignedForager,
-      pointer: QuestPointer.villager,
-      jobTarget: JobRole.forager),
+      reward: VisualReward.bloom, check: _forageStarted,
+      // İşaret artık boştaki köylüyü değil İŞİN YERİNİ gösterir — kadro
+      // yuvası orada duruyor (bkz. scene_work_sites).
+      pointer: QuestPointer.berryBush,
+      jobTarget: JobRole.forager,
+      voice: 'Sepet boş duruyor. Birinin eline ver, çalılar dolu.',
+      // Karşılık KARARA verilir, sonuca değil: adım artık sepetin dolmasını
+      // beklemiyor, o yüzden "sepet doldu" demek yalan olurdu.
+      thanks: 'Sepet sahibini buldu. Bu akşam kimse aç yatmaz.'),
     Quest(
-      id: 'firstBerries', icon: '🍇', label: 'İlk sepet dolsun',
-      hint: 'Toplayıcı en yakın olgun çalıya gidip toplayacak. Sen bir şey '
-          'yapma; sadece izle ve ambarın dolduğunu gör.',
-      category: QuestCategory.production, tier: 0,
-      reward: VisualReward.bloom, check: _firstBerries,
-      pointer: QuestPointer.berryBush),
-    Quest(
-      id: 'giveCook', icon: '🍲', label: 'Ocağa bir aşçı ver',
-      hint: 'Bir köylüyü Aşçı yap. Aşçı ham yiyeceği ocakta pişirir; pişen '
-          'yemek iki katı ağız doyurur. Ateş yeri olmadan olmaz.',
+      id: 'giveCook', icon: '🍲', label: 'Ocağa aşçı ver',
+      hint: 'Ocağa tıkla, kadrosuna bir el ver. Aşçı ham yiyeceği ocakta '
+          'pişirir; pişen yemek iki katı ağız doyurur. Kazan kaynayınca köy '
+          'ilk defa sofraya oturur — o akşam kimse kuru ekmek yemez.',
       category: QuestCategory.production, tier: 0,
       speaker: VillagerType.miller,
-      reward: VisualReward.sparkle, check: _assignedCook,
-      pointer: QuestPointer.villager,
-      jobTarget: JobRole.cook),
-    Quest(
-      id: 'firstMeal', icon: '🥘', label: 'İlk sıcak yemek pişsin',
-      hint: 'Kazan kaynayınca köy ilk defa sofraya oturur. O akşam kimse kuru '
-          'ekmek yemez.',
-      category: QuestCategory.social, tier: 0,
-      reward: VisualReward.festival, check: _firstMeal,
-      pointer: QuestPointer.hearth),
+      reward: VisualReward.festival, check: _kitchenStarted,
+      pointer: QuestPointer.hearth,
+      jobTarget: JobRole.cook,
+      voice: 'Ham böğürtlen karın doyurmaz. Ocağa bir aşçı ver.',
+      thanks: 'Ocağın başı boş değil artık. Kazan birazdan kaynar.'),
     Quest(
       id: 'tent', icon: '⛺', label: 'İlk çadırı kur',
       hint: 'Bir Çadır dik (6 odun). Ucuzdur ve bu gece birini yıldızların '
@@ -336,25 +349,23 @@ class QuestBook {
       speaker: VillagerType.farmer,
       reward: VisualReward.sparkle, check: _tent,
       pointer: QuestPointer.villageCenter,
-      buildTarget: BuildingType.tent),
+      buildTarget: BuildingType.tent,
+      voice: 'Gece yaklaşıyor. Hiç olmazsa bir çadır kuralım.',
+      thanks: 'Bu gece biri örtünün altında yatacak.'),
     Quest(
       id: 'lumber', icon: '🪓', label: 'Baltayı ormana sok',
-      hint: 'Ağaçların dibine Oduncu Kulübesi kur (12 odun). Kulübe tek başına '
-          'odun kesmez — kesecek adamı sen vereceksin.',
+      hint: 'Ağaçların dibine Oduncu Kulübesi kur (12 odun), sonra kulübeye '
+          'tıklayıp kadrosuna bir el ver — kulübe tek başına odun kesmez. Odun '
+          'ağır iştir; köyde baltayı erkekler sallar. Yine de karar senin: '
+          'kadın da keser, sadece geç keser.',
       category: QuestCategory.production, tier: 0,
       speaker: VillagerType.hunter,
-      reward: VisualReward.sparkle, check: _lumber,
+      reward: VisualReward.bloom, check: _woodStarted,
       pointer: QuestPointer.forest,
-      buildTarget: BuildingType.lumberCamp),
-    Quest(
-      id: 'giveAxe', icon: '🪵', label: 'Baltayı birinin eline ver',
-      hint: 'Bir köylüyü Oduncu yap. Odun ağır iştir; köyde baltayı erkekler '
-          'sallar. Yine de karar senin — kadın da keser, sadece geç keser.',
-      category: QuestCategory.production, tier: 0,
-      speaker: VillagerType.hunter,
-      reward: VisualReward.bloom, check: _assignedWoodcutter,
-      pointer: QuestPointer.villager,
-      jobTarget: JobRole.woodcutter),
+      buildTarget: BuildingType.lumberCamp,
+      jobTarget: JobRole.woodcutter,
+      voice: 'Odunsuz ne ev olur ne ateş. Baltayı ormana sok.',
+      thanks: 'Balta işliyor. Odun artık ayağımıza geliyor.'),
     Quest(
       id: 'well', icon: '💧', label: 'Suyu köye getir',
       hint: 'Bir Kuyu kaz (4 odun + 8 taş). Evler doldurur, çiftçi ekinini '
@@ -371,7 +382,9 @@ class QuestBook {
       speaker: VillagerType.farmer,
       reward: VisualReward.bloom, check: _house,
       pointer: QuestPointer.villageCenter,
-      buildTarget: BuildingType.woodenHouse),
+      buildTarget: BuildingType.woodenHouse,
+      voice: 'Çadır bir geceyi kurtarır. Bize bir dam lazım.',
+      thanks: 'Dam çatıldı. Bu, bir hane kuruldu demek.'),
     Quest(
       id: 'farm', icon: '🌾', label: 'Toprağı sür',
       hint: 'Tarla modunu aç, düz bir alan seç. Böğürtlen köyü kurtarmaz, '
@@ -379,14 +392,18 @@ class QuestBook {
       category: QuestCategory.production, tier: 0,
       speaker: VillagerType.farmer,
       reward: VisualReward.bloom, check: _farm,
-      pointer: QuestPointer.villageCenter),
+      pointer: QuestPointer.villageCenter,
+      voice: 'Böğürtlen bir gün biter. Toprağı sürelim.',
+      thanks: 'Toprak sürüldü. Gerisini yağmur bilir.'),
     Quest(
       id: 'firstNight', icon: '🌙', label: 'İlk geceyi çıkar',
       hint: 'Ateşi söndürme, kimseyi aç bırakma. Sabaha çıkan bir köy artık '
           'bir kamp değildir.',
       category: QuestCategory.founding, tier: 0,
       speaker: VillagerType.priest,
-      reward: VisualReward.festival, check: _survivedFirstNight),
+      reward: VisualReward.festival, check: _survivedFirstNight,
+      voice: 'Ateşi söndürme, kimseyi aç bırakma. Sabahı görelim.',
+      thanks: 'Sabah oldu. Burası artık bir kamp değil.'),
 
     // ── Tier 1 — Kapısı Açık Köy ─────────────────────────────────────────
     Quest(
@@ -562,20 +579,28 @@ class QuestBook {
 
   // ── Görev kontrolleri ─────────────────────────────────────────────────────
   static bool _firepit(QuestContext c) => c.has(BuildingType.firepit);
-  static bool _lumber(QuestContext c) => c.has(BuildingType.lumberCamp);
   static bool _tent(QuestContext c) => c.has(BuildingType.tent);
   // "İlk dam" ÇADIR DEĞİL: çadırın kendi görevi var ve `hasRole(housing)`
   // onunla zaten dolardı → iki görev tek hamleyle biterdi.
   static bool _house(QuestContext c) => c.has(BuildingType.woodenHouse);
-  // ── Kuruluş: karar ve sonuç adımları ─────────────────────────────────────
-  static bool _assignedForager(QuestContext c) =>
+  // ── Kuruluş: karar adımları ──────────────────────────────────────────────
+  // KARAR + SONUÇ DENENDİ, GERİ ALINDI. Bu iki adım bir süre "işi ver VE ilk
+  // meyvesi gelsin" diye kuruldu (sepet dolsun, kazan kaynasın). Kâğıtta
+  // doğruydu; oyunda oyuncu hamlesini yapıyor, sonra köylünün çalıya yürümesini,
+  // toplamasını, ambara dönmesini SEYREDİYORDU. Tik o sırada gelmiyor: adım
+  // kapanmıyor, öğretici sıradakine geçmiyor, oyuncunun elinden oyun alınıyor.
+  //
+  // Kural: BİR ADIM OYUNCUNUN HAMLESİNİ ÖLÇER, NPC'NİN HIZINI ÖLÇMEZ. Karar
+  // verildiği anda kapanır. Sonuç kaybolmuyor — ilk sepet ve ilk yemek zaten
+  // kendi bildirimini/anını taşıyor (`_berriesPicked`, `_firstMealShown`);
+  // sadece artık merdivenin önünde durmuyorlar.
+  static bool _forageStarted(QuestContext c) =>
       c.playerAssignedRoles.contains(JobRole.forager);
-  static bool _assignedCook(QuestContext c) =>
+  static bool _kitchenStarted(QuestContext c) =>
       c.playerAssignedRoles.contains(JobRole.cook);
-  static bool _assignedWoodcutter(QuestContext c) =>
+  static bool _woodStarted(QuestContext c) =>
+      c.has(BuildingType.lumberCamp) &&
       c.playerAssignedRoles.contains(JobRole.woodcutter);
-  static bool _firstBerries(QuestContext c) => c.berriesPicked >= 1;
-  static bool _firstMeal(QuestContext c) => c.everCooked;
   static bool _survivedFirstNight(QuestContext c) => c.dayCount >= 2;
   static bool _farm(QuestContext c) => c.farmTiles.isNotEmpty;
   static bool _well(QuestContext c) => c.has(BuildingType.well);

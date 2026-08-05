@@ -386,8 +386,8 @@ class _AppButtonState extends State<AppButton> {
       height: widget.sub != null
           ? null
           : (useCompactGameUi(context)
-              ? (widget.height < 44 ? 44 : widget.height)
-              : widget.height),
+                ? (widget.height < 44 ? 44 : widget.height)
+                : widget.height),
       padding: EdgeInsets.symmetric(
         horizontal: 14,
         vertical: widget.sub == null ? 0 : 8,
@@ -509,52 +509,69 @@ class _AppIconButtonState extends State<AppIconButton> {
   Widget build(BuildContext context) {
     final tint = widget.tint ?? AppUi.accent;
     final hot = _hover || widget.active;
+    // Görsel düğme kompakt kalır; telefon dokunma kutusu görünmeden 44pt'ye
+    // tamamlanır. Böylece 26–32pt kapatma ikonları paneli şişirmeden rahatça
+    // yakalanır.
+    final targetSize = useCompactGameUi(context) && widget.size < 44
+        ? 44.0
+        : widget.size;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 130),
-          width: widget.size,
-          height: widget.size,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: widget.active
-                ? Color.alphaBlend(tint.withValues(alpha: 0.24), AppUi.surface2)
-                : hot
-                ? AppUi.surface3
-                : (widget.ghost ? Colors.transparent : AppUi.surface1),
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(
-              color: widget.active
-                  ? tint
-                  : (widget.ghost && !hot ? Colors.transparent : AppUi.line),
-              width: widget.active ? 1.5 : 1,
-            ),
-            boxShadow: widget.active
-                ? [
-                    BoxShadow(
-                      color: tint.withValues(alpha: 0.4),
-                      blurRadius: 10,
-                    ),
-                  ]
-                : null,
-          ),
-          child: widget.text != null
-              ? Text(
-                  widget.text!,
-                  style: AppUi.button.copyWith(
-                    color: hot ? AppUi.textHi : AppUi.textMid,
-                    fontSize: 13,
-                  ),
-                )
-              : GameIcon(
-                  widget.icon,
-                  size: widget.size * 0.46,
-                  color: hot ? AppUi.textHi : AppUi.textMid,
+        child: SizedBox(
+          width: targetSize,
+          height: targetSize,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 130),
+              width: widget.size,
+              height: widget.size,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: widget.active
+                    ? Color.alphaBlend(
+                        tint.withValues(alpha: 0.24),
+                        AppUi.surface2,
+                      )
+                    : hot
+                    ? AppUi.surface3
+                    : (widget.ghost ? Colors.transparent : AppUi.surface1),
+                borderRadius: BorderRadius.circular(AppUi.radiusSm),
+                border: Border.all(
+                  color: widget.active
+                      ? tint
+                      : (widget.ghost && !hot
+                            ? Colors.transparent
+                            : AppUi.line),
+                  width: widget.active ? 1.5 : 1,
                 ),
+                boxShadow: widget.active
+                    ? [
+                        BoxShadow(
+                          color: tint.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: widget.text != null
+                  ? Text(
+                      widget.text!,
+                      style: AppUi.button.copyWith(
+                        color: hot ? AppUi.textHi : AppUi.textMid,
+                        fontSize: 13,
+                      ),
+                    )
+                  : GameIcon(
+                      widget.icon,
+                      size: widget.size * 0.46,
+                      color: hot ? AppUi.textHi : AppUi.textMid,
+                    ),
+            ),
+          ),
         ),
       ),
     );
@@ -957,6 +974,8 @@ enum GameIconData {
   honey,
   drop,
   reed,
+  wool,
+  snow,
   // insan / iş
   people,
   axe,
@@ -1003,6 +1022,7 @@ enum GameIconData {
   handshake,
   crown,
   door,
+
   /// "İzle" — kamerayı olay vinyetine götüren düğme (bkz. EventBanner).
   eye,
 
@@ -1019,6 +1039,94 @@ class GameIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       Icon(_glyph(icon), size: size, color: color);
+}
+
+/// Oyunun ana işareti: köyün kurulduğu ilk ateş.
+///
+/// Logo ayrı bir görsel asset değildir; loading ekranındaki ateş sembolünün
+/// kendisidir. Böylece menü, loading ve Hakkında ekranı aynı kimliği kullanır.
+///
+/// TELEFONDAKİ UYGULAMA SİMGESİYLE AYNI İŞLEM (`assets/ui/app_icon.svg`): alev
+/// düz tek renk değil, tepeden dibe [AppUi.accentSoft] → [AppUi.accent] →
+/// [AppUi.accentDeep] geçişi. Simge birebir bu üç durağı 0 / 0.58 / 1
+/// noktalarında kullanır; sayılar oradan alındı, uydurulmadı. Ana ekrandaki
+/// simgeyle oyunun içindeki işaret artık aynı şeyi gösteriyor.
+class GameLogo extends StatelessWidget {
+  final double size;
+
+  /// Arkasındaki kor halesi — simgedeki `ember` radyal geçişinin karşılığı.
+  ///
+  /// Varsayılan KAPALI: logonun dört yerinden üçü zaten bir madalyonun
+  /// (menü) ya da nabız atan halkanın (loading) içinde duruyor, ikinci bir
+  /// hale alevi yıkayıp siliyor. Yalnız çıplak durduğu yerde (Hakkında) açılır.
+  /// Açıkken widget'ın kapladığı kutu [size]'ın 1.5 katıdır.
+  final bool glow;
+
+  /// Alevin canlılığı 0..1. 1 = simgenin tam paleti; düştükçe geçiş kora
+  /// çekilir. Loading ekranının nabzı ARTIK BUNU sürüyor (eski `color`
+  /// parametresi yerine): nabız tek renk yakıp söndürmek yerine aynı
+  /// gradyanı canlandırıp söndürüyor, yani kimlik nabızda da bozulmuyor.
+  final double warmth;
+
+  const GameLogo({
+    super.key,
+    required this.size,
+    this.glow = false,
+    this.warmth = 1.0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final w = warmth.clamp(0.0, 1.0);
+    final flame = ShaderMask(
+      blendMode: BlendMode.srcIn,
+      shaderCallback: (r) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color.lerp(AppUi.accentDeep, AppUi.accentSoft, w)!,
+          Color.lerp(AppUi.accentDeep, AppUi.accent, w)!,
+          AppUi.accentDeep,
+        ],
+        stops: const [0.0, 0.58, 1.0],
+      ).createShader(r),
+      // Maske srcIn ile boyayacak → alttaki glif TAM opak olmalı, yoksa
+      // gradyan glifin kendi renginden süzülür ve soluk çıkar.
+      child: GameIcon(GameIconData.flame, size: size, color: Colors.white),
+    );
+    return Semantics(
+      image: true,
+      label: 'LUW oyun logosu',
+      child: ExcludeSemantics(
+        child: glow
+            ? SizedBox(
+                width: size * 1.5,
+                height: size * 1.5,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            AppUi.accent.withValues(alpha: 0.42 * w),
+                            AppUi.accent.withValues(alpha: 0.14 * w),
+                            AppUi.accent.withValues(alpha: 0.0),
+                          ],
+                          stops: const [0.0, 0.48, 1.0],
+                        ),
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                    flame,
+                  ],
+                ),
+              )
+            : flame,
+      ),
+    );
+  }
 }
 
 // GameIconData → Phosphor glyph. Çoğu 'fill' (küçük boyda kütle + okunaklılık);
@@ -1060,6 +1168,11 @@ IconData _glyph(GameIconData i) {
       return PhosphorIcons.drop(fill);
     case GameIconData.reed:
       return PhosphorIcons.plant(fill);
+    case GameIconData.snow:
+      return PhosphorIcons.snowflake(fill);
+    case GameIconData.wool:
+      // Yumak yok; en yakın okunan biçim sarmal/iplik.
+      return PhosphorIcons.spiral(fill);
     // insan / iş
     case GameIconData.people:
       return PhosphorIcons.usersThree(fill);

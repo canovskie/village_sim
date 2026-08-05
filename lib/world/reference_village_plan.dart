@@ -1,5 +1,6 @@
 import '../buildings/building_type.dart';
 import '../core/constants.dart';
+import 'season.dart';
 
 /// ─── REFERANS KÖYÜN PLANI (saf veri) ─────────────────────────────────────────
 ///
@@ -20,6 +21,33 @@ const int kReferenceSeed = 730024;
 /// Referans köyün yazıldığı sabit kayıt slotu (menüden her giriş burayı tazeler).
 const String kReferenceSlotId = 'reference';
 const String kReferenceSlotName = 'Referans Köy';
+
+/// Referans köyün takvim günü — 24. gün, oturmuş bir köyün geçmişi kadar.
+/// Kronik satırları bu güne kadar tarihlenir; küçültmek geçmişi geleceğe atar.
+const int kReferenceDay = 24;
+
+/// Bu günün mevsimi — dört varyantın referans aldığı temel (bugün: yaz).
+Season get kReferenceBaseSeason => seasonForDay(kReferenceDay);
+
+/// MEVSİMLİK VARYANT — dört köy de AYNI planı kurar, yalnız takvim farklıdır.
+///
+/// Takvim hep İLERİ sarılır ve mevsim içindeki AYNI güne denk getirilir
+/// (yaz 24 → sonbahar 28 → kış 32 → ilkbahar 36). İki sebep:
+///   • Geriye sarmak kroniği geleceğe atardı (satırlar 24. güne kadar yazılı).
+///   • Aynı gün-içi konum, dört köyün tek farkının MEVSİM olmasını garanti eder;
+///     "kışın şu oldu" derken mevsim dışında değişen bir şey kalmaz.
+int kReferenceDayFor(Season s) =>
+    kReferenceDay +
+    kDaysPerSeason *
+        ((s.index - kReferenceBaseSeason.index) % Season.values.length);
+
+/// Varyantın kayıt slotu. Temel mevsim (yaz) KANONİK slotu kullanır — menüdeki
+/// "Referans Köy" girişi ile aynı dosya; diğer üçü kendi slotunda yaşar.
+String kReferenceSlotIdFor(Season s) =>
+    s == kReferenceBaseSeason ? kReferenceSlotId : '${kReferenceSlotId}_${s.name}';
+
+String kReferenceSlotNameFor(Season s) =>
+    s == kReferenceBaseSeason ? kReferenceSlotName : 'Referans · ${s.label}';
 
 /// Planın sol-üst köşesi + boyu. Dünya üretici merkez etrafında 23×19'luk bir
 /// "başlangıç bölgesi" bırakır (su ve maden oraya girmez) — plan tam ona oturur.
@@ -53,6 +81,7 @@ const List<(BuildingType, int, int)> kRefLayout = [
   // ── Meydan çevresi ────────────────────────────────────────────────────────
   (BuildingType.well, 13, 9),
   (BuildingType.tavern, 8, 10),
+  (BuildingType.tailor, 6, 8),
   (BuildingType.floristCottage, 15, 8),
   (BuildingType.beehive, 17, 9),
   // ── Üretim (güney) ────────────────────────────────────────────────────────

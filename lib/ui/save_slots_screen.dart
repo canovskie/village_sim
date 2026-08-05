@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../save/save_manager.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 
 /// KAYITLI KÖYLER — ana menünün şafak sahnesinin ÜSTÜNDE açılan overlay pano
 /// (eskiden ayrı bir Material sayfaya atlıyordu: AppBar + AlertDialog + Material
@@ -41,8 +42,7 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
   }
 
   Future<void> _reload() async {
-    final slots =
-        await (widget.loader ?? SaveManager.instance.listSlots)();
+    final slots = await (widget.loader ?? SaveManager.instance.listSlots)();
     // En son kaydedilen başa — "devam et" hep en üstteki olsun.
     slots.sort((a, b) => b.savedAt.compareTo(a.savedAt));
     if (mounted) setState(() => _slots = slots);
@@ -69,6 +69,10 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = useCompactGameUi(context);
+    final mobileWindow = compact
+        ? MobileUi.windowSize(context, maxWidth: 720)
+        : null;
     return Positioned.fill(
       child: CallbackShortcuts(
         bindings: {
@@ -86,33 +90,58 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
                   child: const ColoredBox(color: Color(0xC00A0710)),
                 ),
               ),
-              // Divan'ın kanıtlanmış deseni: dış SingleChildScrollView (çerçeve
-              // içeriğe göre büyür, taşarsa SAYFA kayar). İçeride Flexible + iç
-              // scroll kurmaya çalışmak paneli görünmez bırakıyordu.
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 520),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(22),
-                    child: GestureDetector(
-                      onTap: () {}, // panel içi dokunuş kapatmasın
-                      child: AppReveal(
-                        child: AppGildedFrame(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _header(),
-                              Container(height: 1, color: AppUi.line),
-                              _body(),
-                            ],
+              compact
+                  ? Center(
+                      child: SizedBox(
+                        width: mobileWindow!.width,
+                        height: mobileWindow.height,
+                        child: GestureDetector(
+                          onTap: () {}, // panel içi dokunuş kapatmasın
+                          child: AppReveal(
+                            child: AppGildedFrame(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _header(),
+                                  Container(height: 1, color: AppUi.line),
+                                  Expanded(
+                                    child: SingleChildScrollView(
+                                      child: _body(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  // Masaüstünde çerçeve içeriğe göre büyür; taşarsa sayfa kayar.
+                  : Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(22),
+                          child: GestureDetector(
+                            onTap: () {},
+                            child: AppReveal(
+                              child: AppGildedFrame(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _header(),
+                                    Container(height: 1, color: AppUi.line),
+                                    _body(),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -132,16 +161,23 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('KAYITLI KÖYLER',
-                    style: AppUi.title.copyWith(letterSpacing: 1.6)),
+                Text(
+                  'KAYITLI KÖYLER',
+                  style: AppUi.title.copyWith(letterSpacing: 1.6),
+                ),
                 const SizedBox(height: 2),
-                Text('bıraktığın yere dön',
-                    style: AppUi.label.copyWith(color: AppUi.textLo)),
+                Text(
+                  'bıraktığın yere dön',
+                  style: AppUi.label.copyWith(color: AppUi.textLo),
+                ),
               ],
             ),
           ),
           AppIconButton(
-              icon: GameIconData.close, size: 28, onTap: widget.onClose),
+            icon: GameIconData.close,
+            size: 28,
+            onTap: widget.onClose,
+          ),
         ],
       ),
     );
@@ -157,8 +193,9 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
             width: 22,
             height: 22,
             child: CircularProgressIndicator(
-                strokeWidth: 2.2,
-                valueColor: AlwaysStoppedAnimation(AppUi.accent)),
+              strokeWidth: 2.2,
+              valueColor: AlwaysStoppedAnimation(AppUi.accent),
+            ),
           ),
         ),
       );
@@ -210,15 +247,18 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
         children: [
           const Text('🌱', style: TextStyle(fontSize: 34)),
           const SizedBox(height: 12),
-          Text('Henüz kurulmuş bir köyün yok.',
-              textAlign: TextAlign.center,
-              style: AppUi.bodyHi.copyWith(fontSize: 14)),
+          Text(
+            'Henüz kurulmuş bir köyün yok.',
+            textAlign: TextAlign.center,
+            style: AppUi.bodyHi.copyWith(fontSize: 14),
+          ),
           const SizedBox(height: 6),
           Text(
-              'Menüden "Yeni Köy" ile başla — kurduğun köy '
-              'buraya kendiliğinden yazılır.',
-              textAlign: TextAlign.center,
-              style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textLo)),
+            'Menüden "Yeni Köy" ile başla — kurduğun köy '
+            'buraya kendiliğinden yazılır.',
+            textAlign: TextAlign.center,
+            style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textLo),
+          ),
         ],
       ),
     );
@@ -255,8 +295,9 @@ class _SlotCard extends StatefulWidget {
 class _SlotCardState extends State<_SlotCard> {
   _CardMode _mode = _CardMode.idle;
   bool _hover = false;
-  late final TextEditingController _ctrl =
-      TextEditingController(text: widget.meta.name);
+  late final TextEditingController _ctrl = TextEditingController(
+    text: widget.meta.name,
+  );
   final FocusNode _focus = FocusNode();
 
   @override
@@ -270,11 +311,12 @@ class _SlotCardState extends State<_SlotCard> {
     setState(() {
       _mode = _CardMode.renaming;
       _ctrl.text = widget.meta.name;
-      _ctrl.selection =
-          TextSelection(baseOffset: 0, extentOffset: _ctrl.text.length);
+      _ctrl.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: _ctrl.text.length,
+      );
     });
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => _focus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
   }
 
   void _commitRename() {
@@ -308,8 +350,9 @@ class _SlotCardState extends State<_SlotCard> {
                     end: Alignment.bottomRight,
                     colors: [
                       Color.alphaBlend(
-                          accent.withValues(alpha: active ? 0.20 : 0.13),
-                          AppUi.surface2),
+                        accent.withValues(alpha: active ? 0.20 : 0.13),
+                        AppUi.surface2,
+                      ),
                       AppUi.surface1,
                     ],
                   )
@@ -317,9 +360,11 @@ class _SlotCardState extends State<_SlotCard> {
             color: hero
                 ? null
                 : (active
-                    ? Color.alphaBlend(
-                        accent.withValues(alpha: 0.10), AppUi.surface1)
-                    : AppUi.surface0),
+                      ? Color.alphaBlend(
+                          accent.withValues(alpha: 0.10),
+                          AppUi.surface1,
+                        )
+                      : AppUi.surface0),
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
               color: hero
@@ -330,8 +375,9 @@ class _SlotCardState extends State<_SlotCard> {
             boxShadow: (hero || active)
                 ? [
                     BoxShadow(
-                        color: accent.withValues(alpha: hero ? 0.20 : 0.12),
-                        blurRadius: 12)
+                      color: accent.withValues(alpha: hero ? 0.20 : 0.12),
+                      blurRadius: 12,
+                    ),
                   ]
                 : null,
           ),
@@ -357,23 +403,34 @@ class _SlotCardState extends State<_SlotCard> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(colors: [
-              Color.alphaBlend(
-                  accent.withValues(alpha: 0.22), AppUi.surface0),
-              AppUi.surface0,
-            ]),
+            gradient: RadialGradient(
+              colors: [
+                Color.alphaBlend(
+                  accent.withValues(alpha: 0.22),
+                  AppUi.surface0,
+                ),
+                AppUi.surface0,
+              ],
+            ),
             border: Border.all(
-                color: AppUi.gold.withValues(alpha: 0.5), width: 1.2),
+              color: AppUi.gold.withValues(alpha: 0.5),
+              width: 1.2,
+            ),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('${m.day}',
-                  style: AppUi.number.copyWith(
-                      fontSize: hero ? 17 : 15, color: AppUi.textHi)),
-              Text('GÜN',
-                  style: AppUi.label
-                      .copyWith(fontSize: 6.5, color: AppUi.textLo)),
+              Text(
+                '${m.day}',
+                style: AppUi.number.copyWith(
+                  fontSize: hero ? 17 : 15,
+                  color: AppUi.textHi,
+                ),
+              ),
+              Text(
+                'GÜN',
+                style: AppUi.label.copyWith(fontSize: 6.5, color: AppUi.textLo),
+              ),
             ],
           ),
         ),
@@ -386,30 +443,51 @@ class _SlotCardState extends State<_SlotCard> {
               if (hero)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 3),
-                  child: Text('KALDIĞIN YERDEN DEVAM ET',
-                      style: AppUi.label.copyWith(
-                          fontSize: 8, letterSpacing: 1.2, color: accent)),
+                  child: Text(
+                    'KALDIĞIN YERDEN DEVAM ET',
+                    style: AppUi.label.copyWith(
+                      fontSize: 8,
+                      letterSpacing: 1.2,
+                      color: accent,
+                    ),
+                  ),
                 ),
-              Text(m.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppUi.title.copyWith(fontSize: hero ? 17 : 14)),
+              Text(
+                m.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppUi.title.copyWith(fontSize: hero ? 17 : 14),
+              ),
               const SizedBox(height: 3),
-              Row(children: [
-                Flexible(
-                  child: Text(m.identity,
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      m.identity,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppUi.body
-                          .copyWith(fontSize: 11, color: AppUi.gold)),
-                ),
-                Text(' · ${m.population} kişi · ',
-                    style:
-                        AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo)),
-                Text(_SaveSlotsPanelState.ago(m.savedAt),
-                    style:
-                        AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo)),
-              ]),
+                      style: AppUi.body.copyWith(
+                        fontSize: 11,
+                        color: AppUi.gold,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    ' · ${m.population} kişi · ',
+                    style: AppUi.body.copyWith(
+                      fontSize: 11,
+                      color: AppUi.textLo,
+                    ),
+                  ),
+                  Text(
+                    _SaveSlotsPanelState.ago(m.savedAt),
+                    style: AppUi.body.copyWith(
+                      fontSize: 11,
+                      color: AppUi.textLo,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -418,17 +496,31 @@ class _SlotCardState extends State<_SlotCard> {
         AnimatedOpacity(
           duration: const Duration(milliseconds: 140),
           opacity: _hover ? 1.0 : 0.32,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            _iconBtn(Icons.edit_outlined, AppUi.textMid, 'Yeniden adlandır',
-                _startRename),
-            const SizedBox(width: 2),
-            _iconBtn(Icons.delete_outline, AppUi.rust, 'Sil',
-                () => setState(() => _mode = _CardMode.confirmDelete)),
-          ]),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _iconBtn(
+                Icons.edit_outlined,
+                AppUi.textMid,
+                'Yeniden adlandır',
+                _startRename,
+              ),
+              const SizedBox(width: 2),
+              _iconBtn(
+                Icons.delete_outline,
+                AppUi.rust,
+                'Sil',
+                () => setState(() => _mode = _CardMode.confirmDelete),
+              ),
+            ],
+          ),
         ),
         const SizedBox(width: 4),
-        GameIcon(GameIconData.chevron,
-            size: hero ? 20 : 16, color: _hover ? accent : AppUi.textLo),
+        GameIcon(
+          GameIconData.chevron,
+          size: hero ? 20 : 16,
+          color: _hover ? accent : AppUi.textLo,
+        ),
       ],
     );
   }
@@ -439,9 +531,10 @@ class _SlotCardState extends State<_SlotCard> {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: Padding(
-          padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 17, color: color),
+        child: SizedBox(
+          width: useCompactGameUi(context) ? MobileUi.tap : 27,
+          height: useCompactGameUi(context) ? MobileUi.tap : 27,
+          child: Center(child: Icon(icon, size: 17, color: color)),
         ),
       ),
     );
@@ -470,8 +563,11 @@ class _SlotCardState extends State<_SlotCard> {
           ),
         ),
         const SizedBox(width: 8),
-        _textBtn('Vazgeç', AppUi.textLo,
-            () => setState(() => _mode = _CardMode.idle)),
+        _textBtn(
+          'Vazgeç',
+          AppUi.textLo,
+          () => setState(() => _mode = _CardMode.idle),
+        ),
         const SizedBox(width: 6),
         _textBtn('Kaydet', AppUi.accent, _commitRename),
       ],
@@ -485,14 +581,19 @@ class _SlotCardState extends State<_SlotCard> {
         const Icon(Icons.delete_outline, size: 18, color: AppUi.rust),
         const SizedBox(width: 10),
         Expanded(
-          child: Text('"${widget.meta.name}" kalıcı olarak silinsin mi?',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppUi.body.copyWith(fontSize: 12, color: AppUi.textHi)),
+          child: Text(
+            '"${widget.meta.name}" kalıcı olarak silinsin mi?',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppUi.body.copyWith(fontSize: 12, color: AppUi.textHi),
+          ),
         ),
         const SizedBox(width: 8),
-        _textBtn('Vazgeç', AppUi.textLo,
-            () => setState(() => _mode = _CardMode.idle)),
+        _textBtn(
+          'Vazgeç',
+          AppUi.textLo,
+          () => setState(() => _mode = _CardMode.idle),
+        ),
         const SizedBox(width: 6),
         _textBtn('Sil', AppUi.rust, widget.onDelete),
       ],
@@ -510,8 +611,10 @@ class _SlotCardState extends State<_SlotCard> {
           borderRadius: BorderRadius.circular(7),
           border: Border.all(color: color.withValues(alpha: 0.5)),
         ),
-        child: Text(label,
-            style: AppUi.label.copyWith(fontSize: 9, color: color)),
+        child: Text(
+          label,
+          style: AppUi.label.copyWith(fontSize: 9, color: color),
+        ),
       ),
     );
   }
@@ -549,8 +652,9 @@ class _MenuButtonState extends State<MenuButton> {
                 ? AppUi.accent.withValues(alpha: 0.22)
                 : AppUi.surface1.withValues(alpha: 0.85),
             border: Border.all(
-                color: _hover ? AppUi.accent : AppUi.line,
-                width: _hover ? 1.5 : 1),
+              color: _hover ? AppUi.accent : AppUi.line,
+              width: _hover ? 1.5 : 1,
+            ),
           ),
           child: Icon(
             Icons.home_outlined,
@@ -598,9 +702,16 @@ class _SaveButtonState extends State<SaveButton> {
               ? AppUi.sage.withValues(alpha: 0.30)
               : AppUi.surface1.withValues(alpha: 0.85),
           border: Border.all(
-              color: lit ? AppUi.sage : AppUi.line, width: lit ? 1.5 : 1),
+            color: lit ? AppUi.sage : AppUi.line,
+            width: lit ? 1.5 : 1,
+          ),
           boxShadow: lit
-              ? [BoxShadow(color: AppUi.sage.withValues(alpha: 0.4), blurRadius: 12)]
+              ? [
+                  BoxShadow(
+                    color: AppUi.sage.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                  ),
+                ]
               : null,
         ),
         child: Icon(

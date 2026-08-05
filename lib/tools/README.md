@@ -23,6 +23,7 @@ dosyaların varlık sebebi budur.
 |---|---|
 | `ui_gallery_capture_main.dart` | **Tek çalıştırmada oyunun tüm UI yüzeyleri.** UI değişikliğinden sonra ilk bakılacak yer. |
 | `scene_capture_main.dart` | Taze bir köy sahnesi (menüyü atlar). |
+| `shots_capture_main.dart` | **Tanıtım seti:** referans köy, HUD dahil, 6 vakitte 1600×900 kare → `~/Desktop/village_shots/`. |
 | `living_capture_main.dart` | Showcase köyü: binalar + sürü + meslekler bir arada. |
 | `ledger_capture_main.dart` | Köy Defteri'nin beş bölümü. |
 | `law_capture_main.dart` | Kanunname + mühür ritüeli. |
@@ -49,11 +50,20 @@ dosyaların varlık sebebi budur.
 ## Mobil otomasyon
 
 `mobile_capture_main.dart` diğerlerinden farklı: tek kare çekmez, **oyun
-ekranını sürer**. Beş yatay telefon/tablet profilinde (mobil yatay kilitli,
-bkz. `systems/platform_adapt.dart`) 18 adım koşar — pan, pinch-zoom, inşa
-paleti, köylü seçimi, Köy Defteri'nin beş bölümü — her adımda kare çeker ve
-dört şeyi SAYAR: taşma, ekran dışına düşen yazı/hedef, 44dp altı dokunma
-hedefi, 11px altı yazı.
+ekranını sürer**. Altı yatay telefon/tablet profilinde (mobil yatay kilitli,
+bkz. `systems/platform_adapt.dart`) 19 adım koşar — pan, pinch-zoom, inşa
+paleti, köylü seçimi, Köy Defteri'nin beş bölümü + Haneler sekmesi — her adımda
+kare çeker ve dört şeyi SAYAR: taşma, ekran dışına düşen yazı/hedef, 44dp altı
+dokunma hedefi, 11px altı yazı.
+
+**Sayı yetmez, kareye de bak.** Bu araç bir dönem defterin bütün bölümlerinde
+`of:0 off:0 tap:0 font:0` veriyordu — hiçbiri taşmıyordu, çünkü içerik zaten
+kaydırma alanının içinde fold altında kalıyordu. NÜFUS bölümünde 18 kişilik
+köyden ekranda BİR BUÇUK köylü vardı ve sayaçlar bunu göremedi: "taşma yok"
+ile "işe yarıyor" aynı şey değil. Telefon yerleşiminin bugünkü hâli ve
+gerekçesi `ui/ledger_board.dart` başında; sözleşmesi de
+`test/ledger_board_layout_test.dart`'ta kilitli (bölüm gövdesi dikey kaydırma
+AÇMAZ — sayfalar).
 
 ```
 flutter run -d macos -t lib/tools/mobile_capture_main.dart

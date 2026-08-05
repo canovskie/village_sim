@@ -1,13 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import '../text/voice.dart';
 import 'app_ui.dart';
 
 /// Asset cache'leri (sprite PNG'leri) hazırlanırken gösterilir.
 /// Pulse eden ateş ışıltısı + koyu oyun teması — ana menü estetiği ile uyumlu.
 class LoadingScreen extends StatefulWidget {
   final VoidCallback? onCancel;
-  const LoadingScreen({super.key, this.onCancel});
+
+  /// Yüklenen köyün ADI — kayıt açılırken oyuncuyu kendi köyünün adı karşılar
+  /// ("PINARBAŞI UYANIYOR"). Yeni oyunda henüz ad yoktur, jenerik kalır.
+  final String village;
+
+  const LoadingScreen({super.key, this.onCancel, this.village = ''});
 
   @override
   State<LoadingScreen> createState() => _LoadingScreenState();
@@ -18,6 +24,13 @@ class _LoadingScreenState extends State<LoadingScreen>
   late final Ticker _ticker;
   Duration _last = Duration.zero;
   double _t = 0;
+
+  /// Yükleme başlığı — adı olan köy kendi adıyla uyanır.
+  String get _title {
+    final v = widget.village.trim();
+    if (v.isEmpty || v.toLowerCase() == 'köy') return 'KÖY UYANIYOR';
+    return '${upperTr(v)} UYANIYOR';
+  }
 
   @override
   void initState() {
@@ -55,26 +68,33 @@ class _LoadingScreenState extends State<LoadingScreen>
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [
-                    AppUi.accent.withValues(alpha: (0.5 * pulse).clamp(0.18, 1.0)),
-                    AppUi.accent.withValues(alpha: 0.0),
-                  ]),
+                  gradient: RadialGradient(
+                    colors: [
+                      AppUi.accent.withValues(
+                        alpha: (0.5 * pulse).clamp(0.18, 1.0),
+                      ),
+                      AppUi.accent.withValues(alpha: 0.0),
+                    ],
+                  ),
                 ),
-                child: GameIcon(GameIconData.flame,
-                    size: 40,
-                    color: Color.lerp(
-                        AppUi.accentDeep, AppUi.accentSoft, pulse)!),
+                // Nabız artık tek rengi değil gradyanın canlılığını sürüyor
+                // (bkz. GameLogo.warmth) — sönerken de simgenin biçimi kalır.
+                child: GameLogo(size: 40, warmth: pulse),
               ),
               const SizedBox(height: 22),
-              Text('KÖY UYANIYOR',
-                  style: AppUi.title.copyWith(
-                    fontSize: 14,
-                    letterSpacing: 2.4,
-                    color: AppUi.textHi,
-                  )),
+              Text(
+                _title,
+                style: AppUi.title.copyWith(
+                  fontSize: 14,
+                  letterSpacing: 2.4,
+                  color: AppUi.textHi,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text('asset yükleniyor',
-                  style: AppUi.label.copyWith(letterSpacing: 1.6)),
+              Text(
+                'asset yükleniyor',
+                style: AppUi.label.copyWith(letterSpacing: 1.6),
+              ),
             ],
           ),
         ),

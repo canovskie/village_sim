@@ -27,20 +27,27 @@ class VillagerInfoPanel extends StatefulWidget {
   final VoidCallback? onToggleFollow;
   final VoidCallback? onToggleFavorite;
   final void Function(String)? onRename;
+
   /// Kan davası otoritesi — yalnız feud üyesinde gösterilir (sürgün / idam).
   final VoidCallback? onExile;
   final VoidCallback? onExecute;
 
-  /// ELLE İŞ VERME — oyuncunun köylüye doğrudan iş verdiği kapı.
-  /// `null` rol = "serbest bırak" (köylü otomatik iş gücü havuzuna döner).
-  /// Boş [assignableRoles] verilirse bölüm hiç çizilmez.
-  final void Function(JobRole?)? onAssignJob;
-  final List<JobRole> assignableRoles;
+  /// KÖYLÜNÜN İŞ YERİ — "Maden Ocağı", "Tarlalar", "Şantiye · Ambar".
+  ///
+  /// Bu panel artık iş VERMEZ, iş OKUR. Eskiden burada on bir rol rozeti
+  /// vardı; iş verme yere taşındı (bkz. WorkCrewSection) çünkü simülasyon hep
+  /// "bu maden bir el ister" diye düşünüyordu, panel ise "bu adam madenci
+  /// olsun" diyordu. İki dil ayrıydı ve rozetler o ayrığın üstünü örtüyordu.
+  ///
+  /// null = köylünün üstlendiği bir iş yok.
+  final String? workplaceLabel;
 
-  /// ŞU ANKİ ADIMIN istediği iş (bkz. Quest.jobTarget) — o rol düğmesi sakin
-  /// bir halka ile işaretlenir. Dünyadaki halka doğru köylüyü gösteriyor;
-  /// panel açılınca oyuncu yine bir rol listesiyle baş başa kalmasın.
-  final JobRole? hintRole;
+  /// İş yerine git — kamerayı oraya taşır, kadro yuvalarını açar. Oyuncu bu
+  /// adamı değiştirmek isterse gideceği yer orası.
+  final VoidCallback? onOpenWorkplace;
+
+  /// Bu köylüyü işten al (yuvayı boşalt). null = alınacak iş yok.
+  final VoidCallback? onReleaseJob;
 
   /// Açılışta seçili sekme: 0 = GENEL, 1 = KİŞİLİK, 2 = ÖYKÜ.
   final int initialTab;
@@ -57,9 +64,9 @@ class VillagerInfoPanel extends StatefulWidget {
     this.onRename,
     this.onExile,
     this.onExecute,
-    this.onAssignJob,
-    this.assignableRoles = const [],
-    this.hintRole,
+    this.workplaceLabel,
+    this.onOpenWorkplace,
+    this.onReleaseJob,
     this.initialTab = 0,
   });
 
@@ -100,9 +107,13 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       _renaming = true;
       _nameCtrl.text = widget.villager.name;
       _nameCtrl.selection = TextSelection(
-          baseOffset: 0, extentOffset: _nameCtrl.text.length);
+        baseOffset: 0,
+        extentOffset: _nameCtrl.text.length,
+      );
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _nameFocus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _nameFocus.requestFocus(),
+    );
   }
 
   void _commitRename() {
@@ -181,19 +192,19 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
             Container(height: 1, color: AppUi.line),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                padding: const EdgeInsets.fromLTRB(12, 9, 12, 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _statusStrip(v),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 9),
                     _ageBar(v, stage),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     _moraleBar(v),
                     const SizedBox(height: 4),
                     _moodRow(v),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 9),
                     AppTabs(tabs: _tabs(v), initial: widget.initialTab),
                   ],
                 ),
@@ -202,7 +213,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
             Container(height: 1, color: AppUi.line),
             // Eylemler kaymaz: sayfanın dibinde, parmağın doğal yerinde.
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              padding: const EdgeInsets.fromLTRB(10, 7, 10, 9),
               child: _actionRow(v),
             ),
           ],
@@ -228,10 +239,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
             ..._workSection(v),
             ..._mindSection(v),
             _row('Ev', widget.homeLabel ?? 'Evsiz', icon: GameIconData.home),
-            if (family.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              ...family,
-            ],
+            if (family.isNotEmpty) ...[const SizedBox(height: 6), ...family],
           ],
         ),
       ),
@@ -282,9 +290,9 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                   borderRadius: BorderRadius.circular(7),
                   child: CustomPaint(
                     painter: PortraitPainter(
-                      visual:        v.visual,
-                      stage:         stage,
-                      type:          v.type,
+                      visual: v.visual,
+                      stage: stage,
+                      type: v.type,
                       hasProfession: v.hasProfession,
                     ),
                   ),
@@ -292,9 +300,11 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
               ),
               if (v.isFavorite)
                 Positioned(
-                  top: -5, right: -5,
+                  top: -5,
+                  right: -5,
                   child: Container(
-                    width: 18, height: 18,
+                    width: 18,
+                    height: 18,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: AppUi.surface2,
@@ -302,12 +312,16 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                       border: Border.all(color: AppUi.rust, width: 1),
                       boxShadow: [
                         BoxShadow(
-                            color: AppUi.rust.withValues(alpha: 0.6),
-                            blurRadius: 5),
+                          color: AppUi.rust.withValues(alpha: 0.6),
+                          blurRadius: 5,
+                        ),
                       ],
                     ),
-                    child: const GameIcon(GameIconData.heart,
-                        size: 9, color: AppUi.rust),
+                    child: const GameIcon(
+                      GameIconData.heart,
+                      size: 9,
+                      color: AppUi.rust,
+                    ),
                   ),
                 ),
             ],
@@ -320,7 +334,10 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
               children: [
                 _renaming ? _renameField() : _nameLine(v),
                 const SizedBox(height: 5),
-                AppChip(label: profession.toUpperCase(), color: _stageColor(stage)),
+                AppChip(
+                  label: profession.toUpperCase(),
+                  color: _stageColor(stage),
+                ),
               ],
             ),
           ),
@@ -354,27 +371,35 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           Row(
             children: [
               Flexible(
-                child: Text(v.name,
-                    style: AppUi.title.copyWith(fontSize: 15),
-                    overflow: TextOverflow.ellipsis),
+                child: Text(
+                  v.name,
+                  style: AppUi.title.copyWith(fontSize: 15),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (widget.onRename != null)
                 const Padding(
                   padding: EdgeInsets.only(left: 6),
-                  child:
-                      GameIcon(GameIconData.gear, size: 10, color: AppUi.textLo),
+                  child: GameIcon(
+                    GameIconData.gear,
+                    size: 10,
+                    color: AppUi.textLo,
+                  ),
                 ),
             ],
           ),
           if (v.houseLabel.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 1),
-              child: Text('⌂ ${v.houseLabel}',
-                  style: AppUi.title.copyWith(
-                      fontSize: 10,
-                      color: AppUi.textLo,
-                      fontWeight: FontWeight.w400),
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                '⌂ ${v.houseLabel}',
+                style: AppUi.title.copyWith(
+                  fontSize: 10,
+                  color: AppUi.textLo,
+                  fontWeight: FontWeight.w400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
         ],
       ),
@@ -402,20 +427,28 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
               decoration: const InputDecoration(
                 isDense: true,
                 counterText: '',
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
                 filled: true,
                 fillColor: AppUi.surface0,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(AppUi.radiusSm)),
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(AppUi.radiusSm),
+                  ),
                   borderSide: BorderSide(color: AppUi.accent, width: 1),
                 ),
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(AppUi.radiusSm)),
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(AppUi.radiusSm),
+                  ),
                   borderSide: BorderSide(color: AppUi.line, width: 1),
                 ),
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(AppUi.radiusSm)),
+                  borderRadius: BorderRadius.all(
+                    Radius.circular(AppUi.radiusSm),
+                  ),
                   borderSide: BorderSide(color: AppUi.accent, width: 1.4),
                 ),
               ),
@@ -423,15 +456,17 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           ),
           const SizedBox(width: 5),
           AppIconButton(
-              icon: GameIconData.star,
-              size: 24,
-              tint: AppUi.sage,
-              onTap: _commitRename),
+            icon: GameIconData.star,
+            size: 24,
+            tint: AppUi.sage,
+            onTap: _commitRename,
+          ),
           const SizedBox(width: 4),
           AppIconButton(
-              icon: GameIconData.close,
-              size: 24,
-              onTap: () => setState(() => _renaming = false)),
+            icon: GameIconData.close,
+            size: 24,
+            onTap: () => setState(() => _renaming = false),
+          ),
         ],
       ),
     );
@@ -451,11 +486,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     if (widget.isFollowed) {
       badges.add(_emojiChip('Takipte', AppUi.sage, '🎥'));
     }
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: badges,
-    );
+    return Wrap(spacing: 6, runSpacing: 6, children: badges);
   }
 
   /// Durum/aktivite rozetleri — etiketler emoji-veri taşıdığı için
@@ -473,9 +504,14 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         children: [
           Text(emoji, style: const TextStyle(fontSize: 10, height: 1.0)),
           const SizedBox(width: 5),
-          Text(label,
-              style: AppUi.button.copyWith(
-                  fontSize: 9.5, letterSpacing: 1.0, color: AppUi.textHi)),
+          Text(
+            label,
+            style: AppUi.button.copyWith(
+              fontSize: 9.5,
+              letterSpacing: 1.0,
+              color: AppUi.textHi,
+            ),
+          ),
         ],
       ),
     );
@@ -483,13 +519,13 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   (String, Color, String) _stateChip(VillagerEntity v) {
     // Durum bozucular önce — köylü neden dinliyor/yavaş, oyuncu görsün.
-    if (v.sickDays > 0)   return ('Hasta',        const Color(0xFF7E8A5A), '🤒');
-    if (v.injuryDays > 0) return ('Yaralı',       AppUi.rust, '🤕');
-    if (v.laborDays > 0)  return ('Kürek cezası', const Color(0xFF8A8A92), '⛓️');
+    if (v.sickDays > 0) return ('Hasta', const Color(0xFF7E8A5A), '🤒');
+    if (v.injuryDays > 0) return ('Yaralı', AppUi.rust, '🤕');
+    if (v.laborDays > 0) return ('Kürek cezası', const Color(0xFF8A8A92), '⛓️');
     if (v.isSeatedAtFire) return ('Ateş başı', AppUi.accent, '🔥');
-    if (v.isSleeping)     return ('Uyuyor',    const Color(0xFF6C7CB2), '💤');
-    if (v.isCarrying)     return ('Taşıyor',   AppUi.gold, '📦');
-    if (v.isWalking)      return ('Yürüyor',   AppUi.sage, '🚶');
+    if (v.isSleeping) return ('Uyuyor', const Color(0xFF6C7CB2), '💤');
+    if (v.isCarrying) return ('Taşıyor', AppUi.gold, '📦');
+    if (v.isWalking) return ('Yürüyor', AppUi.sage, '🚶');
     return ('Boşta', AppUi.textLo, '·');
   }
 
@@ -543,11 +579,15 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           children: [
             Text(stage.icon, style: const TextStyle(fontSize: 13)),
             const SizedBox(width: 6),
-            Text('${stage.label} · $ageStr',
-                style: AppUi.bodyHi.copyWith(fontSize: 12)),
+            Text(
+              '${stage.label} · $ageStr',
+              style: AppUi.bodyHi.copyWith(fontSize: 12),
+            ),
             const Spacer(),
-            Text(_lifeStageTail(stage, v),
-                style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo)),
+            Text(
+              _lifeStageTail(stage, v),
+              style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -570,15 +610,18 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                   widthFactor: val,
                   child: Container(
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [
-                        _stageColor(stage).withValues(alpha: 0.8),
-                        _stageColor(stage),
-                        Color.lerp(_stageColor(stage), Colors.white, 0.28)!,
-                      ]),
+                      gradient: LinearGradient(
+                        colors: [
+                          _stageColor(stage).withValues(alpha: 0.8),
+                          _stageColor(stage),
+                          Color.lerp(_stageColor(stage), Colors.white, 0.28)!,
+                        ],
+                      ),
                       boxShadow: [
                         BoxShadow(
-                            color: _stageColor(stage).withValues(alpha: 0.5),
-                            blurRadius: 5),
+                          color: _stageColor(stage).withValues(alpha: 0.5),
+                          blurRadius: 5,
+                        ),
                       ],
                     ),
                   ),
@@ -592,18 +635,18 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   }
 
   (double, double) _stageBounds(LifeStage s) => switch (s) {
-        LifeStage.child => (0.0, kYouthStartDay),
-        LifeStage.youth => (kYouthStartDay, kAdultStartDay),
-        LifeStage.adult => (kAdultStartDay, kElderStartDay),
-        LifeStage.elder => (kElderStartDay, kElderStartDay + kElderLifeMax),
-      };
+    LifeStage.child => (0.0, kYouthStartDay),
+    LifeStage.youth => (kYouthStartDay, kAdultStartDay),
+    LifeStage.adult => (kAdultStartDay, kElderStartDay),
+    LifeStage.elder => (kElderStartDay, kElderStartDay + kElderLifeMax),
+  };
 
   Color _stageColor(LifeStage s) => switch (s) {
-        LifeStage.child => const Color(0xFFE6B870),
-        LifeStage.youth => AppUi.sage,
-        LifeStage.adult => AppUi.accent,
-        LifeStage.elder => const Color(0xFFB079D4),
-      };
+    LifeStage.child => const Color(0xFFE6B870),
+    LifeStage.youth => AppUi.sage,
+    LifeStage.adult => AppUi.accent,
+    LifeStage.elder => const Color(0xFFB079D4),
+  };
 
   String _lifeStageTail(LifeStage s, VillagerEntity v) {
     final (lo, hi) = _stageBounds(s);
@@ -624,8 +667,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     final c = m >= 0.6
         ? AppUi.sage
         : m >= 0.35
-            ? AppUi.accent
-            : AppUi.rust;
+        ? AppUi.accent
+        : AppUi.rust;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -638,11 +681,14 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         ),
         Padding(
           padding: const EdgeInsets.only(left: 54, top: 3),
-          child: Text('· ${v.moraleReason}',
-              style: AppUi.body.copyWith(
-                  fontSize: 10.5,
-                  color: AppUi.textLo,
-                  fontStyle: FontStyle.italic)),
+          child: Text(
+            '· ${v.moraleReason}',
+            style: AppUi.body.copyWith(
+              fontSize: 10.5,
+              color: AppUi.textLo,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
         ),
       ],
     );
@@ -651,7 +697,11 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   Widget _moodRow(VillagerEntity v) {
     final (icon, label) = _moodLabel(v.mood);
     final energyPct = (v.energy * 100).round();
-    return _row('Hâli', '$icon $label · ⚡$energyPct%', icon: GameIconData.heart);
+    return _row(
+      'Hâli',
+      '$icon $label · ⚡$energyPct%',
+      icon: GameIconData.heart,
+    );
   }
 
   (String, String) _moodLabel(double m) {
@@ -663,95 +713,120 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   }
 
   Widget _row(String label, String value, {GameIconData? icon}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          children: [
-            if (icon != null) ...[
-              GameIcon(icon, size: 13, color: AppUi.textLo),
-              const SizedBox(width: 7),
-            ],
-            SizedBox(
-                width: 48,
-                child: Text(label.toUpperCase(),
-                    style: AppUi.label.copyWith(letterSpacing: 0.6))),
-            Flexible(
-              child: Text(value, style: AppUi.bodyHi.copyWith(fontSize: 12)),
-            ),
-          ],
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: [
+        if (icon != null) ...[
+          GameIcon(icon, size: 13, color: AppUi.textLo),
+          const SizedBox(width: 7),
+        ],
+        SizedBox(
+          width: 48,
+          child: Text(
+            label.toUpperCase(),
+            style: AppUi.label.copyWith(letterSpacing: 0.6),
+          ),
         ),
-      );
+        Flexible(
+          child: Text(value, style: AppUi.bodyHi.copyWith(fontSize: 12)),
+        ),
+      ],
+    ),
+  );
 
-  // ─── İş — oyuncunun köye dokunduğu yer ─────────────────────────────────────
+  // ─── İş — nerede çalışıyor ─────────────────────────────────────────────────
 
-  /// ELLE İŞ VERME.
+  /// İŞİN OKUNUŞU.
   ///
-  /// Köyün işleri normalde kendiliğinden dağılır (`_reconcileRole` en yakın boş
-  /// yetişkini kapar). Bu bölüm oyuncuya o dağıtımı ELDEN ALMA hakkı verir:
-  /// seçilen rol köylüye kilitlenir, otomatik kadro ona bir daha dokunmaz.
+  /// Bu bölüm bir karar yüzeyi DEĞİL, bir cevap: "bu adam nerede çalışıyor?"
+  /// Karar iş yerinin kendi kartında verilir (bkz. WorkCrewSection) — orada
+  /// kaç el gerektiği de görünür, burada görünmezdi. Rozet ızgarası bir köylüye
+  /// on bir seçenek sunup köyün o işten kaç el istediğini hiç söylemiyordu.
   ///
-  /// Âdete aykırı seçim ENGELLENMEZ — yalnız işaretlenir (⚠) ve seçilince
-  /// bedeli anlatılır. Kapatılan buton yok; köyün huyu bir kural değil.
+  /// İki eylem bırakıldı: işyerine GİT (kararın verildiği yere götürür) ve
+  /// İŞTEN AL (elindeki tek yıkıcı olmayan geri alma).
   List<Widget> _workSection(VillagerEntity v) {
-    final onAssign = widget.onAssignJob;
-    if (onAssign == null || widget.assignableRoles.isEmpty) return const [];
+    final place = widget.workplaceLabel;
     // Çocuk / hasta / sakat köylüye iş verilmez — sebebini yaz, boş bırakma.
     if (!v.canRunErrands) {
       return [
         _sectionLabel('İŞ'),
         Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Text(_noWorkReason(v),
-              style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11)),
+          child: Text(
+            _noWorkReason(v),
+            style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11),
+          ),
         ),
       ];
     }
 
+    final role = v.job?.role ?? JobRole.none;
     final assigned = v.assignedRole;
-    final current = v.job?.role ?? JobRole.none;
-    final against = assigned != null &&
-        assigned != JobRole.none &&
-        VillageCustom.isAgainst(assigned, male: v.isMale);
+    final against =
+        role != JobRole.none && VillageCustom.isAgainst(role, male: v.isMale);
 
     return [
       _sectionLabel('İŞ'),
-      Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          // Serbest = otomatik havuz. Elle atama yokken seçili görünür.
-          _jobChip(
-            label: 'Serbest',
-            icon: '🎲',
-            selected: assigned == null,
-            warn: false,
-            onTap: () => onAssign(null),
-          ),
-          for (final r in widget.assignableRoles)
-            _jobChip(
-              label: r.label,
-              icon: r.icon,
-              selected: assigned == r,
-              hinted: widget.hintRole == r && assigned != r,
-              warn: VillageCustom.isAgainst(r, male: v.isMale),
-              onTap: () => onAssign(r),
+      if (role == JobRole.none)
+        Text(
+          assigned == JobRole.none
+              ? 'Boşta duruyor — sen böyle istedin.'
+              : 'Boşta. Bir iş yerinin kadrosuna katılırsa çalışmaya başlar.',
+          style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11),
+        )
+      else ...[
+        Row(
+          children: [
+            Text(role.icon, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                place == null ? role.label : '${role.label} — $place',
+                style: AppUi.bodyHi.copyWith(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-        ],
-      ),
-      const SizedBox(height: 6),
-      // Ne olduğunun tek satırlık okuması — seçim ile simin yaptığı iş aynı
-      // yerden okunur (panel bir şey der, sim başka bir şey yapar olmasın).
-      Text(
-        assigned == null
-            ? (current == JobRole.none
-                ? 'Köyün işleri kendiliğinden dağılıyor.'
-                : 'Kendiliğinden ${current.label.toLowerCase()} oldu.')
-            : 'Bu işe sen verdin.',
-        style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11),
-      ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          // Oyuncunun mührü ile köyün kendi dağıtımı ayrı okunmalı: biri karar,
+          // öbürü köyün huyu. Aynı cümleyle anlatılsaydı oyuncu neyi kendi
+          // yaptığını unuturdu.
+          assigned != null
+              ? 'Bu işe sen verdin.'
+              : 'Köyün işleri kendiliğinden dağıldı.',
+          style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11),
+        ),
+      ],
       if (against) ...[
         const SizedBox(height: 4),
-        Text('⚠ Köyün âdeti bu işi böyle bilmez — iş ağır ilerler ve köy konuşur.',
-            style: AppUi.body.copyWith(color: AppUi.gold, fontSize: 11)),
+        Text(
+          '⚠ Köyün âdeti bu işi böyle bilmez — iş ağır ilerler ve köy konuşur.',
+          style: AppUi.body.copyWith(color: AppUi.gold, fontSize: 11),
+        ),
+      ],
+      if (widget.onOpenWorkplace != null || widget.onReleaseJob != null) ...[
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            if (widget.onOpenWorkplace != null)
+              _workLink(
+                label: 'İşyerine git',
+                tint: AppUi.accent,
+                onTap: widget.onOpenWorkplace!,
+              ),
+            if (widget.onReleaseJob != null)
+              _workLink(
+                label: 'İşten al',
+                tint: AppUi.textLo,
+                onTap: widget.onReleaseJob!,
+              ),
+          ],
+        ),
       ],
       const SizedBox(height: 10),
     ];
@@ -764,57 +839,37 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return 'Şimdilik iş tutamaz.';
   }
 
-  Widget _sectionLabel(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(text,
-            style: AppUi.label.copyWith(letterSpacing: 0.6)),
-      );
-
-  /// Tek iş rozeti — seçili/âdet-dışı durumları renkle taşır.
-  Widget _jobChip({
+  /// İş satırının altındaki ince eylem — buton değil bağlantı ağırlığında.
+  /// Kadro kararının ağırlığı iş yeri kartında; burada yalnız oraya açılan
+  /// kapı ve tek geri alma durur.
+  Widget _workLink({
     required String label,
-    required String icon,
-    required bool selected,
-    required bool warn,
+    required Color tint,
     required VoidCallback onTap,
-    bool hinted = false,
-  }) {
-    final base = warn ? AppUi.gold : AppUi.accent;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected
-                ? base.withValues(alpha: 0.16)
-                : AppUi.surface0,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              // İşaret seçili gibi DURMAZ: seçili dolu ember, işaret yarı
-              // ember + kalın. İkisi aynı görünürse oyuncu işi çoktan
-              // verdiğini sanır.
-              color: selected
-                  ? base.withValues(alpha: 0.65)
-                  : hinted
-                      ? AppUi.accent.withValues(alpha: 0.5)
-                      : AppUi.line,
-              width: hinted && !selected ? 1.6 : 1,
-            ),
-          ),
-          child: Text(
-            '$icon $label${warn ? ' ⚠' : ''}',
-            style: AppUi.body.copyWith(
-              color: selected ? base : AppUi.textHi,
-              fontSize: 11,
-            ),
-          ),
+  }) => Material(
+    color: Colors.transparent,
+    child: InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppUi.surface0,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: tint.withValues(alpha: 0.34)),
+        ),
+        child: Text(
+          label,
+          style: AppUi.body.copyWith(fontSize: 11, color: tint),
         ),
       ),
-    );
-  }
+    ),
+  );
+
+  Widget _sectionLabel(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(text, style: AppUi.label.copyWith(letterSpacing: 0.6)),
+  );
 
   // ─── Aklı — ne yapıyor, neden, derdi ne ────────────────────────────────────
 
@@ -834,26 +889,33 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       if (!m.intent.isIdle)
         Padding(
           padding: const EdgeInsets.only(left: 20, bottom: 2),
-          child: Text('“${m.intent.reason}”',
-              style: AppUi.body.copyWith(
-                  fontSize: 11.5,
-                  fontStyle: FontStyle.italic,
-                  color: AppUi.textLo)),
+          child: Text(
+            '“${m.intent.reason}”',
+            style: AppUi.body.copyWith(
+              fontSize: 11.5,
+              fontStyle: FontStyle.italic,
+              color: AppUi.textLo,
+            ),
+          ),
         ),
       // Elinde ne var — mikro-sahnenin somut kanıtı (bkz. villager_act).
       if (v.prop != PropKind.none)
         Padding(
           padding: const EdgeInsets.only(left: 20, bottom: 2),
-          child: Text('elinde: ${propLabel(v.prop)}',
-              style: AppUi.label.copyWith(fontSize: 10.5)),
+          child: Text(
+            'elinde: ${propLabel(v.prop)}',
+            style: AppUi.label.copyWith(fontSize: 10.5),
+          ),
         ),
       // Baskın dert yalnız gerçekten bir dert varken yazılır — her köylüde
       // sürekli "işsizlik 4" yazan bir satır gürültüdür.
       if (domVal >= 0.30)
         Padding(
           padding: const EdgeInsets.only(left: 20, bottom: 4),
-          child: Text('derdi: ${driveLabel(dom)}',
-              style: AppUi.label.copyWith(fontSize: 10.5)),
+          child: Text(
+            'derdi: ${driveLabel(dom)}',
+            style: AppUi.label.copyWith(fontSize: 10.5),
+          ),
         ),
       // HATIRLADIKLARI — köylünün gördükleri. Kulaktan duyduğu açıkça
       // işaretlenir, çünkü köyde neyin bilindiği ile neyin KANITLANDIĞI
@@ -870,14 +932,18 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       const SizedBox(height: 6),
       Padding(
         padding: const EdgeInsets.only(bottom: 2),
-        child: Text('HATIRLADIKLARI',
-            style: AppUi.label.copyWith(letterSpacing: 0.6)),
+        child: Text(
+          'HATIRLADIKLARI',
+          style: AppUi.label.copyWith(letterSpacing: 0.6),
+        ),
       ),
       for (final l in lines)
         Padding(
           padding: const EdgeInsets.only(left: 8, bottom: 1),
-          child: Text('· $l',
-              style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textLo)),
+          child: Text(
+            '· $l',
+            style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textLo),
+          ),
         ),
     ];
   }
@@ -979,26 +1045,30 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   }
 
   Widget _traitChip(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppUi.surface0,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppUi.line, width: 1),
-        ),
-        child: Text(text,
-            style: AppUi.body.copyWith(color: AppUi.textHi, fontSize: 11)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppUi.surface0,
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: AppUi.line, width: 1),
+    ),
+    child: Text(
+      text,
+      style: AppUi.body.copyWith(color: AppUi.textHi, fontSize: 11),
+    ),
+  );
 
   Widget _likeChip(String text) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: AppUi.accent.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppUi.accent.withValues(alpha: 0.5), width: 1),
-        ),
-        child: Text(text,
-            style: AppUi.body.copyWith(color: AppUi.accentSoft, fontSize: 11)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: AppUi.accent.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(color: AppUi.accent.withValues(alpha: 0.5), width: 1),
+    ),
+    child: Text(
+      text,
+      style: AppUi.body.copyWith(color: AppUi.accentSoft, fontSize: 11),
+    ),
+  );
 
   // ─── Family chips ──────────────────────────────────────────────────────────
 
@@ -1058,8 +1128,10 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppUi.line, width: 1),
       ),
-      child: Text('${v.lifeStage.icon} ${v.name}',
-          style: AppUi.body.copyWith(color: AppUi.textMid, fontSize: 11)),
+      child: Text(
+        '${v.lifeStage.icon} ${v.name}',
+        style: AppUi.body.copyWith(color: AppUi.textMid, fontSize: 11),
+      ),
     );
     if (widget.onSelect == null) return chip;
     return GestureDetector(onTap: () => widget.onSelect!(v), child: chip);
@@ -1079,9 +1151,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final e in v.life) _lifeRow(e),
-            ],
+            children: [for (final e in v.life) _lifeRow(e)],
           ),
         ),
       ),
@@ -1098,19 +1168,27 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
           const SizedBox(width: 8),
           SizedBox(
             width: 30,
-            child: Text(e.day > 0 ? '${e.day}.g' : '',
-                style: AppUi.label.copyWith(color: AppUi.textLo, fontSize: 9.5)),
+            child: Text(
+              e.day > 0 ? '${e.day}.g' : '',
+              style: AppUi.label.copyWith(color: AppUi.textLo, fontSize: 9.5),
+            ),
           ),
           Expanded(
-            child: Text(e.text,
-                style: e.milestone
-                    ? AppUi.body.copyWith(
-                        fontSize: 11,
-                        height: 1.3,
-                        fontWeight: FontWeight.w600,
-                        color: AppUi.accentSoft)
-                    : AppUi.body.copyWith(
-                        fontSize: 11, height: 1.3, color: AppUi.textMid)),
+            child: Text(
+              e.text,
+              style: e.milestone
+                  ? AppUi.body.copyWith(
+                      fontSize: 11,
+                      height: 1.3,
+                      fontWeight: FontWeight.w600,
+                      color: AppUi.accentSoft,
+                    )
+                  : AppUi.body.copyWith(
+                      fontSize: 11,
+                      height: 1.3,
+                      color: AppUi.textMid,
+                    ),
+            ),
           ),
         ],
       ),

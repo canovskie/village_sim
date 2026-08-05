@@ -7,11 +7,12 @@ enum LightKind { window, lantern }
 /// Sprite üzerindeki tek bir ışık noktası.
 /// [nx],[ny] = 0..1 aralığında sprite koordinatı (sol-üst = 0,0)
 class BuildingLight {
-  final double   nx;
-  final double   ny;
+  final double nx;
+  final double ny;
   final LightKind kind;
   const BuildingLight(this.nx, this.ny, this.kind);
 }
+
 
 /// Her bina türü için ışık noktaları listesi.
 /// Sadece pencere / fener içeren binalar dahil (market, well hariç).
@@ -49,12 +50,8 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.22, 0.58, LightKind.window),
     BuildingLight(0.79, 0.41, LightKind.window),
   ],
-  BuildingType.mill: [
-    BuildingLight(0.65, 0.51, LightKind.window),
-  ],
-  BuildingType.stable: [
-    BuildingLight(0.87, 0.63, LightKind.window),
-  ],
+  BuildingType.mill: [BuildingLight(0.65, 0.51, LightKind.window)],
+  BuildingType.stable: [BuildingLight(0.87, 0.63, LightKind.window)],
   BuildingType.townhall: [
     BuildingLight(0.40, 0.32, LightKind.window),
     BuildingLight(0.49, 0.51, LightKind.window),
@@ -89,9 +86,7 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.48, 0.42, LightKind.lantern),
     BuildingLight(0.48, 0.54, LightKind.lantern),
   ],
-  BuildingType.mineBuilding: [
-    BuildingLight(0.57, 0.62, LightKind.lantern),
-  ],
+  BuildingType.mineBuilding: [BuildingLight(0.57, 0.62, LightKind.lantern)],
   BuildingType.lamppost: [
     BuildingLight(0.64, 0.48, LightKind.lantern),
     BuildingLight(0.55, 0.47, LightKind.lantern),
@@ -102,6 +97,10 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.75, 0.62, LightKind.window),
     BuildingLight(0.20, 0.57, LightKind.window),
     BuildingLight(0.40, 0.63, LightKind.window),
+  ],
+  BuildingType.tailor: [
+    BuildingLight(0.32, 0.69, LightKind.window),
+    BuildingLight(0.55, 0.73, LightKind.lantern),
   ],
   BuildingType.chickenCoop: [
     BuildingLight(0.34, 0.55, LightKind.window),
@@ -135,9 +134,7 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.82, 0.57, LightKind.window),
     BuildingLight(0.49, 0.67, LightKind.window),
   ],
-  BuildingType.monument: [
-    BuildingLight(0.44, 0.06, LightKind.lantern),
-  ],
+  BuildingType.monument: [BuildingLight(0.44, 0.06, LightKind.lantern)],
   // Liman & Ziyaret — yaklaşık; ışık editörüyle oturt.
   BuildingType.caravanserai: [
     BuildingLight(0.30, 0.55, LightKind.lantern),
@@ -164,45 +161,31 @@ class BuildingChimney {
   final double ny;
   final double density;
   final double rate;
-  const BuildingChimney(this.nx, this.ny, {this.density = 1.0, this.rate = 1.0});
+  const BuildingChimney(
+    this.nx,
+    this.ny, {
+    this.density = 1.0,
+    this.rate = 1.0,
+  });
 }
 
 /// Her bina için 0..N baca/duman çıkış noktası.
 /// Boş veya tanımsızsa duman çizilmez.
 const Map<BuildingType, List<BuildingChimney>> kBuildingChimneys = {
-  BuildingType.woodenHouse: [
-    BuildingChimney(0.65, 0.07),
-  ],
-  BuildingType.stoneHouseBlue: [
-    BuildingChimney(0.70, 0.02),
-  ],
-  BuildingType.stoneHouseGreen: [
-    BuildingChimney(0.74, 0.04),
-  ],
-  BuildingType.manor: [
-    BuildingChimney(0.67, 0.02),
-  ],
-  BuildingType.mill: [
-    BuildingChimney(0.51, 0.05),
-  ],
-  BuildingType.townhall: [
-    BuildingChimney(0.57, 0.09),
-  ],
-  BuildingType.tavern: [
-    BuildingChimney(0.60, 0.03),
-  ],
-  BuildingType.fisherCabin: [
-    BuildingChimney(0.63, 0.04),
-  ],
+  BuildingType.woodenHouse: [BuildingChimney(0.65, 0.07)],
+  BuildingType.stoneHouseBlue: [BuildingChimney(0.70, 0.02)],
+  BuildingType.stoneHouseGreen: [BuildingChimney(0.74, 0.04)],
+  BuildingType.manor: [BuildingChimney(0.67, 0.02)],
+  BuildingType.mill: [BuildingChimney(0.51, 0.05)],
+  BuildingType.townhall: [BuildingChimney(0.57, 0.09)],
+  BuildingType.tavern: [BuildingChimney(0.60, 0.03)],
+  BuildingType.fisherCabin: [BuildingChimney(0.63, 0.04)],
   BuildingType.firepit: [
     BuildingChimney(0.48, 0.20, density: 2.00, rate: 1.70),
   ],
-  BuildingType.floristCottage: [
-    BuildingChimney(0.79, 0.16),
-  ],
-  BuildingType.library: [
-    BuildingChimney(0.76, 0.10),
-  ],
+  BuildingType.floristCottage: [BuildingChimney(0.79, 0.16)],
+  BuildingType.tailor: [BuildingChimney(0.61, 0.08)],
+  BuildingType.library: [BuildingChimney(0.76, 0.10)],
   BuildingType.bathhouse: [
     BuildingChimney(0.75, 0.10),
     BuildingChimney(0.54, 0.47),
@@ -222,12 +205,22 @@ class BuildingWater {
   final double hw;
   final double hh;
   final double intensity;
-  const BuildingWater(this.nx, this.ny, this.hw, this.hh, {this.intensity = 1.0});
+  const BuildingWater(
+    this.nx,
+    this.ny,
+    this.hw,
+    this.hh, {
+    this.intensity = 1.0,
+  });
 }
 
 /// Su yüzeyi olan binalar — şadırvan havuzu, hamam su kanalı. Yaklaşık konumlar;
 /// PNG değişirse ayarlanır (ileride ışık editörü gibi bir araca taşınabilir).
 const Map<BuildingType, List<BuildingWater>> kBuildingWater = {
+  BuildingType.well: [
+    // Kuyunun taş çemberinin içindeki su yüzeyi.
+    BuildingWater(0.50, 0.67, 0.22, 0.075, intensity: 0.82),
+  ],
   BuildingType.fountain: [
     // Sekizgen havuzun teal su yüzeyi (merkez sütunun çevresi).
     BuildingWater(0.50, 0.56, 0.30, 0.12),
@@ -241,38 +234,39 @@ const Map<BuildingType, List<BuildingWater>> kBuildingWater = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum BuildingType {
-  placeholder,  // kullanılmaz, Dart boş enum'a izin vermediği için
-  tent,         // 1x1 — procedurel çadır (asset yok). İlkel kalıcı ucuz konut.
-  woodenHouse,  // 2x2 — minihouse.png (samanlı kulübe — temel ev)
-  stoneHouseBlue,  // 2x2 — stonehouse_blue.png (taş+ahşap konut, mavi çatı)
+  placeholder, // kullanılmaz, Dart boş enum'a izin vermediği için
+  tent, // 1x1 — procedurel çadır (asset yok). İlkel kalıcı ucuz konut.
+  woodenHouse, // 2x2 — minihouse.png (samanlı kulübe — temel ev)
+  stoneHouseBlue, // 2x2 — stonehouse_blue.png (taş+ahşap konut, mavi çatı)
   stoneHouseGreen, // 2x2 — stonehouse_green.png (taş+ahşap konut, yeşil çatı)
-  manor,        // 3x3 — manor.png (görkemli taş konak — en lüks konut)
-  mill,         // 2x2 — mill.png
-  stable,       // 3x2 — stable.png
-  well,         // 1x1 — well.png
-  market,       // 3x2 — market.png
-  townhall,     // 4x3 — townhall.png
-  tavern,       // 2x2 — tavern.png
-  fisherCabin,  // 2x2 — fishercabin.png
-  warehouse,    // 3x2 — warehouse.png
-  firepit,      // 1x1 — firepit.png
-  lumberCamp,   // 2x2 — lumberjack.png  (ağaç keser + diker)
+  manor, // 3x3 — manor.png (görkemli taş konak — en lüks konut)
+  mill, // 2x2 — mill.png
+  stable, // 3x2 — stable.png
+  well, // 1x1 — well.png
+  market, // 3x2 — market.png
+  townhall, // 4x3 — townhall.png
+  tavern, // 2x2 — tavern.png
+  fisherCabin, // 2x2 — fishercabin.png
+  warehouse, // 3x2 — warehouse.png
+  firepit, // 1x1 — firepit.png
+  lumberCamp, // 2x2 — lumberjack.png  (ağaç keser + diker)
   mineBuilding, // 2x2 — mine.png        (maden ocağı)
-  barn,         // 3x2 — barn.png (ağıl: ahşap-çerçeve byre + samanlık + saman)
-  lamppost,     // 1x1 — procedurel çizim (asset yok). Gece ışık kaynağı.
+  barn, // 3x2 — barn.png (ağıl: ahşap-çerçeve byre + samanlık + saman)
+  lamppost, // 1x1 — procedurel çizim (asset yok). Gece ışık kaynağı.
   floristCottage, // 2x2 — floristcottage.png. Çiçekçi kulübesi: çevreye çiçek spawn + Florist NPC sular.
-  chickenCoop,    // 2x2 — chickencoop.png. Tavuk kümesi: 3-4 tavuk spawn + periyodik yumurta (food).
-  beehive,        // 1x1 — beehive.png. Arı kovanı: menzildeki çiçeğe göre bal üretir + ambient arılar.
-  church,         // 2x2 — church.png. Kilise: civic moral + cenaze töreni mekânı + yanına mezarlık.
+  chickenCoop, // 2x2 — chickencoop.png. Tavuk kümesi: 3-4 tavuk spawn + periyodik yumurta (food).
+  beehive, // 1x1 — beehive.png. Arı kovanı: menzildeki çiçeğe göre bal üretir + ambient arılar.
+  church, // 2x2 — church.png. Kilise: civic moral + cenaze töreni mekânı + yanına mezarlık.
   // ─── Köy Meydanı & Kültür Mahallesi ──────────────────────────────────────────
-  fountain,       // 2x2 — fountain.png. Şadırvan: su kaynağı (kuyu gibi) + gündüz toplanma + dekoratif.
-  library,        // 2x2 — library.png. Kütüphane: kültür ameniteleri morali + kronik evi.
-  bathhouse,      // 2x2 — bathhouse.png. Hamam: kültür morali + buhar bacası.
-  monument,       // 1x1 — monument.png. Anıt: prestij/kültür morali + landmark (ileride kronik).
+  fountain, // 2x2 — fountain.png. Şadırvan: su kaynağı (kuyu gibi) + gündüz toplanma + dekoratif.
+  library, // 2x2 — library.png. Kütüphane: kültür ameniteleri morali + kronik evi.
+  bathhouse, // 2x2 — bathhouse.png. Hamam: kültür morali + buhar bacası.
+  monument, // 1x1 — monument.png. Anıt: prestij/kültür morali + landmark (ileride kronik).
   // ─── Liman & Ziyaret Mahallesi ───────────────────────────────────────────────
-  caravanserai,   // 3x3 — caravanserai.png. Han: taşıyıcı hızı + tüccar (civic/carrierSpeed).
-  shrine,         // 2x2 — shrine.png. Türbe: kültür-amenite morali + ziyaret landmark.
-  belltower,      // 1x1 — belltower.png. Çan Kulesi: kültür morali + çan sesi + dikey landmark.
+  caravanserai, // 3x3 — caravanserai.png. Han: taşıyıcı hızı + tüccar (civic/carrierSpeed).
+  shrine, // 2x2 — shrine.png. Türbe: kültür-amenite morali + ziyaret landmark.
+  belltower, // 1x1 — belltower.png. Çan Kulesi: kültür morali + çan sesi + dikey landmark.
+  tailor, // 2x2 — tailor.png. Terzi: köylülerin ilkel kıyafetlerini dikilmiş giysilere yükseltir.
 }
 
 /// İnşa paleti kategorisi — alt çubuğun kalabalık tek sırasını anlamlı gruplara
@@ -282,21 +276,21 @@ enum BuildCategory { konut, uretim, ticaret, civic, altyapi, araziYol }
 
 extension BuildCategoryInfo on BuildCategory {
   String get label => switch (this) {
-        BuildCategory.konut => 'Konut',
-        BuildCategory.uretim => 'Üretim',
-        BuildCategory.ticaret => 'Ticaret',
-        BuildCategory.civic => 'Civic',
-        BuildCategory.altyapi => 'Altyapı',
-        BuildCategory.araziYol => 'Arazi/Yol',
-      };
+    BuildCategory.konut => 'Konut',
+    BuildCategory.uretim => 'Üretim',
+    BuildCategory.ticaret => 'Ticaret',
+    BuildCategory.civic => 'Civic',
+    BuildCategory.altyapi => 'Altyapı',
+    BuildCategory.araziYol => 'Arazi/Yol',
+  };
   String get icon => switch (this) {
-        BuildCategory.konut => '🏠',
-        BuildCategory.uretim => '⚒',
-        BuildCategory.ticaret => '🪙',
-        BuildCategory.civic => '🔥',
-        BuildCategory.altyapi => '💡',
-        BuildCategory.araziYol => '🌾',
-      };
+    BuildCategory.konut => '🏠',
+    BuildCategory.uretim => '⚒',
+    BuildCategory.ticaret => '🪙',
+    BuildCategory.civic => '🔥',
+    BuildCategory.altyapi => '💡',
+    BuildCategory.araziYol => '🌾',
+  };
 }
 
 /// Her binanın paleti kategorisi. araziYol burada yer almaz (bina değil).
@@ -314,6 +308,7 @@ const Map<BuildingType, BuildCategory> kBuildingCategory = {
   BuildingType.chickenCoop: BuildCategory.uretim,
   BuildingType.floristCottage: BuildCategory.uretim,
   BuildingType.beehive: BuildCategory.uretim,
+  BuildingType.tailor: BuildCategory.uretim,
   BuildingType.market: BuildCategory.ticaret,
   BuildingType.warehouse: BuildCategory.ticaret,
   BuildingType.stable: BuildCategory.ticaret,
@@ -340,10 +335,12 @@ class BuildingMeta {
   final double groundY;
   final double groundXCenter;
   final double spriteScale;
+
   /// true → NPC bu binanın footprint tile'larından geçebilir (firepit, well,
   /// lamppost = etrafında durulan dekor; woodenHouse = içine girilen ev).
   /// false → katı bina, pathfinder + wander engel sayar.
   final bool walkable;
+
   /// Bina merkezinden tile cinsinden etki yarıçapı (Öklid mesafesi).
   /// 0 → etkisiz. Çiçek bahçesi gibi dekoratif etki, well için su erişimi,
   /// tavern için moral menzili, firepit için ısı/ışık menzili vs.
@@ -436,6 +433,15 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     spriteScale: 1.0,
     effectRadius: 4.5, // çiçekçi bu menzilde dolaşır + çevreye çiçek serpilir
   ),
+  BuildingType.tailor: BuildingMeta(
+    cols: 2,
+    rows: 2,
+    label: 'Terzi',
+    cost: ResourceCost(wood: 12, stone: 4),
+    groundXCenter: 0.50,
+    groundY: 1.02,
+    spriteScale: 1.0,
+  ),
   BuildingType.chickenCoop: BuildingMeta(
     groundY: 1.002,
     cols: 2,
@@ -480,8 +486,8 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     // fountain.png (1005×960) trimlenmiş; anchor bina tabanında (ölçüldü).
     groundY: 1.0777,
     groundXCenter: 0.4922,
-    walkable: true,       // etrafında durulup toplanılan su öğesi
-    effectRadius: 4.5,    // su erişimi (kuyu gibi) + gündüz toplanma menzili
+    walkable: true, // etrafında durulup toplanılan su öğesi
+    effectRadius: 4.5, // su erişimi (kuyu gibi) + gündüz toplanma menzili
   ),
   BuildingType.library: BuildingMeta(
     spriteScale: 1.0,
@@ -512,7 +518,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     // monument.png (1091×927) trimlenmiş; anchor taban/çim (ölçüldü).
     groundY: 1.0763,
     groundXCenter: 0.446,
-    walkable: true,       // 1×1 dekoratif landmark
+    walkable: true, // 1×1 dekoratif landmark
   ),
   // ─── Liman & Ziyaret Mahallesi ─────────────────────────────────────────────
   // PNG'ler geldi; ebatlar yerleşim editörüyle oturtuldu.
@@ -533,7 +539,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     cost: ResourceCost(wood: 6, stone: 22, gold: 2),
     groundY: 1.0014,
     groundXCenter: 0.4993,
-    effectRadius: 4.0,    // ziyaret/moral menzili
+    effectRadius: 4.0, // ziyaret/moral menzili
   ),
   BuildingType.belltower: BuildingMeta(
     spriteScale: 1.271,
@@ -581,7 +587,8 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     // yeşil varyantla aynı hizada oturmaz. groundXCenter = taban orta noktası.
     groundY: 1.0776,
     groundXCenter: 0.4739,
-    spriteScale: 0.954, // footprint'e otursun (1.18 çok taşıyordu); minihouse hissi
+    spriteScale:
+        0.954, // footprint'e otursun (1.18 çok taşıyordu); minihouse hissi
     walkable: true,
   ),
   BuildingType.stoneHouseGreen: BuildingMeta(

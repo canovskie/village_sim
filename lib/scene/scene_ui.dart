@@ -290,6 +290,7 @@ extension _SceneUi on _VillageSceneState {
           listenable: _frame,
           builder: (_, _) => CommandBar(
             agenda: _divanAgendaCount(),
+            village: _villageName,
             onDefter: () => _openLedger(LedgerSection.tuzuk),
             onDivan: () => _openLedger(LedgerSection.divan),
             onRoster: () => _openLedger(LedgerSection.nufus),
@@ -403,6 +404,35 @@ extension _SceneUi on _VillageSceneState {
         ],
       );
     }
+    // BİNASIZ İŞ YERİ — tarla, böğürtlenlik, şantiye. Bunlar da tıklanır
+    // olduğu için buradan da okunmalı: "Detay" kapısı olmasaydı seçilen
+    // böğürtlenliğin kadro kartı hiçbir yerden açılamazdı.
+    final siteId = _selectedSiteId;
+    if (siteId != null) {
+      final site = _siteById(siteId);
+      if (site != null) {
+        return CommandContext(
+          title: site.label,
+          subtitle: _siteSubtitle(site),
+          stats: [
+            (
+              'Kadro',
+              site.wanted == 0
+                  ? '${site.crew.length} el'
+                  : '${site.crew.length}/${site.wanted}',
+              site.starving ? AppUi.rust : AppUi.sage,
+            ),
+          ],
+          actions: [
+            CommandAction(
+              'Detay',
+              GameIconData.scroll,
+              onTap: () => setStateHere(() => _detailExpanded = true),
+            ),
+          ],
+        );
+      }
+    }
     return null;
   }
 
@@ -428,6 +458,10 @@ extension _SceneUi on _VillageSceneState {
             final active =
                 quests.where((q) => q.active).firstOrNull ?? quests.firstOrNull;
             if (active == null) return const SizedBox.shrink();
+            // Kart kuruluşta AÇIK gelir (oyuncunun "nasıl"ı okuması gereken tek
+            // yer burası); köy kurulunca ince banda döner. Oyuncu elle
+            // dokunduysa karar onun, otomatiğe geri dönmez.
+            final expanded = _questCardOverride ?? _guideActive;
             return QuestTracker(
               icon: questGlyph(active.quest.id),
               activeLabel: active.quest.label,
@@ -435,11 +469,32 @@ extension _SceneUi on _VillageSceneState {
               done: _completedQuests.length,
               total: QuestBook.all.length,
               onOpen: () => _openLedger(LedgerSection.tuzuk),
+              hint: active.quest.hint,
+              speakerName: active.speakerName,
+              expanded: expanded,
+              onToggleExpand: () =>
+                  setStateHere(() => _questCardOverride = !expanded),
+              // "Göster" yalnız kuruluşta: sonrası oyuncunun bildiği fiiller,
+              // orada kamerayı eline almak öğretmek değil elinden almaktır.
+              onShow: _guideActive ? () => setStateHere(_guideShow) : null,
             );
           },
         ),
       ),
     );
+  }
+
+  /// KIŞ TABLOSU BU BİNADA GÖRÜNÜR MÜ — tezgâh nerede duruyorsa orada
+  /// (ambar; ambar yoksa ocak başı, bkz. `_loomSpot`), yalnız sonbahar/kışta.
+  ///
+  /// Kış göstergesi eskiden HUD'ın sağ üstünde sürekli duran bir karttı;
+  /// mevsim boyunca ekranda bekleyen bir tehdit, oyunu olduğundan sert
+  /// gösteriyordu. Artık kışı köy söyler (bkz. scene_winter) ve sayıyı merak
+  /// eden tezgâhın başına gelir — bakmak isteyenin işi, mecburiyet değil.
+  WinterReadiness? _winterPanelFor(BuildingEntity b) {
+    if (_season != Season.autumn && _season != Season.winter) return null;
+    if (_loomSpot != b) return null;
+    return _winterReadiness;
   }
 
   /// Seçili kategorinin içeriği — bina kategorisinde palet, Arazi/Yol'da
@@ -502,7 +557,9 @@ extension _SceneUi on _VillageSceneState {
     final target = _stepBuildTarget;
     final hinted =
         !sel && target != null && kBuildingCategory[target] == cat;
-    return GestureDetector(
+    return GuideTarget(
+      id: GuideAnchors.buildTab(cat.name),
+      child: GestureDetector(
       onTap: () => setStateHere(() => _buildCategory = cat),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
@@ -547,6 +604,7 @@ extension _SceneUi on _VillageSceneState {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -609,7 +667,12 @@ extension _SceneUi on _VillageSceneState {
     } else {
       _placing = type;
       _ghost = null;
+      // Yeni bir künye açılıyor → tatlı not havuzdan bir sonrakine geçsin.
+      _loreNoteSeed++;
     }
+    // Künyenin canlı alanları hayalet yokken boş: ipuçları nötr okunur.
+    _placeReason = null;
+    _placeFacts = null;
   });
 
   /// Arazi/Yol sekmesi içeriği — yol döşeme + Tarla/Kes/Kaz modları.
@@ -716,26 +779,37 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
-  /// Akıllı yerleştirme ipucu — hayalet geçersiz tile üstündeyken NEDEN
-  /// kurulamadığını inşa çubuğunun hemen üstünde gösterir (öğretici).
-  Widget buildPlaceReason() {
+  /// İNŞA KÜNYESİ — elinde bir bina varken açılan bilgi kartı: ne işe yarar,
+  /// NEREYE kurulmalı (hayaletin durduğu yere göre canlı ✓/○), tatlı bir not ve
+  /// —geçersizse— neden kurulamadığı.
+  ///
+  /// Eski "🚫 sebep" çubuğunun yerini alır: o çubuk yalnız KURALLARI, yalnız
+  /// hata anında söylüyordu; avantajları (çadır–ocak, oduncu–orman, balıkçı–göl)
+  /// oyuncu hiç öğrenemiyordu. Kart hep açıktır, kırmızı satır onun bir parçası.
+  ///
+  /// Ekranı yutmasın diye SOL ALTTA, inşa çubuğunun üstünde durur ve tıklamayı
+  /// geçirir — oyuncu okurken yerini de seçebilir.
+  Widget buildBuildBrief() {
+    final compact = useCompactGameUi(context);
     return Positioned(
-      bottom: 132,
-      left: 0,
-      right: 0,
+      left: compact ? MobileUi.gutter : 14,
+      bottom: compact
+          ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap * 2
+          : 132,
       child: IgnorePointer(
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: const Color(0xF21A0E04),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppUi.rust, width: 1),
-            ),
-            child: Text(
-              '🚫 $_placeReason',
-              style: AppUi.bodyHi.copyWith(fontSize: 12, color: AppUi.rust),
-            ),
+        child: RepaintBoundary(
+          child: ListenableBuilder(
+            listenable: _frame,
+            builder: (_, _) {
+              final type = _placing;
+              if (type == null) return const SizedBox.shrink();
+              return BuildingBrief(
+                type: type,
+                facts: _placeFacts,
+                reason: _placeReason,
+                noteSeed: _loreNoteSeed,
+              );
+            },
           ),
         ),
       ),
@@ -777,6 +851,17 @@ extension _SceneUi on _VillageSceneState {
                 residents: _villagers
                     .where((v) => v.homeBuilding == selected)
                     .toList(),
+                // KADRO — bu binanın doğurduğu işler. Ev/kuyu/pazar için boş
+                // liste döner ve bölüm hiç çizilmez.
+                workSites: _sitesOfBuilding(selected),
+                onAddHand: (site) => setStateHere(() => _fillSlot(site)),
+                onRemoveHand: (_, v) => setStateHere(() => _emptySlot(v)),
+                onSelectVillager: (v) => setStateHere(() {
+                  _selectedVillager = v;
+                  _selectedBuilding = null;
+                  _selectedSiteId = null;
+                }),
+                guidedSiteId: _guidedSiteId,
                 barnCows:
                     (selected.type == BuildingType.barn ||
                         selected.type == BuildingType.chickenCoop)
@@ -797,6 +882,23 @@ extension _SceneUi on _VillageSceneState {
                 stats: _stats,
                 population: _villagers.length,
                 populationCap: _populationCap(),
+                // Çadırın ocaktan aldığı sıcaklık — panelde görünen sayı,
+                // moralin ve üşüme dürtüsünün okuduğu sayının ta kendisi.
+                hearthWarmth: selected.type == BuildingType.tent
+                    ? _shelterWarmthOf(selected)
+                    : null,
+                winter: _season == Season.winter,
+                // KIŞ — yalnız tezgâhın durduğu binada, yalnız sonbahar/kışta.
+                winterReadiness: _winterPanelFor(selected),
+                coatPriority: _coatPriority,
+                undistributedCoats: _coatsMade,
+                onCoatPriority: (p) => setStateHere(() {
+                  _coatPriority = p;
+                  // Karar ANINDA görünsün: elde bekleyen giysi varsa yeni
+                  // önceliğe göre dağıtılır, oyuncu bir sonraki taramayı
+                  // beklemesin.
+                  _distributeCoats();
+                }),
                 onClose: () => setStateHere(() => _detailExpanded = false),
                 onSell: (kind) => setStateHere(() {
                   if (sellAtMarket(_stockpile, kind)) {
@@ -982,19 +1084,106 @@ extension _SceneUi on _VillageSceneState {
             if (cleaned.isEmpty || cleaned.length > 20) return;
             setStateHere(() => v.name = cleaned);
           },
-          // ELLE İŞ VERME — köyün işleri artık kendiliğinden dağılmak zorunda
-          // değil; oyuncu bir köylüyü bir işe kilitleyebilir.
-          assignableRoles: _assignableJobRoles(),
-          // Adımın istediği rol — zincirin son halkası (dünyadaki halka doğru
-          // köylüyü, bu da doğru düğmeyi gösterir).
-          hintRole: _stepJobTarget,
-          onAssignJob: (role) => setStateHere(() => _assignVillagerJob(v, role)),
+          // İŞİN OKUNUŞU — panel iş VERMEZ, iş OKUR. Karar iş yerinin kendi
+          // kartında verilir; buradaki tek kapı oraya götürür.
+          workplaceLabel: _siteOfVillager(v)?.label,
+          onOpenWorkplace: v.hasActiveJob
+              ? () => setStateHere(() => _openWorkplaceOf(v))
+              : null,
+          onReleaseJob: v.hasActiveJob
+              ? () => setStateHere(() => _emptySlot(v))
+              : null,
           // Kan davası yargısı — geri alınamaz, onay ister.
           onExile: () => setStateHere(() => _pendingJudgment = (v, false)),
           onExecute: () => setStateHere(() => _pendingJudgment = (v, true)),
         ),
       ),
     );
+  }
+
+  // ── Binasız iş yeri paneli — tarla / böğürtlenlik / şantiye ───────────────
+
+  /// Yapısı olmayan iş yerinin kartı. Bina paneliyle AYNI yuvada açılır:
+  /// oyuncu için ikisi de "bir yere baktım, kadrosunu gördüm"dür.
+  Widget buildSelectedWorkSitePanel() {
+    final site = _siteById(_selectedSiteId!);
+    // İş yeri buharlaştıysa (sipariş tamamlandı, son çalı toplandı) panel de
+    // gitsin — ölü bir şantiyenin kadrosunu göstermek yalan olurdu.
+    if (site == null) return const SizedBox.shrink();
+    final compact = useCompactGameUi(context);
+    return Positioned(
+      top: compact ? MobileUi.top(context) : 64,
+      right: compact ? MobileUi.right(context) : 14,
+      bottom: compact
+          ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
+          : 96,
+      child: _detailFrame(
+        compact: compact,
+        child: WorkSitePanel(
+          site: site,
+          subtitle: _siteSubtitle(site),
+          guidedSiteId: _guidedSiteId,
+          onClose: () => setStateHere(() => _detailExpanded = false),
+          onAddHand: (s) => setStateHere(() => _fillSlot(s)),
+          onRemoveHand: (_, v) => setStateHere(() => _emptySlot(v)),
+          onSelectVillager: (v) => setStateHere(() {
+            _selectedVillager = v;
+            _selectedSiteId = null;
+            _selectedBuilding = null;
+          }),
+        ),
+      ),
+    );
+  }
+
+  /// İş yerinin bir cümlelik hâli — kadro sayısının söylemediği şey.
+  String? _siteSubtitle(WorkSite site) => switch (site.kind) {
+    WorkSiteKind.field => () {
+      final ready = _farmTiles.where((t) => t.stage >= 4).length;
+      return '${_farmTiles.length} parsel'
+          '${ready > 0 ? ' · $ready tanesi hasat vaktinde' : ''}';
+    }(),
+    WorkSiteKind.patch => () {
+      final ripe = _berryBushes.where((b) => b.harvestable).length;
+      return '${_berryBushes.length} çalı · $ripe tanesi olgun';
+    }(),
+    WorkSiteKind.construction =>
+      site.source is BuildOrder
+          ? 'Kadro tam olmadan gövde yükselmez.'
+          : '${_roadOrders.where((o) => !o.completed).length} karo bekliyor',
+    WorkSiteKind.building => null,
+  };
+
+  /// Bu köylünün çalıştığı yeri aç — kamerayı oraya taşı, kartını göster.
+  /// Köylü panelindeki "İşyerine git" buradan geçer: kararın verildiği yer
+  /// iş yerinin kartıdır, oyuncu oraya bir dokunuşla ulaşmalı.
+  void _openWorkplaceOf(VillagerEntity v) {
+    final site = _siteOfVillager(v);
+    if (site == null) return;
+    _focusWorkSite(site);
+  }
+
+  /// Kamerayı iş yerine götür + kartını aç.
+  void _focusWorkSite(WorkSite site) {
+    // Görünüm ölçüsü sahnenin kendi kaydından okunur (`context.size` panelin
+    // ölçüsünü verir, kameranınkini değil — kamera oraya değil ekranın
+    // ortasına oturmalı).
+    final size = _viewSize;
+    if (size.width > 0 && size.height > 0) {
+      _centerCameraOnUV(site.cx - site.cy, site.cx + site.cy, size);
+      _clampCamera(size);
+    }
+    _followedVillager = null;
+    _selectedVillager = null;
+    final src = site.source;
+    if (src is BuildingEntity) {
+      _selectedBuilding = src;
+      _selectedSiteId = null;
+    } else {
+      _selectedSiteId = site.id;
+      _selectedBuilding = null;
+    }
+    _detailExpanded = true;
   }
 
   /// Detay panelinin ÇERÇEVESİ — telefonda ve masaüstünde farklı iş yapar.
@@ -1130,6 +1319,26 @@ extension _SceneUi on _VillageSceneState {
           }),
           onToggleGod: () => setStateHere(() => _godMode = !_godMode),
           onSetRain: (v) => setStateHere(() => _cycle.rainIntensity = v),
+          season: _season,
+          snowOn: kDevForceSnowfall,
+          onToggleSnow: () =>
+              setStateHere(() => kDevForceSnowfall = !kDevForceSnowfall),
+          onJumpSeason: (s) => setStateHere(() => jumpToSeason(s)),
+          // Mevsimlik referans köy: kur → KENDİ slotuna yaz → paneli kapat.
+          // Sahnenin `_slotId`'si final olduğu için kayıt açık hedefle yazılır;
+          // aksi hâlde dört varyant birbirinin üstüne biner.
+          onSeedReference: (s) {
+            buildReferenceVillage(season: s); // kendi setState'ini yapar
+            _saveNow(
+              asSlot: kReferenceSlotIdFor(s),
+              asName: kReferenceSlotNameFor(s),
+            );
+            setStateHere(() => _devPanelOpen = false);
+            _showNotification(
+              '${s.icon} Referans köy kuruldu — ${s.label} '
+              '(${kReferenceSlotNameFor(s)} olarak kaydedildi)',
+            );
+          },
           onSetTimeOfDay: (v) => setStateHere(() => _cycle.timeOfDay = v),
           onTriggerEvent: (e) {
             setStateHere(() {
@@ -1564,6 +1773,8 @@ extension _SceneUi on _VillageSceneState {
         return 'böğürtlen topluyor';
       case JobRole.cook:
         return 'yemek pişiriyor';
+      case JobRole.weaver:
+        return 'dokuma tezgâhında';
       case JobRole.none:
       case null:
         break;

@@ -76,15 +76,23 @@ extension _SceneSave on _VillageSceneState {
 
   /// Mevcut köyü slota yazar (async, fire-and-forget). [manual] true ise
   /// kullanıcıya kısa "Kaydedildi" geri bildirimi gösterir.
-  Future<void> _saveNow({bool manual = false}) async {
-    if (_saving || _slotId.isEmpty) return;
+  /// [asSlot]/[asName] verilirse kayıt SAHNENİN slotuna değil oraya yazılır.
+  /// Godmode'un mevsimlik referans köyleri bunu kullanır: tek oturumda dört
+  /// ayrı slot üretilebilsin (sahnenin `_slotId`'si final, değiştirilemez).
+  Future<void> _saveNow({
+    bool manual = false,
+    String? asSlot,
+    String? asName,
+  }) async {
+    final slot = asSlot ?? _slotId;
+    if (_saving || slot.isEmpty) return;
     _saving = true;
     try {
       final data = <String, dynamic>{
         'version': SaveManager.schemaVersion,
         'meta': SaveSlotMeta(
-          id: _slotId,
-          name: _slotName,
+          id: slot,
+          name: asName ?? _slotName,
           savedAt: DateTime.now(),
           day: _dayCount,
           population: _villagers.length,
@@ -92,7 +100,7 @@ extension _SceneSave on _VillageSceneState {
         ).toJson(),
         'world': captureWorld(),
       };
-      await SaveManager.instance.writeSlot(_slotId, data);
+      await SaveManager.instance.writeSlot(slot, data);
       if (manual && mounted) {
         _showNotification('💾 Köy kaydedildi');
       }
@@ -264,6 +272,15 @@ extension _SceneSave on _VillageSceneState {
       'policies': _policiesToJson(),
       'houses': _houses.toJson(),
       'completedQuests': _completedQuests.toList(),
+      // Öğretici spotu görülmüş adımlar — yüklenen köyde ders tekrarlanmaz.
+      'guideShown': _guideShown.toList(),
+      // KIŞ — dağıtılmamış giysi, dağıtım kararı, ilk-kez törenleri.
+      // Sönmüş ocaklar (_coldHouses) ve kar çarpanı TÜREVDİR: ilk kış
+      // taramasında yeniden hesaplanır, kayda yazılmaz.
+      'coatsMade': _coatsMade,
+      'coatPriority': _coatPriority.name,
+      'firstShearShown': _firstShearShown,
+      'firstCoatShown': _firstCoatShown,
       'villageMemory': _villageMemory.toList(),
       'knownCrafts': _knownCrafts.toList(),
       // Hikâye güncesi (yapısal) + başarımlar + sinematik durumu (anılar kalıcı).
@@ -303,7 +320,12 @@ extension _SceneSave on _VillageSceneState {
       // her yüklemede toplanmamış çalılarla dolu uyanır (bedava yiyecek).
       'berryBushes': [
         for (final b in _berryBushes)
-          {'col': b.col, 'row': b.row, 'variant': b.variant, 'ripe': b.ripeness},
+          {
+            'col': b.col,
+            'row': b.row,
+            'variant': b.variant,
+            'ripe': b.ripeness,
+          },
       ],
       'cookedMeals': _cookedMeals,
       'berriesPicked': _berriesPicked,
@@ -407,6 +429,7 @@ extension _SceneSave on _VillageSceneState {
     'food': _stockpile.food,
     'honey': _stockpile.honey,
     'reed': _stockpile.reed,
+    'wool': _stockpile.wool,
     'gold': _stockpile.gold,
   };
 
@@ -433,6 +456,7 @@ extension _SceneSave on _VillageSceneState {
     'eggTimer': b.eggTimer,
     'honeyTimer': b.honeyTimer,
     'fireFuel': b.fireFuel,
+    if (b.type == BuildingType.mill) 'millRotorAngle': b.millRotorAngle,
   };
 
   Map<String, dynamic> _villagerToJson(
@@ -467,9 +491,15 @@ extension _SceneSave on _VillageSceneState {
       // Yüklerken geri konmazsa köy sessizce otomatik dağıtıma döner ve oyuncu
       // kurduğu iş bölümünü kaybeder. `none` da geçerli bir karardır ("boş dursun").
       if (v.assignedRole != null) 'assignedRole': v.assignedRole!.name,
+      // HANGİ İŞ YERİ — `assignedRole` "ne iş" der, bu "nerede" der. İki
+      // madenli köyde rol tek başına yeri geri getirmez; yazılmazsa yükleyişte
+      // kadro yanlış ocağın altında görünürdü.
+      if (v.assignedSiteId != null) 'assignedSite': v.assignedSiteId,
       if (v.surname.isNotEmpty) 'surname': v.surname,
       if (v.injuryDays > 0) 'injuryDays': v.injuryDays,
       if (v.sickDays > 0) 'sickDays': v.sickDays,
+      // Kışlık giysi — köyün emeği; yükleyince sırtından düşmesin.
+      if (v.hasCoat) 'hasCoat': true,
       if (v.laborDays > 0) 'laborDays': v.laborDays,
       if (v.disabled) 'disabled': true,
       'life': [for (final e in v.life) e.toJson()],
@@ -618,6 +648,9 @@ extension _SceneSave on _VillageSceneState {
     'type': t.type.name,
     'marked': t.isMarkedForCutting,
     'felled': t.isFelled,
+    'fellAge': t.fellAge,
+    'fallDirection': t.fallDirection,
+    'fallImpactEmitted': t.fallImpactEmitted,
     'growing': t.isGrowing,
     'wild': t.isWild,
   };
@@ -715,6 +748,22 @@ extension _SceneSave on _VillageSceneState {
     _villageMemory.clear();
     _knownCrafts.clear();
     _completedQuests.clear();
+    _guideShown.clear();
+    _coatsMade = 0;
+    _coatPriority = CoatPriority.frail;
+    _coldHouses.clear();
+    _firstShearShown = false;
+    _firstCoatShown = false;
+    _winterDay = -1;
+    _shearYear = -1;
+    _winterEveDay = -1;
+    _winterMurmurDay = -1;
+    _guideOpen = false;
+    _guideWanted = false;
+    _guideStepId = '';
+    _questVoiceWho = null;
+    _questVoiceLine = '';
+    _questVoiceLeft = 0;
     _storyLog.clear();
     _achievedMilestones.clear();
     _tierCutscenesShown.clear();
@@ -781,6 +830,16 @@ extension _SceneSave on _VillageSceneState {
     for (final q in (w['completedQuests'] as List? ?? const [])) {
       _completedQuests.add(q as String);
     }
+    for (final g in (w['guideShown'] as List? ?? const [])) {
+      _guideShown.add(g as String);
+    }
+    _coatsMade = _i(w['coatsMade']);
+    _coatPriority = CoatPriority.values.firstWhere(
+      (c) => c.name == w['coatPriority'],
+      orElse: () => CoatPriority.frail,
+    );
+    _firstShearShown = w['firstShearShown'] == true;
+    _firstCoatShown = w['firstCoatShown'] == true;
     for (final s in (w['storyLog'] as List? ?? const [])) {
       // Yeni format = map; eski kayıt = düz string (gün bilinmez → 0).
       if (s is Map) {
@@ -959,12 +1018,14 @@ extension _SceneSave on _VillageSceneState {
     }
     for (final raw in (w['berryBushes'] as List? ?? const [])) {
       final j = Map<String, dynamic>.from(raw as Map);
-      _berryBushes.add(BerryBush(
-        col: _i(j['col']),
-        row: _i(j['row']),
-        variant: _i(j['variant']),
-        ripeness: _d(j['ripe'], 1.0),
-      ));
+      _berryBushes.add(
+        BerryBush(
+          col: _i(j['col']),
+          row: _i(j['row']),
+          variant: _i(j['variant']),
+          ripeness: _d(j['ripe'], 1.0),
+        ),
+      );
     }
     _cookedMeals = _i(w['cookedMeals']);
     _berriesPicked = _i(w['berriesPicked']);
@@ -1017,13 +1078,19 @@ extension _SceneSave on _VillageSceneState {
       final ci = _i(j['culprit'], -1);
       _lootCaches.add(
         LootCache(
-          gridX: _d(j['x']),
-          gridY: _d(j['y']),
-          kind: _enumByName(ResourceKind.values, j['kind'], ResourceKind.food),
-          amount: _i(j['amount']),
-          culpritName: '${j['culpritName'] ?? ''}',
-          culprit: (ci >= 0 && ci < _villagers.length) ? _villagers[ci] : null,
-        )
+            gridX: _d(j['x']),
+            gridY: _d(j['y']),
+            kind: _enumByName(
+              ResourceKind.values,
+              j['kind'],
+              ResourceKind.food,
+            ),
+            amount: _i(j['amount']),
+            culpritName: '${j['culpritName'] ?? ''}',
+            culprit: (ci >= 0 && ci < _villagers.length)
+                ? _villagers[ci]
+                : null,
+          )
           ..age = _d(j['age'])
           ..witnessed = _b(j['witnessed']),
       );
@@ -1103,8 +1170,10 @@ extension _SceneSave on _VillageSceneState {
       final wc = w['weddingCouple'];
       if (wc is List && wc.length == 2) {
         final bi = _i(wc[0], -1), gi = _i(wc[1], -1);
-        if (bi >= 0 && bi < _villagers.length &&
-            gi >= 0 && gi < _villagers.length) {
+        if (bi >= 0 &&
+            bi < _villagers.length &&
+            gi >= 0 &&
+            gi < _villagers.length) {
           _weddingCouple = (_villagers[bi], _villagers[gi]);
         }
       }
@@ -1150,6 +1219,10 @@ extension _SceneSave on _VillageSceneState {
     _anchorSystem.rebuild(_buildings);
     _rebuildSpatialCaches();
     _rebuildBeeSwarms();
+    // İş yerleri türetilmiş yapılara (bina/tarla/sipariş) dayandığı için mühür
+    // devri BURADA, hepsi kurulduktan sonra olur. Yer bilmeyen eski kayıtlar
+    // bugünkü iş yerlerine bağlanır.
+    _adoptLegacyAssignments();
     _groundVersion++;
     _spatialTimer = 0.0;
   }
@@ -1163,6 +1236,7 @@ extension _SceneSave on _VillageSceneState {
     _stockpile.food = _i(j['food']);
     _stockpile.honey = _i(j['honey']);
     _stockpile.reed = _i(j['reed']);
+    _stockpile.wool = _i(j['wool']);
     _stockpile.gold = _i(j['gold']);
   }
 
@@ -1200,6 +1274,7 @@ extension _SceneSave on _VillageSceneState {
     b.eggTimer = _d(j['eggTimer']);
     b.honeyTimer = _d(j['honeyTimer']);
     b.fireFuel = _d(j['fireFuel'], 1.0);
+    b.millRotorAngle = _d(j['millRotorAngle']);
     return b;
   }
 
@@ -1221,6 +1296,7 @@ extension _SceneSave on _VillageSceneState {
           : _d(j['lifespanDays']),
     );
     v.annivCount = _i(j['annivCount']);
+    v.hasCoat = j['hasCoat'] == true;
     // Eski kayıtta yoksa: yetişkin/yaşlı zaten çağrısını bulmuş say (an tekrar
     // tetiklenmesin); çocuk/genç ise büyürken keşfedecek.
     v.callingFound = _b(j['callingFound'], v.ageDays >= kAdultStartDay);
@@ -1251,6 +1327,10 @@ extension _SceneSave on _VillageSceneState {
     if (assigned != null) {
       v.assignedRole = _enumByName(JobRole.values, assigned, JobRole.none);
     }
+    // İş yeri mührü. ESKİ KAYITTA YOK: rol var, yer yok. O köylüler
+    // `_adoptLegacyAssignments` ile yükleme sonunda rolüne uyan en yakın yere
+    // yazılır — kadro sessizce dağılmasın.
+    v.assignedSiteId = j['assignedSite'] as String?;
     v.surname = (j['surname'] as String?) ?? '';
     v.injuryDays = _d(j['injuryDays']);
     v.sickDays = _d(j['sickDays']);
@@ -1351,6 +1431,9 @@ extension _SceneSave on _VillageSceneState {
     );
     t.isMarkedForCutting = _b(j['marked']);
     t.isFelled = _b(j['felled']);
+    t.fellAge = _d(j['fellAge']);
+    t.fallDirection = _i(j['fallDirection'], 1) < 0 ? -1 : 1;
+    t.fallImpactEmitted = _b(j['fallImpactEmitted']);
     return t;
   }
 

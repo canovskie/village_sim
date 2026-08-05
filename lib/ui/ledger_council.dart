@@ -19,11 +19,21 @@ class CouncilTable extends StatefulWidget {
   /// kullanılmaz; harness kartı dokunmadan çekebilsin diye.
   final int initiallySelected;
 
+  /// TAHTA KİPİ (telefon) — masa sabit boy yerine VERİLEN alanı doldurur ve
+  /// reise dokununca açılan eylem kartı masanın ALTINA eklenmez, ÜSTÜNE biner.
+  ///
+  /// Neden: tahtada sütunun boyu sabittir (bkz. ui/ledger_board.dart). Kart
+  /// alta eklenince sütun uzamak ister, uzayamaz, taşar. Kartı masanın üstüne
+  /// bindirmek yerleşimi hiç kıpırdatmaz — ve telefonda zaten doğru olan
+  /// davranış budur: seçtiğin reisin kartı, masanın önüne çıkar.
+  final bool fill;
+
   const CouncilTable({
     super.key,
     required this.seats,
     this.actionsFor,
     this.initiallySelected = -1,
+    this.fill = false,
   });
   @override
   State<CouncilTable> createState() => _CouncilTableState();
@@ -84,6 +94,7 @@ class _CouncilTableState extends State<CouncilTable>
     final sel = (_selected >= 0 && _selected < widget.seats.length)
         ? widget.seats[_selected]
         : null;
+    if (widget.fill) return _filled(sel);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -125,6 +136,49 @@ class _CouncilTableState extends State<CouncilTable>
               style: AppUi.label.copyWith(color: AppUi.textLo)),
         ],
       ],
+    );
+  }
+
+  /// Tahta kipi — masa alanı doldurur, eylem kartı üstüne biner.
+  Widget _filled(DivanSeat? sel) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppUi.radiusSm),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          RepaintBoundary(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => _tapAt(d.localPosition),
+              child: CustomPaint(
+                painter:
+                    _CouncilPainter(widget.seats, _t, _seatCenters, _selected),
+              ),
+            ),
+          ),
+          // NOT: "Bir reise dokun" ipucu tahtada YOK — painter masanın dibine
+          // zaten reislerin isim şeridini çiziyor ve ipucu tam onun üstüne
+          // biniyordu. İsimler okunur durduğu sürece dokunulacağı da anlaşılır.
+
+          // Eylem kartı masanın ÖNÜNE çıkar. Kendi içinde kayar: eylem sayısı
+          // haneye göre değişir ve sütunun boyu bunu bilemez — kaydırma yalnız
+          // bu küçük yüzeye hapsedilir, ekranın tamamına bulaşmaz.
+          if (sel != null)
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: const BoxDecoration(color: AppUi.scrim),
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(4),
+                  child: _HouseActionCard(
+                    seat: sel,
+                    entries: widget.actionsFor!(sel.surname),
+                    onClose: () => setState(() => _selected = -1),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

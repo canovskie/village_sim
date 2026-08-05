@@ -284,7 +284,7 @@ extension _SceneWedding on _VillageSceneState {
     _betrothalForced = false;
 
     final dur = kGameDaySeconds * 0.5;
-    AudioManager.instance.playSfx(Sfx.weddingJoy);
+    AudioManager.instance.playSfx(Sfx.crowdApplause);
     _activeFx.add(ActiveFx(EventEffect(fx: EventFx.wedding, duration: dur), dur));
     _feelVillage(NpcEmotion.love, 14, grand ? 0.18 : 0.12);
 
@@ -312,7 +312,7 @@ extension _SceneWedding on _VillageSceneState {
 
     // Coşkulu → gerçek çifte benzeyen tam ekran 2B sinematik (sim duraklar).
     // Sahneleme aşağıda HEMEN kurulur → sinematik bitince köy zaten kutlamada.
-    if (grand && bride != null && groom != null) {
+    if (grand && bride != null && groom != null && !kCaptureMode) {
       _activeCutscene = weddingCutscene(
         brideType: bride.type, brideVisual: bride.visual, brideName: bride.name,
         groomType: groom.type, groomVisual: groom.visual, groomName: groom.name,

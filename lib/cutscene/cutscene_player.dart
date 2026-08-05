@@ -4,6 +4,9 @@ import 'package:flutter/scheduler.dart';
 import '../rendering/character_renderer.dart';
 import '../characters/life_stage.dart';
 import '../characters/npc_visual.dart';
+import '../characters/villager_names.dart';
+import '../systems/founding_choice.dart';
+import '../text/village_names.dart';
 import '../ui/app_ui.dart';
 import '../ui/mobile_ui.dart';
 import 'cutscene.dart';
@@ -15,8 +18,14 @@ import 'cutscene.dart';
 class CutscenePlayer extends StatefulWidget {
   final Cutscene cutscene;
   final VoidCallback onDone;
-  /// nameVillage kapısı onaylanınca girilen ad (host kimliğe/günceye işler).
-  final void Function(String name)? onNameChosen;
+
+  /// nameVillage kapısı onaylanınca girilen adlar — köyün adı + hanenin (soy)
+  /// adı. Hane adı kurucuların hepsine soyad olarak işlenir ("X Hanesi"),
+  /// köyün adı kayıt slotuna geçer.
+  final void Function(String village, String house)? onNameChosen;
+
+  /// chooseCaravan kapısında seçilen yük — kurucu kadro + başlangıç stoğu.
+  final void Function(FoundingChoice choice)? onFoundingChoice;
 
   // ── Animasyon odası kancaları (oyunda varsayılan davranış değişmez) ───────
   /// Sahne saatinin hızı (1.0 normal). Animasyon odasında yavaşlatıp pozları
@@ -37,6 +46,7 @@ class CutscenePlayer extends StatefulWidget {
     required this.cutscene,
     required this.onDone,
     this.onNameChosen,
+    this.onFoundingChoice,
     this.timeScale = 1.0,
     this.paused = false,
     this.onProgress,
@@ -51,15 +61,30 @@ class _CutscenePlayerState extends State<CutscenePlayer>
     with SingleTickerProviderStateMixin {
   late final Ticker _ticker;
   Duration _last = Duration.zero;
-  double _time = 0;        // genel animasyon saati (yürüyüş/titreşim)
+  double _time = 0; // genel animasyon saati (yürüyüş/titreşim)
   double _shotElapsed = 0; // mevcut çekimde geçen süre
   int _shotIndex = 0;
   bool _done = false;
 
   // Mini-aksiyon (gate) durumu.
-  bool _gateSatisfied = false;   // mevcut çekimin kapısı geçildi mi
-  double _gateSatisfiedAt = 0;   // ignite flash için zaman damgası
+  bool _gateSatisfied = false; // mevcut çekimin kapısı geçildi mi
+  double _gateSatisfiedAt = 0; // ignite flash için zaman damgası
   final _nameCtrl = TextEditingController();
+  final _houseCtrl = TextEditingController();
+  final _nameFocus = FocusNode();
+  final _houseFocus = FocusNode();
+
+  /// Ad önerileri — havuzun karışık bir kopyası, üçerli pencereyle gezilir.
+  /// Boş kutu "ne yazsam?" diye baktırıyordu; öneri hem kutuyu doldurur hem de
+  /// adın NEREDEN geldiğini söyler (bkz. text/village_names.dart).
+  late final List<VillageNameIdea> _ideaPool = shuffledVillageNameIdeas();
+  int _ideaOffset = 0;
+  static const int _ideaWindow = 3;
+
+  List<VillageNameIdea> get _nameIdeas => [
+        for (var i = 0; i < _ideaWindow; i++)
+          _ideaPool[(_ideaOffset + i) % _ideaPool.length],
+      ];
 
   /// Diyalog kutusunun ÖLÇÜLEN yüksekliği (px). Kamera özneyi kutunun üstünde
   /// tutabilmek için ekranın altında ne kadar yer kaldığını bilmek zorunda;
@@ -70,16 +95,15 @@ class _CutscenePlayerState extends State<CutscenePlayer>
 
   // Tempo sabitleri — sakin, sinematik (aceleci kayma yok).
   static const double _charTime = 0.032; // sn/harf (daktilo)
-  static const double _lineHold = 2.1;   // satır tam okununca bekleme
-  static const double _shotTail = 1.0;   // çekim sonu boşluk
-  static const double _actorMove = 6.5;  // en uzak aktörün yürüyüş süresi
+  static const double _lineHold = 2.1; // satır tam okununca bekleme
+  static const double _shotTail = 1.0; // çekim sonu boşluk
+  static const double _actorMove = 6.5; // en uzak aktörün yürüyüş süresi
 
   CutsceneShot get _shot => widget.cutscene.shots[_shotIndex];
 
   /// Bu çekim MEKÂN değiştiriyor mu (önceki çekimden farklı arka plan).
   bool get _bgChanged =>
-      _shotIndex == 0 ||
-      widget.cutscene.shots[_shotIndex - 1].bg != _shot.bg;
+      _shotIndex == 0 || widget.cutscene.shots[_shotIndex - 1].bg != _shot.bg;
 
   /// Çekim başı karartma. Aynı mekânda kalan çekimler her seferinde TAM siyaha
   /// düşerse film kesik kesik olur (açılışta 6 kararma üst üste) — mekân
@@ -97,6 +121,9 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   void dispose() {
     _ticker.dispose();
     _nameCtrl.dispose();
+    _houseCtrl.dispose();
+    _nameFocus.dispose();
+    _houseFocus.dispose();
     super.dispose();
   }
 
@@ -121,8 +148,11 @@ class _CutscenePlayerState extends State<CutscenePlayer>
       _shotElapsed += dt;
       if (_shotElapsed >= _shotEnd()) _advanceShot();
     }
-    widget.onProgress
-        ?.call(_shotIndex, _shotElapsed, widget.cutscene.shots.length);
+    widget.onProgress?.call(
+      _shotIndex,
+      _shotElapsed,
+      widget.cutscene.shots.length,
+    );
     setState(() {});
   }
 
@@ -145,8 +175,43 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   }
 
   void _submitName() {
-    final name = _nameCtrl.text.trim();
-    widget.onNameChosen?.call(name.isEmpty ? 'Köy' : name);
+    final village = _nameCtrl.text.trim();
+    final house = _houseCtrl.text.trim();
+    FocusManager.instance.primaryFocus?.unfocus();
+    // Boş bırakmak serbest — kapı bir formu doldurtmak için değil, kimliği
+    // oyuncuya AÇMAK için var. Boşsa host kendi varsayılanını (rastgele soyad)
+    // korur; '' göndermek onu ezmez.
+    widget.onNameChosen?.call(village.isEmpty ? 'Köy' : village, house);
+    _satisfyGate();
+  }
+
+  /// Öneriye dokunuldu — ad kutuya YAZILIR (kilitlenmez). Oyuncu üstüne
+  /// yazabilsin diye imleç sona alınır.
+  void _applyIdea(VillageNameIdea idea) {
+    setState(() {
+      _nameCtrl.text = idea.name;
+      _nameCtrl.selection = TextSelection.collapsed(offset: idea.name.length);
+    });
+  }
+
+  /// Bir sonraki üç öneri. Havuz döngüseldir; "başka" hiç tükenmez.
+  void _rerollIdeas() => setState(
+        () => _ideaOffset = (_ideaOffset + _ideaWindow) % _ideaPool.length,
+      );
+
+  /// Soy adı kutusuna havuzdan bir ad — köy adının aksine burada anlam kartı
+  /// yok, çünkü soyadı yerin değil ailenin işidir (havuz: villager_names).
+  void _rollHouseName() {
+    final name = randomVillagerSurname(Random());
+    setState(() {
+      _houseCtrl.text = name;
+      _houseCtrl.selection = TextSelection.collapsed(offset: name.length);
+    });
+  }
+
+  void _chooseCaravan(FoundingChoice c) {
+    if (_gateSatisfied) return;
+    widget.onFoundingChoice?.call(c);
     _satisfyGate();
   }
 
@@ -172,7 +237,8 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   }
 
   double _shotEnd() =>
-      max(_contentEnd(), _shot.actors.isNotEmpty ? _actorMove : 0.0) + _shotTail;
+      max(_contentEnd(), _shot.actors.isNotEmpty ? _actorMove : 0.0) +
+      _shotTail;
 
   int _currentLine() {
     if (_shot.lines.isEmpty) return -1;
@@ -243,7 +309,12 @@ class _CutscenePlayerState extends State<CutscenePlayer>
     if (line != null) {
       final starts = _lineStarts();
       final le = _shotElapsed - starts[idx];
-      final n = (le / _charTime).floor().clamp(0, line.text.length);
+      // +1e-6: daktilonun bitişi tam olarak len*_charTime'dır ve KAPILI
+      // çekimde saat oraya KIRPILIR (_gateReadyAt). Kayan nokta bir tık aşağı
+      // düşünce floor() son harfi yutuyordu — kapı açıldığında Maple'ın sorusu
+      // soru işaretsiz kalıyordu ("…biz neyi yükledik"). Kapı olmayan
+      // çekimlerde saat akmaya devam ettiği için hiç görülmemişti.
+      final n = (le / _charTime + 1e-6).floor().clamp(0, line.text.length);
       shown = line.text.substring(0, n);
     }
     // Çekim başı karadan açılma katsayısı.
@@ -257,78 +328,98 @@ class _CutscenePlayerState extends State<CutscenePlayer>
 
     final igniteShot = _shot.gate == CutsceneGate.tapToIgnite;
     final nameShot = _shot.gate == CutsceneGate.nameVillage;
+    final caravanShot = _shot.gate == CutsceneGate.chooseCaravan;
     final ignited = !igniteShot || _gateSatisfied;
     final igniteElapsed = _gateSatisfied ? (_time - _gateSatisfiedAt) : -1.0;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _onTap,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _CutscenePainter(
-                shot: _shot,
-                time: _time,
-                shotElapsed: _shotElapsed,
-                fade: fade,
-                fadeDepth: _fadeDepth,
-                // Aktör hareketi fadeIn sonrası başlar; SÜREYİ aktör başına
-                // painter hesaplar (herkes aynı hızda yürür, aynı anda varmaz).
-                moveElapsed: _shotElapsed - _fadeIn,
-                moveDur: _actorMove,
-                // Kamera: çekim boyunca yayılır, sonunda oturur (drift yok).
-                camT: (_shotElapsed / _shotEnd()).clamp(0.0, 1.0),
-                // O an konuşan aktör — ışık onda kalır, diğerleri kısılır.
-                speaker: line?.speaker,
-                // Letterbox bantları sinematiğin başında iner (sert kesme yok).
-                introT: (_time / 0.6).clamp(0.0, 1.0),
-                // Kadraj payı: kamera özneyi bu bandın üstünde tutar.
-                reservedBottom: reservedBottom,
-                ignited: ignited,
-                igniteElapsed: igniteElapsed,
-              ),
-            ),
-          ),
-          // Diyalog kutusu.
-          if (shown.isNotEmpty) _dialogueBox(line!, shown),
-          // "▸ Devam" göstergesi — satır tam yazıldığında, kapı yokken belirir.
-          // Böylece ilerlemenin ekrana dokunmakla olduğu NET (rastgele değil).
-          if (_showContinueHint(line, shown)) _continueHint(),
-          // Ateşi yak ipucu (replikler bitti, kapı bekliyor).
-          if (igniteShot && _gateReady) _igniteHint(),
-          // Köye ad ver girişi (replikler bitti, kapı bekliyor).
-          if (nameShot && _gateReady) _nameInput(),
-          // Atla.
-          Positioned(
-            top: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: TextButton(
-                  onPressed: _finish,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppUi.textMid,
-                    backgroundColor: const Color(0x55000000),
-                    // Sinematiği atlamak telefondaki en kritik kaçış kapısı;
-                    // 66×32dp'de kalıyordu. HIG tabanı 44dp. minimumSize tek
-                    // başına yetmiyor (VisualDensity kutuyu geri kısıyor) —
-                    // dikey payı da 44'ü verecek kadar aç.
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
-                    minimumSize: const Size(MobileUi.tap, MobileUi.tap),
-                    visualDensity: VisualDensity.standard,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppUi.radiusSm)),
-                  ),
-                  child: Text('Atla ▸',
-                      style: AppUi.button.copyWith(color: AppUi.textMid)),
+    // Material sarmalayıcı: ad kapısının TextField'ı Material atası ister.
+    // Oyunda sinematik Scaffold'un içinde durduğu için görünmüyordu, ama
+    // oynatıcıyı Scaffold'suz mount eden her yer (galeri yakalaması, animasyon
+    // odası) o kapıda kırmızı hata ekranına düşüyordu. Bağımlılığı içeride
+    // kapatmak, çağıranın doğru ağacı kurmasını ummaktan ucuz.
+    return Material(
+      type: MaterialType.transparency,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _onTap,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _CutscenePainter(
+                  shot: _shot,
+                  time: _time,
+                  shotElapsed: _shotElapsed,
+                  fade: fade,
+                  fadeDepth: _fadeDepth,
+                  // Aktör hareketi fadeIn sonrası başlar; SÜREYİ aktör başına
+                  // painter hesaplar (herkes aynı hızda yürür, aynı anda varmaz).
+                  moveElapsed: _shotElapsed - _fadeIn,
+                  moveDur: _actorMove,
+                  // Kamera: çekim boyunca yayılır, sonunda oturur (drift yok).
+                  camT: (_shotElapsed / _shotEnd()).clamp(0.0, 1.0),
+                  // O an konuşan aktör — ışık onda kalır, diğerleri kısılır.
+                  speaker: line?.speaker,
+                  // Letterbox bantları sinematiğin başında iner (sert kesme yok).
+                  introT: (_time / 0.6).clamp(0.0, 1.0),
+                  // Kadraj payı: kamera özneyi bu bandın üstünde tutar.
+                  reservedBottom: reservedBottom,
+                  ignited: ignited,
+                  igniteElapsed: igniteElapsed,
                 ),
               ),
             ),
-          ),
-        ],
+            // Diyalog kutusu.
+            // Ad verme kapısı açıldığında diyalog kutusu yerini bütünüyle
+            // kuruluş ekranına bırakır. İki ayrı koyu panel üst üste binmez.
+            if (shown.isNotEmpty && !(nameShot && _gateReady))
+              _dialogueBox(line!, shown),
+            // "▸ Devam" göstergesi — satır tam yazıldığında, kapı yokken belirir.
+            // Böylece ilerlemenin ekrana dokunmakla olduğu NET (rastgele değil).
+            if (_showContinueHint(line, shown)) _continueHint(),
+            // Ateşi yak ipucu (replikler bitti, kapı bekliyor).
+            if (igniteShot && _gateReady) _igniteHint(),
+            // Köye ad ver girişi (replikler bitti, kapı bekliyor).
+            if (nameShot && _gateReady) _nameInput(),
+            // Kafilenin yükü — üç kart (replikler bitti, kapı bekliyor).
+            if (caravanShot && _gateReady) _caravanChoice(),
+            // Atla.
+            if (!(nameShot && _gateReady && useTouchUi(context)))
+              Positioned(
+                top: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: TextButton(
+                      onPressed: _finish,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppUi.textMid,
+                        backgroundColor: const Color(0x55000000),
+                        // Sinematiği atlamak telefondaki en kritik kaçış kapısı;
+                        // 66×32dp'de kalıyordu. HIG tabanı 44dp. minimumSize tek
+                        // başına yetmiyor (VisualDensity kutuyu geri kısıyor) —
+                        // dikey payı da 44'ü verecek kadar aç.
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        minimumSize: const Size(MobileUi.tap, MobileUi.tap),
+                        visualDensity: VisualDensity.standard,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+                        ),
+                      ),
+                      child: Text(
+                        'Atla ▸',
+                        style: AppUi.button.copyWith(color: AppUi.textMid),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -351,8 +442,10 @@ class _CutscenePlayerState extends State<CutscenePlayer>
               constraints: const BoxConstraints(maxWidth: 620),
               child: Container(
                 key: _boxKey,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 18,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xF21A130B),
                   borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -364,16 +457,19 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (!isNarration) ...[
-                      Text(line.speaker!.toUpperCase(),
-                          style: AppUi.label.copyWith(color: AppUi.accent)),
+                      Text(
+                        line.speaker!.toUpperCase(),
+                        style: AppUi.label.copyWith(color: AppUi.accent),
+                      ),
                       const SizedBox(height: 6),
                     ],
                     Text(
                       shown,
                       style: TextStyle(
                         fontFamily: AppUi.fontText,
-                        fontStyle:
-                            isNarration ? FontStyle.italic : FontStyle.normal,
+                        fontStyle: isNarration
+                            ? FontStyle.italic
+                            : FontStyle.normal,
                         fontWeight: FontWeight.w500,
                         fontSize: 16,
                         height: 1.4,
@@ -404,8 +500,10 @@ class _CutscenePlayerState extends State<CutscenePlayer>
       child: IgnorePointer(
         child: Opacity(
           opacity: pulse,
-          child: Text('dokun ▸',
-              style: AppUi.button.copyWith(color: AppUi.textHi)),
+          child: Text(
+            'dokun ▸',
+            style: AppUi.button.copyWith(color: AppUi.textHi),
+          ),
         ),
       ),
     );
@@ -426,9 +524,108 @@ class _CutscenePlayerState extends State<CutscenePlayer>
               borderRadius: BorderRadius.circular(AppUi.radiusSm),
               border: Border.all(color: AppUi.accent.withValues(alpha: 0.7)),
             ),
-            child: Text('✦  Ateşi yakmak için dokun',
-                style: AppUi.button.copyWith(color: AppUi.accentSoft)),
+            child: Text(
+              '✦  Ateşi yakmak için dokun',
+              style: AppUi.button.copyWith(color: AppUi.accentSoft),
+            ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Kafilenin yükü — üç kart. Oyuncunun oyundaki İLK kararı; kurucu kadroyu,
+  /// nüfusu ve başlangıç stoğunu değiştirir.
+  ///
+  /// Kartlar ekranın ÜST yarısına oturur: alttaki diyalog kutusu (Maple'ın
+  /// sorusu) ekranda kalmalı — soru görünmeden seçenek okunmaz.
+  Widget _caravanChoice() {
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'ARABAYA NE YÜKLEDİK?',
+                    style: AppUi.label.copyWith(
+                      color: AppUi.accent,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final c in FoundingChoice.all) ...[
+                          Expanded(child: _caravanCard(c)),
+                          if (c != FoundingChoice.all.last)
+                            const SizedBox(width: 10),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _caravanCard(FoundingChoice c) {
+    return GestureDetector(
+      onTap: () => _chooseCaravan(c),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 11),
+        decoration: BoxDecoration(
+          color: const Color(0xF21A130B),
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
+          boxShadow: AppUi.softShadow,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${c.icon}  ${c.title}',
+              style: AppUi.bodyHi.copyWith(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              c.blurb,
+              style: AppUi.body.copyWith(fontSize: 12, height: 1.35),
+            ),
+            const SizedBox(height: 7),
+            // BEDEL — kısık renkte ama görünür. Bedeli gizlenmiş bir seçim
+            // karar değil, süstür.
+            Text(
+              c.cost,
+              style: AppUi.body.copyWith(
+                fontSize: 11,
+                height: 1.3,
+                color: AppUi.textLo,
+              ),
+            ),
+            const SizedBox(height: 9),
+            Text(
+              '🪵 ${c.wood}   🪨 ${c.stone}   🥖 ${c.food}   👤 ${c.people}',
+              style: AppUi.label.copyWith(color: AppUi.accentSoft),
+            ),
+          ],
         ),
       ),
     );
@@ -436,72 +633,703 @@ class _CutscenePlayerState extends State<CutscenePlayer>
 
   /// Köye ad ver girişi — metin alanı + onay. Onaylanınca kapı geçilir.
   Widget _nameInput() {
-    return Align(
-      alignment: const Alignment(0, 0.2),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24),
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-          decoration: BoxDecoration(
-            color: const Color(0xF21A130B),
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(color: AppUi.accent.withValues(alpha: 0.6)),
-            boxShadow: AppUi.softShadow,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('BU YUVAYA BİR AD VER',
-                  style: AppUi.label.copyWith(color: AppUi.accent)),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _nameCtrl,
-                autofocus: true,
-                textCapitalization: TextCapitalization.words,
-                maxLength: 22,
-                onSubmitted: (_) => _submitName(),
-                style: AppUi.bodyHi.copyWith(fontSize: 16),
-                cursorColor: AppUi.accent,
-                decoration: InputDecoration(
-                  counterText: '',
-                  hintText: 'örn. Pınarköy',
-                  hintStyle: AppUi.body.copyWith(color: AppUi.textLo),
-                  filled: true,
-                  fillColor: AppUi.surface0,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppUi.radiusSm),
-                    borderSide: const BorderSide(color: AppUi.line),
+    if (useTouchUi(context)) return _mobileNameInput();
+    return _desktopNameInput();
+  }
+
+  /// Telefonda form bir "modal pencere" değil, sahnenin alt kenarına oturan
+  /// ince bir kimlik rayıdır. Klavye açılınca başlık geri çekilir; yalnız
+  /// iki alan ile onay kalır ve ray klavyenin hemen üstüne taşınır.
+  Widget _mobileNameInput() {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardOpen = keyboardInset > 0;
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      left: MobileUi.left(context),
+      right: MobileUi.right(context),
+      bottom: keyboardOpen
+          ? keyboardInset + MobileUi.gap
+          : MobileUi.bottom(context),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: MobileUi.windowMaxW),
+          child: KeyedSubtree(
+            key: const ValueKey('mobile_name_dock'),
+            child: MobileSurface(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                keyboardOpen ? 8 : 10,
+                12,
+                keyboardOpen ? 8 : 10,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!keyboardOpen) ...[
+                    KeyedSubtree(
+                      key: const ValueKey('mobile_name_header'),
+                      child: Row(
+                        children: [
+                          const GameLogo(size: 24),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'YUVANI ADLANDIR',
+                                  style: AppUi.title.copyWith(
+                                    fontSize: 14,
+                                    letterSpacing: 1.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  'Köyünü ve kurucu haneni yaz.',
+                                  style: AppUi.body.copyWith(
+                                    color: AppUi.textLo,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _finish,
+                            style: TextButton.styleFrom(
+                              foregroundColor: AppUi.textLo,
+                              minimumSize: const Size(
+                                MobileUi.tap,
+                                MobileUi.tap,
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                            ),
+                            child: Text('ATLA', style: AppUi.button),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Öneri şeridi yalnız klavye KAPALIYKEN durur: çip yolu
+                    // "hiç yazmadan ad seç" içindir; oyuncu kendi adını
+                    // yazmaya başladıysa yatay telefonda o 44dp'yi klavyeye
+                    // bırakmak gerekir (bkz. mobile_ui referans cihaz).
+                    KeyedSubtree(
+                      key: const ValueKey('mobile_name_ideas'),
+                      child: SizedBox(
+                        height: MobileUi.tap,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final idea in _nameIdeas) ...[
+                                _IdeaChip(
+                                  label: idea.name,
+                                  selected: idea.name.toLowerCase() ==
+                                      _nameCtrl.text.trim().toLowerCase(),
+                                  onTap: () => _applyIdea(idea),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              _IdeaChip(
+                                label: '🎲 başka',
+                                onTap: _rerollIdeas,
+                              ),
+                              const SizedBox(width: 6),
+                              _IdeaChip(label: '🎲 soy', onTap: _rollHouseName),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                  KeyedSubtree(
+                    key: const ValueKey('mobile_name_fields'),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: _mobileNameField(
+                            fieldKey: const ValueKey('village_name_field'),
+                            label: 'KÖYÜN ADI',
+                            controller: _nameCtrl,
+                            hint: 'Pınarköy',
+                            focusNode: _nameFocus,
+                            action: TextInputAction.next,
+                            onSubmitted: (_) => _houseFocus.requestFocus(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _mobileNameField(
+                            fieldKey: const ValueKey('house_name_field'),
+                            label: 'KURUCU SOYU',
+                            controller: _houseCtrl,
+                            hint: 'Yılmaz',
+                            focusNode: _houseFocus,
+                            action: TextInputAction.done,
+                            onSubmitted: (_) => _submitName(),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          key: const ValueKey('founding_name_submit'),
+                          width: 116,
+                          child: AppButton(
+                            label: 'TAMAM',
+                            icon: GameIconData.flame,
+                            kind: AppButtonKind.filled,
+                            expand: true,
+                            height: 48,
+                            onTap: _submitName,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppUi.radiusSm),
-                    borderSide: const BorderSide(color: AppUi.accent),
+                  _mobileMeaningLine(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Telefonda anlam satırı TEK satır kalır (ray zaten dar); ad havuzda
+  /// değilse hiç yer kaplamaz.
+  Widget _mobileMeaningLine() {
+    final meaning = meaningOfVillageName(_nameCtrl.text);
+    if (meaning == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Container(width: 2, height: 12, color: AppUi.accent),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              meaning,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppUi.body.copyWith(
+                fontSize: 10.5,
+                color: AppUi.accentSoft,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileNameField({
+    required Key fieldKey,
+    required String label,
+    required TextEditingController controller,
+    required String hint,
+    required FocusNode focusNode,
+    required TextInputAction action,
+    required ValueChanged<String> onSubmitted,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppUi.label.copyWith(
+            color: AppUi.textMid,
+            fontSize: 10,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          key: fieldKey,
+          controller: controller,
+          focusNode: focusNode,
+          textCapitalization: TextCapitalization.words,
+          textInputAction: action,
+          maxLength: 22,
+          maxLines: 1,
+          scrollPadding: EdgeInsets.zero,
+          onChanged: (_) => setState(() {}),
+          onSubmitted: onSubmitted,
+          style: AppUi.bodyHi.copyWith(fontSize: 15),
+          cursorColor: AppUi.accent,
+          decoration: InputDecoration(
+            counterText: '',
+            hintText: hint,
+            hintStyle: AppUi.body.copyWith(color: AppUi.textLo),
+            isDense: true,
+            filled: true,
+            fillColor: AppUi.surface0.withValues(alpha: 0.76),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+              borderSide: const BorderSide(color: AppUi.glassEdge),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+              borderSide: const BorderSide(color: AppUi.accent, width: 1.2),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _desktopNameInput() {
+    return Positioned.fill(
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 54, 20, 18),
+          child: Center(
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 920),
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color(0xF2171D19), Color(0xF50B0F0D)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0x52F1C588)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0xA6000000),
+                        blurRadius: 36,
+                        offset: Offset(0, 18),
+                      ),
+                    ],
+                  ),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 4,
+                          child: _FoundingIdentity(
+                            village: _nameCtrl.text.trim(),
+                            house: _houseCtrl.text.trim(),
+                          ),
+                        ),
+                        Container(
+                          width: 1,
+                          margin: const EdgeInsets.symmetric(vertical: 22),
+                          color: const Color(0x38F1C588),
+                        ),
+                        Expanded(
+                          flex: 5,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(26, 22, 26, 22),
+                            child: _nameForm(compact: false),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: GestureDetector(
-                  onTap: _submitName,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppUi.accent,
-                      borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _nameForm({required bool compact}) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(width: 28, height: 1, color: AppUi.accent),
+            const SizedBox(width: 9),
+            Text(
+              'KURULUŞ MÜHRÜ',
+              style: AppUi.label.copyWith(
+                color: AppUi.accentSoft,
+                fontSize: 9,
+                letterSpacing: 2.4,
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: compact ? 8 : 12),
+        Text(
+          'BU YUVAYA BİR AD VER',
+          style: AppUi.title.copyWith(
+            fontSize: compact ? 17 : 20,
+            letterSpacing: 1.8,
+          ),
+        ),
+        if (!compact) ...[
+          const SizedBox(height: 5),
+          Text(
+            'Bu ad, ilk ateşten son vakayinameye kadar yaşayacak.',
+            style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11.5),
+          ),
+        ],
+        SizedBox(height: compact ? 10 : 16),
+        Text(
+          'KÖYÜN ADI',
+          style: AppUi.label.copyWith(color: AppUi.textMid, letterSpacing: 1.8),
+        ),
+        const SizedBox(height: 6),
+        _nameField(
+          _nameCtrl,
+          'örn. Pınarköy',
+          fieldKey: const ValueKey('village_name_field'),
+          focusNode: _nameFocus,
+          autofocus: true,
+          textInputAction: TextInputAction.next,
+          onSubmitted: (_) => _houseFocus.requestFocus(),
+        ),
+        const SizedBox(height: 7),
+        _ideaRow(),
+        _meaningLine(),
+        SizedBox(height: compact ? 9 : 12),
+        Row(
+          children: [
+            Text(
+              'OCAĞIN ADI — SOY',
+              style: AppUi.label
+                  .copyWith(color: AppUi.textMid, letterSpacing: 1.8),
+            ),
+            const Spacer(),
+            _IdeaChip(label: '🎲 çek', onTap: _rollHouseName),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _nameField(
+          _houseCtrl,
+          'örn. Yılmaz',
+          fieldKey: const ValueKey('house_name_field'),
+          focusNode: _houseFocus,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _submitName(),
+        ),
+        if (!compact) ...[
+          const SizedBox(height: 5),
+          Text(
+            'Kurucular bu soyadı taşıyacak: “... Hanesi”.',
+            style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+          ),
+        ],
+        SizedBox(height: compact ? 10 : 14),
+        KeyedSubtree(
+          key: const ValueKey('founding_name_submit'),
+          child: _FoundingSubmitButton(onTap: _submitName),
+        ),
+      ],
+    );
+  }
+
+  /// Ad ÖNERİLERİ — üç ad + "başka". Dokunmak kutuyu doldurur; serbest yazı
+  /// duruyor. Öneriler bir liste değil bir başlangıç: köyün adı keyfî bir
+  /// etiket olmasın diye her birinin bir gerekçesi var ([_meaningLine]).
+  Widget _ideaRow() {
+    final current = _nameCtrl.text.trim().toLowerCase();
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final idea in _nameIdeas)
+          _IdeaChip(
+            label: idea.name,
+            selected: idea.name.toLowerCase() == current,
+            onTap: () => _applyIdea(idea),
+          ),
+        _IdeaChip(label: '🎲 başka', onTap: _rerollIdeas),
+      ],
+    );
+  }
+
+  /// Kutudaki ad havuzdaysa NEREDEN geldiğini söyler. Oyuncu kendi adını
+  /// yazdıysa satır sessizce boşalır — kimse ona "yanlış ad" demez.
+  Widget _meaningLine() {
+    final meaning = meaningOfVillageName(_nameCtrl.text);
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      alignment: Alignment.topLeft,
+      child: meaning == null
+          ? const SizedBox(width: double.infinity, height: 0)
+          : Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 2,
+                    height: 22,
+                    margin: const EdgeInsets.only(right: 8, top: 1),
+                    color: AppUi.accent.withValues(alpha: 0.65),
+                  ),
+                  Expanded(
+                    child: Text(
+                      meaning,
+                      style: AppUi.body.copyWith(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: AppUi.accentSoft,
+                      ),
                     ),
-                    child: Text('Adını koy ▸',
-                        style: AppUi.button
-                            .copyWith(color: const Color(0xFF1A0E04))),
+                  ),
+                ],
+              ),
+            ),
+    );
+  }
+
+  /// Ad kapısının metin alanı — iki alan aynı görünmeli (köy/hane).
+  Widget _nameField(
+    TextEditingController ctrl,
+    String hint, {
+    Key? fieldKey,
+    bool autofocus = false,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    return TextField(
+      key: fieldKey,
+      controller: ctrl,
+      autofocus: autofocus,
+      focusNode: focusNode,
+      textCapitalization: TextCapitalization.words,
+      textInputAction: textInputAction,
+      maxLength: 22,
+      onChanged: (_) => setState(() {}),
+      onSubmitted: onSubmitted,
+      style: AppUi.bodyHi.copyWith(fontSize: 16, letterSpacing: 0.3),
+      cursorColor: AppUi.accent,
+      decoration: InputDecoration(
+        counterText: '',
+        hintText: hint,
+        hintStyle: AppUi.body.copyWith(color: AppUi.textLo),
+        filled: true,
+        fillColor: const Color(0xB30A0E0C),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 11,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: Color(0x38FFFFFF)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: AppUi.accent, width: 1.4),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tek dokunuşluk ad önerisi. Seçiliyken ember dolgu — hangi adın kutuda
+/// olduğu tek bakışta okunsun. Dokunma alanı 44dp (telefonda da aynı çip).
+class _IdeaChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _IdeaChip({
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        height: MobileUi.tap,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppUi.accent.withValues(alpha: 0.22)
+                  : const Color(0x660A0E0C),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: selected
+                    ? AppUi.accent.withValues(alpha: 0.85)
+                    : const Color(0x38FFFFFF),
+              ),
+            ),
+            child: Text(
+              label,
+              style: AppUi.button.copyWith(
+                fontSize: 10.5,
+                letterSpacing: 0.6,
+                color: selected ? AppUi.accentSoft : AppUi.textMid,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FoundingIdentity extends StatelessWidget {
+  final String village;
+  final String house;
+
+  const _FoundingIdentity({required this.village, required this.house});
+
+  @override
+  Widget build(BuildContext context) {
+    final villageName = village.isEmpty ? 'ADSIZ YURT' : village.toUpperCase();
+    final houseName = house.isEmpty
+        ? 'KURUCU HANE'
+        : '${house.toUpperCase()} HANESİ';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(28, 24, 24, 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x2EE49139), Color(0x05101412)],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 62,
+            height: 62,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              color: AppUi.accent.withValues(alpha: 0.12),
+              border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
+            ),
+            child: const GameIcon(
+              GameIconData.home,
+              size: 27,
+              color: AppUi.accentSoft,
+            ),
+          ),
+          const SizedBox(height: 22),
+          Text(
+            'BURADA KURULDU',
+            style: AppUi.label.copyWith(
+              color: AppUi.textLo,
+              fontSize: 9,
+              letterSpacing: 2.5,
+            ),
+          ),
+          const SizedBox(height: 7),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              villageName,
+              maxLines: 1,
+              style: AppUi.display.copyWith(fontSize: 34, letterSpacing: 2.2),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Container(width: 26, height: 1, color: AppUi.accent),
+              const SizedBox(width: 9),
+              Flexible(
+                child: Text(
+                  houseName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.label.copyWith(
+                    color: AppUi.accentSoft,
+                    fontSize: 9.5,
+                    letterSpacing: 1.6,
                   ),
                 ),
               ),
             ],
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FoundingSubmitButton extends StatefulWidget {
+  final VoidCallback onTap;
+  const _FoundingSubmitButton({required this.onTap});
+
+  @override
+  State<_FoundingSubmitButton> createState() => _FoundingSubmitButtonState();
+}
+
+class _FoundingSubmitButtonState extends State<_FoundingSubmitButton> {
+  bool _down = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => setState(() => _down = true),
+      onTapUp: (_) => setState(() => _down = false),
+      onTapCancel: () => setState(() => _down = false),
+      onTap: widget.onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 46,
+        transform: _down
+            ? Matrix4.translationValues(0, 1.5, 0)
+            : Matrix4.identity(),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFEAA04B), Color(0xFFBC6724)],
+          ),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFF0C27B)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x4DE49139),
+              blurRadius: 16,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const GameIcon(GameIconData.flame, size: 15, color: AppUi.ink),
+            const SizedBox(width: 9),
+            Text(
+              'Adını koy ▸',
+              style: AppUi.button.copyWith(
+                color: AppUi.ink,
+                fontFamily: AppUi.fontDisplay,
+                fontSize: 12.5,
+                letterSpacing: 1.2,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -527,17 +1355,17 @@ class _CutscenePainter extends CustomPainter {
   final CutsceneShot shot;
   final double time;
   final double shotElapsed;
-  final double fade;       // 0→1 karartmadan açılma
-  final double fadeDepth;  // karartmanın en koyu değeri (mekân değişimi = 1.0)
+  final double fade; // 0→1 karartmadan açılma
+  final double fadeDepth; // karartmanın en koyu değeri (mekân değişimi = 1.0)
   final double moveElapsed; // fade bittikten sonra geçen süre (aktör hareketi)
-  final double moveDur;     // en uzak aktörün yürüyüş süresi
-  final double camT;   // 0→1 kamera ilerlemesi (state çekim süresine bağlar)
+  final double moveDur; // en uzak aktörün yürüyüş süresi
+  final double camT; // 0→1 kamera ilerlemesi (state çekim süresine bağlar)
   final String? speaker; // o an konuşan aktörün adı (null = anlatı sesi)
   final double introT; // 0→1 letterbox bantlarının inişi (sinematik başı)
   /// Ekranın altında diyalog kutusu + letterbox'ın yediği yükseklik (px).
   /// Kadraj özneyi bu bandın ÜSTÜNDE tutar.
   final double reservedBottom;
-  final bool ignited;  // tapToIgnite: ateş yandı mı (yanmadan glow çizilmez)
+  final bool ignited; // tapToIgnite: ateş yandı mı (yanmadan glow çizilmez)
   final double igniteElapsed; // yandıktan sonra geçen süre (flash); <0 = yok
   _CutscenePainter({
     required this.shot,
@@ -556,11 +1384,11 @@ class _CutscenePainter extends CustomPainter {
   });
 
   // ── Katman derinlikleri (pan çarpanı) ──────────────────────────────────────
-  static const double _dSky = 0.10;    // gök + güneş + bulut
-  static const double _dFar = 0.32;    // uzak tepeler
-  static const double _dNear = 0.58;   // yakın tepeler
+  static const double _dSky = 0.10; // gök + güneş + bulut
+  static const double _dFar = 0.32; // uzak tepeler
+  static const double _dNear = 0.58; // yakın tepeler
   static const double _dGround = 0.85; // zemin + AKTÖRLER (aynı düzlem şart)
-  static const double _dFore = 1.35;   // ön plan otları
+  static const double _dFore = 1.35; // ön plan otları
 
   double _lerp(double a, double b, double t) => a + (b - a) * t;
   double _ease(double t) => t * t * (3 - 2 * t);
@@ -596,33 +1424,34 @@ class _CutscenePainter extends CustomPainter {
   /// Sahnenin anahtar ışığı — kaynağın ekrandaki yatay yeri (0..1), kaynağa
   /// dönük yana vurulan sıcaklık ve gövdenin tamamına inen ortam gölgesi.
   /// null = ışıklandırma yok (başlık kartı).
-  ({double keyX, Color warm, Color ambient})? get _keyLight => switch (shot.bg) {
+  ({double keyX, Color warm, Color ambient})? get _keyLight =>
+      switch (shot.bg) {
         // Şafak: güneş sağda, ışık yumuşak şeftali; ortam hafif serin.
         CutsceneBg.valleyDawn => (
-            keyX: 0.72,
-            warm: const Color(0x4DFFD9A8),
-            ambient: const Color(0x1F1A2440),
-          ),
+          keyX: 0.72,
+          warm: const Color(0x4DFFD9A8),
+          ambient: const Color(0x1F1A2440),
+        ),
         // Gündüz yol: tepeden dolgun ışık, ortam neredeyse yok.
         CutsceneBg.road => (
-            keyX: 0.62,
-            warm: const Color(0x2EFFF3D0),
-            ambient: const Color(0x14161E2E),
-          ),
+          keyX: 0.62,
+          warm: const Color(0x2EFFF3D0),
+          ambient: const Color(0x14161E2E),
+        ),
         // Akşam: güneş arkada kaldığı için gövde silüete YAKLAŞIR — yalnız
         // güneşe dönük kenar turuncu yanar (kontra ışık). Sıcaklık gölgeden
         // güçlü olursa figür sahneden parlak çıkar, akşam hissi kaçar.
         CutsceneBg.valleyDusk => (
-            keyX: 0.50,
-            warm: const Color(0x4DFF9A50),
-            ambient: const Color(0x66141A33),
-          ),
+          keyX: 0.50,
+          warm: const Color(0x4DFF9A50),
+          ambient: const Color(0x66141A33),
+        ),
         // Gece ateşi: tek kaynak ortadaki ateş, ortam lacivert.
         CutsceneBg.fireNight => (
-            keyX: 0.50,
-            warm: const Color(0x8CFFAE55),
-            ambient: const Color(0x59101C34),
-          ),
+          keyX: 0.50,
+          warm: const Color(0x8CFFAE55),
+          ambient: const Color(0x59101C34),
+        ),
         CutsceneBg.titleCard => null,
       };
 
@@ -648,14 +1477,16 @@ class _CutscenePainter extends CustomPainter {
   _Cam _camera(Size size) {
     final panX = _lerp(shot.panFrom, shot.panTo, camT) * size.width;
     final tilt = _lerp(shot.tiltFrom, shot.tiltTo, camT) * size.height;
-    final zoom = _lerp(shot.zoomFrom, shot.zoomTo, camT) *
+    final zoom =
+        _lerp(shot.zoomFrom, shot.zoomTo, camT) *
         (shot.framing == CutsceneFraming.close ? 1.16 : 1.0);
     var camX = panX, camY = tilt + _framingLift(size);
     if (shot.pov) {
       // Öznel kamera nefes alır. Sabit duran kadraj "kamera" olur; hafifçe
       // salınan kadraj "birinin gözü". Genlik kasten çok küçük (%0.5) —
       // fazlası mide bulandırır.
-      camY += sin(time * 0.85) * size.height * 0.005 +
+      camY +=
+          sin(time * 0.85) * size.height * 0.005 +
           sin(time * 0.31) * size.height * 0.003;
       camX += sin(time * 0.57 + 1.3) * size.width * 0.004;
     }
@@ -679,8 +1510,9 @@ class _CutscenePainter extends CustomPainter {
     final barH = size.height * 0.10;
     final safeBottom = size.height - max(reservedBottom, barH) - 8;
     // Yakın planda ayak zaten kadraj dışı: bel hizası korunur.
-    final anchor =
-        shot.framing == CutsceneFraming.close ? feet - tallest * 0.45 : feet;
+    final anchor = shot.framing == CutsceneFraming.close
+        ? feet - tallest * 0.45
+        : feet;
     final over = anchor - safeBottom;
     return over > 0 ? over / _dGround : 0;
   }
@@ -711,7 +1543,9 @@ class _CutscenePainter extends CustomPainter {
       final barPaint = Paint()..color = const Color(0xFF000000);
       canvas.drawRect(Rect.fromLTWH(0, 0, size.width, barH), barPaint);
       canvas.drawRect(
-          Rect.fromLTWH(0, size.height - barH, size.width, barH), barPaint);
+        Rect.fromLTWH(0, size.height - barH, size.width, barH),
+        barPaint,
+      );
     }
 
     // Çekim başı geçişi. POV'da bu bir KARARMA değil GÖZ KAPAĞI: iki bant
@@ -722,9 +1556,9 @@ class _CutscenePainter extends CustomPainter {
         _eyelids(canvas, size, fade);
       } else {
         canvas.drawRect(
-            Offset.zero & size,
-            Paint()
-              ..color = Color.fromRGBO(0, 0, 0, (1.0 - fade) * fadeDepth));
+          Offset.zero & size,
+          Paint()..color = Color.fromRGBO(0, 0, 0, (1.0 - fade) * fadeDepth),
+        );
       }
     }
   }
@@ -735,25 +1569,54 @@ class _CutscenePainter extends CustomPainter {
       case CutsceneBg.valleyDawn:
         _layer(canvas, size, cam, _dSky, () {
           _sky(canvas, size, const [
-            Color(0xFF8FA8C4), Color(0xFFE8B892), Color(0xFFF6C79E),
-            Color(0xFFF9DDBE), Color(0xFFFBEFD6),
+            Color(0xFF8FA8C4),
+            Color(0xFFE8B892),
+            Color(0xFFF6C79E),
+            Color(0xFFF9DDBE),
+            Color(0xFFFBEFD6),
           ]);
-          _sun(canvas, size, const Offset(0.72, 0.30), 30,
-              const Color(0xFFFFE6B0));
-          _sunShafts(canvas, size, const Offset(0.72, 0.30),
-              const Color(0xFFFFE7BC));
+          _sun(
+            canvas,
+            size,
+            const Offset(0.72, 0.30),
+            30,
+            const Color(0xFFFFE6B0),
+          );
+          _sunShafts(
+            canvas,
+            size,
+            const Offset(0.72, 0.30),
+            const Color(0xFFFFE7BC),
+          );
           _clouds(canvas, size, const Color(0x66FFF0DC), n: 5, speed: 4.0);
         });
         _layer(canvas, size, cam, _dFar, () {
           _hills(canvas, size, 0.62, const Color(0xFFB69FB0), 3, 0.05);
-          _treeLine(canvas, size, 0.62, 0.05, 3, const Color(0xFFA48FA0),
-              n: 16, scale: 0.75, salt: 1);
+          _treeLine(
+            canvas,
+            size,
+            0.62,
+            0.05,
+            3,
+            const Color(0xFFA48FA0),
+            n: 16,
+            scale: 0.75,
+            salt: 1,
+          );
           _haze(canvas, size, 0.655, const Color(0x59FFE3C8));
         });
         _layer(canvas, size, cam, _dNear, () {
           _hills(canvas, size, 0.70, const Color(0xFF8FA07E), 5, 0.10);
-          _treeLine(canvas, size, 0.70, 0.10, 5, const Color(0xFF6E7F60),
-              n: 20, salt: 2);
+          _treeLine(
+            canvas,
+            size,
+            0.70,
+            0.10,
+            5,
+            const Color(0xFF6E7F60),
+            n: 20,
+            salt: 2,
+          );
         });
         _layer(canvas, size, cam, _dGround, () {
           _ground(canvas, size, 0.78, const Color(0xFF6E7E54));
@@ -762,7 +1625,9 @@ class _CutscenePainter extends CustomPainter {
       case CutsceneBg.road:
         _layer(canvas, size, cam, _dSky, () {
           _sky(canvas, size, const [
-            Color(0xFF8CC6E8), Color(0xFFAFD8EE), Color(0xFFCDE9F6),
+            Color(0xFF8CC6E8),
+            Color(0xFFAFD8EE),
+            Color(0xFFCDE9F6),
             Color(0xFFEAF6FF),
           ]);
           _clouds(canvas, size, const Color(0x88FFFFFF), n: 6, speed: 5.5);
@@ -773,8 +1638,16 @@ class _CutscenePainter extends CustomPainter {
         });
         _layer(canvas, size, cam, _dNear, () {
           _hills(canvas, size, 0.66, const Color(0xFF9FC089), 4, 0.06);
-          _treeLine(canvas, size, 0.66, 0.06, 4, const Color(0xFF6F9457),
-              n: 22, salt: 3);
+          _treeLine(
+            canvas,
+            size,
+            0.66,
+            0.06,
+            4,
+            const Color(0xFF6F9457),
+            n: 22,
+            salt: 3,
+          );
         });
         _layer(canvas, size, cam, _dGround, () {
           _ground(canvas, size, 0.80, const Color(0xFF7C9A55));
@@ -783,11 +1656,19 @@ class _CutscenePainter extends CustomPainter {
       case CutsceneBg.valleyDusk:
         _layer(canvas, size, cam, _dSky, () {
           _sky(canvas, size, const [
-            Color(0xFF241A3E), Color(0xFF4A3A66), Color(0xFF9A5E72),
-            Color(0xFFD87B57), Color(0xFFE8915A),
+            Color(0xFF241A3E),
+            Color(0xFF4A3A66),
+            Color(0xFF9A5E72),
+            Color(0xFFD87B57),
+            Color(0xFFE8915A),
           ]);
-          _sun(canvas, size, const Offset(0.5, 0.52), 36,
-              const Color(0xFFFFCB6E));
+          _sun(
+            canvas,
+            size,
+            const Offset(0.5, 0.52),
+            36,
+            const Color(0xFFFFCB6E),
+          );
           _clouds(canvas, size, const Color(0x59FFB98A), n: 4, speed: 3.0);
           _birds(canvas, size);
         });
@@ -797,31 +1678,62 @@ class _CutscenePainter extends CustomPainter {
         });
         _layer(canvas, size, cam, _dNear, () {
           _hills(canvas, size, 0.72, const Color(0xFF3A3048), 5, 0.10);
-          _treeLine(canvas, size, 0.72, 0.10, 5, const Color(0xFF2A2338),
-              n: 20, salt: 4);
+          _treeLine(
+            canvas,
+            size,
+            0.72,
+            0.10,
+            5,
+            const Color(0xFF2A2338),
+            n: 20,
+            salt: 4,
+          );
         });
-        _layer(canvas, size, cam, _dGround,
-            () => _ground(canvas, size, 0.80, const Color(0xFF2C2436)));
+        _layer(
+          canvas,
+          size,
+          cam,
+          _dGround,
+          () => _ground(canvas, size, 0.80, const Color(0xFF2C2436)),
+        );
       case CutsceneBg.fireNight:
         _layer(canvas, size, cam, _dSky, () {
           _sky(canvas, size, const [
-            Color(0xFF060B22), Color(0xFF0A1330), Color(0xFF142244),
+            Color(0xFF060B22),
+            Color(0xFF0A1330),
+            Color(0xFF142244),
             Color(0xFF1E3052),
           ]);
           _stars(canvas, size);
         });
-        _layer(canvas, size, cam, _dFar,
-            () => _hills(canvas, size, 0.60, const Color(0xFF0C1528), 3, 0.05));
+        _layer(
+          canvas,
+          size,
+          cam,
+          _dFar,
+          () => _hills(canvas, size, 0.60, const Color(0xFF0C1528), 3, 0.05),
+        );
         _layer(canvas, size, cam, _dNear, () {
           _hills(canvas, size, 0.66, const Color(0xFF0E1A30), 4, 0.06);
-          _treeLine(canvas, size, 0.66, 0.06, 4, const Color(0xFF0A1424),
-              n: 18, salt: 5);
+          _treeLine(
+            canvas,
+            size,
+            0.66,
+            0.06,
+            4,
+            const Color(0xFF0A1424),
+            n: 18,
+            salt: 5,
+          );
         });
         _layer(canvas, size, cam, _dGround, () {
           _ground(canvas, size, 0.80, const Color(0xFF0A1322));
           // Odun yığını her zaman; ateş+hâle yanma seviyesine göre.
-          _logs(canvas, Offset(size.width * 0.5, size.height * 0.80),
-              size.height * 0.10);
+          _logs(
+            canvas,
+            Offset(size.width * 0.5, size.height * 0.80),
+            size.height * 0.10,
+          );
           // Yanma seviyesi: gate (dokun) ise yanınca ramp; gate yoksa oto-bloom.
           final double fireLevel;
           if (shot.gate == CutsceneGate.tapToIgnite) {
@@ -834,16 +1746,20 @@ class _CutscenePainter extends CustomPainter {
             // Zemine düşen sıcak ışık havuzu — ateşin gerçekten YERDE yandığını
             // söyleyen şey bu (yoksa hâle havada asılı duruyor).
             final pool = Rect.fromCenter(
-                center: c.translate(0, size.height * 0.012),
-                width: size.width * 0.62 * (0.6 + 0.4 * fireLevel),
-                height: size.height * 0.10 * (0.6 + 0.4 * fireLevel));
+              center: c.translate(0, size.height * 0.012),
+              width: size.width * 0.62 * (0.6 + 0.4 * fireLevel),
+              height: size.height * 0.10 * (0.6 + 0.4 * fireLevel),
+            );
             canvas.drawOval(
-                pool,
-                Paint()
-                  ..shader = RadialGradient(colors: [
+              pool,
+              Paint()
+                ..shader = RadialGradient(
+                  colors: [
                     Color.fromRGBO(255, 160, 70, 0.34 * fireLevel),
                     Color.fromRGBO(255, 120, 50, 0.0),
-                  ]).createShader(pool));
+                  ],
+                ).createShader(pool),
+            );
             _fireGlow(canvas, size, const Offset(0.5, 0.80), fireLevel);
             _flames(canvas, size, c, fireLevel);
             _fireEmbers(canvas, size, const Offset(0.5, 0.80), fireLevel);
@@ -851,18 +1767,25 @@ class _CutscenePainter extends CustomPainter {
         });
       case CutsceneBg.titleCard:
         canvas.drawRect(
-            Offset.zero & size, Paint()..color = const Color(0xFF0C0A07));
+          Offset.zero & size,
+          Paint()..color = const Color(0xFF0C0A07),
+        );
         // Hafif radyal vinyet ışığı + uçuşan közler.
         final c = Offset(size.width * 0.5, size.height * 0.52);
         canvas.drawCircle(
-            c,
-            size.width * 0.4,
-            Paint()
-              ..shader = RadialGradient(colors: [
-                AppUi.accent.withValues(alpha: 0.10),
-                const Color(0x00000000),
-              ]).createShader(
-                    Rect.fromCircle(center: c, radius: size.width * 0.4)));
+          c,
+          size.width * 0.4,
+          Paint()
+            ..shader =
+                RadialGradient(
+                  colors: [
+                    AppUi.accent.withValues(alpha: 0.10),
+                    const Color(0x00000000),
+                  ],
+                ).createShader(
+                  Rect.fromCircle(center: c, radius: size.width * 0.4),
+                ),
+        );
         _embers(canvas, size);
     }
   }
@@ -877,22 +1800,28 @@ class _CutscenePainter extends CustomPainter {
     if (lid <= 0.5) return;
     final black = Paint()..color = const Color(0xFF000000);
     canvas.drawPath(
-        Path()
-          ..moveTo(0, 0)
-          ..lineTo(size.width, 0)
-          ..lineTo(size.width, lid)
-          ..quadraticBezierTo(size.width * 0.5, lid + size.height * 0.05, 0, lid)
-          ..close(),
-        black);
+      Path()
+        ..moveTo(0, 0)
+        ..lineTo(size.width, 0)
+        ..lineTo(size.width, lid)
+        ..quadraticBezierTo(size.width * 0.5, lid + size.height * 0.05, 0, lid)
+        ..close(),
+      black,
+    );
     canvas.drawPath(
-        Path()
-          ..moveTo(0, size.height)
-          ..lineTo(size.width, size.height)
-          ..lineTo(size.width, size.height - lid)
-          ..quadraticBezierTo(size.width * 0.5,
-              size.height - lid - size.height * 0.04, 0, size.height - lid)
-          ..close(),
-        black);
+      Path()
+        ..moveTo(0, size.height)
+        ..lineTo(size.width, size.height)
+        ..lineTo(size.width, size.height - lid)
+        ..quadraticBezierTo(
+          size.width * 0.5,
+          size.height - lid - size.height * 0.04,
+          0,
+          size.height - lid,
+        )
+        ..close(),
+      black,
+    );
   }
 
   /// Kadrajın iki yanındaki komşular — halkanın içinde durduğumuzu söyleyen
@@ -910,9 +1839,10 @@ class _CutscenePainter extends CustomPainter {
       final cx = left ? -size.width * 0.05 : size.width * 1.05;
       final head = Offset(cx, headY);
       final shoulders = Rect.fromCenter(
-          center: Offset(cx, headY + r * 1.75),
-          width: r * 4.4,
-          height: r * 3.4);
+        center: Offset(cx, headY + r * 1.75),
+        width: r * 4.4,
+        height: r * 3.4,
+      );
 
       // Kameraya yakın olan odak dışıdır: gövdenin çevresine yumuşak bir hâle
       // koyarak "net değil" hissi verilir (gerçek blur her karede pahalı).
@@ -933,9 +1863,11 @@ class _CutscenePainter extends CustomPainter {
           ..color = const Color(0x66FFA352);
         canvas.save();
         // Yalnız kadrajın içine bakan yarısı aydınlanır.
-        canvas.clipRect(left
-            ? Rect.fromLTWH(cx, 0, size.width, size.height)
-            : Rect.fromLTWH(0, 0, cx, size.height));
+        canvas.clipRect(
+          left
+              ? Rect.fromLTWH(cx, 0, size.width, size.height)
+              : Rect.fromLTWH(0, 0, cx, size.height),
+        );
         canvas.drawCircle(head, r, rim);
         canvas.drawOval(shoulders, rim);
         canvas.restore();
@@ -967,14 +1899,15 @@ class _CutscenePainter extends CustomPainter {
   void _vignette(Canvas canvas, Size size) {
     final r = Offset.zero & size;
     canvas.drawRect(
-        r,
-        Paint()
-          ..shader = RadialGradient(
-            center: Alignment.center,
-            radius: 0.85,
-            colors: const [Color(0x00000000), Color(0x59000000)],
-            stops: const [0.55, 1.0],
-          ).createShader(r));
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          center: Alignment.center,
+          radius: 0.85,
+          colors: const [Color(0x00000000), Color(0x59000000)],
+          stops: const [0.55, 1.0],
+        ).createShader(r),
+    );
   }
 
   void _sky(Canvas canvas, Size size, List<Color> colors) {
@@ -982,16 +1915,21 @@ class _CutscenePainter extends CustomPainter {
     // GRADYAN ekran ölçüsüne göre haritalanır — yoksa ufuk rengi kadraj dışına
     // kayar ve her sahnenin tonu değişir. Taşan kısım kenar rengiyle dolar.
     final grad = Rect.fromLTWH(0, 0, size.width, size.height);
-    final r = Rect.fromLTWH(-size.width * 0.2, -size.height * 0.35,
-        size.width * 1.4, size.height * 1.7);
+    final r = Rect.fromLTWH(
+      -size.width * 0.2,
+      -size.height * 0.35,
+      size.width * 1.4,
+      size.height * 1.7,
+    );
     canvas.drawRect(
-        r,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: colors,
-          ).createShader(grad));
+      r,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: colors,
+        ).createShader(grad),
+    );
   }
 
   void _sun(Canvas canvas, Size size, Offset norm, double r, Color col) {
@@ -999,18 +1937,18 @@ class _CutscenePainter extends CustomPainter {
     // Nefes alan hâle — sabit disk yerine hafifçe soluyan ışık.
     final breath = 1.0 + 0.04 * sin(time * 0.5);
     canvas.drawCircle(
-        c,
-        r * 3.0 * breath,
-        Paint()
-          ..shader = RadialGradient(colors: [
+      c,
+      r * 3.0 * breath,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
             col.withValues(alpha: 0.42),
             col.withValues(alpha: 0.12),
             col.withValues(alpha: 0.0),
-          ], stops: const [
-            0.0,
-            0.45,
-            1.0
-          ]).createShader(Rect.fromCircle(center: c, radius: r * 3.0 * breath)));
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ).createShader(Rect.fromCircle(center: c, radius: r * 3.0 * breath)),
+    );
     canvas.drawCircle(c, r, Paint()..color = col);
   }
 
@@ -1024,18 +1962,21 @@ class _CutscenePainter extends CustomPainter {
       final ang = 1.95 + i * 0.17 + sin(time * 0.23 + i) * 0.015;
       final w = size.height * (0.055 + _h(i, 21) * 0.055);
       final len = size.height * 1.25;
-      final a = (0.10 + _h(i, 22) * 0.07) *
-          (0.7 + 0.3 * sin(time * 0.4 + i * 1.3));
+      final a =
+          (0.10 + _h(i, 22) * 0.07) * (0.7 + 0.3 * sin(time * 0.4 + i * 1.3));
       canvas.save();
       canvas.rotate(ang);
       final r = Rect.fromLTWH(0, -w / 2, len, w);
       canvas.drawRect(
-          r,
-          Paint()
-            ..shader = LinearGradient(colors: [
+        r,
+        Paint()
+          ..shader = LinearGradient(
+            colors: [
               col.withValues(alpha: a),
               col.withValues(alpha: 0.0),
-            ]).createShader(r));
+            ],
+          ).createShader(r),
+      );
       canvas.restore();
     }
     canvas.restore();
@@ -1043,49 +1984,58 @@ class _CutscenePainter extends CustomPainter {
 
   /// Sürüklenen bulutlar — yumuşak radyal blob'lar (MaskFilter yerine shader:
   /// tam ekran blur her karede pahalı).
-  void _clouds(Canvas canvas, Size size, Color col,
-      {int n = 5, double speed = 5.0}) {
+  void _clouds(
+    Canvas canvas,
+    Size size,
+    Color col, {
+    int n = 5,
+    double speed = 5.0,
+  }) {
     for (int i = 0; i < n; i++) {
       final w = size.width * (0.22 + _h(i, 3) * 0.22);
       final hgt = w * (0.16 + _h(i, 4) * 0.09);
       final span = size.width * 1.6 + w * 2;
-      final x = ((_h(i, 5) * span + time * speed * (0.5 + _h(i, 6))) % span) -
+      final x =
+          ((_h(i, 5) * span + time * speed * (0.5 + _h(i, 6))) % span) -
           w -
           size.width * 0.3;
       final y = size.height * (0.06 + _h(i, 7) * 0.26);
       for (int k = 0; k < 2; k++) {
-        final rr = Rect.fromLTWH(x + w * 0.16 * k, y - hgt * 0.22 * k,
-            w * (1 - 0.22 * k), hgt * (1 - 0.18 * k));
+        final rr = Rect.fromLTWH(
+          x + w * 0.16 * k,
+          y - hgt * 0.22 * k,
+          w * (1 - 0.22 * k),
+          hgt * (1 - 0.18 * k),
+        );
         canvas.drawOval(
-            rr,
-            Paint()
-              ..shader = RadialGradient(colors: [
-                col,
-                col.withValues(alpha: 0.0),
-              ], stops: const [
-                0.35,
-                1.0
-              ]).createShader(rr));
+          rr,
+          Paint()
+            ..shader = RadialGradient(
+              colors: [col, col.withValues(alpha: 0.0)],
+              stops: const [0.35, 1.0],
+            ).createShader(rr),
+        );
       }
     }
   }
 
   /// Ufuk pusu — tepe eteğinde ince ışık bandı; katmanları birbirinden ayırır.
   void _haze(Canvas canvas, Size size, double y, Color col) {
-    final r = Rect.fromLTWH(-size.width * 0.2, y * size.height - size.height * 0.06,
-        size.width * 1.4, size.height * 0.12);
+    final r = Rect.fromLTWH(
+      -size.width * 0.2,
+      y * size.height - size.height * 0.06,
+      size.width * 1.4,
+      size.height * 0.12,
+    );
     canvas.drawRect(
-        r,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              col.withValues(alpha: 0.0),
-              col,
-              col.withValues(alpha: 0.0),
-            ],
-          ).createShader(r));
+      r,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [col.withValues(alpha: 0.0), col, col.withValues(alpha: 0.0)],
+        ).createShader(r),
+    );
   }
 
   /// Zemin sisi — yavaşça sürüklenen alçak tüller (şafak/uyanış hissi).
@@ -1094,21 +2044,23 @@ class _CutscenePainter extends CustomPainter {
       final w = size.width * (0.30 + _h(i, 31) * 0.35);
       final hgt = size.height * (0.030 + _h(i, 32) * 0.030);
       final span = size.width * 1.5 + w * 2;
-      final x = ((_h(i, 33) * span + time * (2.5 + _h(i, 34) * 3.5)) % span) -
+      final x =
+          ((_h(i, 33) * span + time * (2.5 + _h(i, 34) * 3.5)) % span) -
           w -
           size.width * 0.25;
       final yy = y * size.height + size.height * (_h(i, 35) * 0.05 - 0.055);
       final rr = Rect.fromLTWH(x, yy, w, hgt);
       canvas.drawOval(
-          rr,
-          Paint()
-            ..shader = RadialGradient(colors: [
+        rr,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
               col.withValues(alpha: 0.20 + _h(i, 36) * 0.16),
               col.withValues(alpha: 0.0),
-            ], stops: const [
-              0.30,
-              1.0
-            ]).createShader(rr));
+            ],
+            stops: const [0.30, 1.0],
+          ).createShader(rr),
+      );
     }
   }
 
@@ -1121,24 +2073,33 @@ class _CutscenePainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     final span = size.width * 1.6;
     for (int i = 0; i < 7; i++) {
-      final x = ((_h(i, 41) * span + time * (6 + _h(i, 42) * 5)) % span) -
+      final x =
+          ((_h(i, 41) * span + time * (6 + _h(i, 42) * 5)) % span) -
           size.width * 0.3;
-      final y = size.height * (0.14 + _h(i, 43) * 0.16) + sin(time * 0.8 + i) * 3;
+      final y =
+          size.height * (0.14 + _h(i, 43) * 0.16) + sin(time * 0.8 + i) * 3;
       final s = 4.0 + _h(i, 44) * 3.0;
       final flap = 0.35 + 0.65 * (0.5 + 0.5 * sin(time * 5.5 + i * 1.7));
       canvas.drawPath(
-          Path()
-            ..moveTo(x - s, y)
-            ..quadraticBezierTo(x - s * 0.45, y - s * flap, x, y)
-            ..quadraticBezierTo(x + s * 0.45, y - s * flap, x + s, y),
-          paint);
+        Path()
+          ..moveTo(x - s, y)
+          ..quadraticBezierTo(x - s * 0.45, y - s * flap, x, y)
+          ..quadraticBezierTo(x + s * 0.45, y - s * flap, x + s, y),
+        paint,
+      );
     }
   }
 
   /// Tepe silüeti — birkaç sinüs tümseği, [baseY] normalize, [bumps] tümsek.
   /// Pan'de kenar açılmasın diye ekranın iki yanına taşarak çizilir.
-  void _hills(Canvas canvas, Size size, double baseY, Color col, int bumps,
-      double amp) {
+  void _hills(
+    Canvas canvas,
+    Size size,
+    double baseY,
+    Color col,
+    int bumps,
+    double amp,
+  ) {
     final ov = size.width * 0.22;
     // Dikey taşma: kadraj/tilt sahneyi yukarı çektiğinde alt kenarda boşluk
     // açılmasın diye tepe eteği ekranın altına taşar.
@@ -1159,28 +2120,41 @@ class _CutscenePainter extends CustomPainter {
     path.close();
     // Düz tek renk dolgu tepeyi "kesilmiş karton" yapıyordu: sırt çizgisi ışık
     // alır, etek dibi koyulaşır → hacim.
-    final r = Rect.fromLTWH(-ov, y0 - a, size.width + ov * 2,
-        size.height - (y0 - a));
+    final r = Rect.fromLTWH(
+      -ov,
+      y0 - a,
+      size.width + ov * 2,
+      size.height - (y0 - a),
+    );
     canvas.drawPath(
-        path,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.lerp(col, const Color(0xFFFFFFFF), 0.10)!,
-              col,
-              Color.lerp(col, const Color(0xFF000000), 0.22)!,
-            ],
-            stops: const [0.0, 0.28, 1.0],
-          ).createShader(r));
+      path,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color.lerp(col, const Color(0xFFFFFFFF), 0.10)!,
+            col,
+            Color.lerp(col, const Color(0xFF000000), 0.22)!,
+          ],
+          stops: const [0.0, 0.28, 1.0],
+        ).createShader(r),
+    );
   }
 
   /// Sırt çizgisine ağaç silüetleri — düz sinüs tepesi "boyalı karton" gibi
   /// duruyordu; ağaçlar hem siluet kırar hem rüzgârda hafifçe eğilir.
-  void _treeLine(Canvas canvas, Size size, double baseY, double amp, int bumps,
-      Color col,
-      {int n = 20, double scale = 1.0, int salt = 0}) {
+  void _treeLine(
+    Canvas canvas,
+    Size size,
+    double baseY,
+    double amp,
+    int bumps,
+    Color col, {
+    int n = 20,
+    double scale = 1.0,
+    int salt = 0,
+  }) {
     final ov = size.width * 0.22;
     final y0 = baseY * size.height;
     final a = amp * size.height;
@@ -1188,16 +2162,16 @@ class _CutscenePainter extends CustomPainter {
       final x = -ov + (size.width + ov * 2) * _h(i, salt * 10 + 1);
       final rt = x / size.width;
       final y = y0 - a * (0.5 + 0.5 * sin(rt * pi * bumps + baseY * 10)) + 1;
-      final hgt =
-          size.height * (0.020 + _h(i, salt * 10 + 2) * 0.024) * scale;
+      final hgt = size.height * (0.020 + _h(i, salt * 10 + 2) * 0.024) * scale;
       final sway = _wind * hgt * 0.045 * (0.5 + _h(i, salt * 10 + 3));
       canvas.drawPath(
-          Path()
-            ..moveTo(x - hgt * 0.26, y)
-            ..lineTo(x + sway, y - hgt)
-            ..lineTo(x + hgt * 0.26, y)
-            ..close(),
-          Paint()..color = col);
+        Path()
+          ..moveTo(x - hgt * 0.26, y)
+          ..lineTo(x + sway, y - hgt)
+          ..lineTo(x + hgt * 0.26, y)
+          ..close(),
+        Paint()..color = col,
+      );
     }
   }
 
@@ -1212,25 +2186,36 @@ class _CutscenePainter extends CustomPainter {
     for (int i = 0; i < 64; i++) {
       final x = -ov + (size.width + ov * 2) * _h(i, 11);
       final hgt = size.height * (0.10 + _h(i, 12) * 0.15);
-      final sw = (_wind * 0.6 + sin(time * 0.9 + i * 0.6) * 0.5) *
+      final sw =
+          (_wind * 0.6 + sin(time * 0.9 + i * 0.6) * 0.5) *
           hgt *
           0.18 *
           (0.5 + _h(i, 13));
       paint.strokeWidth = 2.0 + _h(i, 14) * 2.2;
       canvas.drawPath(
-          Path()
-            ..moveTo(x, baseY)
-            ..quadraticBezierTo(
-                x + sw * 0.35, baseY - hgt * 0.55, x + sw, baseY - hgt),
-          paint);
+        Path()
+          ..moveTo(x, baseY)
+          ..quadraticBezierTo(
+            x + sw * 0.35,
+            baseY - hgt * 0.55,
+            x + sw,
+            baseY - hgt,
+          ),
+        paint,
+      );
     }
   }
 
   void _ground(Canvas canvas, Size size, double topY, Color col) {
     canvas.drawRect(
-        Rect.fromLTWH(-size.width * 0.22, topY * size.height, size.width * 1.44,
-            size.height * (1.6 - topY)),
-        Paint()..color = col);
+      Rect.fromLTWH(
+        -size.width * 0.22,
+        topY * size.height,
+        size.width * 1.44,
+        size.height * (1.6 - topY),
+      ),
+      Paint()..color = col,
+    );
   }
 
   void _path(Canvas canvas, Size size) {
@@ -1251,11 +2236,13 @@ class _CutscenePainter extends CustomPainter {
       final side = i.isEven ? -1.0 : 1.0;
       final x = size.width * 0.5 + side * (halfW + size.width * 0.01);
       canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(x, y),
-              width: size.width * (0.012 + _h(i, 52) * 0.016),
-              height: size.height * 0.008),
-          tuft);
+        Rect.fromCenter(
+          center: Offset(x, y),
+          width: size.width * (0.012 + _h(i, 52) * 0.016),
+          height: size.height * 0.008,
+        ),
+        tuft,
+      );
     }
   }
 
@@ -1280,11 +2267,16 @@ class _CutscenePainter extends CustomPainter {
       canvas.save();
       canvas.rotate(a);
       canvas.drawRRect(
-          RRect.fromRectAndRadius(
-              Rect.fromCenter(
-                  center: Offset.zero, width: s * 1.4, height: s * 0.22),
-              const Radius.circular(2)),
-          wood);
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset.zero,
+            width: s * 1.4,
+            height: s * 0.22,
+          ),
+          const Radius.circular(2),
+        ),
+        wood,
+      );
       canvas.restore();
     }
     canvas.restore();
@@ -1296,21 +2288,24 @@ class _CutscenePainter extends CustomPainter {
     final flick = 0.85 + 0.15 * sin(time * 9) + 0.08 * sin(time * 17);
     final r = size.width * 0.30 * flick * (0.45 + 0.55 * level);
     canvas.drawCircle(
-        c,
-        r,
-        Paint()
-          ..shader = RadialGradient(colors: [
+      c,
+      r,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
             const Color(0xFFFFB24D).withValues(alpha: 0.55 * flick * level),
             const Color(0xFFE9742E).withValues(alpha: 0.18 * level),
             const Color(0x00000000),
-          ], stops: const [
-            0.0,
-            0.45,
-            1.0
-          ]).createShader(Rect.fromCircle(center: c, radius: r)));
+          ],
+          stops: const [0.0, 0.45, 1.0],
+        ).createShader(Rect.fromCircle(center: c, radius: r)),
+    );
     // Köz çekirdeği.
     canvas.drawCircle(
-        c, 7 * flick * level, Paint()..color = const Color(0xFFFFD27A));
+      c,
+      7 * flick * level,
+      Paint()..color = const Color(0xFFFFD27A),
+    );
   }
 
   /// Alev dilleri. Eskiden "ateş" yalnız radyal bir hâle + 7 px köz çekirdeği
@@ -1327,24 +2322,33 @@ class _CutscenePainter extends CustomPainter {
       final wid = w0 * (1.0 - i * 0.14) * (0.85 + 0.15 * sin(sp * 0.9));
       final r = Rect.fromLTRB(c.dx - wid, c.dy - hgt, c.dx + wid, c.dy);
       canvas.drawPath(
-          Path()
-            ..moveTo(c.dx - wid, c.dy)
-            ..quadraticBezierTo(
-                c.dx - wid * 0.9, c.dy - hgt * 0.55, c.dx + lean, c.dy - hgt)
-            ..quadraticBezierTo(
-                c.dx + wid * 0.9, c.dy - hgt * 0.55, c.dx + wid, c.dy)
-            ..close(),
-          Paint()
-            ..shader = LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [
-                Color.fromRGBO(255, 228, 158, 0.92 * level),
-                Color.fromRGBO(255, 150, 46, 0.72 * level),
-                const Color(0x00C83C14),
-              ],
-              stops: const [0.0, 0.45, 1.0],
-            ).createShader(r));
+        Path()
+          ..moveTo(c.dx - wid, c.dy)
+          ..quadraticBezierTo(
+            c.dx - wid * 0.9,
+            c.dy - hgt * 0.55,
+            c.dx + lean,
+            c.dy - hgt,
+          )
+          ..quadraticBezierTo(
+            c.dx + wid * 0.9,
+            c.dy - hgt * 0.55,
+            c.dx + wid,
+            c.dy,
+          )
+          ..close(),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.bottomCenter,
+            end: Alignment.topCenter,
+            colors: [
+              Color.fromRGBO(255, 228, 158, 0.92 * level),
+              Color.fromRGBO(255, 150, 46, 0.72 * level),
+              const Color(0x00C83C14),
+            ],
+            stops: const [0.0, 0.45, 1.0],
+          ).createShader(r),
+      );
     }
   }
 
@@ -1355,7 +2359,8 @@ class _CutscenePainter extends CustomPainter {
     for (int i = 0; i < 18; i++) {
       final life = (time * 0.42 + _h(i, 71)) % 1.0;
       final rise = size.height * 0.24 * life;
-      final drift = sin(time * 1.1 + i * 1.7) * size.width * 0.030 * life +
+      final drift =
+          sin(time * 1.1 + i * 1.7) * size.width * 0.030 * life +
           _wind * size.width * 0.012 * life;
       final x = c.dx + (_h(i, 72) - 0.5) * size.width * 0.10 + drift;
       final y = c.dy - rise - size.height * 0.01;
@@ -1421,7 +2426,8 @@ class _CutscenePainter extends CustomPainter {
       // varınca faz 0'da bırakılırsa aktör nefes bile almayan bir heykel olur.
       final settled = max(0.0, moveElapsed - own);
       final speaking = hasSpeaker && a.name == speaker;
-      final phase = walkPhase +
+      final phase =
+          walkPhase +
           settled * (speaking ? 1.9 : 1.25) + // konuşan biraz daha canlı
           i * 1.7 +
           a.seed * 0.31; // herkes aynı anda nefes almasın
@@ -1433,13 +2439,15 @@ class _CutscenePainter extends CustomPainter {
 
       // Yumuşak zemin gölgesi — sert oval yerine kenarı dağılan temas gölgesi.
       canvas.drawOval(
-          Rect.fromCenter(
-              center: Offset(x, y + 2),
-              width: targetH * 0.52,
-              height: targetH * 0.13),
-          Paint()
-            ..color = const Color(0x3D000000)
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, targetH * 0.035));
+        Rect.fromCenter(
+          center: Offset(x, y + 2),
+          width: targetH * 0.52,
+          height: targetH * 0.13,
+        ),
+        Paint()
+          ..color = const Color(0x3D000000)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, targetH * 0.035),
+      );
 
       // Konuşmayan aktörler kısılır — üç aynı muhafız arasında komutanın
       // hangisi olduğu ancak böyle okunuyor (diyalog kutusu adı yazsa bile).
@@ -1450,9 +2458,10 @@ class _CutscenePainter extends CustomPainter {
       final key = _keyLight;
       final lit = key != null;
       final bounds = Rect.fromCenter(
-          center: Offset(x, y - targetH * 0.5),
-          width: targetH * 1.9,
-          height: targetH * 1.8);
+        center: Offset(x, y - targetH * 0.5),
+        width: targetH * 1.9,
+        height: targetH * 1.8,
+      );
       if (dim || lit) canvas.saveLayer(bounds, Paint());
 
       canvas.save();
@@ -1473,30 +2482,33 @@ class _CutscenePainter extends CustomPainter {
       if (key != null) {
         // 1) Ortam gölgesi — gövdenin tamamı sahnenin saatine oturur.
         canvas.drawRect(
-            bounds,
-            Paint()
-              ..blendMode = BlendMode.srcATop
-              ..color = key.ambient);
+          bounds,
+          Paint()
+            ..blendMode = BlendMode.srcATop
+            ..color = key.ambient,
+        );
         // 2) Anahtar ışık — kaynağa dönük yan aydınlanır (kaynak sahnenin
         //    güneşi ya da ateşi; ekran uzayında solda mı sağda mı ona bakılır).
         final fromRight = x < key.keyX * size.width;
         canvas.drawRect(
-            bounds,
-            Paint()
-              ..blendMode = BlendMode.srcATop
-              ..shader = LinearGradient(
-                begin: fromRight ? Alignment.centerRight : Alignment.centerLeft,
-                end: fromRight ? Alignment.centerLeft : Alignment.centerRight,
-                colors: [key.warm, key.warm.withValues(alpha: 0.0)],
-                stops: const [0.0, 0.78],
-              ).createShader(bounds));
+          bounds,
+          Paint()
+            ..blendMode = BlendMode.srcATop
+            ..shader = LinearGradient(
+              begin: fromRight ? Alignment.centerRight : Alignment.centerLeft,
+              end: fromRight ? Alignment.centerLeft : Alignment.centerRight,
+              colors: [key.warm, key.warm.withValues(alpha: 0.0)],
+              stops: const [0.0, 0.78],
+            ).createShader(bounds),
+        );
       }
       if (dim) {
         canvas.drawRect(
-            bounds,
-            Paint()
-              ..blendMode = BlendMode.srcATop
-              ..color = const Color(0x73070B16));
+          bounds,
+          Paint()
+            ..blendMode = BlendMode.srcATop
+            ..color = const Color(0x73070B16),
+        );
       }
       if (dim || lit) canvas.restore();
     }

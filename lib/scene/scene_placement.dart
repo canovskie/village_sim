@@ -134,6 +134,145 @@ extension _ScenePlacement on _VillageSceneState {
     return null;
   }
 
+  // ── İNŞA KÜNYESİ: yerin ölçümü ─────────────────────────────────────────────
+
+  /// Hayalet yeni bir tile'a geçti — künyenin iki canlı alanını birden tazeler:
+  /// geçersizlik SEBEBİ (kırmızı satır) ve yerin ÖLÇÜMÜ (ipucu tikleri). İkisi
+  /// tek kapıdan geçsin ki biri güncellenip öbürü bayat kalmasın.
+  void _refreshPlaceHints((int, int)? tile) {
+    final type = _placing;
+    if (tile == null || type == null) {
+      _placeReason = null;
+      _placeFacts = null;
+      return;
+    }
+    _placeReason = _placementReason(tile.$1, tile.$2, type);
+    _placeFacts = _siteFactsAt(tile.$1, tile.$2, type);
+  }
+
+  /// Hayaletin durduğu yeri ÖLÇER — künyedeki yerleşim ipuçları bu gerçeklerle
+  /// canlı doğrulanır (bkz. building_lore.tipState). Burada yalnız sayım var,
+  /// yorum yok: "yakın mı" kararını saf taraf verir.
+  ///
+  /// Yalnız hayalet TILE DEĞİŞTİRDİĞİNDE çağrılır (her karede değil) — tarama
+  /// ağaç/dekor listelerini dolaştığı için ucuz ama bedava değil.
+  SiteFacts _siteFactsAt(int col, int row, BuildingType type) {
+    final meta = kBuildingMeta[type]!;
+    final cx = col + meta.cols * 0.5;
+    final cy = row + meta.rows * 0.5;
+    double d2(num c, num r) {
+      final dx = c + 0.5 - cx, dy = r + 0.5 - cy;
+      return dx * dx + dy * dy;
+    }
+
+    // Ocağın sıcağı — çadırın kış kaderi (tek kaynak: hearth_warmth).
+    final fire = _firepitBuilding;
+    final warmth = _hearthWarmthAt(cx, cy);
+
+    // Orman: oduncu bölgesi yarıçapında ayakta ağaç.
+    const treeR2 = kLumberTerritoryRadius * kLumberTerritoryRadius;
+    int trees = 0;
+    for (final t in _trees) {
+      if (t.isFelled) continue;
+      if (d2(t.col, t.row) <= treeR2) trees++;
+    }
+
+    // Damar: footprint bir maden damarına oturuyor mu.
+    bool onVein = false;
+    for (final n in _mineNodes) {
+      if (n.isDepleted) continue;
+      if (n.col >= col &&
+          n.col < col + meta.cols &&
+          n.row >= row &&
+          n.row < row + meta.rows) {
+        onVein = true;
+        break;
+      }
+    }
+
+    // Kıyı: en yakın su tile'ı (balıkçının her sefer yürüdüğü yol).
+    double? shore;
+    for (final (wc, wr) in _waterTiles) {
+      final dd = d2(wc, wr);
+      if (shore == null || dd < shore) shore = dd;
+    }
+    if (shore != null) shore = sqrt(shore);
+
+    // Çiçek: kovanın menzilindeki çiçek (bal hızının çarpanı).
+    final flowerR = kBuildingMeta[BuildingType.beehive]!.effectRadius;
+    final flowerR2 = flowerR * flowerR;
+    int flowers = 0;
+    for (final d in _decor) {
+      if (d.crushed || !_isFlowerDecor(d.kind)) continue;
+      if (d2(d.col, d.row) <= flowerR2) flowers++;
+    }
+
+    // Açık zemin: etki menzilinde (yoksa varsayılan 4 tile) serpilecek boşluk.
+    // Ağaç/tarla ÖNCE kümeye alınır: tile başına listeyi taramak (169 tile ×
+    // yüzlerce ağaç) hover'da hissedilir bir maliyet olurdu.
+    final treeSet = {
+      for (final t in _trees)
+        if (!t.isFelled) (t.col, t.row),
+    };
+    final farmSet = {for (final t in _farmTiles) (t.col, t.row)};
+    final openR = meta.effectRadius > 0 ? meta.effectRadius : 4.0;
+    final openR2 = openR * openR;
+    final rTiles = openR.ceil();
+    int open = 0;
+    for (int dc = -rTiles; dc <= rTiles; dc++) {
+      for (int dr = -rTiles; dr <= rTiles; dr++) {
+        final c = col + dc, r = row + dr;
+        if (c < 0 || r < 0 || c >= kCols || r >= kRows) continue;
+        // Kendi footprint'i "boşluk" sayılmaz.
+        if (c >= col && c < col + meta.cols && r >= row && r < row + meta.rows) {
+          continue;
+        }
+        if (d2(c, r) > openR2) continue;
+        if (_waterTiles.contains((c, r))) continue;
+        if (_isWilderness(c, r)) continue;
+        if (_isOccupiedByBuilding(c, r)) continue;
+        if (treeSet.contains((c, r))) continue;
+        if (farmSet.contains((c, r))) continue;
+        open++;
+      }
+    }
+
+    // Komşuluk: üretim binaları, teslim noktaları, konutlar.
+    const workR2 = kWorkNearTiles * kWorkNearTiles;
+    const homeR2 = kHomesNearTiles * kHomesNearTiles;
+    int work = 0, stores = 0, homes = 0;
+    for (final b in _buildings) {
+      final bd = d2(b.col + b.cols * 0.5 - 0.5, b.row + b.rows * 0.5 - 0.5);
+      final role = b.fn?.role;
+      if (bd <= workR2 &&
+          (role == BuildingRole.gathering ||
+              role == BuildingRole.processing)) {
+        work++;
+      }
+      // Teslim noktası = ambar, yoksa ocak (bkz. anchor_system).
+      if (bd <= workR2 &&
+          (b.type == BuildingType.warehouse ||
+              b.type == BuildingType.firepit)) {
+        stores++;
+      }
+      if (bd <= homeR2 && role == BuildingRole.housing) homes++;
+    }
+
+    return SiteFacts(
+      hearthWarmth: warmth,
+      hasHearth: fire != null,
+      hearthLit: _fireBurning,
+      treesNear: trees,
+      onVein: onVein,
+      shoreDist: shore,
+      flowersNear: flowers,
+      openTilesNear: open,
+      workNear: work,
+      storesNear: stores,
+      homesNear: homes,
+    );
+  }
+
   void _commitMine((int, int) start, (int, int) end) {
     final c1 = start.$1 < end.$1 ? start.$1 : end.$1;
     final c2 = start.$1 < end.$1 ? end.$1 : start.$1;
@@ -256,6 +395,7 @@ extension _ScenePlacement on _VillageSceneState {
         _placing = null;
         _ghost = null;
         _placeReason = null;
+        _placeFacts = null;
       });
     }
   }
@@ -303,12 +443,16 @@ extension _ScenePlacement on _VillageSceneState {
         _rebuildBeeSwarms();
       } else {
         _orders.add(BuildOrder(type: _placing!, col: c, row: r));
+        // Şantiye kuruldu — aletler çıkar. Bitiş sesinin (buildDone) karşılığı:
+        // inşaatın başı da duyulsun, yoksa iş yalnız biterken var oluyor.
+        AudioManager.instance.playSfx(Sfx.buildStart);
       }
 
       // Ateş tekildir → kurulunca seçim hemen bırakılır.
       if (isFirepit) _placing = null;
       _ghost = null;
       _placeReason = null;
+      _placeFacts = null;
     });
     if (!silent) {
       _showNotification(
@@ -370,6 +514,7 @@ extension _ScenePlacement on _VillageSceneState {
         _placing = b.type;
         _ghost = null;
         _placeReason = null;
+        _placeFacts = null;
         _buildCategory = kBuildingCategory[b.type] ?? _buildCategory;
       }
     });

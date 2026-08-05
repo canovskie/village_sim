@@ -17,16 +17,16 @@ class EventChoiceModal extends StatelessWidget {
   });
 
   Color get _accent => switch (event.category) {
-        EventCategory.positive => AppUi.sage,
-        EventCategory.negative => AppUi.rust,
-        EventCategory.neutral  => AppUi.accent,
-      };
+    EventCategory.positive => AppUi.sage,
+    EventCategory.negative => AppUi.rust,
+    EventCategory.neutral => AppUi.accent,
+  };
 
   String get _categoryLabel => switch (event.category) {
-        EventCategory.positive => 'FIRSAT',
-        EventCategory.negative => 'TEHLİKE',
-        EventCategory.neutral  => 'OLAY',
-      };
+    EventCategory.positive => 'FIRSAT',
+    EventCategory.negative => 'TEHLİKE',
+    EventCategory.neutral => 'OLAY',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -38,60 +38,60 @@ class EventChoiceModal extends StatelessWidget {
   }
 
   List<Widget> _choiceCards() => [
-        for (final c in event.choices!) ...[
-          _ChoiceCard(choice: c, accent: _accent, onTap: () => onChoose(c)),
-          if (c != event.choices!.last) const SizedBox(height: 9),
-        ],
-      ];
+    for (final c in event.choices!) ...[
+      _ChoiceCard(choice: c, accent: _accent, onTap: () => onChoose(c)),
+      if (c != event.choices!.last) const SizedBox(height: 9),
+    ],
+  ];
 
   /// TELEFON YATAY — solda olay, sağda seçenekler. Tek sütunda üç seçenekli
   /// bir olay 414dp'lik ekranın altından taşıyordu; iki sütun hem taşmayı hem
   /// de iki yandaki ~340dp'lik ölü alanı bitirir.
   Widget _compactBody(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: MobileUi.left(context),
-        right: MobileUi.right(context),
-        top: MobileUi.top(context),
-        bottom: MobileUi.bottom(context),
-      ),
-      child: AppReveal(
-        child: AppPanel(
-          accent: _accent,
-          padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 5,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _header(),
-                      const SizedBox(height: 12),
-                      Text(event.message,
-                          style:
-                              AppUi.body.copyWith(fontSize: 12, height: 1.5)),
-                    ],
+    final window = MobileUi.windowSize(context);
+    return Center(
+      child: SizedBox(
+        width: window.width,
+        height: window.height,
+        child: AppReveal(
+          child: AppPanel(
+            accent: _accent,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _header(),
+                        const SizedBox(height: 12),
+                        Text(
+                          event.message,
+                          style: AppUi.body.copyWith(fontSize: 12, height: 1.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Container(width: 1, color: AppUi.line),
-              const SizedBox(width: 14),
-              Expanded(
-                flex: 4,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _choiceCards(),
+                const SizedBox(width: 10),
+                Container(width: 1, color: AppUi.line),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 4,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: _choiceCards(),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -113,9 +113,11 @@ class EventChoiceModal extends StatelessWidget {
                 children: [
                   _header(),
                   const SizedBox(height: 14),
-                  Text(event.message,
-                      textAlign: TextAlign.center,
-                      style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5)),
+                  Text(
+                    event.message,
+                    textAlign: TextAlign.center,
+                    style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
+                  ),
                   const AppDivider(),
                   ..._choiceCards(),
                 ],
@@ -138,7 +140,10 @@ class EventChoiceModal extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppUi.surface0,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(color: _accent.withValues(alpha: 0.7), width: 1.5),
+            border: Border.all(
+              color: _accent.withValues(alpha: 0.7),
+              width: 1.5,
+            ),
             boxShadow: [
               BoxShadow(color: _accent.withValues(alpha: 0.28), blurRadius: 14),
             ],
@@ -151,11 +156,12 @@ class EventChoiceModal extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_categoryLabel,
-                  style: AppUi.label.copyWith(color: _accent)),
+              Text(_categoryLabel, style: AppUi.label.copyWith(color: _accent)),
               const SizedBox(height: 4),
-              Text(event.title,
-                  style: AppUi.title.copyWith(fontSize: 18, color: _accent)),
+              Text(
+                event.title,
+                style: AppUi.title.copyWith(fontSize: 18, color: _accent),
+              ),
             ],
           ),
         ),
@@ -169,8 +175,11 @@ class _ChoiceCard extends StatefulWidget {
   final EventChoice choice;
   final Color accent;
   final VoidCallback onTap;
-  const _ChoiceCard(
-      {required this.choice, required this.accent, required this.onTap});
+  const _ChoiceCard({
+    required this.choice,
+    required this.accent,
+    required this.onTap,
+  });
   @override
   State<_ChoiceCard> createState() => _ChoiceCardState();
 }
@@ -196,7 +205,9 @@ class _ChoiceCardState extends State<_ChoiceCard> {
           decoration: BoxDecoration(
             color: _hover
                 ? Color.alphaBlend(
-                    accent.withValues(alpha: 0.14), AppUi.surface2)
+                    accent.withValues(alpha: 0.14),
+                    AppUi.surface2,
+                  )
                 : AppUi.surface1,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
@@ -204,7 +215,12 @@ class _ChoiceCardState extends State<_ChoiceCard> {
               width: _hover ? 1.5 : 1,
             ),
             boxShadow: _hover
-                ? [BoxShadow(color: accent.withValues(alpha: 0.25), blurRadius: 10)]
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.25),
+                      blurRadius: 10,
+                    ),
+                  ]
                 : null,
           ),
           child: Column(
@@ -223,18 +239,25 @@ class _ChoiceCardState extends State<_ChoiceCard> {
                   ),
                   const SizedBox(width: 9),
                   Expanded(
-                    child: Text(c.label, style: AppUi.bodyHi.copyWith(fontSize: 13)),
+                    child: Text(
+                      c.label,
+                      style: AppUi.bodyHi.copyWith(fontSize: 13),
+                    ),
                   ),
-                  GameIcon(GameIconData.chevron,
-                      size: 14,
-                      color: _hover ? accent : AppUi.textLo),
+                  GameIcon(
+                    GameIconData.chevron,
+                    size: 14,
+                    color: _hover ? accent : AppUi.textLo,
+                  ),
                 ],
               ),
               const SizedBox(height: 5),
               Padding(
                 padding: const EdgeInsets.only(left: 13),
-                child: Text(c.detail,
-                    style: AppUi.body.copyWith(fontSize: 11, height: 1.4)),
+                child: Text(
+                  c.detail,
+                  style: AppUi.body.copyWith(fontSize: 11, height: 1.4),
+                ),
               ),
               if (deltas.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -243,8 +266,9 @@ class _ChoiceCardState extends State<_ChoiceCard> {
                   child: Wrap(
                     spacing: 6,
                     runSpacing: 6,
-                    children:
-                        deltas.map((d) => _deltaChip(d.$1, d.$2)).toList(),
+                    children: deltas
+                        .map((d) => _deltaChip(d.$1, d.$2))
+                        .toList(),
                   ),
                 ),
               ],
@@ -259,9 +283,7 @@ class _ChoiceCardState extends State<_ChoiceCard> {
     final isMoral = icon == '😊';
     final isNeg = label.startsWith('-');
     // Fayda sage ↑ / bedel rust ↓ — sonuçları tipografi+renkle koru.
-    final color = isMoral
-        ? AppUi.accent
-        : (isNeg ? AppUi.rust : AppUi.sage);
+    final color = isMoral ? AppUi.accent : (isNeg ? AppUi.rust : AppUi.sage);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
@@ -274,8 +296,10 @@ class _ChoiceCardState extends State<_ChoiceCard> {
         children: [
           Text(icon, style: const TextStyle(fontSize: 11)),
           const SizedBox(width: 4),
-          Text(label,
-              style: AppUi.number.copyWith(fontSize: 10.5, color: color)),
+          Text(
+            label,
+            style: AppUi.number.copyWith(fontSize: 10.5, color: color),
+          ),
         ],
       ),
     );

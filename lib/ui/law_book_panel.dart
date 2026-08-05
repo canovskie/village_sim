@@ -7,6 +7,8 @@ import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
 import 'law_compass_view.dart';
+import 'ledger_board.dart';
+import 'mobile_ui.dart';
 
 /// KANUNNAME — ALTIGEN PETEK MİMARİSİ.
 ///
@@ -58,6 +60,12 @@ class LawBookView extends StatefulWidget {
   /// Mühürlü bir hükmü BEDELLE feshet. null = fesih kapalı (harness).
   final void Function(LawDef law)? onRepeal;
 
+  /// TAHTA KİPİ (telefon yatay) — pusula · arama · petek ALT ALTA değil YAN
+  /// YANA. Alt alta dizilim 360dp'lik defter penceresinde peteği tamamen fold
+  /// altına itiyordu (bkz. ui/ledger_board.dart); iki sütunda üçü de ilk
+  /// karede görünür ve hiçbiri kaydırma istemez.
+  final bool board;
+
   const LawBookView({
     super.key,
     required this.sealed,
@@ -74,6 +82,7 @@ class LawBookView extends StatefulWidget {
     this.onRepeal,
     this.rot = 0,
     this.faith,
+    this.board = false,
   });
 
   @override
@@ -82,9 +91,14 @@ class LawBookView extends StatefulWidget {
 
 class _LawBookViewState extends State<LawBookView>
     with TickerProviderStateMixin {
+  // Petek açılışı (bloom). CAPTURE'da son karesiyle başlar: harness kareyi
+  // açılıştan ~200ms sonra alıyordu ve peteğin yedi altıgeninden ancak üçü
+  // görünüyordu — yerleşim doğru olsa bile ekran görüntüsü "yarısı eksik" gibi
+  // okunuyor, doğrulama aracı yanlış alarm veriyordu.
   late final AnimationController _bloom = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 720),
+    value: AppUi.captureStatic ? 1 : 0,
   )..forward();
   late final AnimationController _pulse = AnimationController(
     vsync: this,
@@ -150,6 +164,7 @@ class _LawBookViewState extends State<LawBookView>
     // kanun defteri açıldığında TEK ferman görünmüyordu. Kısa ekranda pusula
     // tek satırlık künyeye iner (dokununca açılır) ve boşluklar daralır.
     final compact = useCompactGameUi(context);
+    if (widget.board) return _boardLayout();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -200,6 +215,272 @@ class _LawBookViewState extends State<LawBookView>
         else
           _flowerView(),
       ],
+    );
+  }
+
+  // ── TAHTA DİZİLİMİ (telefon yatay) ───────────────────────────────────────
+
+  /// İki sütun: SOLDA köyün yönü (pusula + günlük idame), SAĞDA defterin
+  /// kendisi (arama + petek / tema açılımı).
+  ///
+  /// Ayrım keyfi değil: sol sütun "köy nereye gidiyor" sorusunun DURAĞAN
+  /// cevabı, sağ sütun oyuncunun içinde gezindiği YER. Alt alta dizilince
+  /// durağan olan, gezinileni ekrandan kovuyordu.
+  Widget _boardLayout() {
+    final upkeep = totalUpkeepLabel(widget.sealed);
+    return BoardRow(
+      children: [
+        BoardCol(
+          flex: 38,
+          head: 'POLİTİK PUSULA',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Kart dikey kipte kısaltılmış hâliyle iPhone 11'e sığar; daha
+              // ALÇAK bir cihazda (ör. 360dp'lik ucuz Android) yine de taşabilir.
+              // scaleDown emniyet kemeri: gereken cihazda küçültür, gerekmeyende
+              // hiçbir şey yapmaz. Kaydırma açmaktan iyidir — kadran ölçekle
+              // okunur kalır, yarım kalan bir sütun okunmaz.
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (context, c) => FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.topCenter,
+                    child: SizedBox(
+                      width: c.maxWidth,
+                      child: LawCompassCard(
+                        sealed: widget.sealed,
+                        totalLaws: kLawBook.length,
+                        rule: widget.rule,
+                        unrest: widget.unrest,
+                        sworn: widget.sworn,
+                        onSwearOath: widget.onSwearOath,
+                        rot: widget.rot,
+                        faith: widget.faith,
+                        vertical: true,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (upkeep != null) ...[
+                const SizedBox(height: 8),
+                _totalUpkeepBar(topPad: 0),
+              ],
+            ],
+          ),
+        ),
+        BoardCol(
+          flex: 62,
+          head: _open == null ? 'KANUNNAME' : _open!.label.toUpperCase(),
+          headTrailing: BoardCount(
+            '${widget.sealed.length}/${kLawBook.length} mühürlü',
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _searchBar()),
+                  if (_open != null && _query.isEmpty) ...[
+                    const SizedBox(width: 8),
+                    _boardBackChip(),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              Expanded(child: _boardBody()),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _boardBody() {
+    if (_query.isNotEmpty) {
+      final hits = _searchHits();
+      return BoardPager(
+        count: hits.length,
+        rowH: 52,
+        rowGap: 6,
+        emptyText: 'Bu adda bir ferman yok.',
+        itemBuilder: (_, i) => _boardLawRow(hits[i], showTheme: true),
+      );
+    }
+    if (_open != null) {
+      final laws = [
+        for (final l in LawBook.ofTheme(_open!))
+          if (_stOf(l) != _LawState.hidden) l,
+      ];
+      return BoardPager(
+        count: laws.length,
+        rowH: 52,
+        rowGap: 6,
+        emptyText:
+            'Bu tema henüz uyanmadı — köyün hâli buranın hükümlerini açmıyor.',
+        itemBuilder: (_, i) => _boardLawRow(laws[i]),
+      );
+    }
+    // PETEK — sabit geometrili bir kompozisyon (330×342). Sütuna sığmadığı
+    // kadarını ölçekleyerek girer; parçalayıp yeniden dizmek çiçeği çiçek
+    // olmaktan çıkarırdı, oysa oradaki bilgi zaten "altı tema + ilerleme".
+    return LayoutBuilder(
+      builder: (context, c) => Center(
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: SizedBox(
+            width: _hw + 1.5 * _hw,
+            height: 3 * _hh,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _embers,
+                      builder: (_, _) =>
+                          CustomPaint(painter: _EmberPainter(_embers.value)),
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_bloom, _pulse]),
+                    builder: (_, _) {
+                      final spot = _spotlight;
+                      final voiceTheme =
+                          spot == null ? null : LawBook.themeOf(spot);
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          _hexAt('C', isHub: true),
+                          for (final (t, pos) in _petals)
+                            _hexAt(pos, theme: t, voice: t == voiceTheme),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _boardBackChip() {
+    final color = themeColor(_open!);
+    return GestureDetector(
+      onTap: () => setState(() => _open = null),
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        height: MobileUi.tap,
+        padding: const EdgeInsets.symmetric(horizontal: 11),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppUi.surface2,
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.arrow_back_rounded, size: 15, color: color),
+            const SizedBox(width: 6),
+            Text('TEMALAR',
+                style: AppUi.label
+                    .copyWith(fontSize: 9, color: AppUi.textHi)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Tahta için SABİT BOYLU (52dp) ferman satırı.
+  ///
+  /// Sayfalanabilmesi için boyunun bilinmesi şart (bkz. [BoardPager]); masaüstü
+  /// kartındaki üç satırlık özet tek satıra iner. Kaybolan bilgi yok: hükmün
+  /// tam metni zaten bir dokunuş arkasındaki mühür ritüelinde.
+  Widget _boardLawRow(LawDef l, {bool showTheme = false}) {
+    final st = _stOf(l);
+    final color = branchColor(l.branch);
+    final tappable = st == _LawState.available && !_inkWet;
+    final spotlight = l.id == widget.spotlightId && st == _LawState.available;
+    final (tag, tagColor) = _tagFor(st, color, spotlight);
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (_, _) => BoardTile(
+        onTap: tappable ? () => widget.onOpenLaw(l) : null,
+        tint: st == _LawState.enacted ? color : null,
+        highlight: spotlight,
+        padding: const EdgeInsets.fromLTRB(8, 6, 9, 6),
+        child: Row(
+          children: [
+            _Medallion(
+              state: _nodeOf(st),
+              color: color,
+              icon: l.icon,
+              size: 28,
+              pulse: tappable ? _pulse.value : 0,
+              pop: 0,
+              selected: false,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(children: [
+                    Expanded(
+                      child: Text(_shortTitle(l.title),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.bodyHi.copyWith(
+                              fontSize: 12,
+                              height: 1.1,
+                              color: st == _LawState.graveLocked
+                                  ? AppUi.textLo
+                                  : AppUi.textHi)),
+                    ),
+                    if (showTheme) ...[
+                      const SizedBox(width: 5),
+                      Text(LawBook.themeOf(l).icon,
+                          style: const TextStyle(fontSize: 10)),
+                    ],
+                    const SizedBox(width: 5),
+                    _stateDot(st, color),
+                  ]),
+                  const SizedBox(height: 2),
+                  Row(children: [
+                    Expanded(
+                      child: Text(tag,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.label.copyWith(
+                              fontSize: 7.5,
+                              color: tagColor,
+                              letterSpacing: 0.5)),
+                    ),
+                    if (upkeepLabel(l) != null) ...[
+                      const SizedBox(width: 5),
+                      _upkeepChip(l),
+                    ],
+                    if (st == _LawState.enacted &&
+                        widget.onRepeal != null &&
+                        LawBook.repealable(l)) ...[
+                      const SizedBox(width: 5),
+                      _repealChip(l),
+                    ],
+                  ]),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -579,11 +860,15 @@ class _LawBookViewState extends State<LawBookView>
 
   // ── ARAMA ──────────────────────────────────────────────────────────────────
 
+  /// Aramanın vurduğu fermanlar — hem masaüstü listesi hem tahta sayfalayıcısı
+  /// aynı sonucu okusun diye ayrı.
+  List<LawDef> _searchHits() => [
+        for (final l in kLawBook)
+          if (_stOf(l) != _LawState.hidden && _matches(l)) l
+      ];
+
   Widget _searchResults() {
-    final hits = [
-      for (final l in kLawBook)
-        if (_stOf(l) != _LawState.hidden && _matches(l)) l
-    ];
+    final hits = _searchHits();
     if (hits.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 26),

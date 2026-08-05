@@ -4,6 +4,7 @@ import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/core/constants.dart';
 import 'package:village_sim/systems/law_compass.dart';
 import 'package:village_sim/world/reference_village_plan.dart';
+import 'package:village_sim/world/season.dart';
 import 'package:village_sim/world/world_generator.dart';
 
 /// REFERANS KÖY — planın regresyon testi.
@@ -100,6 +101,7 @@ void main() {
         BuildingType.lumberCamp, // odun
         BuildingType.fisherCabin, // balık
         BuildingType.floristCottage, // çiçek
+        BuildingType.tailor, // kıyafet geçişi
         BuildingType.beehive, // bal
       ]) {
         expect(types, contains(need), reason: '${need.name} planda yok');
@@ -182,6 +184,39 @@ void main() {
             reason: '$id pusula haritasında yok (yasa silinmiş olabilir)');
       }
       expect(kRefLaws.toSet().length, kRefLaws.length, reason: 'tekrar eden yasa');
+    });
+  });
+
+  // ── Mevsimlik varyantlar ──────────────────────────────────────────────────
+  // Godmode dört referans köy kurar (bkz. dev_panel). Mevsim gün sayacından
+  // TÜREDİĞİ için varyantın doğruluğu tamamen takvim aritmetiğine bakar;
+  // yanlış gün, sessizce "kış" diye yaz köyü kurar.
+  group('mevsimlik referans varyantları', () {
+    test('her varyantın günü GERÇEKTEN istenen mevsime düşer', () {
+      for (final s in Season.values) {
+        expect(seasonForDay(kReferenceDayFor(s)), s,
+            reason: '${s.label} varyantı yanlış mevsime düşüyor');
+      }
+    });
+
+    test('takvim hiç GERİ sarmaz — kronik geleceğe düşmesin', () {
+      for (final s in Season.values) {
+        expect(kReferenceDayFor(s), greaterThanOrEqualTo(kReferenceDay),
+            reason: '${s.label} varyantı köyün geçmişinden öncesine gidiyor');
+      }
+    });
+
+    test('dördü de mevsim içinde AYNI güne denk gelir (tek fark mevsim)', () {
+      final pos = Season.values
+          .map((s) => (kReferenceDayFor(s) - 1) % kDaysPerSeason)
+          .toSet();
+      expect(pos.length, 1, reason: 'varyantlar mevsim içinde farklı günlerde');
+    });
+
+    test('temel mevsim kanonik slotu kullanır, diğerleri ayrı slot', () {
+      expect(kReferenceSlotIdFor(kReferenceBaseSeason), kReferenceSlotId);
+      final ids = Season.values.map(kReferenceSlotIdFor).toSet();
+      expect(ids.length, Season.values.length, reason: 'slotlar çakışıyor');
     });
   });
 }

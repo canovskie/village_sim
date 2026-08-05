@@ -10,10 +10,10 @@ import 'mobile_ui.dart';
 /// (teklif kademeleri, itibara göre tutar/tutmaz); devşirmede fidye seçeneği.
 class ImperialModal extends StatefulWidget {
   final ImperialDemand demand;
-  final double favor;       // 0..1 İmparatorlukla ilişki
-  final int ransomCost;     // devşirme fidyesi (altın)
+  final double favor; // 0..1 İmparatorlukla ilişki
+  final int ransomCost; // devşirme fidyesi (altın)
   final bool canAcceptFull; // tam ödeme karşılanabiliyor mu
-  final bool canRansom;     // fidye karşılanabiliyor mu
+  final bool canRansom; // fidye karşılanabiliyor mu
   final double resistChance; // heyeti kovma başarı şansı (0 = denenemez)
 
   // ── REJİM (bkz. systems/regime.dart) ────────────────────────────────────────
@@ -81,27 +81,28 @@ class _ImperialModalState extends State<ImperialModal> {
       ], _seed);
     }
     final opener = Voice.pick(
-        f >= 0.7
-            ? const [
-                'Komutan atından indi, eldivenini çıkardı. Defteri açtı:',
-                'Komutan seni adınla selamladı, sonra defteri açtı:',
-              ]
-            : f >= 0.25
-                ? const [
-                    'Bölük meydanda dizildi. Komutan defterini açtı, satırı buldu:',
-                    'Komutan inmedi bile. Eyerden okudu:',
-                  ]
-                : const [
-                    'Askerler sıraya girdi, mızraklar indi. Komutan defteri sıkıntıyla açtı:',
-                    'Komutan bugün konuşmak istemiyor. Satırı buldu, parmağını üstüne koydu:',
-                  ],
-        _seed);
+      f >= 0.7
+          ? const [
+              'Komutan atından indi, eldivenini çıkardı. Defteri açtı:',
+              'Komutan seni adınla selamladı, sonra defteri açtı:',
+            ]
+          : f >= 0.25
+          ? const [
+              'Bölük meydanda dizildi. Komutan defterini açtı, satırı buldu:',
+              'Komutan inmedi bile. Eyerden okudu:',
+            ]
+          : const [
+              'Askerler sıraya girdi, mızraklar indi. Komutan defteri sıkıntıyla açtı:',
+              'Komutan bugün konuşmak istemiyor. Satırı buldu, parmağını üstüne koydu:',
+            ],
+      _seed,
+    );
     final close = f >= 0.7
         ? 'Bugün de kolay geçsin.'
         : f >= 0.25
-            ? 'Akşama kadar vaktin var.'
-            : 'Bu satır bir şekilde kapanacak. Nasıl kapanacağı senin elinde değil, '
-                'ne kadar acıyacağı senin elinde.';
+        ? 'Akşama kadar vaktin var.'
+        : 'Bu satır bir şekilde kapanacak. Nasıl kapanacağı senin elinde değil, '
+              'ne kadar acıyacağı senin elinde.';
     return '$opener\n"${d.label}." ${d.bite} $close';
   }
 
@@ -134,31 +135,35 @@ class _ImperialModalState extends State<ImperialModal> {
 
   /// Anlatı bloğu — heyetin künyesi, komutanın satırı, itibar, rejim bandı.
   List<Widget> _narrative() => [
-        Row(
-          children: [
-            const Text('⚔️', style: TextStyle(fontSize: 22)),
-            const SizedBox(width: 10),
-            Flexible(
-              child: Text('İMPARATORLUK HEYETİ',
-                  style: AppUi.label.copyWith(color: AppUi.rust)),
-            ),
-          ],
+    Row(
+      children: [
+        const Text('⚔️', style: TextStyle(fontSize: 22)),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            'İMPARATORLUK HEYETİ',
+            style: AppUi.label.copyWith(color: AppUi.rust),
+          ),
         ),
-        const SizedBox(height: 8),
-        Text(_haggling ? 'Pazarlık masası' : 'Defter açıldı',
-            style: AppUi.title.copyWith(fontSize: 18)),
-        const SizedBox(height: 10),
-        Text(
-          _commanderLine,
-          style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
-        ),
-        const SizedBox(height: 12),
-        _favorBar(),
-        if (widget.postureNote.isNotEmpty || widget.councilVerdict != null) ...[
-          const SizedBox(height: 10),
-          _regimeBanner(),
-        ],
-      ];
+      ],
+    ),
+    const SizedBox(height: 8),
+    Text(
+      _haggling ? 'Pazarlık masası' : 'Defter açıldı',
+      style: AppUi.title.copyWith(fontSize: 18),
+    ),
+    const SizedBox(height: 10),
+    Text(
+      _commanderLine,
+      style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
+    ),
+    const SizedBox(height: 12),
+    _favorBar(),
+    if (widget.postureNote.isNotEmpty || widget.councilVerdict != null) ...[
+      const SizedBox(height: 10),
+      _regimeBanner(),
+    ],
+  ];
 
   /// TELEFON YATAY — solda heyetin sözü, sağda cevabın.
   ///
@@ -167,54 +172,56 @@ class _ImperialModalState extends State<ImperialModal> {
   /// altına itiyordu — vergi ültimatomunda cevap seçenekleri görünmüyordu.
   Widget _compactBody(ImperialDemand d) {
     return Builder(
-      builder: (context) => Positioned.fill(
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: MobileUi.left(context),
-            right: MobileUi.right(context),
-            top: MobileUi.top(context),
-            bottom: MobileUi.bottom(context),
-          ),
-          child: AppReveal(
-            child: AppPanel(
-              accent: AppUi.rust,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    flex: 5,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _narrative(),
+      builder: (context) {
+        final window = MobileUi.windowSize(context);
+        return Positioned.fill(
+          child: Center(
+            child: SizedBox(
+              width: window.width,
+              height: window.height,
+              child: AppReveal(
+                child: AppPanel(
+                  accent: AppUi.rust,
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: 5,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: _narrative(),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Container(width: 1, color: AppUi.line),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 4,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_haggling)
-                            ..._haggleOptions(d)
-                          else
-                            ..._mainOptions(d),
-                        ],
+                      const SizedBox(width: 10),
+                      Container(width: 1, color: AppUi.line),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 4,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (_haggling)
+                                ..._haggleOptions(d)
+                              else
+                                ..._mainOptions(d),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -233,10 +240,7 @@ class _ImperialModalState extends State<ImperialModal> {
                 children: [
                   ..._narrative(),
                   const AppDivider(),
-                  if (_haggling)
-                    ..._haggleOptions(d)
-                  else
-                    ..._mainOptions(d),
+                  if (_haggling) ..._haggleOptions(d) else ..._mainOptions(d),
                 ],
               ),
             ),
@@ -263,8 +267,10 @@ class _ImperialModalState extends State<ImperialModal> {
           color: _favorColor,
         ),
         const SizedBox(height: 4),
-        Text('İmparatorluğun defterinde $_favorWord.',
-            style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
+        Text(
+          'İmparatorluğun defterinde $_favorWord.',
+          style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+        ),
       ],
     );
   }
@@ -287,19 +293,34 @@ class _ImperialModalState extends State<ImperialModal> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (widget.postureNote.isNotEmpty)
-            Text('⚑ ${widget.postureNote}',
-                style: AppUi.body.copyWith(
-                    fontSize: 11, height: 1.4, color: AppUi.textMid)),
+            Text(
+              '⚑ ${widget.postureNote}',
+              style: AppUi.body.copyWith(
+                fontSize: 11,
+                height: 1.4,
+                color: AppUi.textMid,
+              ),
+            ),
           if (widget.councilVerdict != null) ...[
             if (widget.postureNote.isNotEmpty) const SizedBox(height: 7),
-            Text('🏛 ${widget.councilLine}',
-                style: AppUi.bodyHi.copyWith(
-                    fontSize: 11.5, height: 1.4, color: AppUi.accent)),
+            Text(
+              '🏛 ${widget.councilLine}',
+              style: AppUi.bodyHi.copyWith(
+                fontSize: 11.5,
+                height: 1.4,
+                color: AppUi.accent,
+              ),
+            ),
             const SizedBox(height: 3),
-            Text('Başka türlü seçersen meclise rağmen karar vermiş olursun — '
-                'moral ve huzur bunun bedelini öder.',
-                style: AppUi.body.copyWith(
-                    fontSize: 9.5, height: 1.35, color: AppUi.textLo)),
+            Text(
+              'Başka türlü seçersen meclise rağmen karar vermiş olursun — '
+              'moral ve huzur bunun bedelini öder.',
+              style: AppUi.body.copyWith(
+                fontSize: 9.5,
+                height: 1.35,
+                color: AppUi.textLo,
+              ),
+            ),
           ],
         ],
       ),
@@ -315,42 +336,59 @@ class _ImperialModalState extends State<ImperialModal> {
   List<Widget> _mainOptions(ImperialDemand d) {
     return [
       if (d.isConscript) ...[
-        _opt('Genci teslim et', 'Kolona katılır ve bir daha dönmez. Köy yas tutar.',
-            AppUi.textMid, widget.onAccept, defies: _defies(ImperialVerdict.comply)),
         _opt(
-            'Altınla kurtar · ${widget.ransomCost}★',
-            widget.canRansom
-                ? 'Keseyi tart, çocuğu bırak. İtibar da biraz kazanılır.'
-                : 'Kese bu kadarını kaldırmıyor.',
-            AppUi.gold,
-            widget.canRansom ? widget.onRansom : null,
-            defies: _defies(ImperialVerdict.comply)),
+          'Genci teslim et',
+          'Kolona katılır ve bir daha dönmez. Köy yas tutar.',
+          AppUi.textMid,
+          widget.onAccept,
+          defies: _defies(ImperialVerdict.comply),
+        ),
+        _opt(
+          'Altınla kurtar · ${widget.ransomCost}★',
+          widget.canRansom
+              ? 'Keseyi tart, çocuğu bırak. İtibar da biraz kazanılır.'
+              : 'Kese bu kadarını kaldırmıyor.',
+          AppUi.gold,
+          widget.canRansom ? widget.onRansom : null,
+          defies: _defies(ImperialVerdict.comply),
+        ),
       ] else ...[
         _opt(
-            'Tam öde · ${d.amount}${d.icon}',
-            widget.canAcceptFull
-                ? 'Rakamı sorgusuz kapat. En güvenli yol; itibarın yükselir.'
-                : 'Elindeki yetmiyor. Ne bulurlarsa onu alırlar.',
-            AppUi.sage,
-            widget.onAccept,
-            defies: _defies(ImperialVerdict.comply)),
-        _opt('Pazarlık et', 'Daha düşük bir sayı söyle. İtibarın yüksekse tutar.',
-            AppUi.accent, () => setState(() => _haggling = true),
-            defies: _defies(ImperialVerdict.haggle)),
+          'Tam öde · ${d.amount}${d.icon}',
+          widget.canAcceptFull
+              ? 'Rakamı sorgusuz kapat. En güvenli yol; itibarın yükselir.'
+              : 'Elindeki yetmiyor. Ne bulurlarsa onu alırlar.',
+          AppUi.sage,
+          widget.onAccept,
+          defies: _defies(ImperialVerdict.comply),
+        ),
+        _opt(
+          'Pazarlık et',
+          'Daha düşük bir sayı söyle. İtibarın yüksekse tutar.',
+          AppUi.accent,
+          () => setState(() => _haggling = true),
+          defies: _defies(ImperialVerdict.haggle),
+        ),
       ],
       const SizedBox(height: 8),
       // Direniş — yalnız köy yeterince güçlüyse (muhafız/kalabalık). Başarı
       // şansı AÇIKÇA gösterilir (#7 saydamlık): körlemesine kumar değil.
       if (widget.resistChance > 0)
         _opt(
-            'Diren ve kov  ·  %${(widget.resistChance * 100).round()} başarı',
-            'Muhafızlar eşiğe dizilir. Tutarsa kimse ölmez, köy başını dik tutar; '
-                'tutmazsa ilk düşenler onlar olur.',
-            AppUi.accent,
-            widget.onResist,
-            defies: _defies(ImperialVerdict.resist)),
-      _opt('Reddet', 'Hiçbir şey verme. Bedeli komutan kendi eliyle toplar.',
-          AppUi.rust, widget.onRefuse, defies: _refuseDefies),
+          'Diren ve kov  ·  %${(widget.resistChance * 100).round()} başarı',
+          'Muhafızlar eşiğe dizilir. Tutarsa kimse ölmez, köy başını dik tutar; '
+              'tutmazsa ilk düşenler onlar olur.',
+          AppUi.accent,
+          widget.onResist,
+          defies: _defies(ImperialVerdict.resist),
+        ),
+      _opt(
+        'Reddet',
+        'Hiçbir şey verme. Bedeli komutan kendi eliyle toplar.',
+        AppUi.rust,
+        widget.onRefuse,
+        defies: _refuseDefies,
+      ),
     ];
   }
 
@@ -360,25 +398,37 @@ class _ImperialModalState extends State<ImperialModal> {
     // oyuncuya açıkça göster (deneme-yanılma yerine bilinçli risk).
     const fracs = [0.5, 0.7, 0.85];
     // Eşik sahne hesabıyla birebir: itibar + REJİM kolaylığı (tüccar köy ucuza).
-    final threshold =
-        (0.85 - widget.favor * 0.45 - widget.haggleEase).clamp(0.0, 1.0);
+    final threshold = (0.85 - widget.favor * 0.45 - widget.haggleEase).clamp(
+      0.0,
+      1.0,
+    );
     return [
       for (final f in fracs)
         _opt(
-            '${(d.amount * f).round()}${d.icon} öner  (%${(f * 100).round()})',
-            f >= threshold
-                ? '✓ İtibarın bu sayıyı taşır. Kalemi büyük ihtimalle çizer.'
-                : '⚠ Bu sayı komutanı güldürür. Reddederse rakamın tamamını ödersin.',
-            f >= threshold ? AppUi.sage : AppUi.rust,
-            () => widget.onHaggle(f)),
+          '${(d.amount * f).round()}${d.icon} öner  (%${(f * 100).round()})',
+          f >= threshold
+              ? '✓ İtibarın bu sayıyı taşır. Kalemi büyük ihtimalle çizer.'
+              : '⚠ Bu sayı komutanı güldürür. Reddederse rakamın tamamını ödersin.',
+          f >= threshold ? AppUi.sage : AppUi.rust,
+          () => widget.onHaggle(f),
+        ),
       const SizedBox(height: 8),
-      _opt('Vazgeç', 'Ağzını açma. Baştaki seçeneklere dön.', AppUi.textLo,
-          () => setState(() => _haggling = false)),
+      _opt(
+        'Vazgeç',
+        'Ağzını açma. Baştaki seçeneklere dön.',
+        AppUi.textLo,
+        () => setState(() => _haggling = false),
+      ),
     ];
   }
 
-  Widget _opt(String label, String detail, Color accent, VoidCallback? onTap,
-      {bool defies = false}) {
+  Widget _opt(
+    String label,
+    String detail,
+    Color accent,
+    VoidCallback? onTap, {
+    bool defies = false,
+  }) {
     final disabled = onTap == null;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
@@ -396,31 +446,48 @@ class _ImperialModalState extends State<ImperialModal> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Expanded(
-                    child: Text(label, style: AppUi.bodyHi.copyWith(fontSize: 13.5)),
-                  ),
-                  // Meclise rağmen seçim: küçük kırmızı uyarı rozeti.
-                  if (defies) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: AppUi.rust.withValues(alpha: 0.5)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: AppUi.bodyHi.copyWith(fontSize: 13.5),
                       ),
-                      child: Text('meşruiyet bedeli',
-                          style: AppUi.label.copyWith(
-                              fontSize: 7, color: AppUi.rust, letterSpacing: 0.5)),
                     ),
+                    // Meclise rağmen seçim: küçük kırmızı uyarı rozeti.
+                    if (defies) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppUi.rust.withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Text(
+                          'meşruiyet bedeli',
+                          style: AppUi.label.copyWith(
+                            fontSize: 7,
+                            color: AppUi.rust,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ]),
+                ),
                 const SizedBox(height: 2),
-                Text(detail,
-                    style: AppUi.body.copyWith(
-                        fontSize: 10.5, color: AppUi.textLo)),
+                Text(
+                  detail,
+                  style: AppUi.body.copyWith(
+                    fontSize: 10.5,
+                    color: AppUi.textLo,
+                  ),
+                ),
               ],
             ),
           ),

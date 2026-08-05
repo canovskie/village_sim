@@ -31,6 +31,36 @@ extension _SceneReferenceVillage on _VillageSceneState {
   int _refCol(int localCol) => kRefOx + localCol;
   int _refRow(int localRow) => kRefOy + localRow;
 
+  /// TARLANIN MEVSİMLİK HÂLİ — referans köyün dört varyantı arasındaki tek
+  /// görsel fark (bina/kadro/plan aynı).
+  ///
+  /// Kışın rastgele boyda ekin bırakmak yanlış olurdu: büyüme kışın DURUR
+  /// (bkz. season.growthMultiplier), yani yarı boy ekin sonsuza kadar öyle
+  /// kalır ve "donmuş tarla" değil "bozuk tarla" gibi görünür. Kışın toprak
+  /// hasat edilmiş ve nadasta durur — kar altındaki çıplak tarla.
+  FarmTile _refFarmTile(int c, int r, Season season) {
+    final t = FarmTile(c, r);
+    switch (season) {
+      case Season.winter:
+        t.harvest(fallowSeconds: 40);
+      case Season.autumn:
+        // Harman vakti: çoğu tarla hasada hazır ya da bir aşama uzağında.
+        t.sow();
+        t.stage = 3 + _rng.nextInt(2);
+        t.growthProgress = _rng.nextDouble();
+      case Season.spring:
+        // Yeni ekilmiş: filizler henüz alçak.
+        t.sow();
+        t.stage = _rng.nextInt(2);
+        t.growthProgress = _rng.nextDouble();
+      case Season.summer:
+        t.sow();
+        t.stage = _rng.nextInt(4);
+        t.growthProgress = _rng.nextDouble();
+    }
+    return t;
+  }
+
   /// Yerel kutunun (payla genişletilmiş) içinde mi?
   bool _inRefBox(int c, int r, {int pad = 0}) =>
       c >= kRefOx - pad &&
@@ -40,7 +70,12 @@ extension _SceneReferenceVillage on _VillageSceneState {
 
   /// Referans köyü kurar. Sahne hazır olduğunda (asset'ler yüklendikten sonra)
   /// bir kez çağrılır; ardından [_saveNow] ile slota yazılır.
-  void buildReferenceVillage() {
+  ///
+  /// [season] dört mevsimlik varyantı seçer (bkz. [kReferenceDayFor]). Plan,
+  /// tohum, kadro, kanunlar AYNI kalır — değişen yalnız takvim ve tarlanın
+  /// hâli. Böylece "kışın ne oluyor" sorusunun cevabında mevsimden başka
+  /// değişken kalmaz.
+  void buildReferenceVillage({Season season = Season.summer}) {
     setStateHere(() {
       // ── 0. Determinizm ─────────────────────────────────────────────────────
       // Dünya üreticinin kendi rng'si var; sahnenin _rng'si isim/kişilik/yaş
@@ -103,7 +138,7 @@ extension _SceneReferenceVillage on _VillageSceneState {
             final r = _refRow(lr);
             if (_waterTiles.contains((c, r))) continue;
             if (_isOccupiedByBuilding(c, r)) continue;
-            _farmTiles.add(_devSownTile(c, r));
+            _farmTiles.add(_refFarmTile(c, r, season));
           }
         }
       }
@@ -123,9 +158,30 @@ extension _SceneReferenceVillage on _VillageSceneState {
       _governanceLegacy = 0.0;
       _foodHunger = 0.0;
 
+      // ── 7b. Görev merdiveni: köyün geçmişi KAPALI ──────────────────────────
+      // Referans köy KURULMUŞ bir köydür — ateşi çoktan yakmış, ilk sepetini
+      // vermiş, ilk gecesini çıkarmıştır. Merdiven bunu bilmezse köy sonsuza
+      // kadar kademe 0'da kalır: kuruluşun iki adımı (sepeti ver / aşçı ver)
+      // bilerek OYUNCUNUN elle iş vermesini ölçer, otomatik kadro onları asla
+      // tamamlamaz. Sonuç, kış karesinde görüldü: oturmuş bir köyün üstünde
+      // kuruluş öğreticisi çalışıyor, bir kurucu "sepet boş duruyor" diyordu.
+      //
+      // Kuruluş adımları KOŞULSUZ kapanır (köyün geçmişi), üst kademelerin
+      // adımları ise yalnız gerçekten sağlanıyorsa — merdiven hediye edilmez.
+      final refCtx = _questContext();
+      for (final q in QuestBook.all) {
+        if (q.tier == 0 || q.check(refCtx)) _completedQuests.add(q.id);
+      }
+      _charterTier = QuestBook.charterTier(
+        _completedQuests.length,
+        _policies.enactedCount,
+      );
+
       // ── 8. Takvim & kamera ─────────────────────────────────────────────────
-      // 24. gün, sabahın ortası: gündüz işi görünür, gece testine 1 tur var.
-      _dayCount = 24;
+      // Sabahın ortası: gündüz işi görünür, gece testine 1 tur var. Gün sayısı
+      // mevsime göre ileri sarılır (bkz. kReferenceDayFor) — mevsim ayrı bir
+      // alan değil, takvimden TÜREDİĞİ için tek doğruluk kaynağı burası.
+      _dayCount = kReferenceDayFor(season);
       _cycle.timeOfDay = 0.33;
       _lastTimeOfDay = _cycle.timeOfDay;
       _lastSeason = _season;

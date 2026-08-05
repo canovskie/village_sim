@@ -8,6 +8,28 @@ part of '../main.dart';
 /// [[dev_command]] saf modeli, [[dev_console]] UI'ı; burası ikisini sahneye
 /// (setStateHere + tüm _dev* yardımcıları) bağlayan yer.
 extension _SceneDevConsole on _VillageSceneState {
+  /// MEVSİME ATLA — konsol komutu ile godmode panelinin ORTAK gövdesi.
+  ///
+  /// Mevsim gün sayacından türer (bkz. season.dart), o yüzden "ayarlamak" =
+  /// takvimi İLERİ sarmak. Hep ileri: geri almak gün-tabanlı sayaçları
+  /// (dilekçe fitili, kalkma kotası, kronik) tutarsız bırakırdı. Kışa
+  /// atlamak, çadır ↔ ocak mesafesinin bedelini beklemeden görmenin yolu.
+  ///
+  /// `setState` SARMAZ — iki çağıran da kendi setState'i içinde çağırır.
+  void jumpToSeason(Season target) {
+    var d = _dayCount;
+    for (var i = 1; i <= 4 * kDaysPerSeason; i++) {
+      if (seasonForDay(_dayCount + i) == target) {
+        d = _dayCount + i;
+        break;
+      }
+    }
+    final jumped = d - _dayCount;
+    _dayCount = d;
+    logDev('${target.icon} ${target.label} — takvim $jumped gün ileri',
+        tag: '🗓️');
+  }
+
   // ── Komut kayıt defteri ─────────────────────────────────────────────────
   /// Konsolun listelediği tüm dev komutları. Her build'de yeniden kurulur —
   /// closure'lar sahne state'ini yakalar (buildDevPanel'in yaptığı gibi).
@@ -465,6 +487,31 @@ extension _SceneDevConsole on _VillageSceneState {
             'night' => 0.92,
             _ => 0.50,
           };
+        }),
+      ),
+      // Mevsim gün sayacından türer (bkz. season.dart), o yüzden "ayarlamak" =
+      // takvimi İLERİ sarmak. Hep ileri: geri almak gün-tabanlı sayaçları
+      // (dilekçe fitili, kalkma kotası, kronik) tutarsız bırakırdı. Kışa
+      // atlamak, çadır ↔ ocak mesafesinin bedelini beklemeden görmenin yolu.
+      DevCommand(
+        id: 'season.jump',
+        label: 'Mevsimi Atla',
+        category: DevCat.zaman,
+        params: const [
+          DevParam.choice('season', 'Mevsim', [
+            ('spring', '🌱 İlkbahar'),
+            ('summer', '☀ Yaz'),
+            ('autumn', '🍂 Sonbahar'),
+            ('winter', '❄ Kış'),
+          ], choiceDefault: 'winter'),
+        ],
+        run: (a) => setStateHere(() {
+          jumpToSeason(switch (a.getStr('season', 'winter')) {
+            'spring' => Season.spring,
+            'summer' => Season.summer,
+            'autumn' => Season.autumn,
+            _ => Season.winter,
+          });
         }),
       ),
       DevCommand(

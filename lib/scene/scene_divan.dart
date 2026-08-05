@@ -34,6 +34,7 @@ extension _SceneDivan on _VillageSceneState {
           // ertesi gün başka kelimelerle konuşur (rebuild'de zıplamaz).
           seed: _dayCount,
           identity: _houses.identityName,
+          village: _villageName,
           morale: _stats.morale,
           population: _villagers.length,
           food: _stockpile.food,

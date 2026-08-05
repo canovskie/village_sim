@@ -122,6 +122,81 @@ class WorldTag extends StatelessWidget {
   }
 }
 
+/// KÖYÜN SESİ — bir köylünün ağzından çıkan tek cümle, sahnenin üstünde.
+///
+/// [WorldTag] ile aynı dil: KUTU YOK. Çizgi roman baloncuğu sahneye
+/// yapıştırılmış bir arayüz parçası gibi durur; burada okunurluk gölgeden
+/// gelir, cümle sahneye ait bir yazıt gibi durur.
+///
+/// Baş üstü EMOJİ değil (bkz. feedback_event_animation): bu bir duygu ikonu
+/// değil, birinin söylediği söz. Duygunun kendisi gövde dilinde kalır.
+class WorldSpeech extends StatelessWidget {
+  const WorldSpeech({
+    super.key,
+    required this.anchor,
+    required this.name,
+    required this.line,
+    required this.opacity,
+    this.maxWidth = 260,
+  });
+
+  /// Cümlenin ALT-ORTA noktası (ekran uzayı) — konuşanın başının üstü.
+  final Offset anchor;
+  final String name;
+  final String line;
+  final double opacity;
+  final double maxWidth;
+
+  static const _shadows = <Shadow>[
+    Shadow(blurRadius: 9, color: Color(0xD9000000)),
+    Shadow(blurRadius: 2.5, color: Color(0xF2000000)),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final rise = (1.0 - opacity) * 6.0;
+    return Transform.translate(
+      offset: Offset(anchor.dx, anchor.dy - rise),
+      child: FractionalTranslation(
+        translation: const Offset(-0.5, -1.0),
+        child: Opacity(
+          opacity: opacity.clamp(0.0, 1.0),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  line,
+                  textAlign: TextAlign.center,
+                  style: AppUi.body.copyWith(
+                    fontSize: 12.5,
+                    height: 1.3,
+                    color: AppUi.textHi,
+                    shadows: _shadows,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '— $name',
+                  textAlign: TextAlign.center,
+                  style: AppUi.label.copyWith(
+                    fontSize: 9.5,
+                    letterSpacing: 0.6,
+                    color: AppUi.accentSoft,
+                    shadows: _shadows,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Hedefin ayağındaki soluk halka — künyenin kimi anlattığını kalabalıkta
 /// tartışmaya bırakmaz. İzometrik zeminle uyum için basık elips.
 class WorldTagRing extends StatelessWidget {

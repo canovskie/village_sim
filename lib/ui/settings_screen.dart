@@ -39,6 +39,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // alçak ekranda İKİ SÜTUNA açılır (boşta duran genişliği kullanır, böylece
     // kaydırmaya hiç gerek kalmaz).
     final compact = useCompactGameUi(context);
+    final mobileWindow = compact
+        ? MobileUi.windowSize(context, maxWidth: 720)
+        : null;
     return Scaffold(
       backgroundColor: AppUi.scrim,
       body: SafeArea(
@@ -48,61 +51,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Padding(
               padding: EdgeInsets.all(compact ? MobileUi.gutter : 20),
               child: AppReveal(
-                child: AppPanel(
-                  accent: AppUi.accent,
-                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          GameIcon(GameIconData.gear,
-                              size: 18, color: AppUi.accent),
-                          const SizedBox(width: 10),
-                          const Expanded(
-                            child: Text('AYARLAR', style: AppUi.title),
-                          ),
-                          AppIconButton(
-                            icon: GameIconData.close,
-                            size: 32,
-                            onTap: () => Navigator.of(context).pop(),
-                          ),
-                        ],
-                      ),
-                      const AppDivider(),
-                      Flexible(
-                        child: SingleChildScrollView(
-                          child: compact ? _twoColumnBody() : _singleColumnBody(),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      const AppDivider(),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppButton(
-                              label: 'SIFIRLA',
-                              kind: AppButtonKind.ghost,
-                              expand: true,
-                              onTap: _model.resetToDefaults,
+                child: SizedBox(
+                  width: mobileWindow?.width,
+                  height: mobileWindow?.height,
+                  child: AppPanel(
+                    accent: AppUi.accent,
+                    padding: EdgeInsets.fromLTRB(
+                      compact ? 14 : 18,
+                      compact ? 11 : 16,
+                      compact ? 14 : 18,
+                      compact ? 12 : 18,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            GameIcon(
+                              GameIconData.gear,
+                              size: 18,
+                              color: AppUi.accent,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: AppButton(
-                              label: 'GERİ',
-                              kind: AppButtonKind.filled,
-                              icon: GameIconData.chevron,
-                              expand: true,
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Text('AYARLAR', style: AppUi.title),
+                            ),
+                            AppIconButton(
+                              icon: GameIconData.close,
+                              size: 32,
                               onTap: () => Navigator.of(context).pop(),
                             ),
+                          ],
+                        ),
+                        const AppDivider(),
+                        Flexible(
+                          child: SingleChildScrollView(
+                            child: compact
+                                ? _twoColumnBody()
+                                : _singleColumnBody(),
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                        SizedBox(height: compact ? 8 : 16),
+                        const AppDivider(),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: AppButton(
+                                label: 'SIFIRLA',
+                                kind: AppButtonKind.ghost,
+                                expand: true,
+                                onTap: _model.resetToDefaults,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: AppButton(
+                                label: 'GERİ',
+                                kind: AppButtonKind.filled,
+                                icon: GameIconData.chevron,
+                                expand: true,
+                                onTap: () => Navigator.of(context).pop(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -115,95 +132,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   /// Alçak ekran: SES solda, GÖRÜNTÜ + DİL sağda — hiçbiri fold altında kalmaz.
   Widget _twoColumnBody() => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: _soundSection(),
-            ),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ..._displaySection(),
-                const SizedBox(height: 12),
-                ..._languageSection(),
-              ],
-            ),
-          ),
-        ],
-      );
-
-  Widget _singleColumnBody() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ..._soundSection(),
-          const SizedBox(height: 12),
-          ..._displaySection(),
-          const SizedBox(height: 12),
-          ..._languageSection(),
-        ],
-      );
-
-  List<Widget> _soundSection() => [
-        const AppSectionLabel('SES'),
-        _Slider(
-          label: 'Müzik',
-          value: _model.musicVolume,
-          onChanged: (v) => _model.musicVolume = v,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: _soundSection(),
         ),
-        // ORTAM ayrı bir kaydırıcı: eskiden kuş/cırcır/yağmur döngüleri
-        // "Müzik"e bağlıydı, yani etiket yalan söylüyordu. Köyün doğa sesini
-        // kısmak isteyip müziği bırakmak (ya da tersi) artık mümkün.
-        _Slider(
-          label: 'Ortam',
-          value: _model.ambientVolume,
-          onChanged: (v) => _model.ambientVolume = v,
-        ),
-        _Slider(
-          label: 'Efekt',
-          value: _model.sfxVolume,
-          onChanged: (v) => _model.sfxVolume = v,
-        ),
-      ];
-
-  List<Widget> _displaySection() => [
-        const AppSectionLabel('GÖRÜNTÜ'),
-        _Toggle(
-          label: 'FPS Göster',
-          value: _model.showFps,
-          onChanged: (v) => _model.showFps = v,
-        ),
-        _Toggle(
-          label: 'Olay Sarsıntısı',
-          value: _model.shakeOnEvents,
-          onChanged: (v) => _model.shakeOnEvents = v,
-        ),
-      ];
-
-  List<Widget> _languageSection() => [
-        const AppSectionLabel('DİL'),
-        Row(
+      ),
+      const SizedBox(width: 20),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            for (final lang in AppLanguage.values) ...[
-              Expanded(
-                child: _LangChip(
-                  language: lang,
-                  selected: _model.language == lang,
-                  onTap: () => _model.language = lang,
-                ),
-              ),
-              if (lang != AppLanguage.values.last) const SizedBox(width: 8),
-            ],
+            ..._displaySection(),
+            const SizedBox(height: 12),
+            ..._languageSection(),
           ],
         ),
-      ];
+      ),
+    ],
+  );
+
+  Widget _singleColumnBody() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      ..._soundSection(),
+      const SizedBox(height: 12),
+      ..._displaySection(),
+      const SizedBox(height: 12),
+      ..._languageSection(),
+    ],
+  );
+
+  List<Widget> _soundSection() => [
+    const AppSectionLabel('SES'),
+    _Slider(
+      label: 'Müzik',
+      value: _model.musicVolume,
+      onChanged: (v) => _model.musicVolume = v,
+    ),
+    // ORTAM ayrı bir kaydırıcı: eskiden kuş/cırcır/yağmur döngüleri
+    // "Müzik"e bağlıydı, yani etiket yalan söylüyordu. Köyün doğa sesini
+    // kısmak isteyip müziği bırakmak (ya da tersi) artık mümkün.
+    _Slider(
+      label: 'Ortam',
+      value: _model.ambientVolume,
+      onChanged: (v) => _model.ambientVolume = v,
+    ),
+    _Slider(
+      label: 'Efekt',
+      value: _model.sfxVolume,
+      onChanged: (v) => _model.sfxVolume = v,
+    ),
+  ];
+
+  List<Widget> _displaySection() => [
+    const AppSectionLabel('GÖRÜNTÜ'),
+    _Toggle(
+      label: 'FPS Göster',
+      value: _model.showFps,
+      onChanged: (v) => _model.showFps = v,
+    ),
+    _Toggle(
+      label: 'Olay Sarsıntısı',
+      value: _model.shakeOnEvents,
+      onChanged: (v) => _model.shakeOnEvents = v,
+    ),
+  ];
+
+  List<Widget> _languageSection() => [
+    const AppSectionLabel('DİL'),
+    Row(
+      children: [
+        for (final lang in AppLanguage.values) ...[
+          Expanded(
+            child: _LangChip(
+              language: lang,
+              selected: _model.language == lang,
+              onTap: () => _model.language = lang,
+            ),
+          ),
+          if (lang != AppLanguage.values.last) const SizedBox(width: 8),
+        ],
+      ],
+    ),
+  ];
 }
 
 // ── Yardımcı widget'lar ─────────────────────────────────────────────────────
@@ -225,10 +242,7 @@ class _Slider extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          SizedBox(
-            width: 60,
-            child: Text(label, style: AppUi.body),
-          ),
+          SizedBox(width: 60, child: Text(label, style: AppUi.body)),
           Expanded(
             child: SliderTheme(
               data: SliderTheme.of(context).copyWith(
@@ -240,20 +254,16 @@ class _Slider extends StatelessWidget {
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
               ),
-              child: Slider(
-                value: value,
-                onChanged: onChanged,
-              ),
+              child: Slider(value: value, onChanged: onChanged),
             ),
           ),
           SizedBox(
             width: 40,
-            child: Text('$pct%',
-                textAlign: TextAlign.right,
-                style: AppUi.number.copyWith(
-                  fontSize: 12,
-                  color: AppUi.accent,
-                )),
+            child: Text(
+              '$pct%',
+              textAlign: TextAlign.right,
+              style: AppUi.number.copyWith(fontSize: 12, color: AppUi.accent),
+            ),
           ),
         ],
       ),
@@ -289,7 +299,9 @@ class _Toggle extends StatelessWidget {
               decoration: BoxDecoration(
                 color: value
                     ? Color.alphaBlend(
-                        AppUi.accent.withValues(alpha: 0.28), AppUi.surface2)
+                        AppUi.accent.withValues(alpha: 0.28),
+                        AppUi.surface2,
+                      )
                     : AppUi.surface0,
                 borderRadius: BorderRadius.circular(13),
                 border: Border.all(
@@ -299,16 +311,16 @@ class _Toggle extends StatelessWidget {
                 boxShadow: value
                     ? [
                         BoxShadow(
-                            color: AppUi.accent.withValues(alpha: 0.35),
-                            blurRadius: 9)
+                          color: AppUi.accent.withValues(alpha: 0.35),
+                          blurRadius: 9,
+                        ),
                       ]
                     : null,
               ),
               child: AnimatedAlign(
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeOut,
-                alignment:
-                    value ? Alignment.centerRight : Alignment.centerLeft,
+                alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                 child: Padding(
                   padding: const EdgeInsets.all(3),
                   child: Container(
@@ -363,18 +375,22 @@ class _LangChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(language.code,
-                style: AppUi.button.copyWith(
-                  fontSize: 13,
-                  letterSpacing: 1.5,
-                  color: selected ? AppUi.textHi : AppUi.textMid,
-                )),
+            Text(
+              language.code,
+              style: AppUi.button.copyWith(
+                fontSize: 13,
+                letterSpacing: 1.5,
+                color: selected ? AppUi.textHi : AppUi.textMid,
+              ),
+            ),
             const SizedBox(height: 2),
-            Text(language.label,
-                style: AppUi.body.copyWith(
-                  fontSize: 9.5,
-                  color: selected ? AppUi.textMid : AppUi.textLo,
-                )),
+            Text(
+              language.label,
+              style: AppUi.body.copyWith(
+                fontSize: 9.5,
+                color: selected ? AppUi.textMid : AppUi.textLo,
+              ),
+            ),
           ],
         ),
       ),

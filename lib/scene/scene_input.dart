@@ -221,6 +221,7 @@ extension _SceneInput on _VillageSceneState {
       final tile = _toTile(d.localFocalPoint);
       if (tile != _ghost) {
         _ghost = tile;
+        _refreshPlaceHints(tile);
         _frame.value = _frame.value + 1;
       }
     } else if (_draggedVillager != null) {
@@ -328,7 +329,7 @@ extension _SceneInput on _VillageSceneState {
     // Ghost'u imlece taşı (geçerlilik sebebiyle birlikte).
     if (tile != _ghost) {
       _ghost = tile;
-      _placeReason = _placementReason(tile.$1, tile.$2, _placing!);
+      _refreshPlaceHints(tile);
       _frame.value = _frame.value + 1;
     }
     if (_placeStrokeTiles.contains(tile)) return;
@@ -345,6 +346,7 @@ extension _SceneInput on _VillageSceneState {
       _placing = null;
       _ghost = null;
       _placeReason = null;
+      _placeFacts = null;
     });
   }
 
@@ -389,18 +391,34 @@ extension _SceneInput on _VillageSceneState {
           setStateHere(() {
             _selectedVillager = v;
             _selectedBuilding = null;
+            _selectedSiteId = null;
             _detailExpanded = false; // önce komuta çubuğunda kompakt görün
           });
         }
       } else if (tile != null) {
         final b = _buildingAt(tile.$1, tile.$2);
+        // YAPISI OLMAYAN İŞ YERİ — tarla, böğürtlenlik, şantiye. Bina yoksa
+        // bakılır: iş verme yere taşındığı için bu yerlerin de tıklanabilir
+        // olması şart, yoksa toplayıcının ve inşaatçının yuvası hiçbir yerden
+        // açılamazdı.
+        final siteId = b == null ? _siteIdAt(tile.$1, tile.$2) : null;
         // Köylü/bina yoksa: mezara tıklandıysa burada yatanı an (seçim değişmez).
-        final g = b == null ? _graveAt(tile.$1, tile.$2) : null;
+        final g = b == null && siteId == null
+            ? _graveAt(tile.$1, tile.$2)
+            : null;
         if (b != null) {
           setStateHere(() {
             _selectedBuilding = b;
             _selectedVillager = null;
+            _selectedSiteId = null;
             _detailExpanded = false; // önce komuta çubuğunda kompakt görün
+          });
+        } else if (siteId != null) {
+          setStateHere(() {
+            _selectedSiteId = siteId;
+            _selectedBuilding = null;
+            _selectedVillager = null;
+            _detailExpanded = false;
           });
         } else if (g != null) {
           _showNotification(Voice.say(
@@ -412,12 +430,14 @@ extension _SceneInput on _VillageSceneState {
           setStateHere(() {
             _selectedVillager = null;
             _selectedBuilding = null;
+            _selectedSiteId = null;
           });
         }
       } else {
         setStateHere(() {
           _selectedBuilding = null;
           _selectedVillager = null;
+          _selectedSiteId = null;
         });
       }
     }
@@ -429,8 +449,7 @@ extension _SceneInput on _VillageSceneState {
       final tile = _toTile(e.localPosition);
       if (tile != _ghost) {
         _ghost = tile;
-        _placeReason =
-            tile == null ? null : _placementReason(tile.$1, tile.$2, _placing!);
+        _refreshPlaceHints(tile);
         _frame.value = _frame.value + 1;
       }
       return;

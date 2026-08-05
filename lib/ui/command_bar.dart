@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_ui.dart';
+import 'guide_spotlight.dart';
 import 'mobile_ui.dart';
 
 /// KOMUTA ÇUBUĞU — oyunun tek alt komuta hattı (konsept 04).
@@ -26,6 +27,11 @@ class CommandBar extends StatefulWidget {
   /// Defter kapısındaki bekleyen gündem rozeti (0 = rozet yok).
   final int agenda;
 
+  /// Köyün adı — boş orta segmentte fısıldanır ("Pınarbaşı: bir bina ya da
+  /// köylü seç"). Oyuncunun kuruluşta verdiği ad oyun ekranında hiçbir yerde
+  /// geçmiyordu; en sakin yer burası.
+  final String village;
+
   const CommandBar({
     super.key,
     required this.buildSegment,
@@ -34,6 +40,7 @@ class CommandBar extends StatefulWidget {
     required this.onRoster,
     this.context,
     this.agenda = 0,
+    this.village = '',
   });
 
   @override
@@ -103,7 +110,10 @@ class _CommandBarState extends State<CommandBar> {
           ),
           const _Divider(),
           // ── ORTA: bağlam ─────────────────────────────────────────────────
-          Expanded(flex: 2, child: widget.context ?? const _ContextHint()),
+          Expanded(
+            flex: 2,
+            child: widget.context ?? _ContextHint(village: widget.village),
+          ),
           const _Divider(),
           // ── SAĞ: menü kapıları ───────────────────────────────────────────
           _Seg(
@@ -328,7 +338,18 @@ class _Divider extends StatelessWidget {
 
 /// Orta segment boşken — köyün nabzını fısıldayan sakin satır.
 class _ContextHint extends StatelessWidget {
-  const _ContextHint();
+  final String village;
+  const _ContextHint({this.village = ''});
+
+  /// Adı olan köy kendi adıyla seslenir; adsız/varsayılan köy jenerik konuşur.
+  String get _line {
+    final v = village.trim();
+    if (v.isEmpty || v.toLowerCase() == 'köy') {
+      return 'Bir bina ya da köylü seç — işleri buradan görürsün.';
+    }
+    return '$v: bir bina ya da köylü seç — işleri buradan görürsün.';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -337,7 +358,7 @@ class _ContextHint extends StatelessWidget {
         const SizedBox(width: 9),
         Flexible(
           child: Text(
-            'Bir bina ya da köylü seç — işleri buradan görürsün.',
+            _line,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: AppUi.body.copyWith(fontSize: 12, color: AppUi.textLo),
@@ -466,10 +487,16 @@ class CommandContext extends StatelessWidget {
         // Eylemler
         for (var i = 0; i < actions.length; i++) ...[
           if (i > 0) SizedBox(width: compact ? 4 : 7),
-          _ActionButton(
-            action: actions[i],
-            primary: i == 0,
-            showLabel: compact && actions.length == 1,
+          // Öğretici "Detay"ı gösterebilsin diye eylemler çapalı: iş verme
+          // adımının orta halkası bu düğme ve görünmezliği zincirin en
+          // sinsi kopukluğuydu (köylüyü seçmek kartı AÇMIYOR).
+          GuideTarget(
+            id: GuideAnchors.command(actions[i].label),
+            child: _ActionButton(
+              action: actions[i],
+              primary: i == 0,
+              showLabel: compact && actions.length == 1,
+            ),
           ),
         ],
       ],
@@ -685,6 +712,26 @@ class QuestTracker extends StatelessWidget {
   final int total;
   final VoidCallback onOpen;
 
+  /// ADIMIN NASIL YAPILDIĞI — kartın var oluş sebebi.
+  ///
+  /// Bu metin (bkz. Quest.hint) hep üretiliyordu ama hiçbir yerde
+  /// ÇİZİLMİYORDU: takipçi yalnız başlığı gösteriyor, cümle Defter'in Tüzük
+  /// sekmesinde saklı kalıyordu. Oyuncunun "ne yapacağım"ı bilip "nasıl"ı
+  /// bilmemesinin tek sebebi buydu. null → kart eski ince hâlinde kalır.
+  final String? hint;
+
+  /// Görevi isteyen köylünün adı — cümle bir sistem mesajı değil, birinin
+  /// ricası gibi okunsun diye.
+  final String? speakerName;
+
+  /// Genişletilmiş mi. Kuruluşta açık gelir, köy kurulunca ince banda döner.
+  final bool expanded;
+  final VoidCallback? onToggleExpand;
+
+  /// "Göster" — kamerayı hedefe götürür + öğretici spotu açar. null ise
+  /// düğme çizilmez (gösterilecek bir yeri olmayan adımlar).
+  final VoidCallback? onShow;
+
   const QuestTracker({
     super.key,
     required this.icon,
@@ -693,62 +740,97 @@ class QuestTracker extends StatelessWidget {
     required this.done,
     required this.total,
     required this.onOpen,
+    this.hint,
+    this.speakerName,
+    this.expanded = false,
+    this.onToggleExpand,
+    this.onShow,
   });
 
   @override
   Widget build(BuildContext context) {
     final frac = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
+    // Genişleme yalnız gösterilecek bir ipucu VARSA anlamlı — cümlesiz açılan
+    // kart sadece boşluk büyütür.
+    final open = expanded && hint != null;
+
     if (useCompactGameUi(context)) {
       // Sağ ray'ın devamı: aynı cam, aynı yarıçap, RAY'IN GENİŞLİĞİ (dışarıdan
       // Positioned width'i ile gelir). Kendi maxWidth'ini dayatmıyor — ayrı
       // genişlikte bir kutu olduğu an sağ kenar yine tırtıklanıyordu.
-      return GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onOpen,
-        child: MobileSurface(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: SizedBox(
-            height: MobileUi.tap,
-            child: Row(
-              children: [
-                GameIcon(icon, size: 16, color: AppUi.accent),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    activeLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppUi.bodyHi.copyWith(fontSize: 11.5),
-                  ),
+      return MobileSurface(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onToggleExpand ?? onOpen,
+              child: SizedBox(
+                height: MobileUi.tap,
+                child: Row(
+                  children: [
+                    GameIcon(icon, size: 16, color: AppUi.accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        activeLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.bodyHi.copyWith(fontSize: 11.5),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$done/$total',
+                      style:
+                          AppUi.number.copyWith(fontSize: 11, color: AppUi.sage),
+                    ),
+                    if (hint != null) ...[
+                      const SizedBox(width: 6),
+                      Transform.rotate(
+                        angle: open ? -1.5708 : 1.5708,
+                        child: GameIcon(GameIconData.chevron,
+                            size: 13, color: AppUi.textLo),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  '$done/$total',
-                  style: AppUi.number.copyWith(fontSize: 11, color: AppUi.sage),
-                ),
-              ],
+              ),
             ),
-          ),
+            if (open) ...[
+              const SizedBox(height: 2),
+              _hintBlock(compact: true),
+              const SizedBox(height: 10),
+            ],
+          ],
         ),
       );
     }
-    return GestureDetector(
-      onTap: onOpen,
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: Container(
-          width: 208,
-          padding: const EdgeInsets.fromLTRB(13, 10, 13, 11),
-          decoration: BoxDecoration(
-            color: const Color(0xEB14161A),
-            borderRadius: BorderRadius.circular(AppUi.radius),
-            border: Border.all(color: AppUi.line),
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: Container(
+        width: open ? 248 : 208,
+        padding: const EdgeInsets.fromLTRB(13, 10, 13, 11),
+        decoration: BoxDecoration(
+          color: const Color(0xEB14161A),
+          borderRadius: BorderRadius.circular(AppUi.radius),
+          border: Border.all(
+            // Kuruluşta kart oyuncunun bakması GEREKEN yer — kenarı ember.
+            color: open ? AppUi.accent.withValues(alpha: 0.45) : AppUi.line,
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Künye satırı → Defter'in Tüzük bölümü (tam liste orada).
+            GestureDetector(
+              onTap: onOpen,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
                 children: [
                   GameIcon(GameIconData.scroll, size: 12, color: AppUi.accent),
                   const SizedBox(width: 7),
@@ -772,38 +854,116 @@ class QuestTracker extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 9),
-              Row(
+            ),
+            const SizedBox(height: 9),
+            GestureDetector(
+              onTap: hint == null ? onOpen : onToggleExpand,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  GameIcon(icon, size: 14, color: AppUi.accent),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: GameIcon(icon, size: 14, color: AppUi.accent),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       activeLabel,
+                      // Açıkken başlık kırpılmaz: kuruluş adımlarının adı uzun
+                      // ("Sepeti birine ver, ilk yiyecek gelsin") ve tek satıra
+                      // sıkışınca cümlenin yarısı kayboluyordu.
+                      maxLines: open ? 3 : 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppUi.bodyHi.copyWith(fontSize: 12.5),
+                      style: AppUi.bodyHi.copyWith(fontSize: 12.5, height: 1.3),
                     ),
                   ),
+                  if (hint != null) ...[
+                    const SizedBox(width: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Transform.rotate(
+                        angle: open ? -1.5708 : 1.5708,
+                        child: GameIcon(GameIconData.chevron,
+                            size: 12, color: AppUi.textLo),
+                      ),
+                    ),
+                  ],
                 ],
               ),
+            ),
+            if (open) ...[
               const SizedBox(height: 9),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: Container(
-                  height: 4,
-                  color: AppUi.surface0,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FractionallySizedBox(
-                      widthFactor: frac == 0 ? 0.06 : frac,
-                      child: Container(color: AppUi.accent),
-                    ),
+              _hintBlock(compact: false),
+            ],
+            const SizedBox(height: 9),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: Container(
+                height: 4,
+                color: AppUi.surface0,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: frac == 0 ? 0.06 : frac,
+                    child: Container(color: AppUi.accent),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
+      ),
+    );
+  }
+
+  /// NASIL YAPILIR bloğu — isteyen kişi + cümle + "Göster".
+  Widget _hintBlock({required bool compact}) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+      decoration: BoxDecoration(
+        color: AppUi.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.accent.withValues(alpha: 0.32)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (speakerName case final who?) ...[
+            Text(
+              '$who istiyor',
+              style: AppUi.label.copyWith(
+                fontSize: 9,
+                color: AppUi.accentSoft,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+          Text(
+            hint ?? '',
+            style: AppUi.body.copyWith(
+              fontSize: compact ? 11.5 : 11,
+              color: AppUi.textHi,
+              height: 1.45,
+            ),
+          ),
+          if (onShow != null) ...[
+            const SizedBox(height: 9),
+            SizedBox(
+              height: 30,
+              child: AppButton(
+                label: 'Göster',
+                icon: GameIconData.star,
+                kind: AppButtonKind.tonal,
+                height: 30,
+                expand: true,
+                onTap: onShow,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

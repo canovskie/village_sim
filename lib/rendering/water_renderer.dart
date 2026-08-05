@@ -65,12 +65,32 @@ class WaterRenderer {
     double rainIntensity = 0.0,
     double zoom          = 1.0,
     Color  skyTint       = const Color(0xFFA0C0E0),
+    /// Yüzey dalgasının KONUMDAN türeyen fazı — komşu kareler arasında yavaş
+    /// değişmeli (bkz. aşağıdaki açıklama). Çağıran hesaplar; 0 verilirse tüm
+    /// yüzey aynı anda nefes alır (kabul edilebilir ama düz).
+    double wavePhase     = 0,
   }) {
+    // TILE-BAŞINA RASTGELE faz — YALNIZ ufak detaylar için (parıltı, balık).
+    // Taban rengine UYGULANMAZ, sebebi hemen aşağıda.
     final phase = (seed * 1373 % 1000) / 1000.0 * 2 * pi;
 
-    final w1 = _sin(time * 0.85 + phase)       * 0.5 + 0.5;
-    final w2 = _sin(time * 1.50 + phase + 1.9) * 0.5 + 0.5;
-    final w3 = _sin(time * 0.40 + phase + 3.3) * 0.5 + 0.5;
+    // ── YÜZEY DALGASI — UZAMSAL OLARAK SÜREKLİ ────────────────────────────
+    //
+    // Eskiden taban rengi de yukarıdaki rastgele fazdan türüyordu. Sonuç: yan
+    // yana iki su karesi aynı anda farklı tonda oluyordu (mavi kanalda ±38,
+    // yani ~%25) ve göl bir su kütlesi değil ELMAS YAMALI BOHÇA gibi
+    // okunuyordu. Yakınlaştırılmış karede tile ızgarası açıkça görülüyor.
+    //
+    // Faz artık KONUMDAN türüyor: komşu kareler birbirine yakın değerde olur,
+    // fark yüzey boyunca YAVAŞ değişir → dalga, tek tek karelerin titremesi
+    // değil, gölün üstünde ilerleyen bir kabartı gibi okunur. İki eksen
+    // (derinlik ve enine) farklı frekansta, yoksa bantlar cetvel gibi çizgili
+    // çıkardı.
+    final wp = wavePhase;
+
+    final w1 = _sin(time * 0.85 + wp)              * 0.5 + 0.5;
+    final w2 = _sin(time * 1.50 + wp * 0.7 + 1.9)  * 0.5 + 0.5;
+    final w3 = _sin(time * 0.40 + wp * 1.3 + 3.3)  * 0.5 + 0.5;
 
     // Resimsel/suluboya teal taban — eski doygun lacivert yerine yumuşak,
     // açık, yeşilimsi-mavi. Düz "mavi kare" hissini kırar; kıyı sığ suyuyla

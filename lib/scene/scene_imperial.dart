@@ -185,17 +185,22 @@ extension _SceneImperial on _VillageSceneState {
     AudioManager.instance.playSfx(Sfx.imperialMarch);
     addCameraShake(11.0, dur: 0.7);
     // Küçük toast yerine tam-ekran gergin anons. Voice metni alt satır olur.
-    _imperialAlertSub = Voice.pick(const [
-      'Yolun ucunda mızrak parıltısı. Vergi kolonu köye iniyor.',
-      'Toz bulutu büyüyor: heyet köye doğru yürüyor.',
-      'Sancak göründü. Kolon köyün üstüne yürüyor.',
-    ], _impSeed(1));
+    _imperialAlertSub = Voice.say(const [
+      'Yolun ucunda mızrak parıltısı. Vergi kolonu {köy-e} iniyor.',
+      'Toz bulutu büyüyor: heyet {köy-e} doğru yürüyor.',
+      'Sancak göründü. Kolon {köy-in} üstüne yürüyor.',
+    ], _impVoice(1));
     _imperialAlertLeft = _VillageSceneState._kImperialAlertDur;
   }
 
   /// İmparatorluk metinleri için kararlı tohum — gün + tuz. Aynı gün aynı
   /// cümle çıkar (kayıt/yükleme ya da yeniden çizim metni değiştirmez).
   int _impSeed(int salt) => _stableSeed('imperial$salt', _dayCount);
+
+  /// Heyetin ağzının bağlamı. Komutan için burası "köy" değil, deftere yazılı
+  /// bir YER ADIDIR — bu yüzden imparatorluk metinleri `{köy}` yer tutucusunu
+  /// kullanır ve ad ekranda vergiciyle birlikte geçer (bkz. scene_voice).
+  VoiceCtx _impVoice(int salt) => _voice(null, seed: _impSeed(salt));
 
   /// Aktif heyet evre makinesi — her tick (approaching/leaving) çağrılır.
   void _tickImperialColumn(double dt) {
@@ -352,10 +357,10 @@ extension _SceneImperial on _VillageSceneState {
     final demand = _buildImperialDemand(_impProsperity);
     if (demand == null) {
       // Alacak uygun bir şey yok — heyet boş döner (nadir). Doğrudan ayrılışa geç.
-      _showNotification(Voice.pick(const [
-        'Komutan ambara baktı, deftere baktı, atını çevirdi. Bu köyde alacak bir şey yok.',
-        'Heyet köyü şöyle bir süzdü. Kalem oynamadı; kolon geri döndü.',
-      ], _impSeed(2)));
+      _showNotification(Voice.say(const [
+        'Komutan ambara baktı, deftere baktı, atını çevirdi. {köy-de} alacak bir şey yok.',
+        'Heyet {köy-i} şöyle bir süzdü. Kalem oynamadı; kolon geri döndü.',
+      ], _impVoice(2)));
       _imperialPhase = ImperialVisitPhase.leaving;
       _setMarchDir(_impExitCol - _impAnchorCol, _impExitRow - _impAnchorRow);
       return;
@@ -387,11 +392,11 @@ extension _SceneImperial on _VillageSceneState {
     _impGrudge = false;
     if (cinematic) _playCutscene(_buildImperialCutscene(demand));
 
-    _showNotification('⚔️ ${Voice.pick(const [
-          'Heyet meydanda. Komutan defterini açtı.',
-          'Mızraklar köyün eşiğinde durdu. Vergi vakti.',
-          'Kolon durdu, atlar susturuldu. Sıra köyün cevabında.',
-        ], _impSeed(3))}');
+    _showNotification('⚔️ ${Voice.say(const [
+          'Heyet meydanda. Komutan defterini açtı, {köy-in} adını okudu.',
+          'Mızraklar {köy-in} eşiğinde durdu. Vergi vakti.',
+          'Kolon durdu, atlar susturuldu. Sıra {köy-in} cevabında.',
+        ], _impVoice(3))}');
   }
 
   /// İmparatorluk geliş sinematiği — TALEBE + İTİBARA göre dinamik kurulur.
@@ -399,7 +404,8 @@ extension _SceneImperial on _VillageSceneState {
   /// birebir AYNI sahneyi oynatabilsin; odanın kendi kopyasını tutması sahne
   /// düzeltmelerinin oraya yansımamasına yol açıyordu.
   Cutscene _buildImperialCutscene(ImperialDemand d) =>
-      imperialArrivalCutscene(d, favor: _imperialFavor, seed: _impSeed(10));
+      imperialArrivalCutscene(d,
+          favor: _imperialFavor, seed: _impSeed(10), village: _villageName);
 
   /// Talep üret — tür ağırlıklı (refah + itibar talebin sertliğini ölçekler).
   ImperialDemand? _buildImperialDemand(double prosp) {
@@ -487,11 +493,11 @@ extension _SceneImperial on _VillageSceneState {
     }
     _chronicle('Öşür ödendi: ${d.label}. Komutan satırın yanına bir çentik attı.',
         icon: '⚔️');
-    _showNotification('⚔️ ${Voice.pick(const [
-          'Yük arabalara bindi. Köy bu akşam sağ, yalnız daha fakir.',
+    _showNotification('⚔️ ${Voice.say(const [
+          'Yük arabalara bindi. {köy} bu akşam sağ, yalnız daha fakir.',
           'Defter kapandı, kolon yola çıktı. Kimse arkalarından bakmadı.',
           'Ödendi. Meydanda kalan tek şey tekerlek izleri.',
-        ], _impSeed(20))}');
+        ], _impVoice(20))}');
     _endImperialVisit(_prosperity());
   }
 
@@ -508,10 +514,10 @@ extension _SceneImperial on _VillageSceneState {
     }
     _chronicle('Bir gencin yerine kese verildi ($cost★); çocuk ocağında kaldı.',
         icon: '★');
-    _showNotification('★ ${Voice.pick([
-          'Altın sayıldı, çocuğun kolu bırakıldı. Köyde kalıyor. (-$cost★)',
+    _showNotification('★ ${Voice.say([
+          'Altın sayıldı, çocuğun kolu bırakıldı. {köy-de} kalıyor. (-$cost★)',
           'Komutan keseyi tarttı, gence bir daha bakmadı. Kaldı. (-$cost★)',
-        ], _impSeed(21))}');
+        ], _impVoice(21))}');
     _endImperialVisit(_prosperity());
   }
 
@@ -532,10 +538,10 @@ extension _SceneImperial on _VillageSceneState {
       }
       _chronicle('Komutan rakamı çizip $pay yazdı; köy o kadarını ödedi.',
           icon: '🤝');
-      _showNotification('🤝 ${Voice.pick([
-            'Komutan sayıyı çizdi, altına $pay${d.icon} yazdı. Fark köyde kaldı.',
+      _showNotification('🤝 ${Voice.say([
+            'Komutan sayıyı çizdi, altına $pay${d.icon} yazdı. Fark {köy-de} kaldı.',
             'Kalem oynadı. $pay${d.icon} ile kapandı bu iş.',
-          ], _impSeed(22))}');
+          ], _impVoice(22))}');
     } else {
       // Tutmadı → komutan öfkelendi: tam öder + itibar düşer.
       _spendResource(d.kind, d.amount);
@@ -545,10 +551,10 @@ extension _SceneImperial on _VillageSceneState {
       _chronicle(
           'Teklif komutanı güldürmedi. Rakam olduğu gibi tahsil edildi.',
           icon: '⚔️');
-      _showNotification('⚔️ ${Voice.pick(const [
+      _showNotification('⚔️ ${Voice.say(const [
             'Komutan defteri kapatmadı bile. Rakamın tamamı alındı.',
             'Teklif havada kaldı. Askerler ambara kendileri girdi; tam ödendi.',
-          ], _impSeed(23))}');
+          ], _impVoice(23))}');
     }
     _endImperialVisit(_prosperity());
   }
@@ -619,12 +625,13 @@ extension _SceneImperial on _VillageSceneState {
       _activeFx.add(ActiveFx(
           const EventEffect(fx: EventFx.festival, duration: 8), 8));
       _chronicle(
-          'Köy tırpanla, baltayla eşiğe dizildi. Heyet defteri kapatıp geri döndü.',
+          '$_villageName tırpanla, baltayla eşiğe dizildi. Heyet defteri kapatıp '
+          'geri döndü.',
           icon: '🛡️', milestone: true);
-      _showNotification('🛡️ ${Voice.pick(const [
-            'Heyet geri çekildi. Köy bu akşam kimseyi gömmüyor.',
+      _showNotification('🛡️ ${Voice.say(const [
+            'Heyet geri çekildi. {köy} bu akşam kimseyi gömmüyor.',
             'Mızraklar geri döndü. Kimse bağırmadı; herkes yerinde durdu, yetti.',
-          ], _impSeed(24))}');
+          ], _impVoice(24))}');
     } else {
       // BAŞARISIZ — direniş ezildi. Reddetmekten beter: savunucular (muhafızlar)
       // ön safta düşer. Kurbanlar SEÇİLİR ama ölüm, askerlerin merkeze dalışıyla
@@ -650,10 +657,10 @@ extension _SceneImperial on _VillageSceneState {
       _chronicle(
           'Direniş eşikte kırıldı. $killed köylü yerde kaldı, ambar boşaltıldı.',
           icon: '⚔️', milestone: true);
-      _showNotification('⚔️ ${Voice.pick(const [
+      _showNotification('⚔️ ${Voice.say(const [
             'Sıra bozuldu. Askerler meydana giriyor.',
-            'Baltalar yetmedi. Atlılar köyün içinde.',
-          ], _impSeed(25))}');
+            'Baltalar yetmedi. Atlılar {köy-in} içinde.',
+          ], _impVoice(25))}');
     }
     _endImperialVisit(_prosperity());
   }
@@ -683,12 +690,13 @@ extension _SceneImperial on _VillageSceneState {
     if (_imperialCouncilVerdict != null) _payCouncilOverride(violent: true);
     AudioManager.instance.playSfx(Sfx.thunderClap); // reddetme gümbürtüsü
     _chronicle(
-        'Köy ödemedi. Komutan defteri kapattı ve $killed kişiyi bedel olarak aldı.',
+        '$_villageName ödemedi. Komutan defteri kapattı ve $killed kişiyi bedel '
+        'olarak aldı.',
         icon: '⚔️', milestone: true);
-    _showNotification('⚔️ ${Voice.pick(const [
-          'Komutan sessizce başını salladı. Mızraklar indi, atlar köye sürüldü.',
+    _showNotification('⚔️ ${Voice.say(const [
+          'Komutan sessizce başını salladı. Mızraklar indi, atlar {köy-e} sürüldü.',
           'Cevabı aldı. Şimdi bedelini kendi eliyle topluyor.',
-        ], _impSeed(26))}');
+        ], _impVoice(26))}');
     _endImperialVisit(_prosperity());
   }
 

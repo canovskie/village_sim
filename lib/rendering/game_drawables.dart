@@ -36,9 +36,17 @@ class _VillagerDrawable extends _Drawable {
   final VillagerEntity e;
   final double time;
   final double dayLight;
-  _VillagerDrawable(this.e, this.time, this.dayLight);
-  @override double get depth => e.depth;
-  @override WorkerEntity? get actor => e.isInsideBuilding ? null : e;
+  final bool primitiveClothing;
+  _VillagerDrawable(
+    this.e,
+    this.time,
+    this.dayLight, {
+    this.primitiveClothing = false,
+  });
+  @override
+  double get depth => e.depth;
+  @override
+  WorkerEntity? get actor => e.isInsideBuilding ? null : e;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     if (e.isInsideBuilding) return;
@@ -59,9 +67,13 @@ class _VillagerDrawable extends _Drawable {
       final fade = e.highlightTimer.clamp(0.0, 1.0);
       final rw = 30.0 + 4.0 * pulse;
       final ring = Rect.fromCenter(
-          center: Offset(s.dx, s.dy), width: rw, height: rw * 0.46);
-      _pHighlightRing.color =
-          const Color(0xFFFFD25A).withValues(alpha: (0.45 + 0.4 * pulse) * fade);
+        center: Offset(s.dx, s.dy),
+        width: rw,
+        height: rw * 0.46,
+      );
+      _pHighlightRing.color = const Color(
+        0xFFFFD25A,
+      ).withValues(alpha: (0.45 + 0.4 * pulse) * fade);
       canvas.drawOval(ring, _pHighlightRing);
     }
 
@@ -75,9 +87,14 @@ class _VillagerDrawable extends _Drawable {
       final charScaleNow = kCharScale * e.displayScale;
       final shoulderX = (e.effectiveFacingRight ? 1 : -1) * 5.0 * charScaleNow;
       final headY = -64 * charScaleNow;
-      ToolRenderer.drawTorchGlow(canvas,
-          s.dx + shoulderX, s.dy + headY,
-          time, e.torchPhase, intensity: torchLv);
+      ToolRenderer.drawTorchGlow(
+        canvas,
+        s.dx + shoulderX,
+        s.dy + headY,
+        time,
+        e.torchPhase,
+        intensity: torchLv,
+      );
     }
 
     if (e.isSleeping && !e.isInsideBuilding && !e.isDying) {
@@ -86,9 +103,13 @@ class _VillagerDrawable extends _Drawable {
       canvas.save();
       canvas.translate(s.dx, s.dy);
       canvas.scale(sleepScale, sleepScale);
-      CharacterRenderer.drawSleeping(canvas, e.type,
-          walkPhase: e.walkPhase,
-          flipX: !e.facingRight);
+      CharacterRenderer.drawSleeping(
+        canvas,
+        e.type,
+        walkPhase: e.walkPhase,
+        flipX: !e.facingRight,
+        primitiveClothing: primitiveClothing,
+      );
       canvas.restore();
       _drawZzz(canvas, s);
       return;
@@ -101,10 +122,10 @@ class _VillagerDrawable extends _Drawable {
       final cs = kCharScale * e.displayScale;
       final dir = e.effectiveFacingRight ? 1.0 : -1.0;
       // İlk yarı: dizler çöker + yana devrilir. İkinci yarı: yerde solar.
-      final topple = dp * 1.4 * dir;      // ~80° yana yatış
-      final sink   = dp * 6.0 * cs;        // yere oturma
-      final squash = 1.0 - 0.18 * dp;      // dikeyde hafif ezilme
-      final alpha  = (dp < 0.5 ? 1.0 : 1.0 - (dp - 0.5) / 0.5).clamp(0.0, 1.0);
+      final topple = dp * 1.4 * dir; // ~80° yana yatış
+      final sink = dp * 6.0 * cs; // yere oturma
+      final squash = 1.0 - 0.18 * dp; // dikeyde hafif ezilme
+      final alpha = (dp < 0.5 ? 1.0 : 1.0 - (dp - 0.5) / 0.5).clamp(0.0, 1.0);
       _drawCharShadow(canvas, s.dx, s.dy, cs * (1.0 - 0.45 * dp));
       canvas.saveLayer(
         Rect.fromCenter(center: s, width: 140 * cs, height: 180 * cs),
@@ -113,23 +134,27 @@ class _VillagerDrawable extends _Drawable {
       canvas.translate(s.dx, s.dy + sink);
       canvas.rotate(topple);
       canvas.scale(cs, cs * squash);
-      CharacterRenderer.draw(canvas, e.type,
-          flipX:         !e.effectiveFacingRight,
-          walkPhase:     e.walkPhase,
-          moveIntensity: 0,
-          carrying:      false,
-          torchLevel:    0,
-          torchPhase:    e.torchPhase,
-          visual:        e.visual,
-          time:          time,
-          stage:         e.lifeStage,
-          costume:       e.costume,
-          commander:     e.imperialCommander,
-          attacking:     e.imperialAttacking,
-        houseAccent:   houseAccentColor(e.surname),
+      CharacterRenderer.draw(
+        canvas,
+        e.type,
+        flipX: !e.effectiveFacingRight,
+        walkPhase: e.walkPhase,
+        moveIntensity: 0,
+        carrying: false,
+        torchLevel: 0,
+        torchPhase: e.torchPhase,
+        visual: e.visual,
+        time: time,
+        stage: e.lifeStage,
+        costume: e.costume,
+        commander: e.imperialCommander,
+        attacking: e.imperialAttacking,
+        houseAccent: houseAccentColor(e.surname),
         // Ölürken de köyün kumaşı üstünde; örtünme YOK (yerde yatan gövdede
         // omuz bandı yanlış yere düşerdi).
-        provision:     e.provision);
+        provision: e.provision,
+        primitiveClothing: primitiveClothing,
+      );
       canvas.restore();
       return;
     }
@@ -146,55 +171,59 @@ class _VillagerDrawable extends _Drawable {
     final charScale = kCharScale * e.displayScale;
     // Dans → gerçek zıplama. NPC her vuruşta yere iner çıkar.
     double danceBounce = 0;
-    double danceSway   = 0;
+    double danceSway = 0;
     if (e.activity == VillagerActivity.dance) {
       // 2 Hz beat — sin'in mutlak değeri ile sürekli pozitif zıplama.
       danceBounce = sin(time * 6.0 + e.gridX * 1.1).abs() * 4.0;
-      danceSway   = sin(time * 3.0 + e.gridX * 0.7) * 0.20;
+      danceSway = sin(time * 3.0 + e.gridX * 0.7) * 0.20;
     }
     // Sohbet → konuşma jesti: konuşan sırasında belirgin baş-gövde "nod",
     // dinlerken hafif. Karşılıklı sohbetin canlı görünmesini sağlar.
-    double talkBob  = 0;
+    double talkBob = 0;
     double talkSway = 0;
     if (e.activity == VillagerActivity.chat) {
       final (speaking, _) = e.convoNow();
       final amp = speaking ? 1.0 : 0.3;
-      talkBob  = sin(time * 9.0 + e.gridX * 1.3).abs() * 1.5 * amp;
+      talkBob = sin(time * 9.0 + e.gridX * 1.3).abs() * 1.5 * amp;
       talkSway = sin(time * 4.5 + e.gridX) * 0.05 * amp;
     }
     // Mood postürü — neşeli köylü dik + hafif yukarı, üzgün çökük + hafif aşağı.
     // Tüm yürüyen/duran NPC'ye uygulanır (uyku erken return; etkilenmez).
-    double moodLift   = 0;
+    double moodLift = 0;
     double moodScaleY = 1.0;
     if (e.mood > 0.15) {
       final m = e.mood.clamp(0.0, 1.0);
       moodScaleY = 1.0 + 0.03 * m;
-      moodLift   = 0.9 * m;
+      moodLift = 0.9 * m;
     } else if (e.mood < -0.15) {
       final m = (-e.mood).clamp(0.0, 1.0);
       moodScaleY = 1.0 - 0.06 * m;
-      moodLift   = -0.9 * m;
+      moodLift = -0.9 * m;
     }
     // Ateş başı oturma — sprite'ı dikeyde sıkıştırıp aşağı kaydırarak
     // "çömelme" hissi. Anlatıcıda hafif öne-arka sallanma.
-    double sitYOff   = 0;
+    double sitYOff = 0;
     double sitYScale = 1.0;
-    double sitSway   = 0;
+    double sitSway = 0;
     CharPose charPose = CharPose.normal;
-    final isSeated = e.isSeatedAtFire && (
-        e.activity == VillagerActivity.warm ||
-        e.activity == VillagerActivity.storytelling ||
-        e.activity == VillagerActivity.listening);
+    final isSeated =
+        e.isSeatedAtFire &&
+        (e.activity == VillagerActivity.warm ||
+            e.activity == VillagerActivity.storytelling ||
+            e.activity == VillagerActivity.listening);
     if (isSeated) {
       // Gerçek oturma duruşu — kaba squash değil. Duruşa göre yere oturt
       // (sprite'ı aşağı kaydır), uzuv pozunu CharacterRenderer halleder.
       switch (e.firePose) {
         case FirePose.sit:
-          charPose = CharPose.sit;   sitYOff = 9;
+          charPose = CharPose.sit;
+          sitYOff = 9;
         case FirePose.kneel:
-          charPose = CharPose.kneel; sitYOff = 7;
+          charPose = CharPose.kneel;
+          sitYOff = 7;
         case FirePose.mourn:
-          charPose = CharPose.mourn; sitYOff = 10;
+          charPose = CharPose.mourn;
+          sitYOff = 10;
       }
       if (e.activity == VillagerActivity.storytelling) {
         sitSway = sin(time * 2.0 + e.gridX) * 0.06;
@@ -221,7 +250,8 @@ class _VillagerDrawable extends _Drawable {
       final fdir = e.effectiveFacingRight ? 1.0 : -1.0;
       switch (e.emotion) {
         case NpcEmotion.joy:
-          emoBounce = sin(time * 7.0 + e.gridX).abs() * 2.6 * k; // sevinç sıçraması
+          emoBounce =
+              sin(time * 7.0 + e.gridX).abs() * 2.6 * k; // sevinç sıçraması
           emoLift = 0.6 * k;
         case NpcEmotion.love:
           emoRot = sin(time * 3.0 + e.gridX) * 0.07 * k; // yumuşak salınım
@@ -229,17 +259,18 @@ class _VillagerDrawable extends _Drawable {
           emoLift = 1.3 * k; // doğrulup yukarı bakış
           emoScaleY = 1.0 + 0.03 * k;
         case NpcEmotion.content:
-          emoRot = sin(time * 1.6 + e.gridX) * 0.03 * k; // huzurlu hafif sallanış
+          emoRot =
+              sin(time * 1.6 + e.gridX) * 0.03 * k; // huzurlu hafif sallanış
         case NpcEmotion.grief:
           emoScaleY = 1.0 - 0.11 * k; // çöküş
-          emoLift = -1.4 * k;         // başı/gövdeyi aşağı
-          emoRot = 0.06 * k * fdir;   // öne eğilme
+          emoLift = -1.4 * k; // başı/gövdeyi aşağı
+          emoRot = 0.06 * k * fdir; // öne eğilme
         case NpcEmotion.fear:
           emoBounce = sin(time * 22.0 + e.gridX) * 0.9 * k; // titreme
-          emoRot = -0.10 * k * fdir;  // geriye kaçınma
+          emoRot = -0.10 * k * fdir; // geriye kaçınma
         case NpcEmotion.anger:
           emoBounce = sin(time * 18.0 + e.gridX) * 0.7 * k; // gerginlik
-          emoRot = 0.05 * k * fdir;   // öne yüklenme
+          emoRot = 0.05 * k * fdir; // öne yüklenme
         case NpcEmotion.none:
           break;
       }
@@ -265,22 +296,22 @@ class _VillagerDrawable extends _Drawable {
       final cdir = e.effectiveFacingRight ? 1.0 : -1.0;
       switch (e.activity) {
         case VillagerActivity.prowling:
-          crimeScaleY = 0.90;        // çömelme
-          crimeLift = -1.6;          // alçalıp gölgeye sinme
-          crimeRot = 0.09 * cdir;    // öne eğik sinsi duruş
+          crimeScaleY = 0.90; // çömelme
+          crimeLift = -1.6; // alçalıp gölgeye sinme
+          crimeRot = 0.09 * cdir; // öne eğik sinsi duruş
         case VillagerActivity.committing:
           crimeShove = sin(time * 17.0 + e.gridX * 1.7) * 1.5 * cdir; // telaş
           crimeScaleY = 0.94;
           crimeLift = -1.0;
         case VillagerActivity.fleeing:
           crimeLift = sin(time * 16.0 + e.gridX).abs() * 1.8; // telaşlı sıçrama
-          crimeRot = 0.11 * cdir;                             // öne atılma
+          crimeRot = 0.11 * cdir; // öne atılma
         case VillagerActivity.chasing:
           crimeLift = sin(time * 14.0 + e.gridX).abs() * 1.2;
-          crimeRot = 0.09 * cdir;                             // öne yüklenme
+          crimeRot = 0.09 * cdir; // öne yüklenme
         case VillagerActivity.abducted:
-          crimeRot = -0.16 * cdir;                            // geriye direnme
-          crimeShove = sin(time * 20.0 + e.gridY) * 1.2;      // çırpınma
+          crimeRot = -0.16 * cdir; // geriye direnme
+          crimeShove = sin(time * 20.0 + e.gridY) * 1.2; // çırpınma
         default:
           break;
       }
@@ -339,8 +370,8 @@ class _VillagerDrawable extends _Drawable {
       final tense = e.bearingTense;
       final lift = e.bearingLift;
       if (bow > 0.02) {
-        bearScaleY -= 0.12 * bow;                        // omuz düşük
-        bearLift -= 2.4 * bow;                           // baş/gövde aşağı
+        bearScaleY -= 0.12 * bow; // omuz düşük
+        bearLift -= 2.4 * bow; // baş/gövde aşağı
         bearRot += 0.11 * bow * (e.effectiveFacingRight ? 1.0 : -1.0);
       }
       if (tense > 0.02) {
@@ -350,7 +381,7 @@ class _VillagerDrawable extends _Drawable {
         bearScaleY -= 0.05 * tense;
       }
       if (lift > 0.02) {
-        bearScaleY += 0.07 * lift;                       // dik duruş
+        bearScaleY += 0.07 * lift; // dik duruş
         bearLift += 1.7 * lift;
         // Yürürken adımda hafif sekme — duranda sıçratma (yerinde zıplayan
         // köylü neşeli değil, bozuk görünür).
@@ -363,33 +394,34 @@ class _VillagerDrawable extends _Drawable {
       // titreme (nefesten farklı ritim) "iyi değil" hissini verir. Salgın ekran
       // tonu + yavaşlamayla birlikte köyün hâli gözle okunur.
       if (e.sickDays > 0) {
-        bearScaleY -= 0.06;                              // omuzlar düşük
-        bearLift -= 1.1;                                 // baş/gövde aşağı
+        bearScaleY -= 0.06; // omuzlar düşük
+        bearLift -= 1.1; // baş/gövde aşağı
         bearRot += 0.06 * (e.effectiveFacingRight ? 1.0 : -1.0); // öne kapanma
-        bearShove += sin(time * 2.4 + e.gridY) * 0.35;  // hâlsiz salınım
+        bearShove += sin(time * 2.4 + e.gridY) * 0.35; // hâlsiz salınım
       }
     }
 
     canvas.save();
     canvas.translate(
-        s.dx + brawlShove + crimeShove + bearShove + actShove,
-        s.dy -
-            danceBounce -
-            talkBob -
-            moodLift +
-            sitYOff -
-            emoBounce -
-            emoLift -
-            crimeLift -
-            bearLift -
-            actLift);
+      s.dx + brawlShove + crimeShove + bearShove + actShove,
+      s.dy -
+          danceBounce -
+          talkBob -
+          moodLift +
+          sitYOff -
+          emoBounce -
+          emoLift -
+          crimeLift -
+          bearLift -
+          actLift,
+    );
     if (danceSway != 0) canvas.rotate(danceSway);
-    if (sitSway != 0)   canvas.rotate(sitSway);
-    if (talkSway != 0)  canvas.rotate(talkSway);
-    if (emoRot != 0)    canvas.rotate(emoRot);
-    if (crimeRot != 0)  canvas.rotate(crimeRot);
-    if (bearRot != 0)   canvas.rotate(bearRot);
-    if (actRot != 0)    canvas.rotate(actRot);
+    if (sitSway != 0) canvas.rotate(sitSway);
+    if (talkSway != 0) canvas.rotate(talkSway);
+    if (emoRot != 0) canvas.rotate(emoRot);
+    if (crimeRot != 0) canvas.rotate(crimeRot);
+    if (bearRot != 0) canvas.rotate(bearRot);
+    if (actRot != 0) canvas.rotate(actRot);
     // Idle micro-anim — nefes + sway, yalnız dans/oturma/sohbet yokken anlamlı
     // (idle helper'ları walking/işteyken zaten 0/1 döner).
     final calm = danceSway == 0 && sitSway == 0 && talkSway == 0;
@@ -401,45 +433,53 @@ class _VillagerDrawable extends _Drawable {
     // DÖNÜŞ — yön değişimi artık tek karede aynalanmıyor; sprite yatayda
     // daralıp öbür yöne açılıyor ([WorkerEntity.turnScaleX], ~0.22 sn).
     canvas.scale(
-        charScale * e.turnScaleX,
-        charScale *
-            sitYScale *
-            breathY *
-            moodScaleY *
-            emoScaleY *
-            crimeScaleY *
-            bearScaleY *
-            actScaleY);
-    CharacterRenderer.draw(canvas, e.type,
-        flipX:         !e.effectiveFacingRight,
-        walkPhase:     e.walkPhase,
-        moveIntensity: e.moveIntensity,
-        carrying:      e.isCarrying && e.carriedItem != null,
-        pose:          charPose,
-        torchLevel:    torchLv,
-        torchPhase:    e.torchPhase,
-        visual:        e.visual,
-        time:          time,
-        stage:         e.lifeStage,
-        costume:       e.costume,
-        commander:     e.imperialCommander,
-        attacking:     e.imperialAttacking,
-        houseAccent:   houseAccentColor(e.surname),
-        // KÖYÜN HÂLİ (Faz 5): kılık köyün ambarından, örtünme köylünün KENDİ
-        // gerginliğinden. bearingTense'e kişisel moral ve hanenin hâli zaten
-        // karışmış → şal köy ortalamasını değil bu adamı anlatır.
-        provision:     e.provision,
-        shroud:        e.bearingTense);
+      charScale * e.turnScaleX,
+      charScale *
+          sitYScale *
+          breathY *
+          moodScaleY *
+          emoScaleY *
+          crimeScaleY *
+          bearScaleY *
+          actScaleY,
+    );
+    CharacterRenderer.draw(
+      canvas,
+      e.type,
+      flipX: !e.effectiveFacingRight,
+      walkPhase: e.walkPhase,
+      moveIntensity: e.moveIntensity,
+      carrying: e.isCarrying && e.carriedItem != null,
+      pose: charPose,
+      torchLevel: torchLv,
+      torchPhase: e.torchPhase,
+      visual: e.visual,
+      time: time,
+      stage: e.lifeStage,
+      costume: e.costume,
+      commander: e.imperialCommander,
+      attacking: e.imperialAttacking,
+      houseAccent: houseAccentColor(e.surname),
+      // KÖYÜN HÂLİ (Faz 5): kılık köyün ambarından, örtünme köylünün KENDİ
+      // gerginliğinden. bearingTense'e kişisel moral ve hanenin hâli zaten
+      // karışmış → şal köy ortalamasını değil bu adamı anlatır.
+      provision: e.provision,
+      shroud: e.bearingTense,
+      primitiveClothing: primitiveClothing,
+    );
     // ELDEKİ NESNE (bkz. villager_act / prop_renderer) — kova, çuval, ekmek,
     // maşrapa, sepet, odun. Karakterle AYNI yerel uzayda çizilir ki ölçek ve
     // duruş (eğilme/salınım) nesneye de uygulansın; ayrı çizilseydi eğilen
     // köylünün kovası havada asılı kalırdı.
     if (e.prop != PropKind.none) {
-      PropRenderer.draw(canvas, e.prop,
-          facingRight: e.effectiveFacingRight,
-          walkPhase: e.walkPhase,
-          moveIntensity: e.moveIntensity,
-          time: time);
+      PropRenderer.draw(
+        canvas,
+        e.prop,
+        facingRight: e.effectiveFacingRight,
+        walkPhase: e.walkPhase,
+        moveIntensity: e.moveIntensity,
+        time: time,
+      );
     }
     // Müzik aktivitesinde eline saz/bağlama çiz — sprite scale'inde, göğüs
     // hizasında. Karakter sprite ile birlikte çizilir ki flip etse de doğru
@@ -465,7 +505,10 @@ class _VillagerDrawable extends _Drawable {
       }
     }
     // Sohbet baloncuğu.
-    final bubbleBase = Offset(s.dx, s.dy - danceBounce - talkBob - moodLift + sitYOff);
+    final bubbleBase = Offset(
+      s.dx,
+      s.dy - danceBounce - talkBob - moodLift + sitYOff,
+    );
     if (e.activity == VillagerActivity.chat) {
       // Karşılıklı konuşma — yalnız sırası gelen konuşur (konuya bağlı replik).
       final (speaking, cIcon) = e.convoNow();
@@ -481,21 +524,31 @@ class _VillagerDrawable extends _Drawable {
     }
     // Müzik aktivitesinde sazın etrafında uçuşan notalar.
     if (e.activity == VillagerActivity.music && e.chatBubbleTime > 0) {
-      _drawMusicNotes(canvas, Offset(s.dx, s.dy - danceBounce),
-          e.gridX, e.gridY, e.chatBubbleTime);
+      _drawMusicNotes(
+        canvas,
+        Offset(s.dx, s.dy - danceBounce),
+        e.gridX,
+        e.gridY,
+        e.chatBubbleTime,
+      );
     }
     // (Baş üstü duygu emojisi KALDIRILDI — duygu artık yalnızca gövde diliyle
     // anlatılır: yukarıdaki emoBounce/emoLift/emoRot/emoScaleY postürü.)
   }
 
-  void _drawMusicNotes(Canvas canvas, Offset base, double gx, double gy,
-      double timeLeft) {
+  void _drawMusicNotes(
+    Canvas canvas,
+    Offset base,
+    double gx,
+    double gy,
+    double timeLeft,
+  ) {
     // 3 nota — farklı fazda yükselip yan kayarak solar.
     const notes = ['♪', '♫', '♩'];
     for (int i = 0; i < 3; i++) {
       final phase = (time * 0.5 + i * 0.33 + gx * 0.1 + gy * 0.13) % 1.0;
-      final rise  = phase * 28;
-      final sway  = sin(time * 1.5 + i * 1.7 + gx) * 6 * phase;
+      final rise = phase * 28;
+      final sway = sin(time * 1.5 + i * 1.7 + gx) * 6 * phase;
       double a;
       if (phase < 0.15) {
         a = phase / 0.15;
@@ -518,19 +571,23 @@ class _VillagerDrawable extends _Drawable {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas,
-          Offset(base.dx + 8 + sway, base.dy - 20 - rise));
+      tp.paint(canvas, Offset(base.dx + 8 + sway, base.dy - 20 - rise));
     }
   }
 
-  void _drawChatBubble(Canvas canvas, Offset base, String icon, double timeLeft) {
+  void _drawChatBubble(
+    Canvas canvas,
+    Offset base,
+    String icon,
+    double timeLeft,
+  ) {
     // Fade in (ilk 0.4 sn) + tut + fade out (son 0.6 sn).
     // Kısa sohbet (≤5 sn) ve uzun hikaye (>5 sn) baloncukları için ortak.
     double a;
     if (timeLeft < 0.6) {
-      a = timeLeft / 0.6;            // Fade out
+      a = timeLeft / 0.6; // Fade out
     } else if (timeLeft > 4.6 && timeLeft < 5.0) {
-      a = (5.0 - timeLeft) / 0.4;    // Kısa baloncuk için fade in
+      a = (5.0 - timeLeft) / 0.4; // Kısa baloncuk için fade in
     } else {
       a = 1.0;
     }
@@ -585,7 +642,12 @@ class _VillagerDrawable extends _Drawable {
       // Yatay offset yelpaze — uyuyan NPC baş çevresinde dağıt.
       final ox = (i - 1) * 4.0;
       ParticleRenderer.drawSleepZzz(
-          canvas, base.dx + ox, base.dy - 24, time, entitySeed + i * 17);
+        canvas,
+        base.dx + ox,
+        base.dy - 24,
+        time,
+        entitySeed + i * 17,
+      );
     }
   }
 
@@ -601,7 +663,10 @@ class _VillagerDrawable extends _Drawable {
     // ayrıca yazılır. Faz 3'ün dersi birebir aynıydı: köyün ÇOĞUNLUĞU işçidir,
     // yalnız errand yolunu bağlamak "köy değişmedi" demektir.
     // Örtünme yok: elinde kazma sallayan adam şala sarınmaz.
-    CharacterRenderer.beginNpc(provision: e.provision);
+    CharacterRenderer.beginNpc(
+      provision: e.provision,
+      primitiveClothing: primitiveClothing,
+    );
     final job = e.job!;
     final charScale = kCharScale * e.displayScale;
     final working = job.working;
@@ -619,63 +684,135 @@ class _VillagerDrawable extends _Drawable {
     final actPhase = working ? job.phaseAnim : e.walkPhase;
     switch (job.role) {
       case JobRole.builder:
-        CharacterRenderer.drawBuilder(canvas,
-            flipX: flip, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            working: working,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawBuilder(
+          canvas,
+          flipX: flip,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          working: working,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.farmer:
-        CharacterRenderer.drawFarmer(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
-            carryingWater: job.carryingWater, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawFarmer(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          harvesting: job.harvesting,
+          harvestPhase: job.phaseAnim,
+          carryingWater: job.carryingWater,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.miner:
-        CharacterRenderer.drawMiner(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            mining: working, chopPhase: job.phaseAnim, visual: e.visual,
-            time: time, torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawMiner(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          mining: working,
+          chopPhase: job.phaseAnim,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.fisher:
-        CharacterRenderer.drawFisher(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            fishing: working, fishPhase: job.phaseAnim,
-            visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawFisher(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          fishing: working,
+          fishPhase: job.phaseAnim,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.shepherd:
-        CharacterRenderer.drawShepherd(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            milking: working, milkPhase: job.phaseAnim,
-            visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawShepherd(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          milking: working,
+          milkPhase: job.phaseAnim,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.florist:
-        CharacterRenderer.drawFarmer(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
-            carryingWater: job.carryingWater, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawFarmer(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          harvesting: job.harvesting,
+          harvestPhase: job.phaseAnim,
+          carryingWater: job.carryingWater,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.woodcutter:
-        CharacterRenderer.drawWoodcutter(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            chopping: working, chopPhase: job.phaseAnim, visual: e.visual,
-            time: time, torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawWoodcutter(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          chopping: working,
+          chopPhase: job.phaseAnim,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       // TOPLAYICI / AŞÇI — ikisi de eğilip elle çalışan işler; çiçekçinin
       // yaptığı gibi çiftçi gövdesini (stoop + sepet duruşu) ödünç alırlar.
       // Kendi shaded çizimleri iş döngüleriyle birlikte gelecek.
       case JobRole.forager:
+      // Dokumacı ayrı bir sprite İSTEMEZ: tezgâh başında eğilen gövde
+      // aşçınınkiyle aynı okunur (bkz. scene_jobs pose eşlemesi). Yeni meslek
+      // = yeni çizim değil; ayırt eden şey duruş ve elindeki iş.
+      case JobRole.weaver:
       case JobRole.cook:
-        CharacterRenderer.drawFarmer(canvas,
-            flipX: flip, walkPhase: actPhase, moveIntensity: e.moveIntensity,
-            harvesting: job.harvesting, harvestPhase: job.phaseAnim,
-            carryingWater: false, visual: e.visual, time: time,
-            torchLevel: e.torchLevel, torchPhase: e.torchPhase,
-            houseAccent: houseAccentColor(e.surname));
+        CharacterRenderer.drawFarmer(
+          canvas,
+          flipX: flip,
+          walkPhase: actPhase,
+          moveIntensity: e.moveIntensity,
+          harvesting: job.harvesting,
+          harvestPhase: job.phaseAnim,
+          carryingWater: false,
+          visual: e.visual,
+          time: time,
+          torchLevel: e.torchLevel,
+          torchPhase: e.torchPhase,
+          houseAccent: houseAccentColor(e.surname),
+          primitiveClothing: primitiveClothing,
+        );
       case JobRole.none:
         break;
     }
@@ -690,8 +827,14 @@ class _VillagerDrawable extends _Drawable {
     }
     // Çiftçi kuyu/sulama anının ilk 0.4 sn'sinde su sıçraması.
     if (job.role == JobRole.farmer &&
-        job.splashTimer >= 0 && job.splashTimer < 0.4) {
-      ParticleRenderer.drawSplash(canvas, s.dx, s.dy - 10, job.splashTimer / 0.4);
+        job.splashTimer >= 0 &&
+        job.splashTimer < 0.4) {
+      ParticleRenderer.drawSplash(
+        canvas,
+        s.dx,
+        s.dy - 10,
+        job.splashTimer / 0.4,
+      );
     }
     // Madenci kazma darbesinde taş chip'i (chopPhase döngü başı %30).
     if (job.role == JobRole.miner && working) {
@@ -700,9 +843,16 @@ class _VillagerDrawable extends _Drawable {
         final lt = job.phaseAnim / chipWindow;
         final dir = e.facingRight ? 1.0 : -1.0;
         final seed = e.gridX.toInt() * 7 + e.gridY.toInt() * 13;
-        ParticleRenderer.drawChip(canvas, s.dx + dir * 12, s.dy - 18, lt,
-            color: const Color(0xFFA8A4A0), shade: const Color(0xFF5A5450),
-            direction: dir, seed: seed);
+        ParticleRenderer.drawChip(
+          canvas,
+          s.dx + dir * 12,
+          s.dy - 18,
+          lt,
+          color: const Color(0xFFA8A4A0),
+          shade: const Color(0xFF5A5450),
+          direction: dir,
+          seed: seed,
+        );
       }
     }
   }
@@ -735,18 +885,19 @@ class _VillagerDrawable extends _Drawable {
 class _CowDrawable extends _Drawable {
   final AnimalEntity a;
   _CowDrawable(this.a);
-  @override double get depth => a.depth;
+  @override
+  double get depth => a.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(a.renderX, a.renderY, size, camera);
     AnimalRenderer.drawCow(
       canvas,
       s,
-      facing:     a.facing4,
-      walkPhase:  a.walkPhase,
-      isWalking:  a.isWalking,
-      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
-      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
+      facing: a.facing4,
+      walkPhase: a.walkPhase,
+      isWalking: a.isWalking,
+      scale: a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
+      alpha: a.isDying ? (1 - a.deathProgress) : 1.0,
     );
   }
 }
@@ -754,18 +905,19 @@ class _CowDrawable extends _Drawable {
 class _SheepDrawable extends _Drawable {
   final AnimalEntity a;
   _SheepDrawable(this.a);
-  @override double get depth => a.depth;
+  @override
+  double get depth => a.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(a.renderX, a.renderY, size, camera);
     AnimalRenderer.drawSheep(
       canvas,
       s,
-      facing:     a.facing4,
-      walkPhase:  a.walkPhase,
-      isWalking:  a.isWalking,
-      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
-      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
+      facing: a.facing4,
+      walkPhase: a.walkPhase,
+      isWalking: a.isWalking,
+      scale: a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
+      alpha: a.isDying ? (1 - a.deathProgress) : 1.0,
     );
   }
 }
@@ -773,18 +925,19 @@ class _SheepDrawable extends _Drawable {
 class _ChickenDrawable extends _Drawable {
   final AnimalEntity a;
   _ChickenDrawable(this.a);
-  @override double get depth => a.depth;
+  @override
+  double get depth => a.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(a.renderX, a.renderY, size, camera);
     AnimalRenderer.drawChicken(
       canvas,
       s,
-      facing:     a.facing4,
-      walkPhase:  a.walkPhase,
-      isWalking:  a.isWalking,
-      scale:      a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
-      alpha:      a.isDying ? (1 - a.deathProgress) : 1.0,
+      facing: a.facing4,
+      walkPhase: a.walkPhase,
+      isWalking: a.isWalking,
+      scale: a.renderScale * (a.isDying ? (1 - 0.25 * a.deathProgress) : 1.0),
+      alpha: a.isDying ? (1 - a.deathProgress) : 1.0,
     );
   }
 }
@@ -793,10 +946,16 @@ class _DecorDrawable extends _Drawable {
   final DecorEntity d;
   final double time;
   _DecorDrawable(this.d, this.time);
-  @override double get depth => d.depth;
+  @override
+  double get depth => d.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
-    final center = gridToScreen(d.col + 0.5 + d.jitterX, d.row + 0.5 + d.jitterY, size, camera);
+    final center = gridToScreen(
+      d.col + 0.5 + d.jitterX,
+      d.row + 0.5 + d.jitterY,
+      size,
+      camera,
+    );
     DecorRenderer.draw(canvas, center, d, time: time);
   }
 }
@@ -804,11 +963,16 @@ class _DecorDrawable extends _Drawable {
 class _GraveDrawable extends _Drawable {
   final Grave g;
   _GraveDrawable(this.g);
-  @override double get depth => g.depth;
+  @override
+  double get depth => g.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final center = gridToScreen(
-        g.col + 0.5 + g.jitterX, g.row + 0.5 + g.jitterY, size, camera);
+      g.col + 0.5 + g.jitterX,
+      g.row + 0.5 + g.jitterY,
+      size,
+      camera,
+    );
     GraveRenderer.draw(canvas, center, g);
   }
 }
@@ -816,12 +980,16 @@ class _GraveDrawable extends _Drawable {
 class _ReedBedDrawable extends _Drawable {
   final ReedBed b;
   _ReedBedDrawable(this.b);
-  @override double get depth => b.depth;
+  @override
+  double get depth => b.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final center = gridToScreen(b.gridX, b.gridY, size, camera);
-    ReedBedRenderer.draw(canvas, center,
-        seed: (b.gridX * 13 + b.gridY * 7).round());
+    ReedBedRenderer.draw(
+      canvas,
+      center,
+      seed: (b.gridX * 13 + b.gridY * 7).round(),
+    );
   }
 }
 
@@ -829,12 +997,18 @@ class _LotusDrawable extends _Drawable {
   final LotusEntity l;
   final double time;
   _LotusDrawable(this.l, this.time);
-  @override double get depth => l.depth;
+  @override
+  double get depth => l.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final center = gridToScreen(l.col + 0.5, l.row + 0.5, size, camera);
-    NatureRenderer.drawLotus(canvas, center,
-        variant: l.variant, time: time, seed: l.col * 23 + l.row * 37);
+    NatureRenderer.drawLotus(
+      canvas,
+      center,
+      variant: l.variant,
+      time: time,
+      seed: l.col * 23 + l.row * 37,
+    );
   }
 }
 
@@ -842,18 +1016,25 @@ class _ReedDrawable extends _Drawable {
   final ReedClump r;
   final double time;
   _ReedDrawable(this.r, this.time);
-  @override double get depth => r.depth;
+  @override
+  double get depth => r.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     // İki tile'ın üst köşelerinin ortası
-    final s1 = gridToScreen(r.col.toDouble(),  r.row.toDouble(),  size, camera);
+    final s1 = gridToScreen(r.col.toDouble(), r.row.toDouble(), size, camera);
     final s2 = gridToScreen(r.col2.toDouble(), r.row2.toDouble(), size, camera);
     final cx = (s1.dx + s2.dx) / 2;
     final cy = (s1.dy + s2.dy) / 2 + kTileH / 2; // tile orta yüksekliğine in
-    NatureRenderer.drawReeds(canvas, cx, cy,
-        time: time, seed: r.col * 19 + r.row * 41,
-        col: r.col.toDouble(), row: r.row.toDouble(),
-        growth: r.growth);
+    NatureRenderer.drawReeds(
+      canvas,
+      cx,
+      cy,
+      time: time,
+      seed: r.col * 19 + r.row * 41,
+      col: r.col.toDouble(),
+      row: r.row.toDouble(),
+      growth: r.growth,
+    );
   }
 }
 
@@ -861,38 +1042,61 @@ class _BerryBushDrawable extends _Drawable {
   final BerryBush b;
   final double time;
   _BerryBushDrawable(this.b, this.time);
-  @override double get depth => b.depth;
+  @override
+  double get depth => b.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     // Tile merkezinin ALT yarısı — çalı zemine oturur, tile'ın ortasında
     // havada durmaz (sazla aynı hizalama mantığı).
     final s = gridToScreen(b.col + 0.5, b.row + 0.5, size, camera);
-    NatureRenderer.drawBerryBush(canvas, s.dx, s.dy + kTileH * 0.18,
-        ripeness: b.ripeness,
-        variant: b.variant,
-        seed: b.col * 29 + b.row * 47,
-        time: time,
-        col: b.col.toDouble(),
-        row: b.row.toDouble());
+    NatureRenderer.drawBerryBush(
+      canvas,
+      s.dx,
+      s.dy + kTileH * 0.18,
+      ripeness: b.ripeness,
+      variant: b.variant,
+      seed: b.col * 29 + b.row * 47,
+      time: time,
+      col: b.col.toDouble(),
+      row: b.row.toDouble(),
+    );
   }
 }
 
 class _TreeDrawable extends _Drawable {
   final TreeEntity t;
   final double time;
-  _TreeDrawable(this.t, this.time);
-  @override double get depth => t.depth;
+  final Season season;
+  _TreeDrawable(this.t, this.time, this.season);
+  @override
+  double get depth => t.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final center = gridToScreen(t.col + 0.5, t.row + 0.5, size, camera);
     // Çam gövdesi tabanında dar elips gölge
-    _drawTreeShadow(canvas, center.dx, center.dy, 28.0, t.growthScale);
-    TreeRenderer.draw(canvas, t.type, center,
-        time: time, seed: t.col * 17 + t.row * 31,
-        chopPhase: t.chopPhase,
-        growthScale: t.growthScale,
-        col: t.col + 0.5, row: t.row + 0.5,
-        fellProgress: t.fellProgress);
+    _drawTreeShadow(
+      canvas,
+      center.dx,
+      center.dy,
+      28.0,
+      t.growthScale,
+      t.fellProgress,
+      t.fallDirection,
+    );
+    TreeRenderer.draw(
+      canvas,
+      t.type,
+      center,
+      time: time,
+      seed: t.col * 17 + t.row * 31,
+      chopPhase: t.chopPhase,
+      growthScale: t.growthScale,
+      col: t.col + 0.5,
+      row: t.row + 0.5,
+      season: season,
+      fellProgress: t.fellProgress,
+      fallDirection: t.fallDirection,
+    );
   }
 }
 
@@ -901,18 +1105,28 @@ class _BuildingDrawable extends _Drawable {
   final double time;
   final double dayLight;
   final double rainIntensity;
+  final Season season;
+
   /// fireOutbreak event'inde bu bina yanıyor mu — sprite üstüne alev + duman.
   final bool burning;
   final bool perfMode;
-  _BuildingDrawable(this.b, this.time, this.dayLight, this.rainIntensity,
-      this.burning, this.perfMode);
+  _BuildingDrawable(
+    this.b,
+    this.time,
+    this.dayLight,
+    this.rainIntensity,
+    this.season,
+    this.burning,
+    this.perfMode,
+  );
   // Painter's algorithm: bina ön-en (frontmost) tile'ının diagonal sum'ı.
   // (col+cols-1, row+rows-1) bina footprint'inin güney-doğu (ön) tile'ı.
   // Eski formül (col+row + (cols+rows)/2 = orta) → bina arkasındaki NPC önde
   // görünebiliyordu. Ön-tile sort'u izometride doğru z-order verir.
-  @override double get depth =>
-      (b.col + b.cols - 1.0) + (b.row + b.rows - 1.0);
-  @override BuildingEntity? get building => b;
+  @override
+  double get depth => (b.col + b.cols - 1.0) + (b.row + b.rows - 1.0);
+  @override
+  BuildingEntity? get building => b;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final corners = _corners(b.col, b.row, b.cols, b.rows, size, camera);
@@ -934,16 +1148,42 @@ class _BuildingDrawable extends _Drawable {
       canvas.translate(fx, fy);
       canvas.scale(scale, scale);
       canvas.translate(-fx, -fy);
-      BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
-          time: time, seed: b.col * 17 + b.row * 31,
-          dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive, perfMode: perfMode, fireFuel: b.fireFuel);
+      BuildingRenderer.draw(
+        canvas,
+        b.type,
+        corners.$1,
+        corners.$2,
+        corners.$3,
+        corners.$4,
+        time: time,
+        seed: b.col * 17 + b.row * 31,
+        dayLight: dayLight,
+        rainIntensity: rainIntensity,
+        isActive: b.isActive,
+        perfMode: perfMode,
+        fireFuel: b.fireFuel,
+        millRotorAngle: b.millRotorAngle,
+        season: season,
+      );
       canvas.restore();
     } else {
-      BuildingRenderer.draw(canvas, b.type, corners.$1, corners.$2, corners.$3, corners.$4,
-          time: time, seed: b.col * 17 + b.row * 31,
-          dayLight: dayLight, rainIntensity: rainIntensity,
-          isActive: b.isActive, perfMode: perfMode, fireFuel: b.fireFuel);
+      BuildingRenderer.draw(
+        canvas,
+        b.type,
+        corners.$1,
+        corners.$2,
+        corners.$3,
+        corners.$4,
+        time: time,
+        seed: b.col * 17 + b.row * 31,
+        dayLight: dayLight,
+        rainIntensity: rainIntensity,
+        isActive: b.isActive,
+        perfMode: perfMode,
+        fireFuel: b.fireFuel,
+        millRotorAngle: b.millRotorAngle,
+        season: season,
+      );
     }
 
     // Toz bulutu — ilk 0.4 sn footprint kenarlarında 3 partikül. Açık bej ton.
@@ -953,19 +1193,46 @@ class _BuildingDrawable extends _Drawable {
       final fw = (corners.$3.dx - corners.$2.dx).abs();
       final dustScale = 0.35 + fw / 200.0; // büyük bina ~ daha geniş toz
       const dustTint = Color(0xFFE8DCC4);
-      SmokeRenderer.draw(canvas, corners.$2.dx + 4, midY,
-          dustScale, time, b.col * 31 + b.row * 7,
-          tint: dustTint, intensity: dust);
-      SmokeRenderer.draw(canvas, corners.$4.dx, corners.$4.dy - 1,
-          dustScale, time, b.col * 31 + b.row * 11,
-          tint: dustTint, intensity: dust);
-      SmokeRenderer.draw(canvas, corners.$3.dx - 4, midY,
-          dustScale, time, b.col * 31 + b.row * 13,
-          tint: dustTint, intensity: dust);
+      SmokeRenderer.draw(
+        canvas,
+        corners.$2.dx + 4,
+        midY,
+        dustScale,
+        time,
+        b.col * 31 + b.row * 7,
+        tint: dustTint,
+        intensity: dust,
+      );
+      SmokeRenderer.draw(
+        canvas,
+        corners.$4.dx,
+        corners.$4.dy - 1,
+        dustScale,
+        time,
+        b.col * 31 + b.row * 11,
+        tint: dustTint,
+        intensity: dust,
+      );
+      SmokeRenderer.draw(
+        canvas,
+        corners.$3.dx - 4,
+        midY,
+        dustScale,
+        time,
+        b.col * 31 + b.row * 13,
+        tint: dustTint,
+        intensity: dust,
+      );
     }
 
     if (burning) {
-      _drawBurningOverlay(canvas, corners.$1, corners.$2, corners.$3, corners.$4);
+      _drawBurningOverlay(
+        canvas,
+        corners.$1,
+        corners.$2,
+        corners.$3,
+        corners.$4,
+      );
     }
 
     // Pazar satış parıltısı — son satış üstünden < 1sn ise altın yukarı çıkar.
@@ -983,10 +1250,15 @@ class _BuildingDrawable extends _Drawable {
   // Yanan bina overlay'i — sprite çatısı/orta seviyesinde 2-3 alev + yukarı
   // kalkan koyu duman partikülleri + sıcak halo. Footprint köşelerinden
   // ortalanmış pozisyon hesabı.
-  static final Paint _pBurnGlow  = Paint()..isAntiAlias = true;
+  static final Paint _pBurnGlow = Paint()..isAntiAlias = true;
 
-  void _drawBurningOverlay(Canvas canvas,
-      Offset back, Offset left, Offset right, Offset front) {
+  void _drawBurningOverlay(
+    Canvas canvas,
+    Offset back,
+    Offset left,
+    Offset right,
+    Offset front,
+  ) {
     // Sprite çatı orta noktası: footprint orta x, back y (sprite yukarı
     // doğru uzar). Tile genişliğine göre alev ölçeği.
     final cx = (back.dx + front.dx) * 0.5;
@@ -998,7 +1270,11 @@ class _BuildingDrawable extends _Drawable {
     final pulse = sin(time * 4.7 + b.col * 0.3) * 0.15 + 0.85;
     _pBurnGlow.blendMode = BlendMode.plus;
     _pBurnGlow.color = Color.fromARGB(
-        (140 * pulse).round().clamp(0, 200), 0xFF, 0x60, 0x18);
+      (140 * pulse).round().clamp(0, 200),
+      0xFF,
+      0x60,
+      0x18,
+    );
     canvas.drawCircle(Offset(cx, roofY), 30 * flameScale, _pBurnGlow);
     _pBurnGlow.blendMode = BlendMode.srcOver;
 
@@ -1006,19 +1282,40 @@ class _BuildingDrawable extends _Drawable {
     for (int i = 0; i < 3; i++) {
       final fx = cx + (i - 1) * (10 * flameScale);
       final fy = roofY - (i == 1 ? 4 * flameScale : 0);
-      FlameRenderer.draw(canvas, fx, fy, flameScale * 2.0,
-          time + i * 0.41, b.col * 7 + i,
-          intensity: 1.0, sparks: true);
+      FlameRenderer.draw(
+        canvas,
+        fx,
+        fy,
+        flameScale * 2.0,
+        time + i * 0.41,
+        b.col * 7 + i,
+        intensity: 1.0,
+        sparks: true,
+      );
     }
 
     // Yangın dumanı — sprite-based, koyu siyah-gri tint, yoğun yüksek scale.
     // İki duman sütunu (çatının iki ucundan) → yangının büyüklüğünü vurgular.
-    SmokeRenderer.draw(canvas, cx - 4 * flameScale, roofY,
-        flameScale * 2.4, time, b.col * 17 + b.row * 31,
-        tint: const Color(0xFF504842), intensity: 1.0);
-    SmokeRenderer.draw(canvas, cx + 4 * flameScale, roofY - 2,
-        flameScale * 2.0, time + 0.7, b.col * 23 + b.row * 41 + 7,
-        tint: const Color(0xFF504842), intensity: 0.9);
+    SmokeRenderer.draw(
+      canvas,
+      cx - 4 * flameScale,
+      roofY,
+      flameScale * 2.4,
+      time,
+      b.col * 17 + b.row * 31,
+      tint: const Color(0xFF504842),
+      intensity: 1.0,
+    );
+    SmokeRenderer.draw(
+      canvas,
+      cx + 4 * flameScale,
+      roofY - 2,
+      flameScale * 2.0,
+      time + 0.7,
+      b.col * 23 + b.row * 41 + 7,
+      tint: const Color(0xFF504842),
+      intensity: 0.9,
+    );
   }
 }
 
@@ -1032,47 +1329,89 @@ class _ScaffoldDrawable extends _Drawable {
     final m = kBuildingMeta[order.type]!;
     return (order.col + m.cols - 1.0) + (order.row + m.rows - 1.0);
   }
+
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final m = kBuildingMeta[order.type]!;
-    final (back, left, right, front) = _corners(order.col, order.row, m.cols, m.rows, size, camera);
+    final (back, left, right, front) = _corners(
+      order.col,
+      order.row,
+      m.cols,
+      m.rows,
+      size,
+      camera,
+    );
 
     // ── 1) Zemin diamond — inşaat alanı (toprak/sıkıştırılmış renk) ──
     _scratchPath
       ..reset()
-      ..moveTo(back.dx,  back.dy)
+      ..moveTo(back.dx, back.dy)
       ..lineTo(right.dx, right.dy)
       ..lineTo(front.dx, front.dy)
-      ..lineTo(left.dx,  left.dy)
+      ..lineTo(left.dx, left.dy)
       ..close();
     canvas.drawPath(_scratchPath, _pScaffGround);
     canvas.drawPath(_scratchPath, _pScaffBorder);
 
     // ── 2) Bina sprite reveal (smoothstep + jitter + clip kenarı gölge) ──
     BuildingRenderer.drawConstruction(
-        canvas, order.type, left, right, front, order.progress, time);
+      canvas,
+      order.type,
+      left,
+      right,
+      front,
+      order.progress,
+      time,
+    );
   }
 }
 
-(Offset, Offset, Offset, Offset) _corners(int col, int row, int cols, int rows, Size size, Offset camera) {
-  final back  = gridToScreen(col.toDouble(),          row.toDouble(),          size, camera);
-  final left  = gridToScreen(col.toDouble(),          (row + rows).toDouble(), size, camera);
-  final right = gridToScreen((col + cols).toDouble(), row.toDouble(),          size, camera);
-  final front = gridToScreen((col + cols).toDouble(), (row + rows).toDouble(), size, camera);
+(Offset, Offset, Offset, Offset) _corners(
+  int col,
+  int row,
+  int cols,
+  int rows,
+  Size size,
+  Offset camera,
+) {
+  final back = gridToScreen(col.toDouble(), row.toDouble(), size, camera);
+  final left = gridToScreen(
+    col.toDouble(),
+    (row + rows).toDouble(),
+    size,
+    camera,
+  );
+  final right = gridToScreen(
+    (col + cols).toDouble(),
+    row.toDouble(),
+    size,
+    camera,
+  );
+  final front = gridToScreen(
+    (col + cols).toDouble(),
+    (row + rows).toDouble(),
+    size,
+    camera,
+  );
   return (back, left, right, front);
 }
 
 class _MineDrawable extends _Drawable {
   final MineNode n;
   _MineDrawable(this.n);
-  @override double get depth => n.depth;
+  @override
+  double get depth => n.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(n.col.toDouble(), n.row.toDouble(), size, camera);
-    MineRenderer.draw(canvas, s.dx, s.dy,
-        type: n.type,
-        chopPhase: n.chopPhase,
-        seed: n.col * 13 + n.row * 29);
+    MineRenderer.draw(
+      canvas,
+      s.dx,
+      s.dy,
+      type: n.type,
+      chopPhase: n.chopPhase,
+      seed: n.col * 13 + n.row * 29,
+    );
   }
 }
 
@@ -1084,12 +1423,14 @@ class _ResourceBoxDrawable extends _Drawable {
   final ResourceBox b;
   final double time;
   _ResourceBoxDrawable(this.b, this.time);
-  @override double get depth {
+  @override
+  double get depth {
     // Stack içindeki ön-arka offset depth'e dahil — aynı tile'da öndeki
     // kutu arkadakini sprite olarak kapatır.
     final off = ResourcePlacement.offsetFor(b.slotIndex);
     return (b.gridX + off.$1) + (b.gridY + off.$2);
   }
+
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final off = ResourcePlacement.offsetFor(b.slotIndex);
@@ -1102,7 +1443,8 @@ class _EggDrawable extends _Drawable {
   final EggEntity e;
   final double time;
   _EggDrawable(this.e, this.time);
-  @override double get depth => e.depth;
+  @override
+  double get depth => e.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(e.gridX, e.gridY, size, camera);
@@ -1120,12 +1462,17 @@ class _EggDrawable extends _Drawable {
     }
     final c = Offset(s.dx + wob, y);
     canvas.drawOval(
-        Rect.fromCenter(center: Offset(s.dx, s.dy - 0.5), width: 7, height: 3.5),
-        Paint()..color = const Color(0x33000000));
-    canvas.drawOval(Rect.fromCenter(center: c, width: 6.5, height: 8.5),
-        Paint()..color = const Color(0xFFF3E9D2));
-    canvas.drawOval(Rect.fromCenter(center: c.translate(-1, -1.6), width: 2.4, height: 3.4),
-        Paint()..color = const Color(0xFFFFFDF5));
+      Rect.fromCenter(center: Offset(s.dx, s.dy - 0.5), width: 7, height: 3.5),
+      Paint()..color = const Color(0x33000000),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: c, width: 6.5, height: 8.5),
+      Paint()..color = const Color(0xFFF3E9D2),
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: c.translate(-1, -1.6), width: 2.4, height: 3.4),
+      Paint()..color = const Color(0xFFFFFDF5),
+    );
   }
 }
 
@@ -1139,7 +1486,8 @@ class _LootCacheDrawable extends _Drawable {
   final LootCache l;
   final double fade;
   _LootCacheDrawable(this.l, this.fade);
-  @override double get depth => l.depth;
+  @override
+  double get depth => l.depth;
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     final s = gridToScreen(l.gridX, l.gridY, size, camera);
@@ -1150,24 +1498,34 @@ class _LootCacheDrawable extends _Drawable {
 
     // Çukurun gölgesi (hafif oval çöküntü).
     canvas.drawOval(
-        Rect.fromCenter(center: s, width: 13, height: 6.5),
-        Paint()..color = Color.fromRGBO(30, 22, 16, 0.30 * vis));
+      Rect.fromCenter(center: s, width: 13, height: 6.5),
+      Paint()..color = Color.fromRGBO(30, 22, 16, 0.30 * vis),
+    );
     // Eşelenmiş toprak — taze kahve, solunca griye kayar.
     final soil = Color.lerp(
-        const Color(0xFF5A4A3A), const Color(0xFF3E3A2E), 1 - trace)!;
+      const Color(0xFF5A4A3A),
+      const Color(0xFF3E3A2E),
+      1 - trace,
+    )!;
     canvas.drawOval(
-        Rect.fromCenter(center: s.translate(0, -1), width: 10.5, height: 5.0),
-        Paint()..color = soil.withValues(alpha: vis));
+      Rect.fromCenter(center: s.translate(0, -1), width: 10.5, height: 5.0),
+      Paint()..color = soil.withValues(alpha: vis),
+    );
     // Üstte birkaç kesek — düz bir leke değil, kazılmış toprak.
     final clod = Paint()
-      ..color = Color.lerp(const Color(0xFF6B5744), soil, 1 - trace)!
-          .withValues(alpha: vis);
+      ..color = Color.lerp(
+        const Color(0xFF6B5744),
+        soil,
+        1 - trace,
+      )!.withValues(alpha: vis);
     canvas.drawOval(
-        Rect.fromCenter(center: s.translate(-2.6, -2.4), width: 4.0, height: 2.4),
-        clod);
+      Rect.fromCenter(center: s.translate(-2.6, -2.4), width: 4.0, height: 2.4),
+      clod,
+    );
     canvas.drawOval(
-        Rect.fromCenter(center: s.translate(1.9, -3.0), width: 3.2, height: 2.0),
-        clod);
+      Rect.fromCenter(center: s.translate(1.9, -3.0), width: 3.2, height: 2.0),
+      clod,
+    );
   }
 }
 
@@ -1175,18 +1533,20 @@ class _HayDrawable extends _Drawable {
   final HayEntity h;
   final double time;
   _HayDrawable(this.h, this.time);
-  @override double get depth {
+  @override
+  double get depth {
     if (h.isBale) return h.gridX + h.gridY + 1.0;
     final off = ResourcePlacement.offsetFor(h.slotIndex);
     return (h.gridX + off.$1) + (h.gridY + off.$2);
   }
+
   @override
   void draw(Canvas canvas, Size size, Offset camera) {
     if (h.isBale) {
       const bs = 0.5;
-      final right = gridToScreen(h.gridX + bs, h.gridY,       size, camera);
-      final left  = gridToScreen(h.gridX,      h.gridY + bs,  size, camera);
-      final front = gridToScreen(h.gridX + bs, h.gridY + bs,  size, camera);
+      final right = gridToScreen(h.gridX + bs, h.gridY, size, camera);
+      final left = gridToScreen(h.gridX, h.gridY + bs, size, camera);
+      final front = gridToScreen(h.gridX + bs, h.gridY + bs, size, camera);
       final spriteW = (right.dx - left.dx).abs();
       ResourceRenderer.drawBale(canvas, front.dx, front.dy, spriteW, time, h);
     } else {

@@ -35,7 +35,9 @@ Future<void> main() async {
     waited++;
   }
   // Akış taraması (0.5 sn) birkaç kez dönsün ki adım + işaret otursun.
-  await Future<void>.delayed(const Duration(seconds: 4));
+  // 8 sn: kuruluş açılışı SIRALI — önce kurucunun repliği (~5 sn), sonra
+  // öğretici spot. 4 sn'de kare çekmek spotu hiç görmeden "yok" demekti.
+  await Future<void>.delayed(const Duration(seconds: 8));
   // TEŞHİS: kare çekilmeden önce akışın nabzını bas. "Şerit bazen yok"
   // şikâyetinde tek soru bu — tarama koştu mu, koştuysa ne buldu?
   stdout.writeln('FLOW: $kFlowDebug');

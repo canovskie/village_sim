@@ -148,20 +148,22 @@ void main() {
   group('kuruluş kademesi boş bırakmaz', () {
     List<Quest> tier0() => QuestBook.all.where((q) => q.tier == 0).toList();
 
-    test('kuruluşta en az 10 mikro adım var', () {
-      expect(tier0().length, greaterThanOrEqualTo(10),
-          reason: 'kuruluş yeniden beş adıma inerse oyuncu ilk on dakikayı '
-              'yine bekleyerek geçirir — boşluğun kaynağı buydu');
+    test('kuruluş 8-10 mikro adım bandında kalır', () {
+      // ALT sınır: beş "bina dik" görevine geri dönülürse oyuncu ilk on
+      // dakikayı yine bekleyerek geçirir — boşluğun kaynağı buydu.
+      // ÜST sınır: on ikiye çıktığında liste bir iş listesi gibi okundu ve
+      // kuruluş uzun geldi; karar+sonuç adımları birleştirilerek dokuza indi.
+      expect(tier0().length, greaterThanOrEqualTo(8));
+      expect(tier0().length, lessThanOrEqualTo(10));
     });
 
     test('kuruluş yalnız bina dikmekten ibaret değil', () {
-      // En az bir KARAR adımı (oyuncunun birine iş vermesi) ve en az bir
-      // SONUÇ adımı (o işin ürünü) olmalı.
-      final ids = tier0().map((q) => q.id).toSet();
-      expect(ids.contains('giveBasket'), isTrue,
+      // En az bir adım oyuncunun KARARINI (elle iş verme) istemeli — kuruluş
+      // "şu binayı dik" listesine geri dönmesin.
+      final q = QuestBook.all.firstWhere((q) => q.id == 'giveBasket');
+      expect(q.jobTarget, isNotNull,
           reason: 'kuruluşta oyuncunun bir KARAR verdiği adım kalmamış');
-      expect(ids.contains('firstBerries'), isTrue,
-          reason: 'kuruluşta kararın SONUCUNU gösteren adım kalmamış');
+      expect(q.check(_ctx(assigned: {JobRole.forager})), isTrue);
     });
 
     test('kuruluş adımlarının çoğunu bir kurucu ister', () {
@@ -172,17 +174,25 @@ void main() {
 
     test('elle atama görevi OTOMATİK işle tamamlanmaz', () {
       // Boş küme = oyuncu kimseye iş vermedi. Köy kendiliğinden birini
-      // toplayıcı yapsa bile bu görev açık kalmalı.
+      // toplayıcı yapıp sepet doldursa bile bu görev açık kalmalı.
       final q = QuestBook.all.firstWhere((q) => q.id == 'giveBasket');
       expect(q.check(_ctx()), isFalse);
-      expect(q.check(_ctx(assigned: {JobRole.forager})), isTrue);
+      expect(q.check(_ctx(berriesPicked: 3)), isFalse);
     });
 
-    test('ilk sepet STOĞA değil kümülatif toplamaya bakar', () {
-      final q = QuestBook.all.firstWhere((q) => q.id == 'firstBerries');
-      expect(q.check(_ctx(berriesPicked: 0)), isFalse);
-      // Toplandı ama hepsi yenmiş olsa bile görev geri alınmaz.
-      expect(q.check(_ctx(berriesPicked: 1)), isTrue);
+    test('karar adımı NPC\'nin işini bitirmesini BEKLEMEZ', () {
+      // Bu iki adım bir süre kararın SONUCUNU da istiyordu (sepet dolsun,
+      // kazan kaynasın). Oyunda karşılığı şu oldu: oyuncu hamlesini yapıyor,
+      // sonra köylünün çalıya yürümesini seyrederken adım kapanmıyor, öğretici
+      // duruyordu. Bir adım oyuncunun hamlesini ölçer, NPC'nin hızını ölçmez.
+      final basket = QuestBook.all.firstWhere((q) => q.id == 'giveBasket');
+      expect(basket.check(_ctx(assigned: {JobRole.forager}, berriesPicked: 0)),
+          isTrue,
+          reason: 'sepet dolmasını beklemek oyuncuyu izleyiciye çeviriyor');
+      final cook = QuestBook.all.firstWhere((q) => q.id == 'giveCook');
+      expect(cook.check(_ctx(assigned: {JobRole.cook}, everCooked: false)),
+          isTrue,
+          reason: 'kazanın kaynamasını beklemek oyuncuyu izleyiciye çeviriyor');
     });
 
     test('ilk gece ikinci güne çıkınca tamamlanır', () {

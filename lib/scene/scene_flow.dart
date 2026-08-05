@@ -82,7 +82,15 @@ extension _SceneFlow on _VillageSceneState {
       kFlowDebug = 'tarama=$_flowScans adım=${_stepCache?.quest.id ?? "YOK"} '
         'açık=${QuestBook.activeQuests(ctx, _completedQuests).length} '
         'kademe=$_charterTier nüfus=${_villagers.length} '
+        'gün=$_dayCount mevsim=${_season.label} '
+        'kış=%${(_winterReadiness.overall * 100).round()} '
+        'yün=${_stockpile.wool} giysi=${_villagers.where((v) => v.hasCoat).length}/${_villagers.length} '
+        'soğukEv=${_coldHouses.length} '
+        'dokumacı=${_villagers.where((v) => v.job?.role == JobRole.weaver).length} '
+        'bekleyenGiysi=$_coatsMade '
         'işaret=${_stepBeacon == null ? "yok" : "var"} '
+        'öğretici=${_guideOpen ? "AÇIK" : _guideWanted ? "bekliyor(${_guideDelay.toStringAsFixed(1)})" : "kapalı"} '
+        'hedef=${_resolveGuideCue()?.title ?? "YOK"} '
         'kalp=${_villageHeart()} kamera=$_camera kilit=$_cameraCentered '
           'görünüm=$_viewSize';
     }
@@ -103,6 +111,9 @@ extension _SceneFlow on _VillageSceneState {
       final asker = _questSpeaker(q);
       if (asker != null) {
         asker.feel(NpcEmotion.joy, 5, moodDelta: 0.10);
+        // Emek görülmeden kapanmasın: isteyen kişi dünyada karşılık verir.
+        // Bildirim şeridi geçip gidiyor, cümle köylünün başının üstünde durur.
+        _questSpeak(asker, q.thanks, life: 6.0);
         _showNotification('✓ ${q.label} — ${asker.name} sevindi.');
       } else {
         _showNotification('✓ ${q.label}');
@@ -118,12 +129,15 @@ extension _SceneFlow on _VillageSceneState {
       final tier = QuestBook.tierOf(newTier);
       _grantVisualReward(VisualReward.landmark);
       _reactFestival(); // ateşe toplanma + dans (scene_petitions şablonu)
-      _showNotification('${tier.icon} Köyünüz "${tier.name}" oldu!');
+      // Kademe TÖRENSEL an: köy artık dışarıda başka bir adla anılıyor —
+      // cümle "köyünüz" değil, köyün KENDİ adıyla kurulur.
+      _showNotification(
+          '${tier.icon} $_villageName artık "${tier.name}" diye anılıyor!');
       // Nadir tam ekran sinematik — kademe filmi (bir kez).
       final cs = cutsceneForTier(newTier);
       if (cs != null && !_tierCutscenesShown.contains(newTier)) {
         _tierCutscenesShown.add(newTier);
-        _playCutscene(cs, logEntry: 'Köy "${tier.name}" oldu');
+        _playCutscene(cs, logEntry: '$_villageName "${tier.name}" oldu');
       }
     }
   }
@@ -246,8 +260,9 @@ extension _SceneFlow on _VillageSceneState {
     return t;
   }
 
-  /// Şu anki adımın istediği iş rolü — köylü panelindeki işaretin kaynağı.
-  /// Adım zaten tamamlanmışsa (oyuncu o işi verdiyse) işaret düşer.
+  /// Şu anki adımın istediği iş rolü — öğreticinin hangi İŞ YERİNİ
+  /// göstereceğini bu belirler (bkz. `_guidedSiteId`). Adım tamamlanmışsa
+  /// (oyuncu o eli verdiyse) işaret düşer.
   JobRole? get _stepJobTarget => _stepCache?.quest.jobTarget;
 
   /// Köyün kalbi — ocak varsa orası, yoksa köylülerin ortalama konumu
@@ -281,6 +296,12 @@ extension _SceneFlow on _VillageSceneState {
     // Çift tetik koruması — aynı sahne zaten oynuyorsa yok say (aksi halde
     // oynatıcı state'i sıfırlanıp sahne baştan oynar = ekrana art arda 2 kez).
     if (identical(_activeCutscene, c)) return;
+    // Capture harness'ı sahneyi çeker; kilometre taşı sinematiği araya girerse
+    // kare köyü değil diyalog ekranını gösterir (güncesi yine de yazılsın).
+    if (kCaptureMode) {
+      if (logEntry != null) _chronicle(logEntry, icon: '🎬', milestone: true);
+      return;
+    }
     if (logEntry != null) _chronicle(logEntry, icon: '🎬', milestone: true);
     setStateHere(() => _activeCutscene = c);
   }

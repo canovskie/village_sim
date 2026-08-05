@@ -66,6 +66,15 @@ class LawCompassCard extends StatelessWidget {
   final bool expanded;
   final VoidCallback? onToggleExpand;
 
+  /// TAHTA KİPİ (telefon) — kadran ÜSTTE, künye ALTINDA.
+  ///
+  /// Yatay dizilim (132dp'lik kadran + yanında metin) tahtanın ~250dp'lik sol
+  /// sütununa sığmıyor: metne 100dp kalıyor, her satır üç kelimede kırılıyordu.
+  /// Dikeyde kadran sütunun genişliğini kullanır, metin de tam genişlik alır.
+  /// Ayrıca kısaltılmış hâl: uzun notlar satır sınırıyla kırpılır — sütun
+  /// sabit boyludur, taşamaz.
+  final bool vertical;
+
   const LawCompassCard({
     super.key,
     required this.sealed,
@@ -79,6 +88,7 @@ class LawCompassCard extends StatelessWidget {
     this.compact = false,
     this.expanded = false,
     this.onToggleExpand,
+    this.vertical = false,
   });
 
   @override
@@ -88,6 +98,7 @@ class LawCompassCard extends StatelessWidget {
     final tint = regimeColor(id.regime);
 
     if (compact && !expanded) return _summaryRow(id, pos, tint);
+    if (vertical) return _verticalCard(id, pos, tint);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
@@ -105,75 +116,107 @@ class LawCompassCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(children: [
-                  Text('KÖYÜN YÖNÜ',
-                      style: AppUi.label.copyWith(
-                          fontSize: 8, color: tint, letterSpacing: 1.6)),
-                  const Spacer(),
-                  Text('${sealed.length}/$totalLaws',
-                      style: AppUi.number
-                          .copyWith(fontSize: 10.5, color: AppUi.textLo)),
-                ]),
-                const SizedBox(height: 5),
-                Row(children: [
-                  Text(id.icon, style: const TextStyle(fontSize: 15)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(id.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.title
-                            .copyWith(fontSize: 16, color: AppUi.gold)),
-                  ),
-                ]),
-                const SizedBox(height: 5),
-                Text(id.tagline,
-                    style: AppUi.body.copyWith(
-                        fontSize: 11,
-                        height: 1.4,
-                        color: AppUi.textMid,
-                        fontStyle: FontStyle.italic)),
-                const SizedBox(height: 8),
-                Container(height: 1, color: AppUi.line),
-                const SizedBox(height: 7),
-                // SİSTEMİN KALBİ: rejim yalnız bir rozet değil, oyuncunun
-                // elini bağlayan/açan şey. Kart bunu açıkça yazar.
-                Text(id.agencyNote,
-                    style: AppUi.body.copyWith(
-                        fontSize: 10.5, height: 1.45, color: AppUi.textLo)),
-                if (id.regime != VillageRegime.moderate) ...[
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 5, runSpacing: 5, children: [
-                    _tag(id.committed ? 'KÖKLEŞTİ' : 'EĞİLİM',
-                        id.committed ? tint : AppUi.textLo),
-                    if (id.religious) _tag('☾ DİNÎ', AppUi.accent),
-                    if (sworn != null) _tag('⚑ YEMİNLİ', AppUi.gold),
-                    if (rule != null && rule!.powerTitle.isNotEmpty)
-                      _tag(rule!.powerTitle, tint),
-                  ]),
-                ],
-                if (rule != null) ...[
-                  const SizedBox(height: 9),
-                  _unrestBar(tint),
-                  if (rot > 0.02) ...[
-                    const SizedBox(height: 7),
-                    _rotLine(rule!),
-                  ],
-                ],
-                if (faith != null && faith!.note.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text('☾ ${faith!.note}',
-                      style: AppUi.body.copyWith(
-                          fontSize: 10, height: 1.4, color: AppUi.info)),
-                ],
-                if (onSwearOath != null) ...[
-                  const SizedBox(height: 9),
-                  _oathButton(id, tint),
-                ],
-              ],
+              children: _details(id, tint),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Kadranın yanında/altında duran künye gövdesi — iki dizilim de bunu kullanır.
+  /// [tight] telefonda: uzun notlar satır sınırına vurur, boşluklar daralır.
+  List<Widget> _details(RegimeIdentity id, Color tint, {bool tight = false}) {
+    return [
+      Row(children: [
+        Text('KÖYÜN YÖNÜ',
+            style: AppUi.label
+                .copyWith(fontSize: 8, color: tint, letterSpacing: 1.6)),
+        const Spacer(),
+        Text('${sealed.length}/$totalLaws',
+            style: AppUi.number.copyWith(fontSize: 10.5, color: AppUi.textLo)),
+      ]),
+      SizedBox(height: tight ? 3 : 5),
+      Row(children: [
+        Text(id.icon, style: TextStyle(fontSize: tight ? 13 : 15)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(id.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppUi.title
+                  .copyWith(fontSize: tight ? 14 : 16, color: AppUi.gold)),
+        ),
+      ]),
+      SizedBox(height: tight ? 3 : 5),
+      Text(id.tagline,
+          maxLines: tight ? 2 : null,
+          overflow: tight ? TextOverflow.ellipsis : null,
+          style: AppUi.body.copyWith(
+              fontSize: tight ? 10.5 : 11,
+              height: 1.35,
+              color: AppUi.textMid,
+              fontStyle: FontStyle.italic)),
+      SizedBox(height: tight ? 6 : 8),
+      Container(height: 1, color: AppUi.line),
+      SizedBox(height: tight ? 6 : 7),
+      // SİSTEMİN KALBİ: rejim yalnız bir rozet değil, oyuncunun elini
+      // bağlayan/açan şey. Kart bunu açıkça yazar.
+      Text(id.agencyNote,
+          maxLines: tight ? 2 : null,
+          overflow: tight ? TextOverflow.ellipsis : null,
+          style: AppUi.body
+              .copyWith(fontSize: 10.5, height: 1.4, color: AppUi.textLo)),
+      if (id.regime != VillageRegime.moderate) ...[
+        SizedBox(height: tight ? 6 : 8),
+        Wrap(spacing: 5, runSpacing: 5, children: [
+          _tag(id.committed ? 'KÖKLEŞTİ' : 'EĞİLİM',
+              id.committed ? tint : AppUi.textLo),
+          if (id.religious) _tag('☾ DİNÎ', AppUi.accent),
+          if (sworn != null) _tag('⚑ YEMİNLİ', AppUi.gold),
+          if (rule != null && rule!.powerTitle.isNotEmpty)
+            _tag(rule!.powerTitle, tint),
+        ]),
+      ],
+      if (rule != null) ...[
+        SizedBox(height: tight ? 7 : 9),
+        _unrestBar(tint),
+        if (rot > 0.02) ...[
+          SizedBox(height: tight ? 5 : 7),
+          _rotLine(rule!),
+        ],
+      ],
+      if (faith != null && faith!.note.isNotEmpty) ...[
+        SizedBox(height: tight ? 6 : 8),
+        Text('☾ ${faith!.note}',
+            maxLines: tight ? 2 : null,
+            overflow: tight ? TextOverflow.ellipsis : null,
+            style:
+                AppUi.body.copyWith(fontSize: 10, height: 1.35, color: AppUi.info)),
+      ],
+      if (onSwearOath != null) ...[
+        SizedBox(height: tight ? 7 : 9),
+        _oathButton(id, tint),
+      ],
+    ];
+  }
+
+  /// Tahta dizilimi — kadran üstte ortalı, künye altında tam genişlikte.
+  Widget _verticalCard(RegimeIdentity id, CompassPosition pos, Color tint) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+      decoration: BoxDecoration(
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(child: _CompassDial(pos: pos, tint: tint, size: 88)),
+          const SizedBox(height: 8),
+          ..._details(id, tint, tight: true),
         ],
       ),
     );

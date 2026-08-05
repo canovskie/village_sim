@@ -81,13 +81,19 @@ abstract final class MobileUi {
   /// Telefonda okunabilirlik alt sınırı (bkz. [mobileTextScaler]).
   static const fontFloor = 11.0;
 
+  /// iPhone 11 yatay için ana pencere bütçesi. Modal/defter ekranı bütünüyle
+  /// kaplamaz; etrafında dünyayı ve kapatma perdesini okunur bırakan bir pay
+  /// kalır. İçerik taşarsa pencere değil, kendi gövdesi kayar.
+  static const windowMaxW = 760.0;
+  static const windowMaxH = 360.0;
+
   // ── Yan sayfa (detay panelleri) ───────────────────────────────────────────
 
   /// Detay panelleri telefonda "yüzen kutu" değil, sağa yapışan TAM BOY sayfa
   /// olur. Genişlik: okunur bir sütun, ama dünyayı da göstermeye devam eden
   /// bir pay bırakır.
   static double sheetWidth(Size screen) =>
-      math.min(340.0, math.max(264.0, screen.width * 0.40));
+      math.min(304.0, math.max(272.0, screen.width * 0.34));
 
   // ── Yardımcılar ───────────────────────────────────────────────────────────
 
@@ -121,6 +127,24 @@ abstract final class MobileUi {
 
   static double edgeRight(BuildContext c) =>
       math.min(MediaQuery.paddingOf(c).right, cornerSafe) + gutter;
+
+  /// Karar pencereleri ve büyük defter için ortak, güvenli alanı hesaba katan
+  /// boyut. iPhone 11'de sonuç 760×360pt olur; daha dar bir test yüzeyinde
+  /// mevcut alana kırpılır. Bu turda referans iPhone 11 olsa da taşma üretmeyen
+  /// alt sınır davranışı ücretsiz gelir.
+  static Size windowSize(
+    BuildContext c, {
+    double maxWidth = windowMaxW,
+    double maxHeight = windowMaxH,
+  }) {
+    final screen = MediaQuery.sizeOf(c);
+    final availableW = math.max(0.0, screen.width - left(c) - right(c));
+    final availableH = math.max(0.0, screen.height - top(c) - bottom(c));
+    return Size(
+      math.min(maxWidth, availableW),
+      math.min(maxHeight, availableH),
+    );
+  }
 }
 
 // ─── 3. kural: yazı tabanı ────────────────────────────────────────────────────
