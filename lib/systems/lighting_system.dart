@@ -128,23 +128,7 @@ class LightingSystem {
     return result;
   }
 
-  /// Verilen dünya koordinatı herhangi bir ışık kaynağının "çekirdek" alanına
-  /// giriyor mu? "Meşalesiz gece yürüyen NPC" gibi oyun mekanikleri için
-  /// hazır helper.
-  ///
-  /// [coreRatio] ışık çemberinin yüzde kaçını "tam aydınlık" sayacağı (kenar
-  /// gradient'i hariç tutulur — 0.85 varsayılan: dış %15 fade alanı gri).
-  static bool isInLight(
-    double gx, double gy,
-    List<LightSource> sources, {
-    double coreRatio = 0.85,
-  }) {
-    for (final l in sources) {
-      final dx = gx - l.gx;
-      final dy = gy - l.gy;
-      final r  = l.radius * coreRatio;
-      if (dx * dx + dy * dy <= r * r) return true;
-    }
-    return false;
-  }
+  // isInLight() "ileride lazım olur" diye yazılmış hazır helper'dı, hiçbir
+  // mekanik onu sormadı → kaldırıldı. Karanlıkta yürüme mekaniği gerekirse
+  // ışık kaynağı listesi zaten burada, sorgu o zaman yazılır.
 }

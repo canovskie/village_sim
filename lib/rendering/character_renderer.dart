@@ -1,8 +1,10 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../characters/villager_type.dart';
-import '../characters/npc_visual.dart';
+
 import '../characters/life_stage.dart';
+import '../characters/npc_visual.dart';
+import '../characters/villager_type.dart';
 import 'tool_renderer.dart';
 
 // ─── ANİMASYON ────────────────────────────────────────────────────────────────
@@ -154,7 +156,7 @@ class CharacterRenderer {
     final p = _provision;
     if (p.abs() < 0.02) return c;
 
-    final r = (c.r * 255), g = (c.g * 255), b = (c.b * 255);
+    final r = c.r * 255, g = c.g * 255, b = c.b * 255;
     // Algısal gri — yeşil ağırlıklı (göz yeşile duyarlı).
     final grey = r * 0.30 + g * 0.59 + b * 0.11;
 
@@ -571,7 +573,7 @@ class CharacterRenderer {
     if (primitiveClothing) {
       _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
           rightItem: carryingWater
-              ? (arm) => ToolRenderer.drawWaterbucket(arm)
+              ? ToolRenderer.drawWaterbucket
               : null);
       if (showTorch) {
         _torchInLeftHand(canvas, torchLevel,
@@ -807,7 +809,7 @@ class CharacterRenderer {
     _shadedArm(c, -15, anim.armL, tunic, skin);
     // Sulama turunda sağ elde su kovası; değilse boş el (idle/hasat).
     _shadedArm(c, 15, anim.armR, tunic, skin,
-        carryingWater ? (a) => ToolRenderer.drawWaterbucket(a) : null);
+        carryingWater ? ToolRenderer.drawWaterbucket : null);
     if (v != null) {
       _shadedHead(c, v, time);
     } else {
@@ -1008,7 +1010,7 @@ class CharacterRenderer {
 
     if (primitiveClothing) {
       _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
-          rightItem: (arm) => ToolRenderer.drawPickaxe(arm));
+          rightItem: ToolRenderer.drawPickaxe);
       if (showTorch) {
         _torchInLeftHand(canvas, torchLevel,
             shoulderX: -16, time: time, torchPhase: torchPhase);
@@ -1040,7 +1042,7 @@ class CharacterRenderer {
 
     _shadedArm(canvas, -16, armLAngle, shirtCol, skin);
     _shadedArm(canvas,  16, armRAngle, shirtCol, skin,
-        (arm) => ToolRenderer.drawPickaxe(arm));
+        ToolRenderer.drawPickaxe);
 
     if (visual != null) {
       _shadedHead(canvas, visual, time);
@@ -1105,7 +1107,7 @@ class CharacterRenderer {
 
     if (primitiveClothing) {
       _primitiveNpc(canvas, anim, visual ?? _fallbackVisual, time,
-          rightItem: (arm) => ToolRenderer.drawAxe(arm));
+          rightItem: ToolRenderer.drawAxe);
       if (showTorch) {
         _torchInLeftHand(canvas, torchLevel,
             shoulderX: -16, time: time, torchPhase: torchPhase);
@@ -1137,7 +1139,7 @@ class CharacterRenderer {
     // Sol kol
     _shadedArm(canvas, -16, armLAngle, shirtColor, skin);
     // Sağ kol + balta PNG
-    _shadedArm(canvas, 16, armRAngle, shirtColor, skin, (arm) => ToolRenderer.drawAxe(arm));
+    _shadedArm(canvas, 16, armRAngle, shirtColor, skin, ToolRenderer.drawAxe);
 
     if (visual != null) {
       _shadedHead(canvas, visual, time);
@@ -1324,7 +1326,7 @@ class CharacterRenderer {
     if (milking) {
       // Eller aşağı sabit, hafif ritmik salınım (sağım hareketi)
       final wobble = sin(milkPhase * 2) * 0.12;
-      anim = _Anim(0, 0, 0, 0, 1.5, lean: 0.18);
+      anim = const _Anim(0, 0, 0, 0, 1.5, lean: 0.18);
       armRAngle = 1.10 + wobble;
       armLAngle = 1.10 - wobble;
     } else {
@@ -1819,7 +1821,7 @@ class CharacterRenderer {
   static void _blacksmithNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
     final shirtBase = _cloth(const Color(0xFF5A3818), v.clothingShift);
     final hoseBase  = _cloth(const Color(0xFF3A3028), v.clothingShift * 0.5);
-    final apronBase = _leather;
+    const apronBase = _leather;
 
     _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
@@ -2282,8 +2284,8 @@ class CharacterRenderer {
     final shirtBase = _cloth(const Color(0xFF5A7888), v.clothingShift);
     final vestBase  = _cloth(const Color(0xFF2A3840), v.clothingShift * 0.5);
     final hoseBase  = _cloth(const Color(0xFF3A5060), v.clothingShift * 0.4);
-    final hatBrim   = const Color(0xFF4A3A20);
-    final hatDome   = const Color(0xFF5A4A28);
+    const hatBrim   = Color(0xFF4A3A20);
+    const hatDome   = Color(0xFF5A4A28);
 
     _shadow(c, anim);
     _shadedLeg(c, -6, anim.legL, hoseBase, _leatherDk, legLift: anim.legLiftL);
@@ -2350,7 +2352,7 @@ class CharacterRenderer {
     _shadedArm(c, -16, anim.armL, tunicBase, skin);
     // Sağ kol + çekiç (PNG) — artık el de görünür
     _shadedArm(c, 16, anim.armR, tunicBase, skin,
-        (arm) => ToolRenderer.drawHammer(arm));
+        ToolRenderer.drawHammer);
 
     if (v != null) {
       _shadedHead(c, v, time);

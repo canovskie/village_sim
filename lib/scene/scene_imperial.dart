@@ -672,7 +672,7 @@ extension _SceneImperial on _VillageSceneState {
     // SEÇİLİR ama ölüm askerlerin merkeze dalışıyla (raiding) senkron gerçekleşir
     // (bkz. _strikeRaidVictims). Üstüne yağma (kaynağın bir kısmı zorla alınır).
     final severity = 1.0 + (1.0 - _imperialFavor);
-    final victimCount = (1 + (severity).floor()).clamp(1, 3);
+    final victimCount = (1 + severity.floor()).clamp(1, 3);
     final pool = _villagers.where((v) => !v.isDying).toList()..shuffle(_rng);
     _imperialRaidVictims
       ..clear()

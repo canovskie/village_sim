@@ -10,10 +10,8 @@
 // Positioned-only Stack çöküşü…) paneli sessizce boş bırakır; bu yüzden
 // FlutterError.onError yakalanıp RENDER_ERROR olarak basılır.
 import 'dart:io';
-import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../characters/life_stage.dart';
 import '../characters/npc_visual.dart';
@@ -29,6 +27,7 @@ import '../systems/quest_book.dart';
 import '../ui/app_ui.dart';
 import '../ui/village_ledger.dart';
 import '../ui/villager_roster_view.dart';
+import 'capture_support.dart';
 import 'law_demo_ctx.dart';
 
 final GlobalKey _key = GlobalKey();
@@ -56,7 +55,7 @@ Future<void> main() async {
   final base = FlutterError.onError;
   FlutterError.onError = (details) {
     final msg = details.exceptionAsString();
-    if (_isClockClash(msg)) return; // harness artefaktı, panelle ilgisi yok
+    if (isClockClash(msg)) return; // harness artefaktı, panelle ilgisi yok
     _renderErrors++;
     stdout.writeln('RENDER_ERROR: $msg');
     base?.call(details);
@@ -191,7 +190,7 @@ Future<void> main() async {
     'Ayşe', 'Kemal', 'Zeynep', 'Veli', 'Hatice', 'Murat', 'Elif', 'Osman',
     'Leyla', 'Can', 'Deniz', 'Emre', 'Selin', 'Baran', 'Nur', 'Kaan',
   ];
-  final types = VillagerType.values;
+  const types = VillagerType.values;
   final rosterRows = [
     for (int i = 0; i < 26; i++)
       () {
@@ -291,6 +290,7 @@ Future<void> main() async {
                   LedgerSection.tuzuk: 4,
                 },
                 identity: 'Demirhan Hanesi',
+                village: 'Değirmenli',
                 identityBonus: '★ Bereketli Köy — tarlalar %15 gürbüz büyür',
                 morale: 0.63,
                 population: 26,
@@ -377,8 +377,8 @@ Future<void> main() async {
     // Reveal + bar/portre animasyonları otursun. Sadece beklemek YETMEZ:
     // pencere ön planda değilse motor kare üretmez, ticker donar ve panelin
     // açılış Opacity'si 0'da kalır → kapkara kare. Kareyi elde pompala.
-    await _settle(1400);
-    await _capture('/tmp/ledger_${section.name}.png');
+    await settleFrames(1400);
+    await captureBoundary(_key, '/tmp/ledger_${section.name}.png', pixelRatio: 2.0);
   }
 
   stdout.writeln(
@@ -386,44 +386,6 @@ Future<void> main() async {
   exit(0);
 }
 
-/// Elle pompalanan karenin zaman damgası — hep İLERİ gider.
-///
-/// macOS'ta pencere ön planda değilken motor kare üretmez: setState hiç
-/// boyanmaz, ticker'lar donar ve panelin açılış Opacity'si 0'da takılır (kapkara
-/// kare). Bu yüzden kareyi elde pompalıyoruz. Bedeli: motor da arada bir kendi
-/// (daha küçük) damgasıyla kare basarsa AnimationController'ın
-/// `elapsedInSeconds >= 0` assert'i öter — zararsız, yakalamayı bozmuyor;
-/// [_isClockClash] ile hata sayımından düşülür.
-Duration _stamp = Duration.zero;
 
-/// Kareyi ELDE zorlar (bkz. ui_gallery_capture_main._settle).
-Future<void> _settle(int ms) async {
-  final b = WidgetsBinding.instance;
-  final steps = (ms / 16).ceil();
-  for (int i = 0; i < steps; i++) {
-    // Gerçek zaman da geçmeli: async işler (asset/font) yalnız kare
-    // pompalayarak tamamlanmaz.
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-    if (b.schedulerPhase != SchedulerPhase.idle) continue;
-    _stamp += const Duration(milliseconds: 16);
-    b.handleBeginFrame(_stamp);
-    b.handleDrawFrame();
-  }
-}
 
-/// Motor saati ↔ elle pompalama çakışması mı — gerçek layout hatası değil.
-bool _isClockClash(String s) => s.contains('elapsedInSeconds >= 0.0');
 
-Future<void> _capture(String path) async {
-  final ctx = _key.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL: $path');
-    return;
-  }
-  final b = ctx.findRenderObject() as RenderRepaintBoundary;
-  final img = await b.toImage(pixelRatio: 2.0);
-  final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) return;
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

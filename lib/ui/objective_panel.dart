@@ -97,7 +97,7 @@ class ObjectivePanel extends StatelessWidget {
                           letterSpacing: 1.2,
                         )),
                   ),
-                  GameIcon(GameIconData.star, size: 11, color: AppUi.sage),
+                  const GameIcon(GameIconData.star, size: 11, color: AppUi.sage),
                   const SizedBox(width: 3),
                   Text('$completedCount',
                       style: AppUi.number
@@ -116,7 +116,7 @@ class ObjectivePanel extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
             child: Transform.rotate(
               angle: collapsed ? 1.5708 : -1.5708,
-              child: GameIcon(GameIconData.chevron,
+              child: const GameIcon(GameIconData.chevron,
                   size: 13, color: AppUi.textLo),
             ),
           ),

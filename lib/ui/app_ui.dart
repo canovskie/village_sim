@@ -377,7 +377,7 @@ class _AppButtonState extends State<AppButton> {
         widget.kind == AppButtonKind.filled ||
         widget.kind == AppButtonKind.danger;
 
-    Widget btn = AnimatedContainer(
+    final Widget btn = AnimatedContainer(
       duration: const Duration(milliseconds: 120),
       curve: Curves.easeOut,
       // Telefonda dokunma tabanı: 38dp'lik buton temanın üç kuralından birini

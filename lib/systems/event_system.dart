@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../buildings/building_entity.dart';
-import '../buildings/building_type.dart';
 import '../core/resources.dart';
 import '../text/voice.dart';
 
@@ -88,11 +87,6 @@ class EventContext {
     required this.buildings,
   });
 
-  bool hasBuilding(BuildingType t) =>
-      buildings.any((b) => b.type == t);
-
-  int countBuilding(BuildingType t) =>
-      buildings.where((b) => b.type == t).length;
 }
 
 /// Karar gerektiren olaylarda oyuncuya sunulan seçenek. Seçilince delta'lar

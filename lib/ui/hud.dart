@@ -519,7 +519,7 @@ class GameHUD extends StatelessWidget {
                 // Sıfır genişlikte yükseklik dayatması: opaque hit alanı
                 // kapsülün tamamını kaplasın, yalnız yazının satırını değil.
                 const SizedBox(height: 44),
-                GameIcon(GameIconData.people, size: 14, color: AppUi.textMid),
+                const GameIcon(GameIconData.people, size: 14, color: AppUi.textMid),
                 const SizedBox(width: 4),
                 Text(
                   '$_totalPop',
@@ -527,7 +527,7 @@ class GameHUD extends StatelessWidget {
                 ),
                 if (homelessCount > 0) ...[
                   const SizedBox(width: 8),
-                  GameIcon(GameIconData.home, size: 14, color: AppUi.rust),
+                  const GameIcon(GameIconData.home, size: 14, color: AppUi.rust),
                   const SizedBox(width: 4),
                   Text(
                     '$homelessCount',
@@ -832,7 +832,7 @@ class GameHUD extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GameIcon(GameIconData.people, size: 16, color: AppUi.textMid),
+          const GameIcon(GameIconData.people, size: 16, color: AppUi.textMid),
           const SizedBox(width: 6),
           Text('$_totalPop', style: AppUi.number.copyWith(fontSize: 15.5)),
           if (homelessCount > 0) ...[
@@ -843,7 +843,7 @@ class GameHUD extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GameIcon(GameIconData.home, size: 15, color: AppUi.rust),
+                  const GameIcon(GameIconData.home, size: 15, color: AppUi.rust),
                   const SizedBox(width: 5),
                   Text(
                     '$homelessCount',
@@ -857,7 +857,7 @@ class GameHUD extends StatelessWidget {
             ),
           ],
           const SizedBox(width: 7),
-          GameIcon(GameIconData.chevron, size: 11, color: AppUi.textLo),
+          const GameIcon(GameIconData.chevron, size: 11, color: AppUi.textLo),
         ],
       ),
     );

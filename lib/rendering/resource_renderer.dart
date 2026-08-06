@@ -1,9 +1,11 @@
 import 'dart:math';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../world/resource_box.dart';
+
 import '../world/hay_entity.dart';
+import '../world/resource_box.dart';
 import '../world/resource_placement.dart';
 import 'asset_style.dart';
 

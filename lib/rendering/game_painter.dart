@@ -1,272 +1,70 @@
 import 'dart:math';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'character_renderer.dart';
-import '../characters/npc_visual.dart';
-import 'prop_renderer.dart';
-import '../systems/villager_act.dart';
-import '../systems/winter.dart';
-import '../entities/villager_entity.dart';
-import '../entities/villager_job.dart';
-import '../entities/worker_entity.dart';
-import '../entities/build_order.dart';
-import '../entities/road_order.dart';
-import '../systems/road_system.dart';
-import '../systems/hearth_warmth.dart';
-import '../world/road_surface.dart';
-import 'road_renderer.dart';
-import '../core/constants.dart';
-import 'tile_renderer.dart';
-import '../world/tree_entity.dart';
-import '../world/leaf_burst.dart';
-import 'tree_renderer.dart';
-import '../world/mine_node.dart';
-import 'mine_renderer.dart';
-import 'water_renderer.dart';
-import 'ocean_renderer.dart';
-import '../world/nature_entity.dart';
-import '../world/decor_entity.dart';
-import '../world/grave.dart';
-import '../world/reed_bed.dart';
-import 'reed_bed_renderer.dart';
-import 'nature_renderer.dart';
-import 'decor_renderer.dart';
-import 'grave_renderer.dart';
-import 'animal_renderer.dart';
+
 import '../buildings/building_entity.dart';
 import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
-import '../systems/lighting_system.dart';
-import '../systems/event_system.dart';
-import 'flame_renderer.dart';
-import 'particle_renderer.dart';
-import 'smoke_renderer.dart';
-import '../farm/farm_tile.dart';
-import '../world/season.dart';
+import '../characters/npc_visual.dart';
+import '../core/constants.dart';
+import '../entities/build_order.dart';
+import '../entities/road_order.dart';
+import '../entities/villager_entity.dart';
+import '../entities/villager_job.dart';
+import '../entities/worker_entity.dart';
 import '../farm/farm_renderer.dart';
+import '../farm/farm_tile.dart';
+import '../systems/event_system.dart';
+import '../systems/hearth_warmth.dart';
+import '../systems/lighting_system.dart';
+import '../systems/road_system.dart';
+import '../systems/villager_act.dart';
+import '../systems/winter.dart';
 import '../world/animal_entity.dart';
-import '../world/egg_entity.dart';
-import '../world/loot_cache.dart';
-import '../world/bird_flock.dart';
 import '../world/bee_flock.dart';
-import '../world/resource_box.dart';
+import '../world/bird_flock.dart';
+import '../world/decor_entity.dart';
+import '../world/egg_entity.dart';
+import '../world/grave.dart';
 import '../world/hay_entity.dart';
+import '../world/leaf_burst.dart';
+import '../world/loot_cache.dart';
+import '../world/mine_node.dart';
+import '../world/nature_entity.dart';
+import '../world/reed_bed.dart';
+import '../world/resource_box.dart';
 import '../world/resource_placement.dart';
-import 'resource_renderer.dart';
-import 'tool_renderer.dart';
+import '../world/road_surface.dart';
+import '../world/season.dart';
+import '../world/tree_entity.dart';
+import 'animal_renderer.dart';
+import 'character_renderer.dart';
+import 'decor_renderer.dart';
+import 'flame_renderer.dart';
+import 'grave_renderer.dart';
+import 'ground_weather_renderer.dart';
+import 'mine_renderer.dart';
 import 'mud_renderer.dart';
+import 'nature_renderer.dart';
+import 'ocean_renderer.dart';
+import 'particle_renderer.dart';
+import 'prop_renderer.dart';
+import 'reed_bed_renderer.dart';
+import 'resource_renderer.dart';
+import 'road_renderer.dart';
+import 'smoke_renderer.dart';
 import 'snow_field.dart';
 import 'snow_ground_renderer.dart';
-import 'ground_weather_renderer.dart';
+import 'tile_renderer.dart';
+import 'tool_renderer.dart';
+import 'tree_renderer.dart';
+import 'water_renderer.dart';
 
+part 'game_ambient.dart';
 part 'game_drawables.dart';
 part 'game_fx.dart';
-part 'game_ambient.dart';
-
-// ── Static Paint havuzu (game_painter genelinde paylaşılır) ───────────────────
-// Progress bar
-final _ppBg = Paint()
-  ..color = const Color(0xFF111111)
-  ..isAntiAlias = false;
-final _ppFill = Paint()
-  ..color = const Color(0xFFE8A020)
-  ..isAntiAlias = false;
-final _ppBorder = Paint()
-  ..color = const Color(0xFFFFFFFF)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 1
-  ..isAntiAlias = false;
-
-// Selection overlays — sabit renkler, bir kez yaratılır
-final _pFarmFill = Paint()
-  ..color = const Color(0x5544AA22)
-  ..isAntiAlias = false;
-final _pFarmBorder = Paint()
-  ..color = const Color(0xCC66DD33)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 1.5
-  ..isAntiAlias = false;
-final _pLumberFill = Paint()
-  ..color = const Color(0x44AA4400)
-  ..isAntiAlias = false;
-final _pLumberBorder = Paint()
-  ..color = const Color(0xCCDD6600)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 1.5
-  ..isAntiAlias = false;
-
-// Marker paints
-final _pTreeX = Paint()
-  ..color = const Color(0xDDFF3300)
-  ..strokeWidth = 2.5
-  ..isAntiAlias = false;
-final _pMineX = Paint()
-  ..color = const Color(0xDDFFCC00)
-  ..strokeWidth = 2.0
-  ..isAntiAlias = false;
-
-// Scaffold — sıkıştırılmış toprak zemin (build site marker). Ahşap iskele
-// kaldırıldı; sprite reveal + hammer spark + completion pop yeterli.
-final _pScaffGround = Paint()
-  ..color = const Color(0xFFD4B896)
-  ..isAntiAlias = false;
-final _pScaffBorder = Paint()
-  ..color = const Color(0xFF7A5810)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 1
-  ..isAntiAlias = false;
-
-// Lighting pass paint havuzu (lokal ışık + halo).
-// saveLayer içine karanlık + vignette → bu paint normal blend.
-final _pLighting = Paint()..isAntiAlias = false;
-// Light mask buffer — her ışık BlendMode.lighten ile birleştirilir.
-// lighten RGB için MAX alır (premul beyaz: R=G=B=a → max RGB = max alpha) ama
-// alpha kanalı srcOver-stacked olur. dstOut erasure alpha'yı kullandığı için
-// outer Paint'e ColorFilter (alpha = R) konur → gerçek MAX alpha bypass.
-final _pLightMask = Paint()
-  ..blendMode = BlendMode.lighten
-  ..isAntiAlias = true;
-// Sıcak halo paint — saveLayer içinde lighten ile birleştirilir, dış
-// saveLayer plus blend ile sahneye uygulanır. Premul-warm RGB'ler için
-// lighten zaten MAX verir; plus dst.RGB ekler → overlap'te ekstra parlaklık yok.
-final _pWarmHalo = Paint()
-  ..blendMode = BlendMode.lighten
-  ..isAntiAlias = true;
-
-// Ambient color grade — fullscreen modulate (= multiply). Sahnenin "günün
-// içinde bulunduğu ışık tonu" (mehtap mavi, altın saat amber, ...). Strength=0
-// için identity beyaza lerp edilir → öğle neredeyse dokunulmaz.
-final _pAmbientGrade = Paint()
-  ..blendMode = BlendMode.modulate
-  ..isAntiAlias = false;
-// Gündüz atmosfer pass'i — fullscreen blend katmanları (güneş formu / hava
-// perspektifi / bloom / sıcak vignette). Blend modu her katmanda set edilir.
-final _pDayGrade = Paint()..isAntiAlias = false;
-// Köylü vurgu halkası (HUD "evsizleri göster") — ayak altı nabızlı kehribar.
-final _pHighlightRing = Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 2.5
-  ..isAntiAlias = true;
-// Per-light warm wash — sprite'ı ışık alanında ısıtır. BlendMode.plus
-// radial gradient, dış halo'dan dar ve daha düşük alfa: hedef sprite hue
-// değişimi, parlama patlaması değil. (Layer paint inline yapılıyor —
-// imageFilter.blur sigma'sı pass'e özel.)
-final _pWarmWash = Paint()
-  ..blendMode = BlendMode.lighten
-  ..isAntiAlias = true;
-// Mehtap dolgusu — gece ışıksız alanlarda hafif soğuk-mavi plus
-// (saveLayer'ın DIŞINA, dstOut tarafından korunmadan). Karanlığı
-// "düz siyah" olmaktan kurtarır, ışığa kontrast üretir.
-final _pMoonFill = Paint()
-  ..blendMode = BlendMode.plus
-  ..isAntiAlias = false;
-
-// Sohbet baloncuğu — fill + stroke. Renk (alpha) her frame değişir, ama
-// nesne değil: çağrı başına .color set edilir → frame başına 2 Paint allocation
-// (konuşan NPC × frame) kalkar, çıktı bit-aynı. Dosyanın _pXxx havuz deseni.
-final _pBubbleFill = Paint()..isAntiAlias = true;
-final _pBubbleBorder = Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 1
-  ..isAntiAlias = true;
-
-// Map border
-final _pMapBorder = Paint()
-  ..color = const Color(0xFF1E4820)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 2
-  ..isAntiAlias = false;
-
-// Kıyı sisi — kara kenarı boyunca yumuşak karanlık hale. Tek path/frame,
-// 3 kalın stroke (azalan alpha) ile yumuşak görünüm — MaskFilter.blur'dan
-// 4–8× ucuz (CPU shader yolu).
-final _pEdgeMistOuter = Paint()
-  ..color = const Color(0x180A1018)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 26
-  ..isAntiAlias = false;
-final _pEdgeMistMid = Paint()
-  ..color = const Color(0x300A1018)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 16
-  ..isAntiAlias = false;
-final _pEdgeMistInner = Paint()
-  ..color = const Color(0x520A1018)
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 8
-  ..isAntiAlias = false;
-
-// Gece ateş böcekleri — 2 katmanlı circle (geniş soluk + parlak çekirdek).
-// Blur yok → particle başı maliyet ~5× düşer.
-final _pFireflyGlow = Paint()..isAntiAlias = true;
-final _pFireflyCore = Paint()..isAntiAlias = true;
-
-// Gündüz polen/toz zerreleri — küçük blur kaldırıldı, anti-aliased crisp circle.
-final _pPollen = Paint()..isAntiAlias = true;
-
-// Mevsim partikülleri — kış kar tanesi + sonbahar sürüklenen yaprak.
-final _pSnow = Paint()..isAntiAlias = true;
-final _pLeaf = Paint()..isAntiAlias = true;
-final _pLeafVein = Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeCap = StrokeCap.round
-  ..isAntiAlias = true;
-
-// Ghost
-final _pGhostFill = Paint()..isAntiAlias = false;
-final _pGhostBorder = Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 2
-  ..isAntiAlias = false;
-
-// Rain — 3 parallax katman + ground splash. Paint havuzu (per-frame
-// allocation yok). AA AÇIK: damlalar piksel satırları arasında geçerken
-// sub-pixel akıyor → yağmur akıcı kayar. Pixel-art kapalı AA tile/sprite'a
-// özgü; ekran uzayı efektleri (yağmur, mist) AA ile daha temiz.
-// _pRain: 1px far/mid katmanı, _pRainBold: 1.6px ön katman,
-// _pRainTail: ön katman damlaların soluk motion-trail çizgisi.
-// _pSplash: yere çarpan damlanın droplet/crown daireleri (fill, AA).
-// _pSplashRing: çarpma noktasında genişleyen iso oval (stroke, AA).
-// _pRainMist: yoğun yağmurda hafif mavi-gri atmosfer perde overlay.
-// PERF: arka+orta katman (en yoğun, en sönük) AA KAPALI — AA'lı ince çizgi
-// Skia'da pahalı; bu katmanlar hızlı akan sönük perde, aliasing fark edilmez.
-// Hero ön katman (_pRainBold) + kuyruk (_pRainTail) AA kalır (okunur damlalar).
-final _pRain = Paint()
-  ..strokeWidth = 1.0
-  ..strokeCap = StrokeCap.round
-  ..isAntiAlias = false;
-final _pRainBold = Paint()
-  ..strokeWidth = 1.6
-  ..strokeCap = StrokeCap.round
-  ..isAntiAlias = true;
-final _pRainTail = Paint()
-  ..strokeWidth = 0.9
-  ..strokeCap = StrokeCap.round
-  ..isAntiAlias = true;
-final _pSplash = Paint()..isAntiAlias = true;
-final _pSplashRing = Paint()
-  ..style = PaintingStyle.stroke
-  ..strokeWidth = 1.0
-  ..isAntiAlias = true;
-final _pRainMist = Paint();
-
-// Gölgeler — karakter/ağaç için yumuşak eliptik, bina için yumuşak diamond.
-// Önce: 2 katman sert diamond + sert contact AO → toplam 3 stamp, "öküz".
-// Şimdi: 2 katman BLUR'LU diamond, alpha düşük → tek yumuşak ambient gölge
-// hissi. Contact AO ayrı olarak yok — alttaki katman zaten o işi yapıyor.
-final _pShadow = Paint()
-  ..color = const Color(0x77000000)
-  ..isAntiAlias = true;
-final _pBuildingShadowOuter = Paint()
-  ..color =
-      const Color(0x1E000000) // ~12% black, çok soluk halo
-  ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 5.0)
-  ..isAntiAlias = true;
-final _pBuildingShadowInner = Paint()
-  ..color =
-      const Color(0x32000000) // ~20% black, çekirdek koyuluk
-  ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 2.0)
-  ..isAntiAlias = true;
+part 'game_paints.dart';
 
 /// Karakterin ayağı altında ince yatay elips. (sx, sy) = feet pozisyonu
 /// (her character drawable'da gridToScreen sonucu). [scale] karakterin
@@ -1053,8 +851,8 @@ class VillageGamePainter extends CustomPainter {
   // ── Tarla tile'ları ───────────────────────────────────────────────────────
 
   void _drawFarmTiles(Canvas canvas, Size size) {
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
     final (minX, maxX, minY, maxY) = _visBounds(size);
     for (final t in farmTiles) {
       final s = gridToScreen(t.col.toDouble(), t.row.toDouble(), size, camera);
@@ -1085,8 +883,8 @@ class VillageGamePainter extends CustomPainter {
   // Çizim sırası: zemin (grass) sonrası, sahne (NPC/bina) öncesi.
   void _drawRoads(Canvas canvas, Size size) {
     if (roadSystem.count == 0 && pendingRoadOrders.isEmpty) return;
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
 
     // Tamamlanmış yollar — cached Picture (ground gibi camera-bağımsız).
     // Zoom karşılaştırması tolerance'lı: ScaleUpdate.scale floating-point
@@ -1161,8 +959,8 @@ class VillageGamePainter extends CustomPainter {
   /// Sahne sprite'larından SONRA çizilir → bina arkasında kalmaz.
   void _drawRoadPreview(Canvas canvas, Size size) {
     if (roadPreview.isEmpty) return;
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
     final erasing = roadPreviewSurface == null;
     final previewTiles = <(int, int)>{
       if (!erasing)
@@ -1254,8 +1052,8 @@ class VillageGamePainter extends CustomPainter {
 
   void _drawFarmSelection(Canvas canvas, Size size) {
     final (c1, r1, c2, r2) = farmSelection!;
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
     final minC = c1 < c2 ? c1 : c2;
     final maxC = c1 < c2 ? c2 : c1;
     final minR = r1 < r2 ? r1 : r2;
@@ -1283,8 +1081,8 @@ class VillageGamePainter extends CustomPainter {
 
   void _drawLumberSelection(Canvas canvas, Size size) {
     final (c1, r1, c2, r2) = lumberSelection!;
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
     final minC = c1 < c2 ? c1 : c2;
     final maxC = c1 < c2 ? c2 : c1;
     final minR = r1 < r2 ? r1 : r2;
@@ -1332,8 +1130,8 @@ class VillageGamePainter extends CustomPainter {
 
   void _drawMineSelection(Canvas canvas, Size size) {
     final (c1, r1, c2, r2) = mineSelection!;
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
     final minC = c1 < c2 ? c1 : c2;
     final maxC = c1 < c2 ? c2 : c1;
     final minR = r1 < r2 ? r1 : r2;
@@ -1379,8 +1177,8 @@ class VillageGamePainter extends CustomPainter {
     final (minX, maxX, minY, maxY) = _visBounds(size);
 
     // Grid → ekran (gridToScreen ile aynı, inline — sıcak yol allocation azaltır)
-    final ox = (size.width / 2 + camera.dx);
-    final oy = (size.height * 0.28 + camera.dy);
+    final ox = size.width / 2 + camera.dx;
+    final oy = size.height * 0.28 + camera.dy;
 
     // (sx, sy) screen-space anchor. Sprite uzantısına göre genişletilmiş aralık.
     bool inView(double gx, double gy, double up, double side) {
@@ -2494,7 +2292,7 @@ class VillageGamePainter extends CustomPainter {
       Offset(0, size.height * 0.55),
       [
         Color.fromARGB(a(0x22), 0xB4, 0xC8, 0xDC),
-        Color.fromARGB(0, 0xB4, 0xC8, 0xDC),
+        const Color.fromARGB(0, 0xB4, 0xC8, 0xDC),
       ],
     );
     canvas.drawRect(rect, _pDayGrade);
@@ -2506,7 +2304,7 @@ class VillageGamePainter extends CustomPainter {
       maxR * 0.62,
       [
         Color.fromARGB(a(0x16), 0xFF, 0xE8, 0xAC),
-        Color.fromARGB(0, 0xFF, 0xE8, 0xAC),
+        const Color.fromARGB(0, 0xFF, 0xE8, 0xAC),
       ],
     );
     canvas.drawRect(rect, _pDayGrade);

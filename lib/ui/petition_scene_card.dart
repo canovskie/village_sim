@@ -252,26 +252,26 @@ class _SceneCardPainter extends CustomPainter {
     canvas.drawRect(
         Offset.zero & size,
         Paint()
-          ..shader = RadialGradient(
-            center: const Alignment(0.0, -0.15),
+          ..shader = const RadialGradient(
+            center: Alignment(0.0, -0.15),
             radius: 1.25,
-            colors: const [Color(0x00000000), Color(0x66000000)],
-            stops: const [0.62, 1.0],
+            colors: [Color(0x00000000), Color(0x66000000)],
+            stops: [0.62, 1.0],
           ).createShader(Offset.zero & size));
     // Üst letterbox + alt taban karartma (başlık/portre okunaklılığı için zemin).
     canvas.drawRect(
         Offset.zero & size,
         Paint()
-          ..shader = LinearGradient(
+          ..shader = const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: const [
+            colors: [
               Color(0x4A000000),
               Color(0x00000000),
               Color(0x00000000),
               Color(0x59000000),
             ],
-            stops: const [0.0, 0.22, 0.72, 1.0],
+            stops: [0.0, 0.22, 0.72, 1.0],
           ).createShader(Offset.zero & size));
   }
 
@@ -336,7 +336,7 @@ class _SceneCardPainter extends CustomPainter {
 
   void _foreground(Canvas c, Size size) {
     final w = size.width, h = size.height;
-    final dark = const Color(0xFF080709);
+    const dark = Color(0xFF080709);
     // Sol-alt ve sağ-alt köşede flu ot/saz kümeleri — "içinden bakma" derinliği.
     void clump(double bx, double dir, double sc, int blades) {
       for (int i = 0; i < blades; i++) {

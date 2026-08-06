@@ -141,7 +141,7 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cost = surface.cost;
-    final tint = AppUi.accent;
+    const tint = AppUi.accent;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(

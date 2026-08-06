@@ -283,9 +283,9 @@ extension _SceneWedding on _VillageSceneState {
     _courtshipTimer = 0;
     _betrothalForced = false;
 
-    final dur = kGameDaySeconds * 0.5;
+    const dur = kGameDaySeconds * 0.5;
     AudioManager.instance.playSfx(Sfx.crowdApplause);
-    _activeFx.add(ActiveFx(EventEffect(fx: EventFx.wedding, duration: dur), dur));
+    _activeFx.add(ActiveFx(const EventEffect(fx: EventFx.wedding, duration: dur), dur));
     _feelVillage(NpcEmotion.love, 14, grand ? 0.18 : 0.12);
 
     VillagerEntity? bride, groom;

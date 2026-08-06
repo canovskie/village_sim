@@ -112,7 +112,7 @@ void main() {
     });
 
     test('zanaat kaybedilmemişse "Kimsenin Bilmediği İş" gelmez', () {
-      final ctx = PetitionContext(
+      const ctx = PetitionContext(
         population: 20, adults: 12, food: 200, gold: 90, morale: 0.55,
         hasChurch: true, dayCount: 52, foundersAlive: false,
         houseCount: 3, sealedLaws: 7,
@@ -122,7 +122,7 @@ void main() {
     });
 
     test('hür ve huzurlu rejimde "Konuşmayı Göze Alan" gelmez', () {
-      final ctx = PetitionContext(
+      const ctx = PetitionContext(
         population: 20, adults: 12, food: 200, gold: 90, morale: 0.7,
         hasChurch: true, dayCount: 52, foundersAlive: false,
         houseCount: 3, sealedLaws: 7,

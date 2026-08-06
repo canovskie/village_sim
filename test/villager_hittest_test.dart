@@ -73,7 +73,7 @@ void main() {
   group('sprite merkezine tıklama isabet eder', () {
     for (final zoom in [0.25, 0.5, 1.0, 2.0, 4.0]) {
       test('zoom=$zoom', () {
-        final v = const VTest(30, 40, depth: 70);
+        const v = VTest(30, 40, depth: 70);
         final (_, ctr) = screenPos(v, view, camera, zoom);
         final hit = villagerAtScreen(ctr, [v], view, camera, zoom);
         expect(hit, same(v), reason: 'merkez tık her zoom\'da tutmalı');
@@ -84,7 +84,7 @@ void main() {
   test('düşük zoomda bile garanti dokunma yarıçapı (>=15px)', () {
     // Eski hata: zoom küçülünce kutu ~2px'e düşüp tıklanamaz oluyordu.
     const zoom = 0.25;
-    final v = const VTest(30, 40, depth: 70);
+    const v = VTest(30, 40, depth: 70);
     final (feet, ctr) = screenPos(v, view, camera, zoom);
     // Merkezden 14px yana kayık tık hâlâ tutmalı (taban yarıçap 15px).
     expect(villagerAtScreen(ctr + const Offset(14, 0), [v], view, camera, zoom),
@@ -95,7 +95,7 @@ void main() {
 
   test('uzağa tıklama ıskalar (yanlış-pozitif yok)', () {
     const zoom = 1.0;
-    final v = const VTest(30, 40, depth: 70);
+    const v = VTest(30, 40, depth: 70);
     final (_, ctr) = screenPos(v, view, camera, zoom);
     expect(villagerAtScreen(ctr + const Offset(200, 0), [v], view, camera, zoom),
         isNull);
@@ -106,8 +106,8 @@ void main() {
   test('üst üste binen köylülerde önde çizilen (depth büyük) kazanır', () {
     const zoom = 1.0;
     // Aynı ekran noktasında iki köylü — arka (depth küçük) + ön (depth büyük).
-    final back = const VTest(30, 40, depth: 70);
-    final front = const VTest(30, 40, depth: 71);
+    const back = VTest(30, 40, depth: 70);
+    const front = VTest(30, 40, depth: 71);
     final (_, ctr) = screenPos(front, view, camera, zoom);
     final hit = villagerAtScreen(ctr, [back, front], view, camera, zoom);
     expect(hit, same(front), reason: 'öndeki seçilmeli');
@@ -119,14 +119,14 @@ void main() {
   test('kamera kaymışken de doğru köylüyü bulur', () {
     const zoom = 1.5;
     const cam = Offset(-320, 140);
-    final v = const VTest(55, 22, depth: 77);
+    const v = VTest(55, 22, depth: 77);
     final (_, ctr) = screenPos(v, view, cam, zoom);
     expect(villagerAtScreen(ctr, [v], view, cam, zoom), same(v));
   });
 
   test('çocuk (küçük sprite) yine de rahat tıklanır', () {
     const zoom = 0.6;
-    final child = const VTest(30, 40, renderScale: 0.60, depth: 70);
+    const child = VTest(30, 40, renderScale: 0.60, depth: 70);
     final (feet, ctr) = screenPos(child, view, camera, zoom);
     expect(villagerAtScreen(ctr, [child], view, camera, zoom), same(child));
     // Küçük sprite'ta bile taban yarıçap tıklamayı korur.

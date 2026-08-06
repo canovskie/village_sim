@@ -87,15 +87,12 @@ abstract class WorkerEntity {
   /// Per-NPC sabit flicker fazı — spawn pos hash'inden lazy. Tüm meşalelerin
   /// aynı anda titrememesi için.
   double? _torchPhase;
-  double get torchPhase => _torchPhase ??= (spawnCol * 0.41 + spawnRow * 0.73);
+  double get torchPhase => _torchPhase ??= spawnCol * 0.41 + spawnRow * 0.73;
 
   // ── Idle wander state (idleWander tarafından yönetilir) ────────────────────
   double _idleTargetX = -1;
   double _idleTargetY = -1;
   double _idleTimer   = 0;
-
-  // ── İş arama throttle ──────────────────────────────────────────────────────
-  double _workSearchCd = 0.0;
 
   // ── Stuck-detect + yield ───────────────────────────────────────────────────
   // Düz çizgi hareket + separation iki NPC'yi tam karşıdan kilitleyebilir;
@@ -118,15 +115,8 @@ abstract class WorkerEntity {
   bool   _prevOnRoad  = false;
   bool   _prevIsWalking = false;
 
-  /// Boştaki işçinin her frame tüm hedef listesini taramasını engeller.
-  /// ~[kWorkSearchInterval]'de bir true döner; aradaki frame'lerde işçi
-  /// yalnızca dolaşır. İş anında lazım değilse bu gecikme görünmez.
-  bool readyToSearchWork(double dt) {
-    _workSearchCd -= dt;
-    if (_workSearchCd > 0) return false;
-    _workSearchCd = kWorkSearchInterval;
-    return true;
-  }
+  // readyToSearchWork() iş arama throttle'ıydı — anonim işçi katmanı köylülere
+  // taşınınca (iş dağıtımı scene_jobs'a geçti) çağıranı kalmadı → kaldırıldı.
 
   WorkerEntity({
     required double startCol,

@@ -50,9 +50,9 @@ class PlacementEditorApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: ThemeData.dark(useMaterial3: true).copyWith(
           scaffoldBackgroundColor: const Color(0xFF1A1A2E),
-          colorScheme: ColorScheme.dark(
-            primary: const Color(0xFF66D9A0),
-            surface: const Color(0xFF16213E),
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF66D9A0),
+            surface: Color(0xFF16213E),
           ),
         ),
         home: const PlacementEditorScreen(),

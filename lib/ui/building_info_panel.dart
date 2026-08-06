@@ -1,5 +1,7 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+
 import '../buildings/building_entity.dart';
 import '../buildings/building_function.dart';
 import '../buildings/building_lore.dart';
@@ -10,16 +12,16 @@ import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
 import '../entities/work_site.dart';
-import '../world/animal_entity.dart';
 import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
 import '../systems/hearth_warmth.dart';
 import '../systems/winter.dart';
+import '../world/animal_entity.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
-import 'work_crew.dart';
 import 'winter_section.dart';
+import 'work_crew.dart';
 
 /// Bir binaya tıklanınca açılan yönetim kartı. Modern koyu panel: başlık +
 /// portre, animasyonlu durum çubukları, vektör ikonlu aksiyon butonları.
@@ -275,7 +277,7 @@ class BuildingInfoPanel extends StatelessWidget {
             ),
             child: thumb != null
                 ? CustomPaint(painter: _ThumbPainter(thumb))
-                : Center(
+                : const Center(
                     child: GameIcon(GameIconData.home,
                         size: 20, color: AppUi.textMid)),
           ),

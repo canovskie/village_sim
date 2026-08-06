@@ -155,8 +155,6 @@ class VillagePolicies {
     onChanged?.call();
   }
 
-  bool isOn(String id) => sealed.contains(id);
-
   /// Aile planlaması — iki mutex fermanın okunuşu (ayrı bir state değil).
   FamilyPolicy get family => sealed.contains('oneChild')
       ? FamilyPolicy.oneChild

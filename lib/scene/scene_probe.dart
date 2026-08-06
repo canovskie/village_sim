@@ -55,9 +55,17 @@ extension _SceneProbe on _VillageSceneState {
     kProbeReportSeq++;
   }
 
-  /// Rapor aralığı (sim sn) — yarım oyun günü. Hızlandırmayla wall-clock
-  /// saniyeler mertebesine iner.
-  static const double _kProbeInterval = 0.5 * kGameDaySeconds;
+  /// Rapor aralığı (sim sn). Hızlandırmayla wall-clock saniyeler mertebesine
+  /// iner.
+  ///
+  /// TUZAK — ÖLÇÜM TAKMASI: bu değer YARIM GÜNDÜ (0.5). Gün uzunluğunun tam
+  /// böleni olduğu için her örnek saatin AYNI iki noktasına düşüyordu (~08 ve
+  /// ~20) ve prova saatin geri kalanını hiç göremiyordu. Gecenin ortası hiç
+  /// örneklenmediği için "20:00'de kimse uyumuyor" gibi yanıltıcı bir tablo
+  /// çıkıyordu — oysa 20:00 herkesin yatağa YÜRÜDÜĞÜ andı (walkingToSleep
+  /// "yürüyen" sayılır). 0.43 günle örnek noktası her turda kayar, birkaç
+  /// günde saatin tamamı taranır; rapor sayısı yaklaşık aynı kalır.
+  static const double _kProbeInterval = 0.43 * kGameDaySeconds;
 
   /// Köyün o anki davranış özeti — çok satırlı, okunur.
   String probeReport() {

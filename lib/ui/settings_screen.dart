@@ -68,7 +68,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       children: [
                         Row(
                           children: [
-                            GameIcon(
+                            const GameIcon(
                               GameIconData.gear,
                               size: 18,
                               color: AppUi.accent,
@@ -353,7 +353,7 @@ class _LangChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tint = AppUi.accent;
+    const tint = AppUi.accent;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(

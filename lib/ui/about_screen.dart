@@ -45,12 +45,12 @@ class AboutScreen extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Center(child: Text('HAKKINDA', style: AppUi.title)),
+                      const Center(child: Text('HAKKINDA', style: AppUi.title)),
                       const SizedBox(height: 18),
 
                       // Çıplak duran tek yer burası → kor halesi AÇIK (madalyon
                       // yok). Hale kutuyu 1.5× büyüttüğü için glif 72→60.
-                      Center(child: const GameLogo(size: 60, glow: true)),
+                      const Center(child: GameLogo(size: 60, glow: true)),
                       const SizedBox(height: 12),
                       Center(
                         child: Text(

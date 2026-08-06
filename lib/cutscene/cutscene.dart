@@ -1,5 +1,5 @@
-import '../characters/villager_type.dart';
 import '../characters/npc_visual.dart';
+import '../characters/villager_type.dart';
 
 /// 2B sinematik ara-sahne veri modeli — storyline'ı tam ekran "film" olarak
 /// anlatır. Oyun motorundan (izometrik) ayrı; prosedürel arka plan + mevcut
@@ -441,7 +441,7 @@ Cutscene weddingCutscene({
             fromX: 0.60, y: 0.80, scale: 1.4, flip: true),
       ],
       lines: [
-        CutsceneLine(
+        const CutsceneLine(
             'Ateşe fazladan odun attılar. Köy halka oldu, ortada iki kişi kaldı.'),
       ],
     ),

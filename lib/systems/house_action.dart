@@ -159,7 +159,7 @@ HouseActionGate gateFor(
     });
   }
   if (authority < kind.requiredAuthority) {
-    return HouseActionGate.shut(
+    return const HouseActionGate.shut(
         'Meclis buna razı olmaz. Bu yetki ancak sözün mutlaklaştığı bir '
         'köyde kullanılır.');
   }
@@ -174,14 +174,14 @@ HouseActionGate gateFor(
     }
   }
   if (kind == HouseActionKind.scheme && gold < _kSchemeCost) {
-    return HouseActionGate.shut('Gizli iş de para ister — $_kSchemeCost altın.');
+    return const HouseActionGate.shut('Gizli iş de para ister — $_kSchemeCost altın.');
   }
   if (kind == HouseActionKind.exile && members <= 1) {
-    return HouseActionGate.shut(
+    return const HouseActionGate.shut(
         'Hanede tek can kaldı. Onu da yola vurursan soy tükenir.');
   }
   if (kind == HouseActionKind.betroth && members <= 0) {
-    return HouseActionGate.shut('Nikâh bağlanacak kimse yok.');
+    return const HouseActionGate.shut('Nikâh bağlanacak kimse yok.');
   }
   return const HouseActionGate.open();
 }

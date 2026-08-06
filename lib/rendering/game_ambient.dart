@@ -22,7 +22,7 @@ extension _PainterAmbient on VillageGamePainter {
     // İnci/şafak tonu — şafak/alacakaranlıkta hafif sıcak, gündüz nötr-parlak.
     final warm = (1.0 - dayLight).clamp(0.0, 1.0);
     final cr = (0xE4 + 0x14 * warm).round().clamp(0, 255);
-    final cg = (0xE8).clamp(0, 255);
+    final cg = 0xE8.clamp(0, 255);
     final cb = (0xEC - 0x16 * warm).round().clamp(0, 255);
     const maxA = 0.11; // tek kenar tepe opaklığı (çok hafif)
     final edge = Color.fromRGBO(cr, cg, cb, maxA);
@@ -38,13 +38,13 @@ extension _PainterAmbient on VillageGamePainter {
       canvas.drawRect(rect, _pEdgeHaze);
     }
 
-    side(Rect.fromLTWH(0, 0, w, band), Offset(0, 0), Offset(0, band)); // üst
+    side(Rect.fromLTWH(0, 0, w, band), const Offset(0, 0), Offset(0, band)); // üst
     side(
       Rect.fromLTWH(0, h - band, w, band),
       Offset(0, h),
       Offset(0, h - band),
     ); // alt
-    side(Rect.fromLTWH(0, 0, band, h), Offset(0, 0), Offset(band, 0)); // sol
+    side(Rect.fromLTWH(0, 0, band, h), const Offset(0, 0), Offset(band, 0)); // sol
     side(
       Rect.fromLTWH(w - band, 0, band, h),
       Offset(w, 0),

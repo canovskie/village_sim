@@ -162,8 +162,6 @@ const double kCarrierAssignInterval = 3.0; // saniye
 // Engel/kuyu/yasak tile set'leri her frame yeniden kurulmaz; bu aralıkta bir
 // yenilenir (harita statik, maden/bina değişimi bu gecikmeyle yansır → görünmez).
 const double kSpatialRebuildInterval = 0.3; // saniye
-// Boştaki işçi her frame tüm hedef listesini taramasın; bu sıklıkta arar.
-const double kWorkSearchInterval     = 0.4; // saniye
 
 // ─── Lumber camp bölgesi ─────────────────────────────────────────────────────
 const double kLumberTerritoryRadius   = 6.0; // tile yarıçapı
@@ -189,7 +187,7 @@ Offset gridToScreen(double gx, double gy, Size size, Offset camera) {
   final oy = size.height * 0.28 + camera.dy;
   final dx = screen.dx - ox;
   final dy = screen.dy - oy;
-  final a  = kTileW / 2;
-  final b  = kTileH / 2;
+  const a  = kTileW / 2;
+  const b  = kTileH / 2;
   return ((dx / a + dy / b) / 2, (dy / b - dx / a) / 2);
 }

@@ -168,7 +168,9 @@ void main() {
     var lastSeq = -1;
     var reports = 0;
     // 50ms adım × 28× → pump başına ~1.4 sim-sn; ~1800 pump ≈ 2500 sim-sn ≈
-    // 10 oyun günü. Rapor aralığı yarım gün → ~20 rapor.
+    // 10 oyun günü. Rapor aralığı 0.43 gün → ~23 rapor ve örnek noktası her
+    // turda kayar, yani döküm günün TÜM saatlerini tarar (bkz. scene_probe
+    // `_kProbeInterval` — yarım günlük eski aralık hep aynı iki saate düşüyordu).
     for (var i = 0; i < 1800; i++) {
       await tester.pump(const Duration(milliseconds: 50));
       if (kProbeReportSeq != lastSeq && kProbeReport.isNotEmpty) {

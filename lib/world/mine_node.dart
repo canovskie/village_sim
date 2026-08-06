@@ -1,7 +1,6 @@
 enum OreType { stone, iron, coal }
 
 extension OreTypeExt on OreType {
-  int    get goldValue => switch (this) { OreType.stone => 8, OreType.iron => 22, OreType.coal => 15 };
   double get mineTime  => switch (this) { OreType.stone => 2.5, OreType.iron => 4.0, OreType.coal => 3.2 };
   String get label     => switch (this) { OreType.stone => 'Taş', OreType.iron => 'Demir', OreType.coal => 'Kömür' };
 }

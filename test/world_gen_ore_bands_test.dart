@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/world/world_generator.dart';
 import 'package:village_sim/world/mine_node.dart';
+import 'package:village_sim/world/world_generator.dart';
 
 void main() {
   // Kontrollü kaynak açılımı: madenler reach bandlarında üretilmeli —

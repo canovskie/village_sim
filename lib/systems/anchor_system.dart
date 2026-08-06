@@ -55,14 +55,6 @@ class AnchorPoint {
       s._owner = null;
     }
   }
-
-  /// Tüm slot'ları zorla boşalt — bina silinince / harita reset.
-  void clearAll() {
-    for (final s in slots) {
-      s._taken = false;
-      s._owner = null;
-    }
-  }
 }
 
 /// Tüm anchor noktalarını binalardan türeten merkezi otorite.

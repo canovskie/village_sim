@@ -14,11 +14,10 @@
 // TUZAK (bu projede defalarca vakit yedi): pencere arka plandaysa macOS kare
 // üretmez — koşarken pencereyi ÖNDE tut.
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import '../main.dart';
 import '../systems/event_system.dart';
+import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
 
@@ -73,7 +72,7 @@ Future<void> main() async {
     }
     // Koreografinin ortası: yürüyüşler bitmiş, iş duruşları başlamış olur.
     await Future<void>.delayed(const Duration(seconds: 9));
-    await _capture('preview/vignette_$id.png', id);
+    await _capture('preview/vignette_$id.png');
     // Sahne kapansın (ömür 30 sn) — sıradaki olay temiz kadro bulsun.
     while (kProbeVignetteId.isNotEmpty) {
       await Future<void>.delayed(const Duration(seconds: 1));
@@ -83,19 +82,10 @@ Future<void> main() async {
   exit(0);
 }
 
-Future<void> _capture(String path, String id) async {
-  final ctx = _boundaryKey.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL $id: no context');
-    return;
+/// Ortak çekime ek olarak KADROYU da basar — vinyet dökümünde asıl soru
+/// "kare çıktı mı" değil, "rolleri kim oynadı".
+Future<void> _capture(String path) async {
+  if (await captureBoundary(_boundaryKey, path, pixelRatio: 1.5)) {
+    stdout.writeln('  kadro=$kProbeVignetteCast');
   }
-  final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
-  final image = await boundary.toImage(pixelRatio: 1.5);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) {
-    stdout.writeln('CAPTURE_FAIL $id: no bytes');
-    return;
-  }
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED $path (kadro=$kProbeVignetteCast)');
 }

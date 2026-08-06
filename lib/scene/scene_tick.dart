@@ -798,8 +798,8 @@ extension _SceneTick on _VillageSceneState {
   /// köylüler başını kaldırıp izler (🌠 bubble) + birkaçı ateşe toplanır +
   /// köy moralı artar. Karar/soru yok; saf bir cozy gece ödülü.
   void _startMeteorShower() {
-    final dur = kGameDaySeconds * 0.35; // birkaç dakikalık gece gösterisi
-    final e = EventEffect(fx: EventFx.meteorShower, duration: dur);
+    const dur = kGameDaySeconds * 0.35; // birkaç dakikalık gece gösterisi
+    const e = EventEffect(fx: EventFx.meteorShower, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
     addCameraShake(4, dur: 0.7); // hafif huşû titreşimi (juice)
     for (final v in _villagers) {

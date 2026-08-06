@@ -58,32 +58,8 @@ class ImperialDemand {
       };
 }
 
-/// İmparatorluğun zümre nabzındaki salt-okunur özeti — köyün İÇ zümrelerinin
-/// (bkz. [HouseSnapshot]) yanına eklenen DIŞ güç madalyonu. İç hizip değil:
-/// köye dışarıdan bakan bir göz. [favor] ilişki (0 düşman ↔ 1 dost), [watching]
-/// köy İmparatorluğun iştahını çekecek kadar zengin/kalabalık mı (değilse heyet
-/// gözden ırak/uykuda), [imminence] sıradaki ziyaretin yakınlığı (0 uzak ↔ 1
-/// kapıda), [active] şu an aktif bir talep var mı.
-class ImperialSnapshot {
-  final double favor;
-  final bool watching;
-  final double imminence;
-  final bool active;
-  const ImperialSnapshot({
-    required this.favor,
-    required this.watching,
-    required this.imminence,
-    required this.active,
-  });
-
-  /// İlişkinin okunur kısa etiketi (madalyon altı durum sözcüğü).
-  String get favorLabel {
-    if (favor < 0.30) return 'düşman';
-    if (favor < 0.50) return 'gergin';
-    if (favor < 0.72) return 'temkinli';
-    return 'dost';
-  }
-}
+// ImperialSnapshot hiç örneklenmiyordu (ölü kod) → kaldırıldı; EstateSnapshot
+// ile aynı hikâye. Madalyon istenirse alanları imparatorluk state'inden okur.
 
 /// İmparatorluk geliş sinematiğini TALEBE + İTİBARA göre kurar. Süvariler
 /// ufuktan gelir; komutanın sözü talebin türünü, tonu da ilişkiyi (düşman/

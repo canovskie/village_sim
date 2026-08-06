@@ -272,7 +272,7 @@ class LawCompassCard extends StatelessWidget {
                 style:
                     AppUi.number.copyWith(fontSize: 10.5, color: AppUi.textLo)),
             const SizedBox(width: 6),
-            Icon(Icons.expand_more, size: 18, color: AppUi.textLo),
+            const Icon(Icons.expand_more, size: 18, color: AppUi.textLo),
           ],
         ),
       ),
@@ -573,8 +573,8 @@ class _DialPainter extends CustomPainter {
       c,
       rim,
       Paint()
-        ..shader = RadialGradient(
-          colors: const [Color(0xFF15171B), Color(0xFF0C0D10)],
+        ..shader = const RadialGradient(
+          colors: [Color(0xFF15171B), Color(0xFF0C0D10)],
         ).createShader(Rect.fromCircle(center: c, radius: rim)),
     );
     canvas.drawCircle(

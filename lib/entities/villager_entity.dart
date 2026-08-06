@@ -1,8 +1,9 @@
 import 'dart:math';
-import '../characters/villager_type.dart';
+
+import '../characters/life_stage.dart';
 import '../characters/npc_visual.dart';
 import '../characters/personality.dart';
-import '../characters/life_stage.dart';
+import '../characters/villager_type.dart';
 import '../core/constants.dart';
 import '../systems/chronicle.dart';
 import '../systems/villager_act.dart';
@@ -110,7 +111,7 @@ class VillagerEntity extends WorkerEntity {
 
   /// Köylünün kişiliği (mizaç + sevdiği şey + künye). Seed'den lazy üretilir.
   late final Personality personality =
-      Personality.fromSeed(personalitySeed, type);
+      Personality.fromSeed(personalitySeed);
 
   /// Kutlanan yıldönümü sayısı — yaş kilometre taşı geçince artar (kişisel an).
   int annivCount = 0;
@@ -424,17 +425,11 @@ class VillagerEntity extends WorkerEntity {
   /// İyi beslenme + mabet iyileşmeyi hızlandırır. Kaydedilir.
   double sickDays = 0.0;
 
-  /// Bu köylü şu an hasta mı.
-  bool get isSick => sickDays > 0;
-
   /// KÜREK CEZASI — kalan zorunlu emek süresi (oyun günü). >0 iken köylü
   /// mahkûm: normal işe/errand'a gitmez, kadroya alınmaz; gündüzleri taş
   /// ocağına koşulur ve köye günlük taş üretir ([_tickConvictLabor]). Süre
   /// dolunca salıverilir. Kaydedilir. scene_crime `_sentenceToLabor` atar.
   double laborDays = 0.0;
-
-  /// Bu köylü şu an kürek cezasında mı (zorunlu emekte).
-  bool get isConvictLaboring => laborDays > 0;
 
   /// KALICI SAKATLIK — ağır bir yaralanma kalıcı aksaklık bırakır: ömür boyu
   /// hafif yavaş (limp). injuryDays bitse de kalır. Kaydedilir.
@@ -815,9 +810,6 @@ class VillagerEntity extends WorkerEntity {
   /// Hane etiketi — "Demirhan Hanesi" biçimi; soyad yoksa boş (eski kayıt).
   String get houseLabel => surname.isEmpty ? '' : '$surname Hanesi';
 
-  /// Ad + hane — "Ayşe Demirhan"; soyad yoksa yalnız ad.
-  String get fullName => surname.isEmpty ? name : '$name $surname';
-
   /// Otomatik visual seed — type + spawn pozisyonu hash'i.  Aynı pozisyondan
   /// aynı tipte spawn olan iki NPC olmaz pratikte, ama görsel seed verilebilir.
   /// Kişilik için rastgele tohum — her köylü farklı kişilik alsın diye varsayılan.
@@ -1128,8 +1120,27 @@ class VillagerEntity extends WorkerEntity {
     // Soğuktan kalkma sayacı — bitince köylü kaldığı yerden uykuya döner.
     if (sleepRestless > 0) sleepRestless = max(0.0, sleepRestless - dt);
 
+    // YATAĞA DÖNÜŞ — `_wasSleeping` eskiden TEK ATIŞLIK bir kilitti: köylüyü
+    // gece bir kez yataktan koparan her şey (iş döngüsünün goTo'su, tören,
+    // taşıma görevi) onu SABAHA KADAR ayakta bırakıyordu. Ölçüm: derin gecede
+    // 7-10 köylü "boşta" — uyumadan, iş yapmadan dikiliyorlardı.
+    //
+    // Kapı artık yeniden kurulabilir, ama üç şart altında: köylü gerçekten
+    // BOŞTA olmalı (yürüyeni/çalışanı yataga zorlamak sahneyi bozar), şafak
+    // OLMAMALI ve tören/oturma altında olmamalı. Şafak şartı histerezisi
+    // korur: yatma ve kalkma eşikleri çakışırsa köylü şafakta yat-kalk
+    // titrerdi (bkz. test/curfew_test.dart flip sayacı).
+    final canReturnToBed = _wasSleeping &&
+        !isDawn &&
+        state == VillagerState.idle &&
+        activity == VillagerActivity.none &&
+        !sitClaimed;
+
     // Nöbetçi geceyi uyanık geçirir — uyku akışına hiç girmez.
-    if (isNight && !_wasSleeping && !nightDuty && sleepRestless <= 0) {
+    if (isNight &&
+        (!_wasSleeping || canReturnToBed) &&
+        !nightDuty &&
+        sleepRestless <= 0) {
       _wasSleeping = true;
       if (sleepTarget != null) {
         state     = VillagerState.walkingToSleep;

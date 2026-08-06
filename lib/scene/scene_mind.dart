@@ -211,7 +211,7 @@ extension _SceneMind on _VillageSceneState {
   /// niyet köylüyü yere götürür, yer dürtüyü söndürür.
   void _tickDrives(VillagerEntity v, double dt) {
     final m = v.mind;
-    final r = DriveRates(kGameDaySeconds);
+    const r = DriveRates(kGameDaySeconds);
     final p = _pressure;
 
     // ── AÇLIK ──────────────────────────────────────────────────────────────

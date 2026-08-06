@@ -337,7 +337,7 @@ extension _SceneGuide on _VillageSceneState {
   /// anlamsızdı. Kartın yaşadığı bantta (üst ~380px) tavan kartın soluna çekilir.
   double _speechX(double x, double y) {
     const half = 132.0; // WorldSpeech maxWidth 260 / 2 + pay
-    final lo = half + 12;
+    const lo = half + 12;
     var hi = _viewSize.width - half - 12;
     if (y < 380) hi = _viewSize.width - 262 - half;
     if (hi <= lo) return x;

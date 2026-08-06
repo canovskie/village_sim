@@ -76,7 +76,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 12, 12, 10),
       child: Row(
         children: [
-          Text('ANİMASYON ODASI', style: AppUi.title),
+          const Text('ANİMASYON ODASI', style: AppUi.title),
           const SizedBox(width: 10),
           Expanded(
             child: Text('animasyonları canlı dene',
@@ -84,7 +84,7 @@ class _Header extends StatelessWidget {
           ),
           GestureDetector(
             onTap: onClose,
-            child: AppChip(label: '✕ Kapat', color: AppUi.accent),
+            child: const AppChip(label: '✕ Kapat', color: AppUi.accent),
           ),
         ],
       ),
@@ -392,7 +392,7 @@ class _CharacterTabState extends State<_CharacterTab>
               () => setState(() => _typeIdx =
                   (_typeIdx + 1) % VillagerType.values.length)),
           _cycle('EVRE', _stage.name, () {
-            final v = LifeStage.values;
+            const v = LifeStage.values;
             setState(() => _stage = v[(v.indexOf(_stage) + 1) % v.length]);
           }),
           _cycle('POZ', _pose.name, () {

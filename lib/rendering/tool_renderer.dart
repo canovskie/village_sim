@@ -22,7 +22,6 @@ class ToolRenderer {
   static Future<void> loadAll() async {
     await _load(_Tool.axe,         'assets/tools/axe.png');
     await _load(_Tool.hammer,      'assets/tools/hammer.png');
-    await _load(_Tool.hoe,         'assets/tools/hoe.png');
     await _load(_Tool.pickaxe,     'assets/tools/pickaxe.png');
     await _load(_Tool.rod,         'assets/tools/rod.png');
     await _load(_Tool.torch,       'assets/tools/torch.png');
@@ -72,21 +71,9 @@ class ToolRenderer {
     canvas.restore();
   }
 
-  // ── ÇAPA (çiftçi) ─────────────────────────────────────────────────────────
-  // PNG: 629 × 840 — baş üstte, sap dikey.
-  // Tutuş: PNG %72'sinde. Çok az eğim.
-  static void drawHoe(Canvas canvas) {
-    final img = _imgs[_Tool.hoe];
-    if (img == null) return;
-    const w = 20.0;
-    final h = w * img.height / img.width;
-    canvas.save();
-    canvas.translate(3, 14);
-    canvas.rotate(0.18);
-    canvas.drawImageRect(img, _src(img),
-        Rect.fromLTWH(-w * 0.50, -h * 0.72, w, h), _paint());
-    canvas.restore();
-  }
+  // ÇAPA (çiftçi) çizimi hiç çağrılmıyordu → kaldırıldı. Çiftçi tarlada
+  // `stoop` duruşuyla anlatılıyor, elinde alet yok. Geri istenirse assets/
+  // tools/hoe.png duruyor.
 
   // ── KAZMA (madenci) ───────────────────────────────────────────────────────
   // PNG: 814 × 1028 — pick baş üstte, sap köşegen.
@@ -236,4 +223,4 @@ class ToolRenderer {
   static Paint  _paint() => _pTool;
 }
 
-enum _Tool { axe, hammer, hoe, pickaxe, rod, torch, waterbucket }
+enum _Tool { axe, hammer, pickaxe, rod, torch, waterbucket }

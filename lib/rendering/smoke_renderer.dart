@@ -42,9 +42,9 @@ class SmokeRenderer {
   /// Beyaz → transparent + tint uygulayan 4×5 ColorMatrix oluşturur.
   /// Bu matrix sahnedeki dst pixel'ini: alpha = 255-luma, color = tint.
   static ColorFilter _filterFor(Color tint, double intensity) {
-    final r = (tint.r * 255);
-    final g = (tint.g * 255);
-    final b = (tint.b * 255);
+    final r = tint.r * 255;
+    final g = tint.g * 255;
+    final b = tint.b * 255;
     final iA = intensity.clamp(0.0, 1.0);
     // Alpha hesabı: A = (255 - (R+G+B)/3) × intensity
     // Bu 5-stop matrix: [A_R, A_G, A_B, A_A, A_offset] son satır

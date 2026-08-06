@@ -1077,7 +1077,7 @@ extension _SceneConflict on _VillageSceneState {
     if (wasFeud) _pacifyFeudOf(v); // adalet kan borcunu kapatır → döngü durur
 
     // Halk toplanır — infaz tanığı (diz çökmüş saygı/dehşet duruşu).
-    final dur = kGameDaySeconds * 0.5;
+    const dur = kGameDaySeconds * 0.5;
     _gatherAtFire(dur, max: 8, pose: FirePose.kneel);
     _activeFx.add(ActiveFx(
         const EventEffect(screenTint: Color(0x55AA1414), duration: 2.2), 2.2));

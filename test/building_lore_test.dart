@@ -79,7 +79,7 @@ void main() {
       expect(
         tipState(
             hearth,
-            SiteFacts(
+            const SiteFacts(
                 hearthWarmth: kColdShelterThreshold,
                 hasHearth: true,
                 hearthLit: true)),

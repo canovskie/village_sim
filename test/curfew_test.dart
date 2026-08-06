@@ -138,4 +138,44 @@ void main() {
       expect(watch.isSleeping, isFalse);
     });
   });
+
+  // ── YATAĞA DÖNÜŞ ──────────────────────────────────────────────────────────
+  //
+  // Gerçek şikâyetin kaynağı: köy hiçbir zaman sessizleşmiyordu. Prova
+  // dökümünde derin gecede 15-18 kişilik köyde uyuyan 0-7 arasındaydı ve
+  // geceyi "boşta" dikilerek geçiren 7-10 köylü vardı.
+  //
+  // Sebep `_wasSleeping`in TEK ATIŞLIK olmasıydı: köylüyü gece bir kez
+  // yataktan koparan her şey (iş döngüsünün goTo'su, tören, taşıma görevi)
+  // onu sabaha kadar ayakta bırakıyordu. Aşağıdaki iki test o kapıyı kilitler.
+  group('yatağa dönüş', () {
+    test('gece uyandırılan köylü boşa düşünce yatağına döner', () {
+      final v = _villager();
+      _step(v, 0.05);
+      expect(v.isSleeping, isTrue, reason: 'önce uyumuş olmalı');
+
+      // Gece yarısı bir şey onu ayağa kaldırdı (iş/tören/taşıma taklidi).
+      v.state = VillagerState.idle;
+      expect(v.isSleeping, isFalse);
+
+      // Hâlâ gece ve köylü boşta → yatağına dönmeli.
+      _step(v, 0.05);
+      expect(v.isSleeping, isTrue,
+          reason: 'boştaki köylü geceyi ayakta geçirmemeli');
+    });
+
+    test('gece uyandırılan MEŞGUL köylü zorla yatırılmaz', () {
+      final v = _villager();
+      _step(v, 0.05);
+      expect(v.isSleeping, isTrue);
+
+      // Sohbete girmiş: yürüyen/oynayan köylüyü yatağa zorlamak sahneyi bozar
+      // (yarım kalan sohbet, ayağa fırlayan dinleyici). Dönüş yalnız BOŞTA.
+      v.state = VillagerState.idle;
+      v.activity = VillagerActivity.chat;
+      _step(v, 0.05);
+      expect(v.isSleeping, isFalse,
+          reason: 'meşgul köylü yatağa çekilmemeli');
+    });
+  });
 }

@@ -1,28 +1,43 @@
-# This file configures the analyzer, which statically analyzes Dart code to
-# check for errors, warnings, and lints.
+# Analiz + lint ayarları. `flutter analyze` bunu okur.
 #
-# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
-# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
-# invoked from the command line by running `flutter analyze`.
+# Taban: flutter_lints. Altındaki liste ONA EKLENEN kurallar — hepsi bir kez
+# koşturulup çıkan bulgu sayısı ve örnekleri gözle bakılarak seçildi. Kural
+# eklerken aynısını yap: önce aç, `flutter analyze` ile kaç bulgu ve NE tür
+# bulgu çıktığına bak, sonra kalıcı yap. Gürültülü kural, gerçek uyarıyı
+# görünmez yapar — bu dosyanın tek işi analyze çıktısını "sıfır" tutmak.
 
-# The following line activates a set of recommended lints for Flutter apps,
-# packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
 linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at https://dart.dev/lints.
-  #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # ── const: Flutter'ın rebuild maliyeti ───────────────────────────────────
+    # const widget yeniden kurulmaz, aynı örnek kullanılır. Oyun HUD'ı her
+    # karede setState yiyor; buradaki kazanç kozmetik değil.
+    prefer_const_constructors: true
+    prefer_const_constructors_in_immutables: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_const_declarations: true
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+    # ── gerçek hata yakalayanlar ─────────────────────────────────────────────
+    # Yakalanmamış Future = sessiz async hata (audio_manager'da bir tane vardı).
+    unawaited_futures: true
+    # Okunmayan constructor parametresi = yalan imza (Personality.fromSeed).
+    avoid_unused_constructor_parameters: true
+
+    # ── biçim/tutarlılık (hepsi zaten uyumluydu, kilitliyoruz) ───────────────
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    use_super_parameters: true
+    unnecessary_await_in_return: true
+
+    # ── sadeleştirme ─────────────────────────────────────────────────────────
+    unnecessary_lambdas: true
+    unnecessary_parenthesis: true
+    prefer_final_locals: true
+    directives_ordering: true
+
+    # BİLEREK AÇILMADI — avoid_redundant_argument_values:
+    # 357 bulgu veriyor ve çoğu ayar tablolarında: `spriteScale: 1.0`,
+    # `pose: ActPose.labor`. Bu projede varsayılana eşit değer GÜRÜLTÜ DEĞİL,
+    # belge: bina tablosunda satırlar hizalı durur ve hangi kolonun ayar knob'ı
+    # olduğu görünür. Silmek okunabilirliği düşürürdü.

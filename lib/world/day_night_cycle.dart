@@ -100,19 +100,6 @@ class DayNightCycle {
 
   // ── Sky bands ─────────────────────────────────────────────────────────────
 
-  /// Gökyüzü üst band
-  Color get skyTop => _lerp([
-    (0.00, 0x06, 0x08, 0x22), // gece — derin lacivert
-    (0.20, 0x12, 0x08, 0x35), // gece öncesi mor
-    (0.25, 0xCC, 0x55, 0x18), // şafak — yanık turuncu
-    (0.32, 0x56, 0x8A, 0xCC), // sabah — kornflower mavi
-    (0.50, 0x3A, 0x72, 0xBE), // öğle — berrak mavi
-    (0.68, 0x56, 0x8A, 0xCC), // öğleden sonra
-    (0.75, 0xB8, 0x40, 0x20), // gün batımı — derin kırmızı-turuncu
-    (0.82, 0x14, 0x08, 0x38), // akşam mor
-    (1.00, 0x06, 0x08, 0x22), // gece
-  ]);
-
   /// Gökyüzü ufuk bandı
   Color get skyMid => _lerp([
     (0.00, 0x08, 0x0C, 0x20),
@@ -137,21 +124,6 @@ class DayNightCycle {
   Color get overlayTop => _composeOverlay(_overlayTopRgb(), _overlayTopAlpha());
   Color get overlayBottom =>
       _composeOverlay(_overlayBottomRgb(), _overlayBottomAlpha());
-
-  /// Geriye dönük uyumluluk — eski tek-renk overlay'i isteyen kod için
-  /// gradient'in ortalamasını verir. Yeni kod overlayTop/overlayBottom'a
-  /// geçmelidir.
-  Color get sceneOverlay {
-    final top = overlayTop;
-    final bot = overlayBottom;
-    int avg(num a, num b) => ((a + b) / 2).round().clamp(0, 255);
-    return Color.fromARGB(
-      avg(top.a * 255, bot.a * 255),
-      avg(top.r * 255, bot.r * 255),
-      avg(top.g * 255, bot.g * 255),
-      avg(top.b * 255, bot.b * 255),
-    );
-  }
 
   Color _composeOverlay(Color rgb, double a) {
     final base = Color.fromARGB(
@@ -306,10 +278,6 @@ class DayNightCycle {
     return ((timeOfDay - 0.78) / 0.12).clamp(0, 1);
   }
 
-  /// Yıldızlar — ay ile aynı görünürlük (gece). Berrak gecede ~%45 parlar.
-  double get starOpacity =>
-      (moonOpacity * (1.0 + _nightClarity * 0.45)).clamp(0.0, 1.0);
-
   /// 0.0 = gece (su koyu), 1.0 = tam gündüz (su parlak)
   double get dayLight => _lerpScalar([
     (0.00, 0.0),
@@ -323,18 +291,6 @@ class DayNightCycle {
     (0.82, 0.0),
     (1.00, 0.0),
   ]);
-
-  double get cloudOpacity {
-    double base;
-    if (timeOfDay < 0.22 || timeOfDay > 0.80) {
-      base = 0.20;
-    } else if (timeOfDay < 0.30 || timeOfDay > 0.72) {
-      base = 0.65;
-    } else {
-      base = 0.85;
-    }
-    return (base + rainIntensity * 0.15).clamp(0.0, 1.0);
-  }
 
   // ── Yardımcı ─────────────────────────────────────────────────────────────
 

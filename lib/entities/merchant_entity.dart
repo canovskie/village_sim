@@ -1,6 +1,7 @@
 import 'dart:math';
-import '../characters/villager_type.dart';
+
 import '../characters/life_stage.dart';
+import '../characters/villager_type.dart';
 import 'villager_entity.dart';
 
 /// Gezgin tüccarın ziyaret evresi. Köyün dışından gelir, pazarda/meydanda bir

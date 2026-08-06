@@ -546,7 +546,7 @@ class _LawBookViewState extends State<LawBookView>
         border: Border.all(color: AppUi.line),
       ),
       child: Row(children: [
-        Icon(Icons.search, size: 16, color: AppUi.textLo),
+        const Icon(Icons.search, size: 16, color: AppUi.textLo),
         const SizedBox(width: 8),
         Expanded(
           child: TextField(
@@ -569,7 +569,7 @@ class _LawBookViewState extends State<LawBookView>
               _query = '';
               _search.clear();
             }),
-            child: Icon(Icons.close, size: 15, color: AppUi.textLo),
+            child: const Icon(Icons.close, size: 15, color: AppUi.textLo),
           ),
       ]),
     );

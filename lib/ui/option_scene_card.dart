@@ -230,11 +230,11 @@ class _OptionScenePainter extends CustomPainter {
     canvas.drawRect(
         Offset.zero & size,
         Paint()
-          ..shader = RadialGradient(
-            center: const Alignment(0.0, -0.1),
+          ..shader = const RadialGradient(
+            center: Alignment(0.0, -0.1),
             radius: 1.25,
-            colors: const [Color(0x00000000), Color(0x73000000)],
-            stops: const [0.55, 1.0],
+            colors: [Color(0x00000000), Color(0x73000000)],
+            stops: [0.55, 1.0],
           ).createShader(Offset.zero & size));
   }
 
@@ -414,7 +414,7 @@ class _OptionScenePainter extends CustomPainter {
       ..color = const Color(0xFF5A6472)
       ..strokeWidth = 1.6
       ..strokeCap = StrokeCap.round;
-    final n = 5;
+    const n = 5;
     for (int i = 0; i < n; i++) {
       final t0 = i / n, t1 = (i + 0.6) / n;
       c.drawLine(Offset.lerp(a, b, t0)!, Offset.lerp(a, b, t1)!, p);

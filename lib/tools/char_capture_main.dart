@@ -6,15 +6,14 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/char_capture_main.dart
 // Çıktı:     /tmp/chars.png
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
 import '../core/constants.dart';
 import '../rendering/character_renderer.dart';
 import '../rendering/tool_renderer.dart';
+import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
 
@@ -32,7 +31,7 @@ Future<void> main() async {
     ),
   ));
   await Future<void>.delayed(const Duration(milliseconds: 600));
-  await _capture('/tmp/chars.png');
+  await captureBoundary(_boundaryKey, '/tmp/chars.png', pixelRatio: 2.0);
   exit(0);
 }
 
@@ -116,19 +115,3 @@ class _CharPainter extends CustomPainter {
   bool shouldRepaint(_CharPainter old) => false;
 }
 
-Future<void> _capture(String path) async {
-  final ctx = _boundaryKey.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL: no context');
-    return;
-  }
-  final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
-  final image = await boundary.toImage(pixelRatio: 2.0);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) {
-    stdout.writeln('CAPTURE_FAIL: no bytes');
-    return;
-  }
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

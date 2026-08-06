@@ -92,7 +92,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   /// Bir kişilik tohumunun çağrısı (içindeki meslek eğilimi). Doğan/göçen
   /// köylülerin mesleği bununla belirlenir — rastgele değil, kişilikten doğar.
   VillagerType _callingForSeed(int seed) =>
-      callingFor(Personality.fromSeed(seed, VillagerType.farmer), seed);
+      callingFor(Personality.fromSeed(seed), seed);
 
   /// İstenen mesleğe çağrısı olan bir kişilik tohumu bul — kurucuların
   /// kişiliği mesleğiyle uyumlu olsun diye (demirci ateş sever, muhafız cesur…).
@@ -198,7 +198,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     List<(VillagerType, bool)>? roster,
     String? lineage,
   }) {
-    final cx = kCols / 2.0, cy = kRows / 2.0;
+    const cx = kCols / 2.0, cy = kRows / 2.0;
     // Giriş yönü — kafile haritanın rastgele bir yanından girer, hep aynı
     // yerden gelmesin. Mesafe kısa tutuldu (~16 tile): açılış kamerasının
     // içinde kalsın, yürüyüş dakikalar değil saniyeler sürsün.

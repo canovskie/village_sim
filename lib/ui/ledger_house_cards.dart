@@ -37,9 +37,9 @@ class _HouseActionCard extends StatelessWidget {
           // ── Başlık: hane kimliği + hâl + nüfuz ──────────────────────────
           Container(
             padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppUi.surface2,
-              borderRadius: const BorderRadius.vertical(
+              borderRadius: BorderRadius.vertical(
                   top: Radius.circular(AppUi.radiusSm)),
               border: Border(bottom: BorderSide(color: AppUi.line)),
             ),

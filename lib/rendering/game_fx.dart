@@ -243,7 +243,7 @@ extension _PainterFx on VillageGamePainter {
       final caps = (infect * 4).round();
       for (int c = 0; c < caps; c++) {
         final ang = i * 1.3 + c * 1.7;
-        final grow = ((infect - c * 0.2).clamp(0.0, 1.0));
+        final grow = (infect - c * 0.2).clamp(0.0, 1.0);
         final mx = base.dx + cos(ang) * 8 * zoom;
         final my = base.dy + sin(ang) * 4.5 * zoom;
         // sap
@@ -320,7 +320,7 @@ extension _PainterFx on VillageGamePainter {
       final stalks = (ripe * 4).round();
       for (int s = 0; s < stalks; s++) {
         final ang = i * 1.1 + s * 1.6;
-        final grow = ((ripe - s * 0.18).clamp(0.0, 1.0));
+        final grow = (ripe - s * 0.18).clamp(0.0, 1.0);
         if (grow <= 0) continue;
         final sway = sin(time * 1.8 + i + s) * 1.4 * zoom;
         final sx = base.dx + cos(ang) * 8 * zoom;

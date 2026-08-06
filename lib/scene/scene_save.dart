@@ -183,7 +183,7 @@ extension _SceneSave on _VillageSceneState {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Ana menüye dön', style: AppUi.title),
+                  const Text('Ana menüye dön', style: AppUi.title),
                   const SizedBox(height: 8),
                   Text(
                     'Köy otomatik kaydedilecek ve ana menüye döneceksin. '

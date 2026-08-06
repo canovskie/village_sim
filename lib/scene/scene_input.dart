@@ -469,7 +469,7 @@ extension _SceneInput on _VillageSceneState {
     if (probe != null && (e.localPosition - probe).distanceSquared < 9.0) return;
     _hoverProbe = e.localPosition;
 
-    VillagerEntity? v = _villagerAtScreen(e.localPosition);
+    final VillagerEntity? v = _villagerAtScreen(e.localPosition);
     BuildingEntity? b;
     Grave? g;
     if (v == null) {

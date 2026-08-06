@@ -99,7 +99,7 @@ extension _SceneMerchant on _VillageSceneState {
     // güzergâhındaki bir yer adıdır (bkz. scene_voice `_villageWith` kuralı).
     _showNotification(Voice.say(const [
       '🛒 Gezgin tüccar {köy-e} uğradı; tezgâhını meydana kurdu.',
-      '🛒 Bir kervan {köy-in} yolunu bulmuş — tüccar meydanda.',
+      '🛒 Bir kervan {köy-in} yolunu bulmuş; tüccar meydanda.',
       '🛒 Tüccar atını {köy-de} bağladı, denklerini çözüyor.',
       '🛒 Yabancı bir terazi kuruldu meydana: tüccar {köy-e} geldi.',
     ], _voice(null, seed: _stableSeed('tüccarGeldi', _dayCount))));
@@ -137,7 +137,7 @@ extension _SceneMerchant on _VillageSceneState {
           'altın': '$gold',
         });
     _showNotification(Voice.say(const [
-      '🛒 Tüccar {miktar} {mal} aldı — {köy} {altın} altın kazandı.',
+      '🛒 Tüccar {miktar} {mal} aldı; {köy} {altın} altın kazandı.',
       '🛒 Gezgin tüccar {miktar} {mal} karşılığı {altın} altın bıraktı.',
       '🛒 Tezgâhta pazarlık: {miktar} {mal} gitti, {altın} altın geldi.',
     ], ctx));

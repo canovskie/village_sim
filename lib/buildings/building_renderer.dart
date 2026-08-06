@@ -1,13 +1,15 @@
 import 'dart:math' show sin;
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'building_type.dart';
+
 import '../rendering/asset_style.dart';
 import '../rendering/flame_renderer.dart';
 import '../rendering/smoke_renderer.dart';
 import '../rendering/water_shimmer_renderer.dart';
 import '../world/season.dart';
+import 'building_type.dart';
 
 class BuildingRenderer {
   // ── Sprite önbelleği ────────────────────────────────────────────────────────
@@ -666,7 +668,7 @@ class BuildingRenderer {
 
     final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
     final spriteH = spriteW * img.height / img.width;
-    final bottom = (front.dy).roundToDouble();
+    final bottom = front.dy.roundToDouble();
     final top = (front.dy - spriteH * meta.groundY).roundToDouble();
 
     // smoothstep(3t² - 2t³) — başta ve sonda yumuşak, ortada hızlı reveal.

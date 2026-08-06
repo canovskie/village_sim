@@ -563,7 +563,7 @@ extension _SceneRegime on _VillageSceneState {
     // Yemin köyün kendini DIŞARIYA ilan ettiği andır — bu yüzden cümle "köy"
     // demez, köyün adını söyler (bkz. scene_voice `_villageWith` kuralı).
     _showNotification(
-        '${id.icon} $title — ${_villageWith(Suffix.genitive)} yemini.');
+        '${id.icon} $title. ${_villageWith(Suffix.genitive)} yemini.');
     _chronicle('$title  $decree', icon: id.icon, milestone: true);
     _award('oath.${id.regime.name}', '${id.title}: $_villageName yeminini etti',
         id.icon);

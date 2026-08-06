@@ -8,22 +8,21 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/reveal_capture_main.dart
 // Çıktı:     /tmp/reveal.png
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../buildings/building_entity.dart';
-import '../core/constants.dart';
+import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
+import '../core/constants.dart';
 import '../entities/build_order.dart';
 import '../entities/road_order.dart';
-import '../buildings/building_renderer.dart';
 import '../rendering/game_painter.dart';
 import '../rendering/tile_renderer.dart';
 import '../systems/road_route.dart';
 import '../systems/road_system.dart';
 import '../world/road_surface.dart';
+import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
 
@@ -48,8 +47,8 @@ Future<void> main() async {
     debugShowCheckedModeBanner: false,
     home: RepaintBoundary(
       key: _boundaryKey,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF2A2E27),
+      child: const Scaffold(
+        backgroundColor: Color(0xFF2A2E27),
         body: Row(
           children: [
             _Cell(title: 'ÖNCESİ — hedef yok', reveal: false, road: false),
@@ -61,7 +60,7 @@ Future<void> main() async {
     ),
   ));
   await Future<void>.delayed(const Duration(milliseconds: 800));
-  await _capture('/tmp/reveal.png');
+  await captureBoundary(_boundaryKey, '/tmp/reveal.png', pixelRatio: 2.0);
   exit(0);
 }
 
@@ -145,19 +144,3 @@ class _Cell extends StatelessWidget {
   }
 }
 
-Future<void> _capture(String path) async {
-  final ctx = _boundaryKey.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL: no context');
-    return;
-  }
-  final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
-  final image = await boundary.toImage(pixelRatio: 2.0);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) {
-    stdout.writeln('CAPTURE_FAIL: no bytes');
-    return;
-  }
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

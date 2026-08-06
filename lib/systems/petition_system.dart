@@ -5,6 +5,14 @@ import 'estate_system.dart';
 import 'law_compass.dart';
 
 part 'petition_catalog.dart';
+part 'petition_catalog_core.dart';
+part 'petition_catalog_estates.dart';
+part 'petition_catalog_law.dart';
+part 'petition_catalog_factions.dart';
+part 'petition_catalog_chains.dart';
+part 'petition_catalog_herd.dart';
+part 'petition_catalog_mature.dart';
+part 'petition_catalog_trees.dart';
 
 /// Dilekçeye bağlı görsel/anlık tepki — sahne bunu somut animasyona çevirir
 /// (sadece istatistik değil: köy gözle görülür biçimde tepki verir).

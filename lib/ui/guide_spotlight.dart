@@ -111,14 +111,6 @@ class GuideCue {
 
   /// Tek cümlelik açıklama.
   final String body;
-
-  /// İki cue aynı şeyi mi gösteriyor — sahne bunu "spot yerinde duruyor mu"
-  /// kararında kullanır (her karede yeniden animasyon başlatmamak için).
-  bool sameAs(GuideCue? o) =>
-      o != null &&
-      o.anchorId == anchorId &&
-      o.title == title &&
-      (o.spot == null) == (spot == null);
 }
 
 class GuideSpotlight extends StatefulWidget {
@@ -255,7 +247,7 @@ class _GuideSpotlightState extends State<GuideSpotlight>
         children: [
           Row(
             children: [
-              GameIcon(GameIconData.star, size: 11, color: AppUi.accent),
+              const GameIcon(GameIconData.star, size: 11, color: AppUi.accent),
               const SizedBox(width: 7),
               Expanded(
                 child: Text(

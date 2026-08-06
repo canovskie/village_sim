@@ -1,9 +1,10 @@
 import 'dart:math';
+
+import '../core/constants.dart';
+import 'decor_entity.dart';
+import 'mine_node.dart';
 import 'nature_entity.dart';
 import 'tree_entity.dart';
-import 'mine_node.dart';
-import 'decor_entity.dart';
-import '../core/constants.dart';
 
 // ── Result ────────────────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ class WorldGenerator {
     // 7.5 = kullanıcının onayladığı lush yoğunluğu birebir korur.
     // Perf: bu kalemler STATİK ve item başına ucuz (t.update(dt)); asıl per-frame
     // yük villager AI'sı ve o NÜFUSLA ölçekleniyor, harita/entity ile değil.
-    final s = (kCols * kRows) / baseArea;
+    const s = (kCols * kRows) / baseArea;
     return s.clamp(1.0, 7.5);
   }
 

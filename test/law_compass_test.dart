@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/law_compass.dart';
 import 'package:village_sim/systems/estate_system.dart';
+import 'package:village_sim/systems/law_compass.dart';
 
 void main() {
   group('LawCompass — konum', () {

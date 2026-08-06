@@ -62,7 +62,7 @@ class EventBanner extends StatelessWidget {
             Container(
               padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
               decoration: BoxDecoration(
-                border: Border(
+                border: const Border(
                   bottom:
                       BorderSide(color: AppUi.line, width: 1),
                 ),

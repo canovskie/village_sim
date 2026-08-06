@@ -190,7 +190,11 @@ class AudioManager {
         _tgt[p] = 0.0;
       }
       for (int i = 0; i < 4; i++) {
-        _sfxPool.add(AudioPlayer()..setReleaseMode(ReleaseMode.stop));
+        // setReleaseMode Future döner; cascade içinde bırakılınca hata
+        // yakalanmadan uçuyordu — dosyanın geri kalanıyla aynı _safe kapısı.
+        final p = AudioPlayer();
+        _safe(p.setReleaseMode(ReleaseMode.stop));
+        _sfxPool.add(p);
       }
       _music = AudioPlayer();
       _safe(_music!.setReleaseMode(ReleaseMode.loop));
@@ -240,11 +244,6 @@ class AudioManager {
     _musicTgt = _baseMusic;
     _safe(_music!.stop());
     _safe(_music!.play(AssetSource('$_dir/${_musicFile[t]}'), volume: 0.0));
-  }
-
-  /// Müziği susturur (yumuşak iner; [update] indirmeyi sürdürür).
-  void stopMusic() {
-    _musicTgt = 0.0;
   }
 
   /// Her tick (gerçek-zaman dt). Ortam + müzik seviyelerini hedefe yumuşatır

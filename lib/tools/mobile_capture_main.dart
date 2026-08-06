@@ -29,9 +29,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../buildings/building_type.dart';
+import '../main.dart';
 import '../ui/app_ui.dart';
 import '../ui/village_ledger.dart';
-import '../main.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cihaz profilleri — hepsi YATAY (oyun yatay kilitli)

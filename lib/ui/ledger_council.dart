@@ -275,29 +275,29 @@ class _CouncilPainter extends CustomPainter {
     canvas.drawRect(
         wall,
         Paint()
-          ..shader = LinearGradient(
+          ..shader = const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: const [Color(0xFF0A0C10), Color(0xFF15181F)],
+            colors: [Color(0xFF0A0C10), Color(0xFF15181F)],
           ).createShader(wall));
     final floor = Rect.fromLTWH(0, floorY - 1, w, h - floorY + 1);
     canvas.drawRect(
         floor,
         Paint()
-          ..shader = LinearGradient(
+          ..shader = const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: const [Color(0xFF1A1E26), Color(0xFF0C0E13)],
+            colors: [Color(0xFF1A1E26), Color(0xFF0C0E13)],
           ).createShader(floor));
     // Köşe kararması — dikkat ortada toplansın.
     canvas.drawRect(
         Offset.zero & size,
         Paint()
-          ..shader = RadialGradient(
+          ..shader = const RadialGradient(
             center: Alignment.center,
             radius: 0.95,
-            colors: const [Color(0x00000000), Color(0x8C000000)],
-            stops: const [0.5, 1.0],
+            colors: [Color(0x00000000), Color(0x8C000000)],
+            stops: [0.5, 1.0],
           ).createShader(Offset.zero & size));
   }
 
@@ -313,7 +313,7 @@ class _CouncilPainter extends CustomPainter {
         Paint()
           ..shader = RadialGradient(colors: [
             Color.fromRGBO(255, 176, 88, 0.52 * flick),
-            Color.fromRGBO(255, 130, 50, 0.18),
+            const Color.fromRGBO(255, 130, 50, 0.18),
             const Color(0x00000000),
           ], stops: const [
             0.0,
@@ -374,15 +374,15 @@ class _CouncilPainter extends CustomPainter {
                 at.dx + ww * 0.9, at.dy - hh * 0.55, at.dx + ww, at.dy)
             ..close(),
           Paint()
-            ..shader = LinearGradient(
+            ..shader = const LinearGradient(
               begin: Alignment.bottomCenter,
               end: Alignment.topCenter,
               colors: [
                 Color.fromRGBO(255, 226, 160, 0.95),
                 Color.fromRGBO(255, 146, 46, 0.75),
-                const Color(0x00C83C14),
+                Color(0x00C83C14),
               ],
-              stops: const [0.0, 0.45, 1.0],
+              stops: [0.0, 0.45, 1.0],
             ).createShader(rr));
     }
   }
@@ -456,9 +456,9 @@ class _CouncilPainter extends CustomPainter {
       canvas.drawOval(
           r,
           Paint()
-            ..shader = RadialGradient(colors: [
-              const Color(0xB3E9C552),
-              const Color(0x00E9C552),
+            ..shader = const RadialGradient(colors: [
+              Color(0xB3E9C552),
+              Color(0x00E9C552),
             ]).createShader(r));
     }
 
@@ -469,10 +469,10 @@ class _CouncilPainter extends CustomPainter {
           hc,
           52 * s,
           Paint()
-            ..shader = RadialGradient(colors: [
-              const Color(0x33E9C552),
-              const Color(0x00E9C552),
-            ], stops: const [
+            ..shader = const RadialGradient(colors: [
+              Color(0x33E9C552),
+              Color(0x00E9C552),
+            ], stops: [
               0.25,
               1.0
             ]).createShader(Rect.fromCircle(center: hc, radius: 52 * s)));

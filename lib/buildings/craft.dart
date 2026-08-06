@@ -1,5 +1,5 @@
-import 'building_type.dart';
 import '../characters/villager_type.dart';
+import 'building_type.dart';
 
 /// ─── Köyün Bildiği Zanaatlar ────────────────────────────────────────────────
 ///

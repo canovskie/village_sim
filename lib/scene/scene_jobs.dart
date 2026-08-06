@@ -48,6 +48,20 @@ extension _SceneJobs on _VillageSceneState {
       // Claim korunur; sahne bitince iş kaldığı yerden sürer.
       v.mind.intent.priority < IntentPriority.ceremony &&
       v.activity == VillagerActivity.none &&
+      // GECE PAYDOSU + KÖYÜN HÂLİ PAYDOSU.
+      //
+      // Bu iki kapı `scene_work`te (tezgâh/post işleri) VARDI, burada YOKTU —
+      // iki iş sistemi geceye dair farklı şey söylüyordu. Sonucu ölçtüm:
+      // tarla/maden/balta işi karanlıkta sürüyor, iş döngüsünün her karedeki
+      // `goTo`su köylüyü `walkingToSleep`ten koparıyor ve `_wasSleeping` tek
+      // atışlık kilit olduğu için o köylü SABAHA KADAR yatağa dönemiyordu.
+      // Derin gecede 15-18 kişilik köyde uyuyan 0-7 arasındaydı; baskın niyet
+      // saat 03:00'te "İşinde"ydi.
+      //
+      // Eşik ve muafiyet scene_work ile birebir aynı: karanlık = dayLight
+      // 0.35 altı, nöbetçi muaf (muhafız geceyi zaten devriyede geçirir).
+      (_cycle.dayLight > 0.35 || v.nightDuty) &&
+      v.workPause <= 0 &&
       !identical(v, _draggedVillager);
 
   /// Bu rolü ÜSTLENMİŞ köylü sayısı — HUD/panel sayaçlarının tek kaynağı.

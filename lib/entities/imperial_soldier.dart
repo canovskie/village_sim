@@ -1,6 +1,6 @@
-import '../characters/villager_type.dart';
-import '../characters/npc_visual.dart';
 import '../characters/life_stage.dart';
+import '../characters/npc_visual.dart';
+import '../characters/villager_type.dart';
 import 'villager_entity.dart';
 
 /// İmparatorluk vergici heyetinin FİZİKSEL askeri — köye dışarıdan formasyonla

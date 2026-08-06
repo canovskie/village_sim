@@ -4,12 +4,11 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/compass_capture_main.dart
 // Çıktı:     /tmp/compass.png
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../ui/app_ui.dart';
 import '../ui/law_compass_view.dart';
+import 'capture_support.dart';
 
 final GlobalKey _key = GlobalKey();
 
@@ -105,20 +104,7 @@ Future<void> main() async {
   ));
 
   await Future<void>.delayed(const Duration(milliseconds: 1400));
-  await _capture('/tmp/compass_p$page.png');
+  await captureBoundary(_key, '/tmp/compass_p$page.png', pixelRatio: 2.0);
   exit(0);
 }
 
-Future<void> _capture(String path) async {
-  final ctx = _key.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL');
-    return;
-  }
-  final b = ctx.findRenderObject() as RenderRepaintBoundary;
-  final img = await b.toImage(pixelRatio: 2.0);
-  final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) return;
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

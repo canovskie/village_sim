@@ -1,5 +1,5 @@
-import '../characters/villager_type.dart';
 import '../characters/life_stage.dart';
+import '../characters/villager_type.dart';
 
 /// Köyün zümreleri (hizipleri) — yönetişimin kalbi. Oyuncu "politik dengeci":
 /// her kararı zümrelerin MORALİNİ (memnun↔küskün) ve NÜFUZUNU (köy ona ne kadar

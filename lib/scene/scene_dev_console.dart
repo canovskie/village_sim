@@ -220,7 +220,7 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.yonetisim,
         hint: 'Krizi hemen kaynatmak için',
         params: [
-          DevParam.integer('v', 'Değer (%)', intDefault: 90, intMax: 100),
+          const DevParam.integer('v', 'Değer (%)', intDefault: 90, intMax: 100),
         ],
         run: (a) => setStateHere(() {
           _unrest = (a.getInt('v', 90) / 100).clamp(0.0, 1.0);
@@ -233,7 +233,7 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.yonetisim,
         hint: 'Kronik hâli tetiklemek için (Faz 3)',
         params: [
-          DevParam.integer('v', 'Değer (%)', intDefault: 65, intMax: 100),
+          const DevParam.integer('v', 'Değer (%)', intDefault: 65, intMax: 100),
         ],
         run: (a) => setStateHere(() {
           _regimeRot = (a.getInt('v', 65) / 100).clamp(0.0, 1.0);
@@ -286,7 +286,7 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.yonetisim,
         hint: 'Kim ne yapıyor, neden, derdi ne',
         params: [
-          DevParam.integer('n', 'Kaç köylü', intDefault: 10, intMax: 40),
+          const DevParam.integer('n', 'Kaç köylü', intDefault: 10, intMax: 40),
         ],
         run: (a) {
           final n = a.getInt('n', 10);

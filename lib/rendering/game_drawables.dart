@@ -203,7 +203,7 @@ class _VillagerDrawable extends _Drawable {
     // Ateş başı oturma — sprite'ı dikeyde sıkıştırıp aşağı kaydırarak
     // "çömelme" hissi. Anlatıcıda hafif öne-arka sallanma.
     double sitYOff = 0;
-    double sitYScale = 1.0;
+    const double sitYScale = 1.0;
     double sitSway = 0;
     CharPose charPose = CharPose.normal;
     final isSeated =

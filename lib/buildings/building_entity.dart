@@ -1,5 +1,5 @@
-import 'building_type.dart';
 import 'building_function.dart';
+import 'building_type.dart';
 
 /// [BuildingEntity.ownerSurname] için özel değer: mülk artık kimsenin değil,
 /// KÖYÜN (topyekûn el koyma / kamulaştırma sonrası).

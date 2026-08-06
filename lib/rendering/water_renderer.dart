@@ -95,9 +95,9 @@ class WaterRenderer {
     // Resimsel/suluboya teal taban — eski doygun lacivert yerine yumuşak,
     // açık, yeşilimsi-mavi. Düz "mavi kare" hissini kırar; kıyı sığ suyuyla
     // (coastline) ton bütünlüğü kurar.
-    final baseR = (40  + w3 * 14  + dayLight * 16);
-    final baseG = (98  + w1 * 24  + dayLight * 22);
-    final baseB = (124 + w2 * 38  + dayLight * 24);
+    final baseR = 40  + w3 * 14  + dayLight * 16;
+    final baseG = 98  + w1 * 24  + dayLight * 22;
+    final baseB = 124 + w2 * 38  + dayLight * 24;
 
     // Gökyüzü yansıması — base renge skyTint'i karıştır. Suluboya hissi için
     // ağırlık yükseltildi (0.22 → 0.32) → su gökle daha çok nefes alır.
@@ -151,7 +151,7 @@ class WaterRenderer {
       final spX    = px + (sx - 0.5) * hw * 1.3;
       final spY    = py + hh + (sy - 0.5) * hh * 1.1;
       final sPhase = time * (1.1 + i * 0.4) + phase + i * 2.1;
-      final sparkA = (_sin(sPhase) * 0.5 + 0.5);
+      final sparkA = _sin(sPhase) * 0.5 + 0.5;
       if (sparkA > 0.55) {
         final alpha = ((sparkA - 0.55) / 0.45 * 210 * dayLight).toInt().clamp(0, 210);
         _pSparkle.color = Color.fromARGB(alpha, 215, 245, 255);

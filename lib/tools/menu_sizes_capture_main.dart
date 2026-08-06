@@ -4,15 +4,13 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/menu_sizes_capture_main.dart
 // Çıktı:     /tmp/menu_<ad>.png
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
 
 import '../ui/app_ui.dart';
-import '../ui/mobile_ui.dart';
 import '../ui/main_menu_screen.dart';
+import '../ui/mobile_ui.dart';
+import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
 
@@ -50,8 +48,8 @@ Future<void> main() async {
 
   for (final d in _devices) {
     runApp(_frame(d));
-    await _settle(1400);
-    await _capture('/tmp/menu_${d.name}.png');
+    await settleFrames(1400);
+    await captureBoundary(_boundaryKey, '/tmp/menu_${d.name}.png', pixelRatio: 1.5);
   }
 
   // Kayıt YOKKEN (ilk açılış) tek kartlı hâl.
@@ -60,8 +58,8 @@ Future<void> main() async {
     (d) => d.name == 'phone_15' || d.name == 'ipad',
   )) {
     runApp(_frame(d));
-    await _settle(1400);
-    await _capture('/tmp/menu_${d.name}_nosave.png');
+    await settleFrames(1400);
+    await captureBoundary(_boundaryKey, '/tmp/menu_${d.name}_nosave.png', pixelRatio: 1.5);
   }
   exit(0);
 }
@@ -101,30 +99,5 @@ Widget _frame(_Device d) => MaterialApp(
 void _noop() {}
 void _noopMeta(Object _) {}
 
-final Stopwatch _clock = Stopwatch()..start();
 
-Future<void> _settle(int ms) async {
-  final steps = (ms / 16).ceil();
-  for (int i = 0; i < steps; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 16));
-    final b = WidgetsBinding.instance;
-    if (b.schedulerPhase == SchedulerPhase.idle) {
-      b.handleBeginFrame(_clock.elapsed);
-      b.handleDrawFrame();
-    }
-  }
-}
 
-Future<void> _capture(String path) async {
-  final ctx = _boundaryKey.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL: $path (no context)');
-    return;
-  }
-  final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
-  final image = await boundary.toImage(pixelRatio: 1.5);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) return;
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

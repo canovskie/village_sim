@@ -80,7 +80,7 @@ class _Wall extends StatelessWidget {
     ];
 
     // PET_ONE=<index> → tek modalı geniş+üstten hizalı göster (kart detayı için).
-    final oneStr = const String.fromEnvironment('PET_ONE', defaultValue: '');
+    const oneStr = String.fromEnvironment('PET_ONE', defaultValue: '');
     final one = int.tryParse(oneStr);
     if (one != null && one < picked.length) {
       return Scaffold(

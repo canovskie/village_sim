@@ -30,7 +30,7 @@ class VillageNameIdea {
 const List<VillageNameIdea> kVillageNameIdeas = [
   VillageNameIdea(
     'Pınarbaşı',
-    'Suyun gözü tam burada açılır — ilk kova hep buradan dolar.',
+    'Suyun gözü tam burada açılır; ilk kova hep buradan dolar.',
   ),
   VillageNameIdea(
     'Çamlıca',
@@ -50,7 +50,7 @@ const List<VillageNameIdea> kVillageNameIdeas = [
   ),
   VillageNameIdea(
     'Ovacık',
-    'İki sırtın arasındaki küçük ova — rüzgâr kırılır, ekin durur.',
+    'İki sırtın arasındaki küçük ova: rüzgâr kırılır, ekin durur.',
   ),
   VillageNameIdea(
     'Yenice',
@@ -66,7 +66,7 @@ const List<VillageNameIdea> kVillageNameIdeas = [
   ),
   VillageNameIdea(
     'Ilıca',
-    'Yerden ılık su çıkar — kışın el yıkanacak tek yer burasıdır.',
+    'Yerden ılık su çıkar; kışın el yıkanacak tek yer burasıdır.',
   ),
   VillageNameIdea(
     'Gökpınar',
@@ -82,7 +82,7 @@ const List<VillageNameIdea> kVillageNameIdeas = [
   ),
   VillageNameIdea(
     'Ardıçlı',
-    'Ardıç çürümez — kapı direği de mezar taşı da ondan yapılır.',
+    'Ardıç çürümez: kapı direği de mezar taşı da ondan yapılır.',
   ),
   VillageNameIdea(
     'Ayvalı',

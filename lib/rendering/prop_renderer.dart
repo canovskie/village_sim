@@ -96,7 +96,7 @@ abstract final class PropRenderer {
     c.save();
     c.translate(x, y);
     // Sap.
-    c.drawRect(Rect.fromLTWH(-3, -5, 6, 1), _f(band));
+    c.drawRect(const Rect.fromLTWH(-3, -5, 6, 1), _f(band));
     // Gövde (hafif konik: alt biraz dar).
     _shaded(c, const Rect.fromLTWH(-4, -4, 8, 9), wood);
     // Çemberler.

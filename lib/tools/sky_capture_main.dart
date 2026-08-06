@@ -4,14 +4,13 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/sky_capture_main.dart
 // Çıktı:     /tmp/sky_track.png
 import 'dart:io';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../core/resources.dart';
-import '../world/season.dart';
 import '../ui/hud.dart';
+import '../world/season.dart';
+import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
 
@@ -25,7 +24,7 @@ Future<void> main() async {
     ),
   ));
   await Future<void>.delayed(const Duration(milliseconds: 800));
-  await _capture('/tmp/sky_track.png');
+  await captureBoundary(_boundaryKey, '/tmp/sky_track.png', pixelRatio: 2.0);
   exit(0);
 }
 
@@ -113,11 +112,3 @@ class _Rows extends StatelessWidget {
       );
 }
 
-Future<void> _capture(String path) async {
-  final boundary = _boundaryKey.currentContext!.findRenderObject()
-      as RenderRepaintBoundary;
-  final image = await boundary.toImage(pixelRatio: 2.0);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  await File(path).writeAsBytes(bytes!.buffer.asUint8List());
-  stdout.writeln('saved $path');
-}

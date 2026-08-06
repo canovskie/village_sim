@@ -10,14 +10,14 @@
 //   LAW_ID=<ferman id>  → ritüelde hangi ferman (varsayılan: nizam.watch)
 //   LAW_PATH=nizam      → book modunda girilmiş dava kolu (öbürü kapanır)
 import 'dart:io';
-import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 
 import '../systems/law_book.dart';
 import '../ui/app_ui.dart';
-import 'law_demo_ctx.dart';
 import '../ui/law_book_panel.dart';
+import 'capture_support.dart';
+import 'law_demo_ctx.dart';
 
 final GlobalKey _key = GlobalKey();
 
@@ -98,20 +98,7 @@ Future<void> main() async {
   ));
 
   await Future<void>.delayed(const Duration(milliseconds: 1600));
-  await _capture('/tmp/law_$mode.png');
+  await captureBoundary(_key, '/tmp/law_$mode.png', pixelRatio: 2.0);
   exit(0);
 }
 
-Future<void> _capture(String path) async {
-  final ctx = _key.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL');
-    return;
-  }
-  final b = ctx.findRenderObject() as RenderRepaintBoundary;
-  final img = await b.toImage(pixelRatio: 2.0);
-  final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) return;
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

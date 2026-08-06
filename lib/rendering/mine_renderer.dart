@@ -1,9 +1,11 @@
 import 'dart:math';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../world/mine_node.dart';
+
 import '../core/constants.dart';
+import '../world/mine_node.dart';
 import 'asset_style.dart';
 
 /// İzometrik maden/kaya bloğu çizer.
@@ -49,8 +51,8 @@ class MineRenderer {
     double chopPhase = -1,
     int seed = 0,
   }) {
-    final hw = kTileW / 2;
-    final hh = kTileH / 2;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
 
     // ── Darbe sarsıntısı (damlı harmonik — tree ile aynı formül) ──────────
     double shakeX = 0, shakeY = 0;
@@ -141,7 +143,7 @@ class MineRenderer {
     }
 
     // ── Kaya bloğu yüksekliği (tile yüksekliğinin %65'i) ──────────────────
-    final bh = hh * 1.3; // blok yüksekliği (piksel)
+    const bh = hh * 1.3; // blok yüksekliği (piksel)
 
     // Blok köşe noktaları (izometrik):
     // Üst yüz (top face) — tile'ın tam merkezi

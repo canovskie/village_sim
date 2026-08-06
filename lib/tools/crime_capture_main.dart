@@ -11,10 +11,9 @@
 // Çalıştır:  flutter run -d macos -t lib/tools/crime_capture_main.dart
 // Çıktı:     /tmp/crime.png + stdout'a CRIME@<sn> satırları
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import '../main.dart';
+import 'capture_support.dart';
 // Hedefli tek-suç testi açılacaksa gerekir (aşağıdaki kCaptureCrimeKind satırı):
 // import '../systems/crime_system.dart';
 
@@ -58,23 +57,7 @@ Future<void> main() async {
   }
   stdout.writeln('NIZAM_SEAL=${kCaptureSealNizam ? 1 : 0}');
 
-  await _capture('/tmp/crime.png');
+  await captureBoundary(_boundaryKey, '/tmp/crime.png', pixelRatio: 1.5);
   exit(0);
 }
 
-Future<void> _capture(String path) async {
-  final ctx = _boundaryKey.currentContext;
-  if (ctx == null) {
-    stdout.writeln('CAPTURE_FAIL: no context');
-    return;
-  }
-  final boundary = ctx.findRenderObject() as RenderRepaintBoundary;
-  final image = await boundary.toImage(pixelRatio: 1.5);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-  if (bytes == null) {
-    stdout.writeln('CAPTURE_FAIL: no bytes');
-    return;
-  }
-  await File(path).writeAsBytes(bytes.buffer.asUint8List());
-  stdout.writeln('CAPTURED: $path');
-}

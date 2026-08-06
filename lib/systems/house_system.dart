@@ -70,7 +70,7 @@ class HouseSystem {
   int get houseCount => _states.length;
 
   HouseState _ensure(String surname) =>
-      _states.putIfAbsent(surname, () => HouseState());
+      _states.putIfAbsent(surname, HouseState.new);
 
   /// Sahne her tick besler: `counts` = soyad→canlı üye sayısı, `moraleSum` =
   /// soyad→üye moral toplamı. Yeni hane eklenir; bu turda görünmeyen hane

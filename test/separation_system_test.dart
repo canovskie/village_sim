@@ -8,7 +8,7 @@ import 'package:village_sim/world/animal_entity.dart';
 double _dist(double x1, double y1, double x2, double y2) {
   final dx = x1 - x2;
   final dy = y1 - y2;
-  return (dx * dx + dy * dy);
+  return dx * dx + dy * dy;
 }
 
 void main() {

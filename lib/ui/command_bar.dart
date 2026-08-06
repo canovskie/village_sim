@@ -354,7 +354,7 @@ class _ContextHint extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        GameIcon(GameIconData.home, size: 15, color: AppUi.textLo),
+        const GameIcon(GameIconData.home, size: 15, color: AppUi.textLo),
         const SizedBox(width: 9),
         Flexible(
           child: Text(
@@ -455,8 +455,8 @@ class CommandContext extends StatelessWidget {
                   children: [
                     for (var i = 0; i < stats.length; i++) ...[
                       if (i > 0)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8),
                           child: Text(
                             '·',
                             style: TextStyle(color: AppUi.textLo, fontSize: 11),
@@ -791,7 +791,7 @@ class QuestTracker extends StatelessWidget {
                       const SizedBox(width: 6),
                       Transform.rotate(
                         angle: open ? -1.5708 : 1.5708,
-                        child: GameIcon(GameIconData.chevron,
+                        child: const GameIcon(GameIconData.chevron,
                             size: 13, color: AppUi.textLo),
                       ),
                     ],
@@ -832,7 +832,7 @@ class QuestTracker extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               child: Row(
                 children: [
-                  GameIcon(GameIconData.scroll, size: 12, color: AppUi.accent),
+                  const GameIcon(GameIconData.scroll, size: 12, color: AppUi.accent),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
@@ -884,7 +884,7 @@ class QuestTracker extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 2),
                       child: Transform.rotate(
                         angle: open ? -1.5708 : 1.5708,
-                        child: GameIcon(GameIconData.chevron,
+                        child: const GameIcon(GameIconData.chevron,
                             size: 12, color: AppUi.textLo),
                       ),
                     ),

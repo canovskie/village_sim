@@ -41,17 +41,6 @@ extension AnimalLifeStageX on AnimalLifeStage {
         AnimalLifeStage.adult => 1.0,
         AnimalLifeStage.elder => 0.92,
       };
-
-  /// Türe göre Türkçe etiket (yavru: buzağı/kuzu/civciv).
-  String labelFor(AnimalKind k) => switch (this) {
-        AnimalLifeStage.juvenile => switch (k) {
-            AnimalKind.cow => 'Buzağı',
-            AnimalKind.sheep => 'Kuzu',
-            AnimalKind.chicken => 'Civciv',
-          },
-        AnimalLifeStage.adult => 'Yetişkin',
-        AnimalLifeStage.elder => 'Yaşlı',
-      };
 }
 
 /// Ağıla bağlı serbest dolaşan hayvan. Hunger ↗ zaman; otladıkça (= hareket
@@ -134,7 +123,7 @@ class AnimalEntity {
        lifespanDays = lifespanDays ?? kAnimalElderDay + 9.0 {
     // Idle nefes/salınım fazını konumdan tohumla → aynı ağıldaki hayvanlar
     // tek karede donsalar bile aynı ritimde soluyup senkron/robotik görünmesin.
-    walkPhase = ((startCol * 1.7 + startRow * 3.3).abs() % (2 * pi));
+    walkPhase = (startCol * 1.7 + startRow * 3.3).abs() % (2 * pi);
   }
 
   /// Wander radius scale — `freeRange` politikası açıkken scene 1.5 yapar.
@@ -166,7 +155,6 @@ class AnimalEntity {
           ? AnimalLifeStage.adult
           : AnimalLifeStage.elder;
 
-  bool get isJuvenile => lifeStage == AnimalLifeStage.juvenile;
   /// Üretim + üreme yalnızca yetişkinde (yaşlı da üretir ama daha az ürer).
   bool get isAdult => ageDays >= kAnimalAdultDay;
   double get renderScale => lifeStage.renderScale;

@@ -1,10 +1,12 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../systems/petition_system.dart';
-import '../entities/villager_entity.dart';
-import '../characters/villager_type.dart';
+
 import '../characters/life_stage.dart';
+import '../characters/villager_type.dart';
+import '../entities/villager_entity.dart';
 import '../rendering/portrait_renderer.dart';
+import '../systems/petition_system.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
 import 'option_scene_card.dart';
@@ -147,7 +149,7 @@ class PetitionModal extends StatelessWidget {
           child: GestureDetector(
             onTap: () {}, // pano içi dokunuş arkadaki dismiss'i tetiklemesin
             child: AppReveal(
-              child: _GildedFrame(
+              child: AppGildedFrame(
                 accent: _toneAccent,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -267,7 +269,7 @@ class PetitionModal extends StatelessWidget {
           child: GestureDetector(
             onTap: () {},
             child: AppReveal(
-              child: _GildedFrame(
+              child: AppGildedFrame(
                 accent: _toneAccent,
                 // Hero illüstrasyon panelin tam genişliğini kaplasın diye
                 // panelin kendi padding'i sıfır; iç bloklar kendi boşluğunu verir.
@@ -361,62 +363,6 @@ class PetitionModal extends StatelessWidget {
   }
 }
 
-/// İnce altın oyma çerçeveli koyu pano — Total War panolarının "imparatorluk"
-/// ağırlığını AppUi koyu diliyle verir: ince metalik kenar + içte hairline +
-/// yumuşak gölge. Parşömen/ahşap YOK (UI cilalı kalır). Hero illüstrasyonu
-/// köşelere kadar yaslar (kendi clip'i var).
-class _GildedFrame extends StatelessWidget {
-  final Widget child;
-  final Color accent;
-  const _GildedFrame({required this.child, required this.accent});
-
-  @override
-  Widget build(BuildContext context) {
-    const r = AppUi.radius;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppUi.surface2, AppUi.surface1],
-        ),
-        borderRadius: BorderRadius.circular(r),
-        // İnce altın metalik kenar (üst parlak → alt sönük → ince çizgi hissi).
-        border: Border.all(
-          color: AppUi.gold.withValues(alpha: 0.32),
-          width: 1.2,
-        ),
-        boxShadow: [
-          ...AppUi.softShadow,
-          BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 26),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(r),
-        child: Stack(
-          children: [
-            child,
-            // İçte ince altın hairline — "oyma" derinliği (IgnorePointer: tıklamayı engellemesin).
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  margin: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(r - 4),
-                    border: Border.all(
-                      color: AppUi.gold.withValues(alpha: 0.12),
-                      width: 1,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// Dilekçe HERO bloğu — illüstrasyon panosu + üstte DİLEKÇE künyesi/not, altta
 /// gradient zemin üstüne madalyon portre + oyma başlık + sunan. Total War olay
@@ -456,14 +402,14 @@ class _PetitionHero extends StatelessWidget {
             ),
           ),
           // Alt okunaklılık zemini — başlık/portre için koyu gradient.
-          Positioned(
+          const Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             height: 116,
             child: IgnorePointer(
               child: DecoratedBox(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,

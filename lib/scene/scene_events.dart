@@ -478,10 +478,10 @@ extension _SceneEvents on _VillageSceneState {
     bool dance = false,
     int gather = 6,
   }) {
-    final dur = kGameDaySeconds * 0.4;
+    const dur = kGameDaySeconds * 0.4;
     // Önce müzisyen/dansçılar (activity != none olur → toplanma onları atlamaz).
-    if (music) _startActivityForSome((v) => _tryStartMusicFor(v), 2, dur);
-    if (dance) _startActivityForSome((v) => _tryStartDanceFor(v), 2, dur);
+    if (music) _startActivityForSome(_tryStartMusicFor, 2, dur);
+    if (dance) _startActivityForSome(_tryStartDanceFor, 2, dur);
     // Kalabalık toplanır — tüccarda pazara, diğerlerinde ateşe.
     if (atMarket) {
       final m = _firstBuildingOf(BuildingType.market);

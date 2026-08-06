@@ -82,8 +82,8 @@ extension _SceneFuneral on _VillageSceneState {
       // Mezar kaz (görsel tavana ulaşılmadıysa).
       if (_graves.length < _kMaxGraves) _spawnGrave(v.name);
       // Anma töreni: köy ateş başında toplanır + mum töreni fx (vigil).
-      final dur = kGameDaySeconds * 0.45;
-      final e = EventEffect(fx: EventFx.vigil, duration: dur);
+      const dur = kGameDaySeconds * 0.45;
+      const e = EventEffect(fx: EventFx.vigil, duration: dur);
       _activeFx.add(ActiveFx(e, dur));
       _gatherAtFire(dur, max: 7);
       _feelVillage(NpcEmotion.grief, 10, -0.12);

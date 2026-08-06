@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+
 import '../core/resources.dart';
-import '../world/season.dart';
 import '../scene/scene_data.dart';
 import '../systems/event_system.dart';
+import '../world/season.dart';
 import 'app_ui.dart';
 
 // ScenarioReport + SimSnapshot data classes lib/scene/scene_data.dart'tan
@@ -752,7 +753,7 @@ class DevPanel extends StatelessWidget {
         children: [
           Row(
             children: [
-              SizedBox(
+              const SizedBox(
                 width: 64,
                 child: Text('SİM HIZI', style: AppUi.label),
               ),
@@ -760,7 +761,7 @@ class DevPanel extends StatelessWidget {
                   style: AppUi.number.copyWith(fontSize: 11)),
               const SizedBox(width: 9),
               if (simSpeedBoost > 1.01)
-                AppChip(label: 'HIZLI', color: _accent, solid: true),
+                const AppChip(label: 'HIZLI', color: _accent, solid: true),
             ],
           ),
           SizedBox(

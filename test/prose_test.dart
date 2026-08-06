@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/petition_system.dart';
 import 'package:village_sim/systems/crime_system.dart';
 import 'package:village_sim/systems/event_system.dart';
+import 'package:village_sim/systems/petition_system.dart';
 import 'package:village_sim/text/voice.dart';
 import 'package:village_sim/world/season.dart';
 

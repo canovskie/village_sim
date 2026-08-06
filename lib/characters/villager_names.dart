@@ -35,10 +35,5 @@ const List<String> _kSurnames = [
 String randomVillagerSurname(Random rng) =>
     _kSurnames[rng.nextInt(_kSurnames.length)];
 
-/// [count] kadar FARKLI hane adı seç — kurucular aynı haneye düşmesin. Havuz
-/// yetmezse (çok nadir) sondan tekrar eder.
-List<String> pickDistinctSurnames(Random rng, int count) {
-  final pool = List<String>.of(_kSurnames)..shuffle(rng);
-  if (count <= pool.length) return pool.sublist(0, count);
-  return [for (var i = 0; i < count; i++) pool[i % pool.length]];
-}
+// pickDistinctSurnames() kurucuları AYRI hanelere dağıtmak içindi; köy artık
+// TEK AİLE ile kuruluyor (yeni hane yalnız dışarıdan gelir) → çağıranı kalmadı.

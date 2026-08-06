@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+
 import '../characters/life_stage.dart';
 import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
@@ -9,16 +10,16 @@ import '../entities/villager_entity.dart';
 import '../rendering/character_renderer.dart';
 import '../systems/chronicle.dart';
 import '../systems/house_system.dart';
-import '../systems/petition_system.dart';
-import '../systems/quest_book.dart';
-import '../text/voice.dart';
 import '../systems/law_book.dart';
 import '../systems/law_compass.dart';
+import '../systems/petition_system.dart';
+import '../systems/quest_book.dart';
 import '../systems/regime.dart';
+import '../text/voice.dart';
 import 'app_ui.dart';
+import 'law_book_panel.dart';
 import 'ledger_board.dart';
 import 'mobile_ui.dart';
-import 'law_book_panel.dart';
 import 'petition_scene_card.dart';
 import 'villager_roster_view.dart';
 
@@ -455,7 +456,7 @@ class VillageLedger extends StatelessWidget {
               child: SizedBox(
                 width: w,
                 height: h,
-                child: _GildedFrame(
+                child: AppGildedFrame(
                   accent: AppUi.accent,
                   // Politika bağlanmamışsa Kanunname bölümü yok.
                   child: compact
@@ -988,12 +989,12 @@ class VillageLedger extends StatelessWidget {
             ),
           ),
           // Alt okunaklılık zemini.
-          Positioned(
+          const Positioned(
             left: 0,
             right: 0,
             bottom: 0,
             height: 98,
-            child: const IgnorePointer(
+            child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -1658,59 +1659,6 @@ class VillageLedger extends StatelessWidget {
   }
 }
 
-/// İnce altın oyma çerçeveli koyu pano — dilekçe modalıyla AYNI dil (yönetişimin
-/// iki yüzü aynı ağırlıkta görünsün). Hero illüstrasyonunu köşelere yaslar.
-class _GildedFrame extends StatelessWidget {
-  final Widget child;
-  final Color accent;
-  const _GildedFrame({required this.child, required this.accent});
-
-  @override
-  Widget build(BuildContext context) {
-    const r = AppUi.radius;
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [AppUi.surface2, AppUi.surface1],
-        ),
-        borderRadius: BorderRadius.circular(r),
-        border: Border.all(
-          color: AppUi.gold.withValues(alpha: 0.32),
-          width: 1.2,
-        ),
-        boxShadow: [
-          ...AppUi.softShadow,
-          BoxShadow(color: accent.withValues(alpha: 0.16), blurRadius: 26),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(r),
-        child: Stack(
-          children: [
-            child,
-            // İçte ince altın hairline — "oyma" derinliği.
-            Positioned.fill(
-              child: IgnorePointer(
-                child: Container(
-                  margin: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(r - 4),
-                    border: Border.all(
-                      color: AppUi.gold.withValues(alpha: 0.12),
-                      width: 1,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 /// DEFTER MÜHRÜ — köy içi işlerin TEK kapısı, hep ekranda. Eskiden bu mühür
 /// yalnız Divan'ı açardı; nüfus HUD ikonunda, hikâye ⚙ kümesinde, görevler ayrı

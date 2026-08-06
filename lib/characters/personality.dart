@@ -89,8 +89,13 @@ class Personality {
     return s.clamp(0.5, 1.5);
   }
 
-  /// Seed + tip'ten kişilik üret. Tamamen deterministik.
-  factory Personality.fromSeed(int seed, VillagerType type) {
+  /// Seed'den kişilik üret. Tamamen deterministik.
+  ///
+  /// Meslek parametresi BİLEREK yok: bu projede ok ters yönde işliyor — kişilik
+  /// mesleği doğurur (`callingFor`), meslek kişiliği değil. Eski imza bir
+  /// `VillagerType` alıyordu ama hiç okumuyordu; çağıranlardan biri uydurma
+  /// `VillagerType.farmer` geçiyordu.
+  factory Personality.fromSeed(int seed) {
     final r = Random(seed);
 
     // 1-2 mizaç (çoğunlukla 2). İkincisi ilkinden farklı.

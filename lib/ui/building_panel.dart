@@ -1,7 +1,9 @@
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
-import '../buildings/building_type.dart';
+
 import '../buildings/building_renderer.dart';
+import '../buildings/building_type.dart';
 import '../core/resources.dart';
 import '../rendering/asset_style.dart';
 import 'app_ui.dart';

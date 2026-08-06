@@ -28,9 +28,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../buildings/building_entity.dart';
-import '../buildings/building_renderer.dart';
-import '../rendering/character_renderer.dart';
 import '../buildings/building_lore.dart';
+import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
@@ -39,6 +38,7 @@ import '../cutscene/cutscene_player.dart';
 import '../dev/dev_command.dart';
 import '../dev/dev_console.dart';
 import '../entities/villager_entity.dart';
+import '../rendering/character_renderer.dart';
 import '../save/save_manager.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
@@ -47,19 +47,18 @@ import '../systems/estate_system.dart';
 import '../systems/event_system.dart';
 import '../systems/house_system.dart';
 import '../systems/imperial.dart';
-import '../systems/regime.dart';
 import '../systems/law_book.dart';
 import '../systems/petition_system.dart';
 import '../systems/quest_book.dart';
+import '../systems/regime.dart';
 import '../text/voice.dart';
 import '../ui/about_screen.dart';
 import '../ui/app_ui.dart';
-import '../ui/building_info_panel.dart';
 import '../ui/building_brief.dart';
+import '../ui/building_info_panel.dart';
 import '../ui/building_panel.dart';
 import '../ui/command_bar.dart';
 import '../ui/dev_panel.dart';
-import '../ui/village_ledger.dart';
 import '../ui/event_banner.dart';
 import '../ui/event_choice_modal.dart';
 import '../ui/hud.dart';
@@ -70,7 +69,6 @@ import '../ui/loading_screen.dart';
 import '../ui/main_menu_screen.dart';
 import '../ui/mobile_ui.dart';
 import '../ui/mode_button.dart';
-import '../ui/world_tag.dart';
 import '../ui/objective_panel.dart';
 import '../ui/option_scene_card.dart';
 import '../ui/petition_modal.dart';
@@ -78,8 +76,10 @@ import '../ui/petition_scene_card.dart';
 import '../ui/road_panel.dart';
 import '../ui/save_slots_screen.dart';
 import '../ui/settings_screen.dart';
+import '../ui/village_ledger.dart';
 import '../ui/villager_info_panel.dart';
 import '../ui/villager_roster_view.dart';
+import '../ui/world_tag.dart';
 import '../world/road_surface.dart';
 import '../world/season.dart';
 import 'law_demo_ctx.dart';
@@ -344,7 +344,7 @@ List<VillagerStatRow> _statRows() {
     'Nur',
     'Kaan',
   ];
-  final types = VillagerType.values;
+  const types = VillagerType.values;
   String label(int t) => switch (t) {
     4 => 'Konak',
     3 => 'Taş Ev',
@@ -561,7 +561,7 @@ List<Shot> buildShots() => <Shot>[
     w: 1440,
     h: 810,
     settleMs: 2600,
-    build: () => CutscenePlayer(cutscene: kOpeningCutscene, onDone: _noop),
+    build: () => const CutscenePlayer(cutscene: kOpeningCutscene, onDone: _noop),
   ),
   Shot(
     id: 'cutscene_choice',
@@ -575,7 +575,7 @@ List<Shot> buildShots() => <Shot>[
     // Kapı ~24 sn'de açılır (iki replik + daktilo). Yakalama beklemesin
     // diye sahne saati hızlandırılır; kapı UI'ı zamanlamadan bağımsız.
     settleMs: 6000,
-    build: () => CutscenePlayer(
+    build: () => const CutscenePlayer(
       cutscene: kOpeningCutscene,
       timeScale: 6.0,
       onDone: _noop,
@@ -832,7 +832,7 @@ List<Shot> buildShots() => <Shot>[
       child: Stack(
         children: [
           // Görev takipçisi — sağ üst
-          Positioned(
+          const Positioned(
             right: 16,
             top: 14,
             child: QuestTracker(
@@ -861,10 +861,10 @@ List<Shot> buildShots() => <Shot>[
                 hasFirepit: true,
                 category: BuildCategory.konut,
               ),
-              context: CommandContext(
+              context: const CommandContext(
                 title: 'Köy Evi',
                 subtitle: 'Demirhan Hanesi',
-                stats: const [
+                stats: [
                   ('Sakinler', '3/2', Color(0xFF7FC08C)),
                   ('Su', '62%', Color(0xFF52B9B0)),
                 ],
@@ -908,7 +908,7 @@ List<Shot> buildShots() => <Shot>[
             hasFirepit: true,
             category: BuildCategory.uretim,
           ),
-          context: CommandContext(
+          context: const CommandContext(
             title: 'Değirmen',
             description:
                 'Kanatlar döndükçe içerisi un kokar. Değirmen çalışırken '
@@ -996,8 +996,8 @@ List<Shot> buildShots() => <Shot>[
     w: 700,
     h: 300,
     build: () => _worldBackdrop(
-      child: Padding(
-        padding: const EdgeInsets.all(22),
+      child: const Padding(
+        padding: EdgeInsets.all(22),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1007,14 +1007,14 @@ List<Shot> buildShots() => <Shot>[
               pendingPetition: true,
               bookOpen: true,
             ),
-            const SizedBox(width: 22),
+            SizedBox(width: 22),
             LedgerSeal(
               onTap: _noop,
               agendaCount: 0,
               pendingPetition: false,
               bookOpen: false,
             ),
-            const SizedBox(width: 30),
+            SizedBox(width: 30),
             ModeButton(
               icon: '🌾',
               label: 'Tarla',
@@ -1022,7 +1022,7 @@ List<Shot> buildShots() => <Shot>[
               accentColor: AppUi.sage,
               onTap: _noop,
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             ModeButton(
               icon: '🪓',
               label: 'Kes',
@@ -1030,7 +1030,7 @@ List<Shot> buildShots() => <Shot>[
               accentColor: AppUi.accent,
               onTap: _noop,
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             ModeButton(
               icon: '⛏',
               label: 'Kaz',
@@ -1191,6 +1191,7 @@ List<Shot> buildShots() => <Shot>[
           children: [
             VillageLedger(
               identity: 'Demirhan Hanesi',
+              village: '',
               identityBonus: '★ Bereketli Köy — tarlalar %15 gürbüz büyür',
               morale: 0.63,
               population: 24,
@@ -1763,9 +1764,9 @@ class _DesignSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('KÖY SİMÜLASYONU — ARAYÜZ DİLİ', style: AppUi.display),
+            const Text('KÖY SİMÜLASYONU — ARAYÜZ DİLİ', style: AppUi.display),
             const SizedBox(height: 4),
-            Text(
+            const Text(
               'Cinzel başlık / Spectral gövde, soğuk grafit yüzey + ember vurgu',
               style: AppUi.body,
             ),
@@ -1793,10 +1794,10 @@ class _DesignSheet extends StatelessWidget {
             const AppDivider(),
             const AppSectionLabel('Butonlar'),
             const SizedBox(height: 8),
-            Wrap(
+            const Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: const [
+              children: [
                 AppButton(
                   label: 'Mühürle',
                   icon: GameIconData.scroll,
@@ -1827,10 +1828,10 @@ class _DesignSheet extends StatelessWidget {
             const AppDivider(),
             const AppSectionLabel('Çipler ve Göstergeler'),
             const SizedBox(height: 8),
-            Wrap(
+            const Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: const [
+              children: [
                 AppChip(
                   label: 'Bereketli',
                   icon: GameIconData.wheat,
@@ -1878,7 +1879,7 @@ class _DesignSheet extends StatelessWidget {
             const AppDivider(),
             const AppSectionLabel('Panel · Sekme · Yaldızlı Çerçeve'),
             const SizedBox(height: 8),
-            Row(
+            const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
@@ -1888,7 +1889,7 @@ class _DesignSheet extends StatelessWidget {
                         (
                           'GENEL',
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            padding: EdgeInsets.symmetric(vertical: 10),
                             child: Text(
                               'Sekmeli panel gövdesi. Yoğun panellerde ortak AppTabs '
                               'kullanılır; başlık büyük harf, gövde Spectral.',
@@ -1896,22 +1897,22 @@ class _DesignSheet extends StatelessWidget {
                             ),
                           ),
                         ),
-                        ('KİŞİLİK', const SizedBox(height: 60)),
-                        ('ÖYKÜ', const SizedBox(height: 60)),
+                        ('KİŞİLİK', SizedBox(height: 60)),
+                        ('ÖYKÜ', SizedBox(height: 60)),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                SizedBox(width: 14),
                 Expanded(
                   child: AppGildedFrame(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('FERMAN', style: AppUi.title),
-                          const SizedBox(height: 6),
+                          SizedBox(height: 6),
                           Text(
                             'Yaldızlı çerçeve yalnız yönetişim yüzeylerinde: '
                             'Kanunname, Divan ve mühür ritüeli.',
@@ -1943,7 +1944,7 @@ class _IconSheet extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('İKON SETİ', style: AppUi.display),
+            const Text('İKON SETİ', style: AppUi.display),
             const SizedBox(height: 12),
             Expanded(
               child: GridView.count(

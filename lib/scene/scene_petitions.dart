@@ -769,9 +769,9 @@ extension _ScenePetitions on _VillageSceneState {
     // Not: _resolvePetition'ın setStateHere'i içinde çağrılır → doğrudan mutate.
     final v = _pickLostSoul();
     final name = v?.name;
-    final dur = kGameDaySeconds * 0.5;
+    const dur = kGameDaySeconds * 0.5;
     if (v != null) _removeVillager(v);
-    final e = EventEffect(fx: EventFx.vigil, duration: dur);
+    const e = EventEffect(fx: EventFx.vigil, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
     _gatherAtFire(dur, pose: FirePose.mourn); // yas duruşu — başlar öne eğik
     _feelVillage(NpcEmotion.grief, 10, -0.15);
@@ -798,8 +798,8 @@ extension _ScenePetitions on _VillageSceneState {
   /// farkı — KİMSE ölmez; bu sadece göçenleri anan bir tören (moral kapanışı
   /// option'dan gelir). Kilise dilekçesinin görünür karşılığı.
   void _reactRemembrance() {
-    final dur = kGameDaySeconds * 0.5;
-    final e = EventEffect(fx: EventFx.vigil, duration: dur);
+    const dur = kGameDaySeconds * 0.5;
+    const e = EventEffect(fx: EventFx.vigil, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
     _gatherAtFire(dur, max: 8, pose: FirePose.mourn); // anma — başlar saygıyla eğik
     _feelVillage(NpcEmotion.content, 10, 0.06); // hüzünlü ama iyileştiren
@@ -807,8 +807,8 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// BESPOKE ayin: okült çember fx + birkaç köylü ateşe toplanır (inananlar).
   void _reactCult() {
-    final dur = kGameDaySeconds * 0.6;
-    final e = EventEffect(fx: EventFx.cultRite, duration: dur);
+    const dur = kGameDaySeconds * 0.6;
+    const e = EventEffect(fx: EventFx.cultRite, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
     _gatherAtFire(dur, max: 4, pose: FirePose.kneel); // ayin — dizüstü yakarış
     _feelVillage(NpcEmotion.wonder, 8, 0.02);
@@ -836,8 +836,8 @@ extension _ScenePetitions on _VillageSceneState {
   /// BESPOKE mantar tepkisi: tarlalarda yayılan mantar animasyonu + günlerce
   /// süren ürün verimi düşüşü (farm growth ×0.25). Etki alanı = TARLA.
   void _reactBlight() {
-    final dur = kGameDaySeconds * 1.5; // mantar günlerce sürer
-    final e = EventEffect(
+    const dur = kGameDaySeconds * 1.5; // mantar günlerce sürer
+    const e = EventEffect(
       fx: EventFx.cropBlight,
       farmGrowthMul: 0.25,
       duration: dur,
@@ -850,8 +850,8 @@ extension _ScenePetitions on _VillageSceneState {
   /// fx) + günlerce süren verim artışı (farm growth ×1.6). Mantarın pozitif
   /// karşıtı — etki alanı = TARLA. İyi bakımın görünür ödülü.
   void _reactHarvestBounty() {
-    final dur = kGameDaySeconds * 1.0; // bereket bir gün boyunca tarlalarda parlar
-    final e = EventEffect(
+    const dur = kGameDaySeconds * 1.0; // bereket bir gün boyunca tarlalarda parlar
+    const e = EventEffect(
       fx: EventFx.harvestBounty,
       farmGrowthMul: 1.6,
       duration: dur,
@@ -865,8 +865,8 @@ extension _ScenePetitions on _VillageSceneState {
   /// ateş başına topla, birkaç çift dans ettir. Gerçek, görünür bir bayram.
   void _reactFestival() {
     AudioManager.instance.playSfx(Sfx.crowdFair);
-    final dur = kGameDaySeconds * 0.6; // şenlik neredeyse bir gün sürer
-    final e = EventEffect(fx: EventFx.festival, duration: dur);
+    const dur = kGameDaySeconds * 0.6; // şenlik neredeyse bir gün sürer
+    const e = EventEffect(fx: EventFx.festival, duration: dur);
     _activeFx.add(ActiveFx(e, dur));
     _feelVillage(NpcEmotion.joy, 14, 0.20);
 

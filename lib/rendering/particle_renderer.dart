@@ -31,7 +31,7 @@ class ParticleRenderer {
     final a = t < 0.75 ? 1.0 : (1.0 - (t - 0.75) / 0.25);
     final alpha = (a * 255).round().clamp(0, 255);
     // 6-7 piksel düzensiz silüet (her seed farklı şekil verir).
-    final r = ((seed >> 1) & 3);
+    final r = (seed >> 1) & 3;
     final shape = _chipShapes[r];
     for (final (ox, oy, kind) in shape) {
       _p.color = (kind == 0
@@ -148,7 +148,7 @@ class ParticleRenderer {
     canvas.drawRect(Rect.fromLTWH(cx2 - 1, cy2 - 1, 1, 1), _p);
 
     // Parıltı: 4 yöne sin tabanlı 1-piksel ışık (pulsing)
-    final twinkle = (sin(t * 12) * 0.5 + 0.5);
+    final twinkle = sin(t * 12) * 0.5 + 0.5;
     if (twinkle > 0.5) {
       _p.color = const Color(0xFFFFFFFF)
           .withAlpha((alpha * twinkle).round().clamp(0, 255));

@@ -1217,7 +1217,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         follow,
         const SizedBox(height: 10),
         const AppDivider(),
-        AppSectionLabel('KAN DAVASI — YARGI'),
+        const AppSectionLabel('KAN DAVASI — YARGI'),
         const SizedBox(height: 6),
         Row(
           children: [
