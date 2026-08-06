@@ -88,11 +88,15 @@ class LightingSystem {
         ));
       } else if (b.fn?.role == BuildingRole.housing &&
                  b.occupants > 0 && darkness > 0.30) {
-        // Ev — sakini varsa gece pencere ışığı.
+        // Ev — sakini varsa gece pencere ışığı. UYUYAN evin camı söner:
+        // [BuildingEntity.windowGlow] uyanık oranından türeyen yumuşak değer.
+        // Eskiden bütün evler sabaha kadar aynı parlaklıkta yanıyordu, köyün
+        // yattığı hiçbir yerde görünmüyordu.
+        if (b.windowGlow < 0.03) continue;
         result.add(LightSource(
           gx: cx, gy: cy,
           radius: 2.2 + darkness * 0.6,
-          intensity: darkness,
+          intensity: darkness * b.windowGlow,
           warm: const Color(0xFFFFC868),
         ));
       } else if (b.isActive && darkness > 0.30) {

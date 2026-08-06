@@ -627,10 +627,10 @@ extension _SceneJobs on _VillageSceneState {
             job.carryingWater ? PropKind.bucketFull : PropKind.none,
           ),
           JobRole.florist => (ActPose.stoop, PropKind.basket),
-          JobRole.shepherd => (
-            ActPose.stoop,
-            PropKind.none,
-          ), // sağım için çömelir
+          // Sağım için çömelir ve YANINDA KOVA olur. `working` bu rolde yalnız
+          // sağım evresinde true (sürüyü güderken false), o yüzden kova sahnenin
+          // dışına taşmaz. Mevcut kova çizimi kullanılır — yeni sprite yok.
+          JobRole.shepherd => (ActPose.stoop, PropKind.bucketFull),
           JobRole.forager => (ActPose.stoop, PropKind.basket), // çalıdan sepete
           JobRole.cook => (ActPose.stoop, PropKind.none), // kazanı karıştırır
           JobRole.weaver => (ActPose.stoop, PropKind.none), // tezgâha eğilir

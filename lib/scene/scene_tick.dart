@@ -222,10 +222,29 @@ extension _SceneTick on _VillageSceneState {
   double _tickPopulationAndHunger(double dt) {
     // Konut doluluğunu güncelle — ev su tüketimi sakin sayısına bağlı.
     for (final b in _buildings) {
-      if (b.fn?.role == BuildingRole.housing) b.occupants = 0;
+      if (b.fn?.role == BuildingRole.housing) {
+        b.occupants = 0;
+        b.awakeOccupants = 0;
+      }
     }
     for (final v in _villagers) {
-      if (v.homeBuilding case final h?) (h as BuildingEntity).occupants++;
+      if (v.homeBuilding case final h?) {
+        final home = h as BuildingEntity;
+        home.occupants++;
+        if (!v.isSleeping) home.awakeOccupants++;
+      }
+    }
+    // PENCERE IŞIĞI — evin camı sakinleri uyudukça söner. Aynı sayımın içinde
+    // yapılır: ayrı bir tarama, aynı listeyi ikinci kez gezmek olurdu.
+    //
+    // Yumuşak akış şart: sert geçişte köy her gece tek karede kararıyor, "ışık
+    // söndü" değil "ışık bozuldu" gibi duruyor. ~2 sn'lik exp-lerp, son uyuyan
+    // yattıktan sonra camın sönmesine yetecek kadar yavaş.
+    final glowK = 1 - exp(-dt * 0.55);
+    for (final b in _buildings) {
+      if (b.fn?.role != BuildingRole.housing) continue;
+      final target = b.occupants == 0 ? 0.0 : b.awakeOccupants / b.occupants;
+      b.windowGlow += (target - b.windowGlow) * glowK;
     }
 
     // Tüm köylüler + işçiler zamanla yiyecek yer; üretim yetmezse stok azalır.

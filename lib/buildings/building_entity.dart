@@ -29,6 +29,24 @@ class BuildingEntity {
   /// Bu evde yaşayan köylü sayısı — main her tick günceller (su tüketimi için).
   int occupants = 0;
 
+  /// PENCERE IŞIĞI (0 sönük ↔ 1 tam yanar). Sakinlerin UYANIK oranından türer
+  /// ve yumuşak akar: son uyuyan yatınca evin camı birkaç saniyede söner,
+  /// biri kalkınca yeniden yanar.
+  ///
+  /// Neden var: gece kurulmadan önce bütün evler sabaha kadar aynı parlaklıkta
+  /// yanıyordu — köyün "yattığı" hiçbir yerde görünmüyordu. Tek alan iki
+  /// tüketiciyi birden besler (yerdeki halo `LightingSystem.collect` +
+  /// sprite üstündeki cam parlaması `BuildingRenderer`), böylece ikisi
+  /// birbirinden ayrışamaz.
+  ///
+  /// KAYDEDİLMEZ: türetilmiş bir değer, yüklemeden sonra birkaç saniyede
+  /// kendi doğru değerine oturur.
+  double windowGlow = 1.0;
+
+  /// [occupants]'ın UYANIK olanı — [windowGlow]'un hedefi buradan çıkar.
+  /// Doluluk sayımıyla aynı geçişte tazelenir (bkz. _tickPopulationAndHunger).
+  int awakeOccupants = 0;
+
   /// MÜLK SAHİBİ hane (soyad). Boş = sahibi sakinlerden TÜRETİLİR (kimin evinde
   /// kim oturuyorsa onun sayılır). Bağışlanan mülkte açıkça yazılır; topyekûn
   /// el koymadan sonra [kPublicOwner] olur (mülk köyün).

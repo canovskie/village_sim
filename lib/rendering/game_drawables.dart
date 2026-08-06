@@ -97,8 +97,21 @@ class _VillagerDrawable extends _Drawable {
       );
     }
 
+    // UYKU — yatay poz, yastık + battaniye + kapalı göz, hafif breath.
+    //
+    // YATMA/KALKMA GEÇİŞİ DENENDİ VE VAZGEÇİLDİ (2026-08-06). İki yol da
+    // filmstrip'te çürüdü (`lib/tools/sleep_capture_main.dart`):
+    //   1. Ayakta gövdeyi ayak ucundan devirmek → gövde yatay hâle gelirken
+    //      yerden havada kalıyor.
+    //   2. Erken takas + squash/stretch → takas anında tam boy gövdeden minik
+    //      bir yığına düşüyor, aradaki ezilme gözle görülmüyor bile.
+    // Kök sebep ikisinde de aynı: [CharacterRenderer.drawSleeping] ayakta
+    // çizimden ÇOK daha küçük ve bambaşka bir kompozisyon. İki çizim
+    // birbirine harmanlanamaz — geçiş isteniyorsa önce uyku çizimi ayakta
+    // gövdenin oranlarına göre YENİDEN ÇİZİLMELİ. Harness o karşılaştırmayı
+    // yan yana basar. O yapılana kadar anlık geçiş DAHA İYİ: yanlış bir
+    // animasyon, animasyonsuzluktan daha çok göze batıyor.
     if (e.isSleeping && !e.isInsideBuilding && !e.isDying) {
-      // Yatay uyku pozu — yastık + battaniye + kapalı göz, hafif breath.
       final sleepScale = kCharScale * e.displayScale;
       canvas.save();
       canvas.translate(s.dx, s.dy);
@@ -1164,6 +1177,7 @@ class _BuildingDrawable extends _Drawable {
         fireFuel: b.fireFuel,
         millRotorAngle: b.millRotorAngle,
         season: season,
+        windowGlow: b.windowGlow,
       );
       canvas.restore();
     } else {
@@ -1183,6 +1197,7 @@ class _BuildingDrawable extends _Drawable {
         fireFuel: b.fireFuel,
         millRotorAngle: b.millRotorAngle,
         season: season,
+        windowGlow: b.windowGlow,
       );
     }
 

@@ -215,6 +215,10 @@ class BuildingRenderer {
     double fireFuel = 1.0,
     double millRotorAngle = 0.0,
     Season season = Season.spring,
+    /// Pencere/fener ışığının kısılma çarpanı (bkz. [BuildingEntity.windowGlow]).
+    /// Konutta sakinler uyudukça 0'a iner → evin camı söner. Konut olmayan
+    /// binalar 1.0 geçer, davranışları değişmez.
+    double windowGlow = 1.0,
   }) {
     final img = (season == Season.winter ? _winterCache[type] : null) ??
         _cache[type];
@@ -243,6 +247,7 @@ class BuildingRenderer {
         dayLight,
         time,
         seed,
+        windowGlow,
       );
     }
     _drawSprite(
@@ -294,6 +299,7 @@ class BuildingRenderer {
         dayLight,
         time,
         seed,
+        windowGlow,
       );
     }
 
@@ -722,11 +728,12 @@ class BuildingRenderer {
     double dayLight,
     double time,
     int seed,
+    double windowGlow,
   ) {
     final lights = kBuildingLights[type];
     if (lights == null || lights.isEmpty) return;
 
-    final nightness = 1.0 - dayLight;
+    final nightness = (1.0 - dayLight) * windowGlow;
     if (nightness < 0.02) return;
 
     final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
@@ -811,11 +818,12 @@ class BuildingRenderer {
     double dayLight,
     double time,
     int seed,
+    double windowGlow,
   ) {
     final lights = kBuildingLights[type];
     if (lights == null || lights.isEmpty) return;
 
-    final nightness = 1.0 - dayLight;
+    final nightness = (1.0 - dayLight) * windowGlow;
     if (nightness < 0.02) return; // tam gündüz — ışık yok
 
     // Sprite rect (buildingMeta bağımlı — _drawSprite ile aynı hesap)
