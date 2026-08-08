@@ -142,6 +142,20 @@ const int    kCookFoodCost        = 1;    // pişirim başına harcanan ham yiye
 const int    kCookMealsPerBatch   = 2;    // pişirim başına üretilen sıcak yemek
 const int    kCookMealsPerMouth   = 2;    // kişi başı yemek tavanı (aşçı durur)
 
+// ── Köyün kendi kendini doyurma refleksi ────────────────────────────────────
+// Toplayıcı/aşçı kadrosu bir süre YALNIZ elle veriliyordu (otomatik hedef 0):
+// niyet "oyuncunun ilk kararı" idi, oyundaki karşılığı mikro kontrol oldu —
+// oyuncu tek tek köylüye böğürtlen atıyor, atamazsa köy aç kalıyordu. Karar
+// tek seferliktir, mikro kontrol her seferlik.
+//
+// Ölçü stok değil AĞIZ BAŞINA stok: on kişilik köyde 20 yiyecek bolluk,
+// otuz kişilik köyde açlıktır. İki eşik arasında tek sepet, altında köyün
+// üçte biri çalıya gider; üstünde kimse gitmez (çalılar yenilensin).
+const double kForageComfort = 4.0; // ağız başına yiyecek — üstünde toplama durur
+const double kForageLow     = 2.0; // altında kadro büyür
+const int    kMaxForagers   = 3;   // çalı ekonomisi bundan fazlasını taşımaz
+const int    kSecondCookPop = 14;  // bu nüfustan sonra ocakta ikinci el
+
 // ─── Gece / gündüz eşikleri ──────────────────────────────────────────────────
 // dayLight bu eşiklerin altına düşünce "gece"; üstüne çıkınca "gündüz".
 // Histerez için iki ayrı değer — flicker önler.

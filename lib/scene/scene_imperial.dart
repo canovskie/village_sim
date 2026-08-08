@@ -344,11 +344,16 @@ extension _SceneImperial on _VillageSceneState {
   }
 
   /// Bir sonraki ziyarete kadar süre — refah arttıkça kısalır, itibar arttıkça
-  /// uzar (iyi ilişki = daha seyrek/yumuşak baskı).
+  /// uzar (iyi ilişki = daha seyrek/yumuşak baskı), YIL geçtikçe kısalır.
+  ///
+  /// Sertleşen tek şey rakam değil nefes payıdır: son yılda heyet neredeyse
+  /// iki katı sıklıkta gelir. Rakamı büyütüp aralığı sabit bırakmak, köyün
+  /// "bir ziyareti atlatınca uzun süre rahat" ritmini bozmazdı.
   double _rollImperialInterval(double prosp) {
     final wealthRush = (prosp / 240.0).clamp(0.0, 1.0); // 0 sakin → 1 iştahlı
     final base = 5.5 - wealthRush * 2.5 + _imperialFavor * 2.5; // ~3.0–8.0 gün
-    return (base + _rng.nextDouble() * 1.5) * kGameDaySeconds;
+    final tempo = pressureForDay(_dayCount).imperialTempo; // 1.0 → 0.55
+    return (base + _rng.nextDouble() * 1.5) * tempo * kGameDaySeconds;
   }
 
   /// Heyet köy eşiğine vardı — pazarlığı açar. Talep + sinematik + modal kurulur
@@ -409,7 +414,13 @@ extension _SceneImperial on _VillageSceneState {
 
   /// Talep üret — tür ağırlıklı (refah + itibar talebin sertliğini ölçekler).
   ImperialDemand? _buildImperialDemand(double prosp) {
+    // İki katman çarpılır ve ikisi ayrı şeyi ölçer: İTİBAR "seninle nasıl
+    // geçiniyoruz", YIL "imparatorluğun bu yılki iştahı". Eskiden yalnız
+    // birincisi vardı, dolayısıyla iyi geçinen bir köy altıncı yılda birinci
+    // yıldaki rakamı ödüyordu (bkz. systems/village_year.dart).
     final severity = 1.0 + (1.0 - _imperialFavor) * 0.8; // 1.0–1.8
+    final era = pressureForDay(_dayCount);
+    final appetite = era.imperialAppetite; // 1.0–2.0
     final pop = _villagers.length;
     final youths = _conscriptCandidates();
 
@@ -426,11 +437,19 @@ extension _SceneImperial on _VillageSceneState {
     int amount;
     switch (kind) {
       case ImperialDemandKind.goldTax:
-        amount = (pop * 1.6 * severity).round().clamp(6, 9999);
+        // Rakam saf fonksiyonda (bkz. systems/imperial.dart) — bir denge
+        // kararı sahnede gömülü kalmasın, ölçülebilir bir yerde dursun.
+        amount = imperialGoldDemand(
+          population: pop,
+          treasury: _stockpile.gold,
+          severity: severity,
+          appetite: appetite,
+          treasuryShare: era.treasuryShare,
+        );
       case ImperialDemandKind.foodLevy:
-        amount = (pop * 2.2 * severity).round().clamp(8, 9999);
+        amount = (pop * 2.2 * severity * appetite).round().clamp(8, 9999);
       case ImperialDemandKind.woodLevy:
-        amount = (pop * 2.0 * severity).round().clamp(8, 9999);
+        amount = (pop * 2.0 * severity * appetite).round().clamp(8, 9999);
       case ImperialDemandKind.conscript:
         amount = 1;
     }

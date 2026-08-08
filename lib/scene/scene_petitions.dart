@@ -182,6 +182,8 @@ extension _ScenePetitions on _VillageSceneState {
       hasCrops: _farmTiles.any((t) => t.isGrowing || t.readyToHarvest),
       hasResentful: _resentfulVillager() != null,
       hasFeud: _feudMember() != null,
+      // Hane karşılığı — esirgeyen hane varsa köy bunu masaya getirir.
+      withholdingHouse: _withholdingHouseSurname,
       // Meçhul kalan suçların biriktirdiği şüphe → asayiş dilekçesinin kapısı.
       crimeSuspicion: _crimeSuspicion,
       // Politika↔dilekçe köprüsü: yürürlükteki yasalar sosyal karşılık doğurur.
@@ -484,6 +486,10 @@ extension _ScenePetitions on _VillageSceneState {
         PetitionFx.feudExecute => -0.04,
         // Suç hükümleri: adaletin kalıcı tortusu. Af merhametli ama düzeni
         // gevşetir; teşhir düzen kurar; sürgün/idam köyün ruhunu soğutur.
+        // Hane karşılığı: barışmak köyün ruhunda ılık bir iz bırakır, bel
+        // kırmak soğuk bir iz. Sayılar küçük — bu her oyunda birkaç kez olur.
+        PetitionFx.houseAppeased => 0.02,
+        PetitionFx.houseRebuked => -0.03,
         PetitionFx.crimePardon => 0.01,
         PetitionFx.crimePunish => 0.01,
         PetitionFx.crimeExile => -0.02,
@@ -695,6 +701,11 @@ extension _ScenePetitions on _VillageSceneState {
         _payRansom();
       case PetitionFx.ransomRefused:
         _refuseRansom();
+      // ── Hane karşılığı (scene_house_stance) ─────────────────────────────
+      case PetitionFx.houseAppeased:
+        _appeaseWithholdingHouse(author);
+      case PetitionFx.houseRebuked:
+        _rebukeWithholdingHouse(author);
     }
   }
 

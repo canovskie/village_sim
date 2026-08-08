@@ -461,7 +461,12 @@ extension _SceneUi on _VillageSceneState {
             // Kart kuruluşta AÇIK gelir (oyuncunun "nasıl"ı okuması gereken tek
             // yer burası); köy kurulunca ince banda döner. Oyuncu elle
             // dokunduysa karar onun, otomatiğe geri dönmez.
-            final expanded = _questCardOverride ?? _guideActive;
+            // KAPSAM `_guideActive` DEĞİL KURULUŞ. Öğretici dörde inince bu
+            // satır bir süre `_guideActive`e bakıyordu ve kart beşinci adımda
+            // aniden ince banda düşüyordu: parmak kalktığı yerde "nasıl"ı
+            // anlatan tek yüzey de kapanıyor, oyuncu tam serbest kaldığı anda
+            // yalnız kalıyordu. Spot dört adım, kart bütün kuruluş boyunca.
+            final expanded = _questCardOverride ?? (_charterTier == 0);
             return QuestTracker(
               icon: questGlyph(active.quest.id),
               activeLabel: active.quest.label,
@@ -476,7 +481,10 @@ extension _SceneUi on _VillageSceneState {
                   setStateHere(() => _questCardOverride = !expanded),
               // "Göster" yalnız kuruluşta: sonrası oyuncunun bildiği fiiller,
               // orada kamerayı eline almak öğretmek değil elinden almaktır.
-              onShow: _guideActive ? () => setStateHere(_guideShow) : null,
+              // Rehberli adımla sınırlı DEĞİL — rehbersiz kuruluş adımlarında
+              // da kamerayı hedefe götürür (spot çıkmaz, yalnız kayar), ki
+              // "ağaçların dibi neresi" sorusu cevapsız kalmasın.
+              onShow: _charterTier == 0 ? () => setStateHere(_guideShow) : null,
             );
           },
         ),
@@ -861,7 +869,6 @@ extension _SceneUi on _VillageSceneState {
                   _selectedBuilding = null;
                   _selectedSiteId = null;
                 }),
-                guidedSiteId: _guidedSiteId,
                 barnCows:
                     (selected.type == BuildingType.barn ||
                         selected.type == BuildingType.chickenCoop)
@@ -1122,7 +1129,6 @@ extension _SceneUi on _VillageSceneState {
         child: WorkSitePanel(
           site: site,
           subtitle: _siteSubtitle(site),
-          guidedSiteId: _guidedSiteId,
           onClose: () => setStateHere(() => _detailExpanded = false),
           onAddHand: (s) => setStateHere(() => _fillSlot(s)),
           onRemoveHand: (_, v) => setStateHere(() => _emptySlot(v)),

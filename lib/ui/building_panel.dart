@@ -134,30 +134,34 @@ class _BuildingTileState extends State<_BuildingTile>
   bool _hover = false;
 
   /// Nabız YALNIZ işaretli kartta döner — panelde onlarca kart var, hepsine
-  /// ticker takmak boşuna kare üretimi olurdu. İşaret kalkınca durur.
+  /// dönen ticker takmak boşuna kare üretimi olurdu. İşaret kalkınca DURUR
+  /// (dispose edilmez: SingleTicker bir State'te ikinci ticker'a izin vermez,
+  /// işaret gidip gelince yeniden yaratmak assert'e düşerdi). Duran ticker
+  /// kare üretmediği için maliyet aynı kapıya çıkar.
   AnimationController? _pulse;
 
   @override
   void initState() {
     super.initState();
-    if (widget.hinted) _startPulse();
+    if (widget.hinted) _syncPulse();
   }
 
   @override
   void didUpdateWidget(_BuildingTile old) {
     super.didUpdateWidget(old);
-    if (widget.hinted && _pulse == null) _startPulse();
-    if (!widget.hinted && _pulse != null) {
-      _pulse!.dispose();
-      _pulse = null;
-    }
+    if (widget.hinted != old.hinted) _syncPulse();
   }
 
-  void _startPulse() {
-    _pulse = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat(reverse: true);
+  void _syncPulse() {
+    if (widget.hinted) {
+      final c = _pulse ??= AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1500),
+      );
+      if (!c.isAnimating) c.repeat(reverse: true);
+    } else {
+      _pulse?.stop();
+    }
   }
 
   @override
@@ -318,7 +322,9 @@ class _BuildingTileState extends State<_BuildingTile>
     );
 
     final p = _pulse;
-    if (p == null) return tile;
+    // Halka İŞARETE bağlı, controller'ın varlığına değil: işaret geçtikten
+    // sonra controller duruyor ama hayatta kalıyor.
+    if (!widget.hinted || p == null) return tile;
 
     // ADIM İŞARETİ — kartın ETRAFINDA nefes alan bir halka.
     //

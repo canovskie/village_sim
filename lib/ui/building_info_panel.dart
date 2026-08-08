@@ -46,7 +46,6 @@ class BuildingInfoPanel extends StatelessWidget {
 
   /// Öğreticinin şu an gösterdiği iş yeri kimliği — o yerin ilk boş yuvası
   /// spot hedefi olarak işaretlenir.
-  final String? guidedSiteId;
 
   final List<AnimalEntity> barnCows;
   final ResourceBundle stockpile;
@@ -110,7 +109,6 @@ class BuildingInfoPanel extends StatelessWidget {
     this.onAddHand,
     this.onRemoveHand,
     this.onSelectVillager,
-    this.guidedSiteId,
     this.barnCows = const [],
     required this.stockpile,
     required this.stats,
@@ -222,7 +220,6 @@ class BuildingInfoPanel extends StatelessWidget {
       out.add(
         WorkCrewSection(
           site: site,
-          guided: guidedSiteId == site.id,
           onAddHand: onAddHand == null ? null : () => onAddHand!(site),
           onRemoveHand: (v) => onRemoveHand?.call(site, v),
           onSelect: onSelectVillager,

@@ -22,7 +22,6 @@ void main() {
   WorkSite site({
     required int wanted,
     List<VillagerEntity> crew = const [],
-    bool autoStaffed = true,
     String? idleReason,
   }) => WorkSite(
     id: 'b:1,1:miner',
@@ -33,7 +32,6 @@ void main() {
     cx: 1,
     cy: 1,
     crew: crew,
-    autoStaffed: autoStaffed,
     idleReason: idleReason,
   );
 
@@ -91,15 +89,6 @@ void main() {
       expect(s.starving, isFalse, reason: 'kimse yok değil');
       expect(s.staffed, isFalse, reason: 'ama yeterli de değil');
     });
-  });
-
-  test('kendiliğinden dolmayan yerler işaretli', () {
-    // Toplayıcı ve aşçı bilinçli olarak köyün otomatik dağıtımının dışında
-    // (bkz. _syncJobWorkforce): erken oyunun tek amacı oyuncunun "kim ne
-    // yapsın" kararını vermesi. Panel bunu söylemezse oyuncu boş yuvaya bakıp
-    // "köy nasılsa halleder" sanır.
-    expect(site(wanted: 1, autoStaffed: false).autoStaffed, isFalse);
-    expect(site(wanted: 1).autoStaffed, isTrue);
   });
 
   test('her JobRole bir etiket ve ikon taşır — yeni rol eklenince burası çöker',

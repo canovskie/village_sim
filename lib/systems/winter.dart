@@ -157,6 +157,13 @@ class WinterReadiness {
 ///
 /// [days] kaç günlük kış hesaplanacağı — kışın ORTASINDA da çağrılır (kalan
 /// gün üzerinden), o zaman gösterge "daha ne kadar dayanırım"a döner.
+///
+/// [bite] kışın sertlik çarpanı: yıl geçtikçe kışlar ağırlaşır
+/// (bkz. systems/village_year.dart `winterBite`). YALNIZ YAKACAĞA biner ve
+/// bu bilinçlidir. Erzağı da ölçeklemek açlık zincirini tetikler ve kış
+/// "hazırlığı ödüllendiren" bir mevsim olmaktan çıkıp bir ölüm sayacına
+/// dönerdi (bu dosyanın başındaki tasarım kuralı). Yakacağın yetmemesi ise
+/// zarifçe başarısız olur: soğuk ev, düşen moral, görünür uyarı.
 WinterReadiness winterReadiness({
   required int mouths,
   required int animals,
@@ -166,13 +173,15 @@ WinterReadiness winterReadiness({
   required double fodder,
   required int coats,
   int? days,
+  double bite = 1.0,
 }) {
   final d = (days ?? kWinterDays).clamp(1, 999);
+  final b = bite.clamp(1.0, 2.0);
   return WinterReadiness(
     fuel: WinterItem(
       'Yakacak',
       wood + coal * kCoalFuelValue,
-      mouths * kFuelPerMouthPerDay * d,
+      mouths * kFuelPerMouthPerDay * b * d,
     ),
     food: WinterItem('Erzak', food, mouths * kFoodPerMouthPerDay * d),
     fodder: WinterItem(

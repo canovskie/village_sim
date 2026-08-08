@@ -30,7 +30,6 @@ class WorkSitePanel extends StatelessWidget {
 
   /// Öğreticinin gösterdiği iş yeri kimliği — eşleşirse ilk boş yuva
   /// spot hedefi olur.
-  final String? guidedSiteId;
 
   const WorkSitePanel({
     super.key,
@@ -40,7 +39,6 @@ class WorkSitePanel extends StatelessWidget {
     this.onAddHand,
     this.onRemoveHand,
     this.onSelectVillager,
-    this.guidedSiteId,
   });
 
   @override
@@ -73,8 +71,7 @@ class WorkSitePanel extends StatelessWidget {
                     padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
                     child: WorkCrewSection(
                       site: site,
-                      guided: guidedSiteId == site.id,
-                      onAddHand: onAddHand == null
+                                  onAddHand: onAddHand == null
                           ? null
                           : () => onAddHand!(site),
                       onRemoveHand: (v) => onRemoveHand?.call(site, v),

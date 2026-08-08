@@ -26,6 +26,10 @@ void assignCarriers({
   required ResourceBundle stockpile,
   required AnchorSystem anchorSystem,
   double baleYieldMultiplier = 1.0,
+  /// Yiyeceğin köy ambarına GİRİŞ kapısı. Verilmezse doğrudan eklenir.
+  /// Sahne bunu hane karşılığına bağlar: küskün hanenin taşıdığı balya köy
+  /// ambarına değil hanenin kendi ambarına iner (bkz. scene_house_stance).
+  void Function(VillagerEntity carrier, int amount)? routeFood,
 }) {
   final hasAnyAnchor = anchorSystem.warehousePoints.isNotEmpty ||
       anchorSystem.firepitPoints.isNotEmpty;
@@ -132,7 +136,12 @@ void assignCarriers({
             // yem (kMillBonusMaxCount'a kadar yığılır). Mevsim/rejim/değirmenci
             // çarpanları baleYieldMultiplier'da toplanır.
             final base = kBaleFoodBase + millBonus;
-            stockpile.food += (base * baleYieldMultiplier).round();
+            final yield_ = (base * baleYieldMultiplier).round();
+            if (routeFood != null) {
+              routeFood(v, yield_);
+            } else {
+              stockpile.food += yield_;
+            }
             // En yakın değirmeni öğütmeye geçir → görünür duman + panel doğruluğu.
             if (mills.isNotEmpty) {
               var nearest = mills.first;

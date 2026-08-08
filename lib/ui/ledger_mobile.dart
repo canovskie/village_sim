@@ -74,6 +74,8 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
                 label: s.short,
                 badge: widget.badges[s] ?? 0,
                 selected: _sec == s,
+                guideId:
+                    s == LedgerSection.kanun ? GuideAnchors.sectionKanun : null,
                 onTap: () => setState(() => _sec = s),
               ),
           ],

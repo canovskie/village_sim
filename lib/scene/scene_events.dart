@@ -33,8 +33,14 @@ extension _SceneEvents on _VillageSceneState {
     _eventTimer -= dt;
     if (_eventTimer <= 0) {
       _beginOmen();
-      _eventTimer = kEventMinInterval +
-          _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval);
+      // YIL BASKISI (bkz. systems/village_year.dart): aralık yıl geçtikçe
+      // kısalır. Sıklaşan şey olay TABLOSUNUN TAMAMI — yani geç oyun daha
+      // olaylı olur, daha cezalı değil. Ceza tarafını vergi zaten büyütüyor;
+      // ikisini birden sertleştirmek geç oyunu cozy çizginin dışına atardı.
+      final tempo = pressureForDay(_dayCount).eventTempo; // 1.0 → 0.65
+      _eventTimer = (kEventMinInterval +
+              _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval)) *
+          tempo;
     }
   }
 
@@ -173,6 +179,9 @@ extension _SceneEvents on _VillageSceneState {
     } else if (e.category == EventCategory.positive) {
       _award('first_blessing', 'Talih ilk kez bu kapıya uğradı.', '✨');
     }
+    // PROVA: karar isteyen olay simi DONDURUR (bkz. kProbePause). Harness'lar
+    // bunu ölçemez ve yanlış yerden düşer; prova köyünde olaylar susturulabilir.
+    if (kProbeNoEvents) return;
     if (e.needsChoice) {
       // Modal ile bildirim aynı cümleyi konuşsun: varyant burada materyalize.
       _pendingChoice = e.withMessage(e.messageFor(_eventSeed(e)));

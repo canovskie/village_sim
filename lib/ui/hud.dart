@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../core/resources.dart';
+import '../systems/village_year.dart';
 import '../world/season.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
@@ -607,7 +608,10 @@ class GameHUD extends StatelessWidget {
           Text(_clockText, style: AppUi.number.copyWith(fontSize: 16)),
           const SizedBox(width: 7),
           Text(
-            '$dayCount · ${season.label.toUpperCase()}',
+            // MOBİL: ham gün sayısı yerine YIL. Kenar rayında yer dar, iki
+            // sayı sığmaz; ikisinden hangisi oyuncuyu yönlendiriyorsa o kalır
+            // ve o yıldır (hesaplaşma yıla bağlı). Gün sayısı Defter'de durur.
+            '${yearOf(dayCount)}. YIL · ${season.label.toUpperCase()}',
             style: AppUi.label.copyWith(
               fontSize: 11,
               letterSpacing: 0,
@@ -1114,7 +1118,11 @@ class GameHUD extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'GÜN $dayCount',
+              // YIL ÖNDE: köyün ömrü artık yıllarla sayılıyor (bkz.
+              // systems/village_year.dart) ve hesaplaşma bir YIL'a bağlı.
+              // "Gün 37" oyuncuya nerede olduğunu söylemiyordu; "3. yıl"
+              // söylüyor. Gün sayacı yanında kalır, kronikle eşleşsin.
+              '${yearOf(dayCount)}. YIL · GÜN $dayCount',
               style: AppUi.label.copyWith(
                 fontSize: 10,
                 letterSpacing: 1.4,

@@ -480,7 +480,13 @@ class _CouncilPainter extends CustomPainter {
 
     final bounds = Rect.fromCenter(
         center: foot.translate(0, -45 * s), width: 110 * s, height: 110 * s);
-    canvas.saveLayer(bounds, Paint());
+    // BOŞ SANDALYE — masayı boykot eden hanenin reisi çizilir ama SİS gibi:
+    // yeri belli, kendisi orada değil. Tamamen silmek yerine hayalet bırakmak
+    // yokluğu bir eksiklik olarak okutur (boşluk kimin boşluğu, görünsün).
+    canvas.saveLayer(
+        bounds,
+        Paint()
+          ..color = Color.fromRGBO(255, 255, 255, seat.absent ? 0.15 : 1.0));
     canvas.save();
     canvas.translate(foot.dx, foot.dy);
     canvas.scale(s, s);
@@ -539,6 +545,8 @@ class _CouncilPainter extends CustomPainter {
       final seat = seats[i];
       final x = footOf(i).dx;
       final on = i == selected;
+      // Boykot eden reisin adı da söner — masada yalnız yeri kalır.
+      final away = seat.absent;
       final tp = TextPainter(
         text: TextSpan(
           text: seat.name,
@@ -547,11 +555,13 @@ class _CouncilPainter extends CustomPainter {
             fontSize: 10,
             height: 1.0,
             fontWeight: on || seat.ascendant ? FontWeight.w800 : FontWeight.w600,
-            color: on
-                ? AppUi.accent
-                : seat.ascendant
-                    ? AppUi.gold
-                    : AppUi.textMid,
+            color: away
+                ? AppUi.textLo
+                : on
+                    ? AppUi.accent
+                    : seat.ascendant
+                        ? AppUi.gold
+                        : AppUi.textMid,
           ),
         ),
         textDirection: TextDirection.ltr,

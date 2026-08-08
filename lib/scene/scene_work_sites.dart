@@ -109,17 +109,6 @@ extension _SceneWorkSites on _VillageSceneState {
   List<WorkSite> _sitesOfBuilding(BuildingEntity b) =>
       _workSites().where((s) => identical(s.source, b)).toList();
 
-  /// [role] için köyün gösterebileceği tek yer — öğretici ışığı buraya bakar.
-  /// Birden fazlaysa kadrosu en aç olanı seçer (oyuncunun ilgilenmesi gereken).
-  WorkSite? _siteForRole(JobRole role) {
-    WorkSite? best;
-    for (final s in _workSites()) {
-      if (s.role != role) continue;
-      if (best == null || (s.crew.length < best.crew.length)) best = s;
-    }
-    return best;
-  }
-
   // ── Kaynak başına iskelet ──────────────────────────────────────────────────
 
   void _collectBuildingSites(List<_SiteSkeleton> out) {
@@ -136,7 +125,6 @@ extension _SceneWorkSites on _VillageSceneState {
         JobRole role,
         int wanted, {
         String? idleReason,
-        bool autoStaffed = true,
       }) {
         out.add(
           _SiteSkeleton(
@@ -149,7 +137,6 @@ extension _SceneWorkSites on _VillageSceneState {
             cy: cy,
             source: b,
             idleReason: idleReason,
-            autoStaffed: autoStaffed,
           ),
         );
       }
@@ -172,12 +159,9 @@ extension _SceneWorkSites on _VillageSceneState {
         case BuildingType.lumberCamp:
           add(JobRole.woodcutter, 1);
         case BuildingType.firepit:
-          // AŞÇI kendiliğinden atanmaz (bkz. `_syncJobWorkforce`): erken oyunun
-          // tek amacı oyuncunun "kim ne yapsın" kararını vermesi.
           add(
             JobRole.cook,
             1,
-            autoStaffed: false,
             idleReason: _stockpile.food < kCookFoodCost
                 ? 'Ocakta pişirecek ham yiyecek yok.'
                 : null,
@@ -255,11 +239,10 @@ extension _SceneWorkSites on _VillageSceneState {
         kind: WorkSiteKind.patch,
         role: JobRole.forager,
         label: 'Böğürtlenlik',
-        // Bina istemeyen tek iş — oyunun ilk saniyesinden itibaren verilebilir
-        // olması erken oyunun bütün meselesi. Köy oraya kimseyi kendiliğinden
-        // yollamaz; bu yuvayı yalnız oyuncu doldurur.
+        // Bina istemeyen tek iş — oyunun ilk saniyesinden itibaren yürümesi
+        // erken oyunun bütün meselesi. Köy açsa buraya kendi el yollar
+        // (bkz. `_foragerTarget`); oyuncu isterse üstüne yazar.
         wanted: 1,
-        autoStaffed: false,
         cx: sx / n,
         cy: sy / n,
         idleReason: ripe == 0 ? 'Çalılar çıplak — meyve yeniden gelecek.' : null,
@@ -455,7 +438,6 @@ class _SiteSkeleton {
   final double cx, cy;
   final Object? source;
   final String? idleReason;
-  final bool autoStaffed;
 
   const _SiteSkeleton({
     required this.id,
@@ -467,7 +449,6 @@ class _SiteSkeleton {
     required this.cy,
     this.source,
     this.idleReason,
-    this.autoStaffed = true,
   });
 
   WorkSite build(List<VillagerEntity> crew) => WorkSite(
@@ -481,6 +462,5 @@ class _SiteSkeleton {
     source: source,
     crew: List.unmodifiable(crew),
     idleReason: idleReason,
-    autoStaffed: autoStaffed,
   );
 }

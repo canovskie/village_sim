@@ -3,9 +3,9 @@ import '../buildings/building_function.dart';
 import '../buildings/building_type.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
-import '../entities/villager_job.dart';
 import '../farm/farm_tile.dart';
 import '../scene/scene_data.dart';
+import 'reckoning.dart';
 
 /// Köy Akışı — bol görev + politika-odaklı Tüzük ilerlemesi (no-fail).
 ///
@@ -25,24 +25,16 @@ enum VisualReward { sparkle, bloom, festival, landmark }
 /// Adımın DÜNYADAKİ hedefi — "nereye bakacağım" sorusunun cevabı.
 ///
 /// Kuruluş adımları metin olarak doğruydu ama ekranda hiçbir yeri
-/// göstermiyordu: "bir köylüye tıkla" hangi köylü, "böğürtlen çalısı" nerede,
-/// "ağaçların dibine kur" hangi ağaçlar. Oyuncu cümleyi okuyup ekranda
-/// arıyordu. Bu enum, adımı bir YERE bağlar; sahne onu çözer, çizim oraya
-/// sakin bir işaret koyar.
+/// göstermiyordu: "ağaçların dibine kur" hangi ağaçlar? Oyuncu cümleyi okuyup
+/// ekranda arıyordu. Bu enum, adımı bir YERE bağlar; sahne onu çözer, çizim
+/// oraya sakin bir işaret koyar.
 ///
-/// Bilinçli olarak DAR tutuldu: her adıma özel bir işaret türü değil, altı
+/// Bilinçli olarak DAR tutuldu: her adıma özel bir işaret türü değil, birkaç
 /// genel hedef. Yeni adım eklerken buradan birini seç; uymuyorsa işaretsiz
 /// bırak (zaman/izleme adımlarında işaret zaten yanlış olur).
 enum QuestPointer {
   /// İşaret yok — zaman geçmesini ya da izlemeyi isteyen adımlar.
   none,
-
-  /// Mesleksiz/boşta bir köylü — "birine iş ver" adımları. Köylünün ayağının
-  /// altındaki kehribar halka yanar (mevcut `highlightTimer`).
-  villager,
-
-  /// En yakın böğürtlen çalısı — ilk yiyeceğin geldiği yer.
-  berryBush,
 
   /// Orman kenarı — oduncu kulübesinin dikileceği yer.
   forest,
@@ -53,6 +45,19 @@ enum QuestPointer {
   /// Köyün merkezi (ocak varsa orası, yoksa kurucuların durduğu yer) —
   /// "buraya bir şey dik" adımları.
   villageCenter,
+}
+
+/// Adımın istediği ARAYÜZ KAPISI — ne dünyada bir yer, ne bir inşa kartı.
+///
+/// Bugün tek kullanıcısı yönetişim ve sebebi tam olarak bu: berat bir bina
+/// değil, Köy Defteri'nin içindeki bir hüküm. Kuruluş öğreticisi uzun süre
+/// yalnız bina diktirdi ve oyunun ASIL konusuna (mühür, hane, divan) hiç
+/// değmedi — oyuncu köyü kurup "eee, şimdi?" diye kaldı.
+enum QuestUi {
+  none,
+
+  /// Köy Defteri → KANUNNAME rafı. Defter kapalıysa önce onun kapısı.
+  lawBook,
 }
 
 /// Tek bir görev — bildirimsel, durağan.
@@ -88,12 +93,21 @@ class Quest {
   /// null = adımın inşayla işi yok (iş verme / izleme / zaman adımları).
   final BuildingType? buildTarget;
 
-  /// Adımın istediği İŞ — köylü panelindeki o rol düğmesi işaretlenir.
+  /// Adımın istediği ARAYÜZ KAPISI (bkz. [QuestUi]).
+  final QuestUi uiTarget;
+
+  /// ÖĞRETİCİ BU ADIMA EŞLİK EDER Mİ.
   ///
-  /// Kuruluşun on iki adımından üçü "birine iş ver". Dünyadaki halka doğru
-  /// köylüyü gösteriyor ama panel açılınca oyuncu yine bir liste ile baş başa
-  /// kalıyordu: hangi rol? Bu alan zincirin son halkası.
-  final JobRole? jobTarget;
+  /// Kuruluşun tamamı bir süre rehberliydi: dokuz adımın dokuzunda da spot
+  /// açılıyordu ve oyuncu köyü kurarken sürekli birinin parmağını izliyordu.
+  /// Öğretici öğretmiyor, EŞLİK EDİYORDU.
+  ///
+  /// Artık yalnız DÖRT adım rehberli ve dördü de kendi başına bulunamayacak
+  /// şeyler: bir yapıyı haritaya kurmak (ocak), barınağın ayrı bir karar
+  /// olduğu (çadır), işin binaya bağlı olduğu (oduncu kulübesi) ve köyün asıl
+  /// işinin defterde döndüğü (berat). Gerisi bu dördünün tekrarı — orada spot
+  /// öğretmez, dırdır eder.
+  final bool guided;
 
   /// KURUCUNUN AĞZINDAN — adım açılınca [speaker] bunu dünyada söyler.
   ///
@@ -125,7 +139,8 @@ class Quest {
     this.speaker,
     this.pointer = QuestPointer.none,
     this.buildTarget,
-    this.jobTarget,
+    this.uiTarget = QuestUi.none,
+    this.guided = false,
     this.voice,
     this.thanks,
   });
@@ -154,26 +169,29 @@ class QuestContext {
   /// oyunun "artık bir duruşun var" görevi.
   final bool regimeNamed;
 
-  // ── Kuruluş kademesi (tier 0) ─────────────────────────────────────────────
-  // Bu beş alan yalnız kuruluşun mikro adımları için var. Kuruluş eskiden beş
-  // "şu binayı dik" görevinden ibaretti ve aralarında dakikalarca hiçbir şey
-  // olmuyordu. Artık merdivenin ilk basamakları KARAR (kime iş verdin) ve
-  // SONUÇ (ilk sepet, ilk yemek, ilk gece) üzerinden ilerliyor.
-
   /// Kaçıncı gün — "ilk geceyi çıkar" gibi zaman adımları için.
   final int dayCount;
 
-  /// Köy hiç sıcak yemek pişirdi mi (bir kez true olur, geri dönmez).
-  final bool everCooked;
+  // ── HANELER & HESAPLAŞMA (geç oyun) ───────────────────────────────────────
+  //
+  // Geç kademeler bir inşa listesine dönüşmüştü: on iki görevin sekizi "şu
+  // binayı dik"ti. Oyunun en güçlü tarafı — dilekçe, kanunname, haneler —
+  // merdiveni sürmüyor, yalnız süslüyordu. Aşağıdaki üç alan merdivenin son
+  // basamaklarını KARARLARA bağlar; hiçbiri bir binayla kapatılamaz.
 
-  /// Şimdiye kadar toplanmış böğürtlen sepeti (kümülatif — stok değil; stok
-  /// bakılsaydı görev, yenen yiyecek yüzünden geri alınmış gibi görünürdü).
-  final int berriesPicked;
+  /// Sana borçlu (sadık) hane sayısı.
+  final int loyalHouses;
 
-  /// Oyuncunun ELLE verdiği roller. "Sepeti birinin eline ver" adımı bina
-  /// değil KARAR ölçer; otomatik atanan iş bu kümeye girmez, girseydi oyuncu
-  /// hiçbir şey yapmadan görevi tamamlamış sayılırdı.
-  final Set<JobRole> playerAssignedRoles;
+  /// Elini ya da ürününü çekmiş hane sayısı (el çekti/ambar/kopuş).
+  final int withheldHouses;
+
+  /// Köydeki hane sayısı — "bütün haneler" ölçüleri için payda.
+  final int houseCount;
+
+  /// Köyün hesaplaşmadaki gücü (0..1, bkz. systems/reckoning.dart). Berat
+  /// eşiğini geçmek son kademenin görevidir: oyuncu kapanışta neyle
+  /// tartılacağını oyunun içinde öğrensin, kapanış ekranında değil.
+  final double standing;
 
   /// Kurucu meslek → yaşayan köylünün adı. Görev metnini o kişinin ağzına
   /// koymak için (bkz. [Quest.speaker]).
@@ -191,9 +209,10 @@ class QuestContext {
     this.roadCount = 0,
     this.regimeNamed = false,
     this.dayCount = 1,
-    this.everCooked = false,
-    this.berriesPicked = 0,
-    this.playerAssignedRoles = const {},
+    this.loyalHouses = 0,
+    this.withheldHouses = 0,
+    this.houseCount = 0,
+    this.standing = 0,
     this.speakerNames = const {},
   });
 
@@ -231,8 +250,8 @@ class QuestBook {
   /// EŞİKLER ULAŞILABİLİR OLMALI: bir kademenin `minQuests`'i, ONDAN ÖNCEKİ
   /// kademelerde açılan toplam görev sayısını AŞAMAZ (üst kademe görevleri
   /// ancak o kademeye geçilince açılır — aşarsa merdiven kilitlenir).
-  /// Bugünkü dağılım: t0:9 t1:5 t2:7 t3:4 t4:6 t5:6 → kümülatif
-  /// 9/14/21/25/31/37. (Kuruluş 5→12→9: bkz. tier 0 başlığı.)
+  /// Bugünkü dağılım: t0:8 t1:4 t2:7 t3:4 t4:6 t5:6 → kümülatif
+  /// 8/12/19/23/29/35. (Kuruluş 5→12→9→8: bkz. tier 0 başlığı.)
   ///
   /// Eşik ayrıca NEFES payı bırakmalı. Tavana "bir görev hariç hepsi" diye
   /// oturursa, kovan/çiçekçi gibi isteğe bağlı bir görevi atlayan oyuncu
@@ -240,15 +259,15 @@ class QuestBook {
   /// tamamlananları gizliyor). Her kademede 3-4 görevlik pay bilinçli.
   static const List<CharterTier> tiers = [
     CharterTier('Yeni Yakılan Ocak', '🔥', 0, 0),
-    CharterTier('Kapısı Açık Köy',   '🏡', 0, 6),
-    CharterTier('Davulu Duyulan Kasaba', '🎏', 2, 11),
-    CharterTier('Harmanı Taşan Kasaba', '🌟', 4, 17),
+    CharterTier('Kapısı Açık Köy',   '🏡', 0, 5),
+    CharterTier('Davulu Duyulan Kasaba', '🎏', 2, 9),
+    CharterTier('Harmanı Taşan Kasaba', '🌟', 4, 15),
     // ── GEÇ OYUN ───────────────────────────────────────────────────────────
     // Buraya kadar merdiven "köyü kur"du; bundan sonrası "köyü bir yer yap".
     // Eşikler politikaya daha ağır yaslanır: geç oyun bina dikmekle değil,
     // yönetişimin oturmasıyla ilerler (kademe adları da onu söylüyor).
-    CharterTier('Adı Duyulan Kaza', '⚖️', 6, 21),
-    CharterTier('Sancağı Olan Şehir', '👑', 8, 27),
+    CharterTier('Adı Duyulan Kaza', '⚖️', 6, 19),
+    CharterTier('Sancağı Olan Şehir', '👑', 8, 25),
   ];
 
   static int get maxTier => tiers.length - 1;
@@ -293,14 +312,19 @@ class QuestBook {
   // ── Görev havuzu ──────────────────────────────────────────────────────────
   static const List<Quest> all = [
     // ── Tier 0 — Yeni Ocak (KURULUŞ) ─────────────────────────────────────
-    // On iki mikro adım, ~iki güne yayılır. Eskiden burada beş görev vardı ve
-    // beşi de "şu binayı dik"ti: oyuncu ateşi yakıyor, sonra odun birikmesini
-    // bekliyor, arada hiçbir şey olmuyordu. Boşluğun kaynağı buydu.
+    // Sekiz adım. Bu liste iki kez küçüldü ve her seferinde aynı sebeple:
     //
-    // Yeni merdivenin ritmi bilinçli olarak KARAR → SONUÇ → KARAR:
-    // birine iş ver (karar), ilk sepet gelsin (sonuç), aşçı ver (karar), ilk
-    // yemek pişsin (sonuç)… Her adım oyuncunun bir hamlesinin karşılığını
-    // gösteriyor; bekleme aralıkları saniyelere iniyor.
+    // (1) Beş "şu binayı dik" görevinden ibaretti; arada dakikalarca hiçbir şey
+    //     olmuyordu → on iki mikro adıma bölündü.
+    // (2) On iki adımın üçü "şu köylüye şu işi ver"di. Kâğıtta karar, oyunda
+    //     MİKRO KONTROL: köy artık kendi açlığına bakıyor (bkz. scene_jobs
+    //     `_foragerTarget`/`_cookTarget`), oyuncu sepet dağıtmıyor. O üç adım
+    //     düştü, yerine köyün ASIL işi geldi: ilk berat.
+    //
+    // İlk DÖRT adım rehberli ([Quest.guided]) ve sırası bilinçli: ocak (bir
+    // yapıyı haritaya kur) → çadır (barınak ayrı bir karar) → oduncu kulübesi
+    // (iş binaya bağlı, kadroya değil) → berat (köy defterden yönetilir).
+    // Beşinciden sonra öğretici susar; kalan dört adım aynı fiillerin tekrarı.
     Quest(
       id: 'firepit', icon: '🔥', label: 'Ocağı yak',
       hint: 'Kafile durdu, bir yer bekliyor. Meydan olacak yere Ateş Yeri koy; '
@@ -310,37 +334,9 @@ class QuestBook {
       reward: VisualReward.sparkle, check: _firepit,
       pointer: QuestPointer.villageCenter,
       buildTarget: BuildingType.firepit,
+      guided: true,
       voice: 'Yolun sonu burası. Ateşi yak da burası bir yer olsun.',
       thanks: 'Ateş yandı. Artık dönülecek bir yerimiz var.'),
-    Quest(
-      id: 'giveBasket', icon: '🧺', label: 'Sepeti birine ver',
-      hint: 'Böğürtlenliğe tıkla, kadrosundaki boş yuvaya bir el ver; gerisini '
-          'köy halleder. Çalılar bina istemez — köyün ilk yiyeceği oradan '
-          'gelir. Köyde sepeti kadınlar taşır; eli başkası tutarsa da olur, '
-          'iş sadece ağır ilerler.',
-      category: QuestCategory.production, tier: 0,
-      speaker: VillagerType.shepherd,
-      reward: VisualReward.bloom, check: _forageStarted,
-      // İşaret artık boştaki köylüyü değil İŞİN YERİNİ gösterir — kadro
-      // yuvası orada duruyor (bkz. scene_work_sites).
-      pointer: QuestPointer.berryBush,
-      jobTarget: JobRole.forager,
-      voice: 'Sepet boş duruyor. Birinin eline ver, çalılar dolu.',
-      // Karşılık KARARA verilir, sonuca değil: adım artık sepetin dolmasını
-      // beklemiyor, o yüzden "sepet doldu" demek yalan olurdu.
-      thanks: 'Sepet sahibini buldu. Bu akşam kimse aç yatmaz.'),
-    Quest(
-      id: 'giveCook', icon: '🍲', label: 'Ocağa aşçı ver',
-      hint: 'Ocağa tıkla, kadrosuna bir el ver. Aşçı ham yiyeceği ocakta '
-          'pişirir; pişen yemek iki katı ağız doyurur. Kazan kaynayınca köy '
-          'ilk defa sofraya oturur — o akşam kimse kuru ekmek yemez.',
-      category: QuestCategory.production, tier: 0,
-      speaker: VillagerType.miller,
-      reward: VisualReward.festival, check: _kitchenStarted,
-      pointer: QuestPointer.hearth,
-      jobTarget: JobRole.cook,
-      voice: 'Ham böğürtlen karın doyurmaz. Ocağa bir aşçı ver.',
-      thanks: 'Ocağın başı boş değil artık. Kazan birazdan kaynar.'),
     Quest(
       id: 'tent', icon: '⛺', label: 'İlk çadırı kur',
       hint: 'Bir Çadır dik (6 odun). Ucuzdur ve bu gece birini yıldızların '
@@ -350,22 +346,39 @@ class QuestBook {
       reward: VisualReward.sparkle, check: _tent,
       pointer: QuestPointer.villageCenter,
       buildTarget: BuildingType.tent,
+      guided: true,
       voice: 'Gece yaklaşıyor. Hiç olmazsa bir çadır kuralım.',
       thanks: 'Bu gece biri örtünün altında yatacak.'),
     Quest(
       id: 'lumber', icon: '🪓', label: 'Baltayı ormana sok',
-      hint: 'Ağaçların dibine Oduncu Kulübesi kur (12 odun), sonra kulübeye '
-          'tıklayıp kadrosuna bir el ver — kulübe tek başına odun kesmez. Odun '
-          'ağır iştir; köyde baltayı erkekler sallar. Yine de karar senin: '
-          'kadın da keser, sadece geç keser.',
+      hint: 'Ağaçların dibine Oduncu Kulübesi kur (12 odun). Kulübe dikilince '
+          'köy baltayı kendi eline alır — kimseyi tek tek göreve yazman '
+          'gerekmez. Odun ağır iştir; köyde baltayı erkekler sallar, ama bu '
+          'bir kural değil huy: kadın da keser, sadece geç keser.',
       category: QuestCategory.production, tier: 0,
       speaker: VillagerType.hunter,
-      reward: VisualReward.bloom, check: _woodStarted,
+      reward: VisualReward.bloom, check: _lumberCamp,
       pointer: QuestPointer.forest,
       buildTarget: BuildingType.lumberCamp,
-      jobTarget: JobRole.woodcutter,
+      guided: true,
       voice: 'Odunsuz ne ev olur ne ateş. Baltayı ormana sok.',
       thanks: 'Balta işliyor. Odun artık ayağımıza geliyor.'),
+    // YÖNETİŞİM KURULUŞA GİRDİ. Berat eskiden tier 1'deydi: oyuncu köyü
+    // kuruyor, öğretici susuyor ve oyunun asıl konusuna (mühür/divan/hane)
+    // kendi başına çarpması bekleniyordu. Berat bir bina istemez — Defter ilk
+    // günden açık, o yüzden bu adım kuruluşun içinde durabiliyor.
+    Quest(
+      id: 'firstPolicy', icon: '📜', label: 'İlk beratı yaz',
+      hint: 'Köy Defteri\'ni aç, KANUNNAME rafından bir hükmü mühürle. Köyün '
+          'tüzüğü o satırla başlar; bundan sonra köy senin yazdığın gibi '
+          'yaşar.',
+      category: QuestCategory.governance, tier: 0,
+      speaker: VillagerType.priest,
+      reward: VisualReward.festival, check: _firstPolicy,
+      uiTarget: QuestUi.lawBook,
+      guided: true,
+      voice: 'Ateş yandı, dam çatıldı. Sıra bu köyün usulünde.',
+      thanks: 'Mühür basıldı. Artık burada yazılı bir söz var.'),
     Quest(
       id: 'well', icon: '💧', label: 'Suyu köye getir',
       hint: 'Bir Kuyu kaz (4 odun + 8 taş). Evler doldurur, çiftçi ekinini '
@@ -411,12 +424,6 @@ class QuestBook {
       hint: 'Belediye binasını dik. Köyün mührü orada durur; berat oradan çıkar.',
       category: QuestCategory.governance, tier: 1,
       reward: VisualReward.bloom, check: _townhall),
-    Quest(
-      id: 'firstPolicy', icon: '📜', label: 'İlk beratı yaz',
-      hint: 'Belediye panelini aç, bir politikayı yürürlüğe koy. Köyün tüzüğü '
-          'o satırla başlar.',
-      category: QuestCategory.governance, tier: 1,
-      reward: VisualReward.festival, check: _firstPolicy),
     Quest(
       id: 'tavern', icon: '🍺', label: 'Tavernayı aç',
       hint: 'Bir Taverna kur. Akşam işten çıkanın gideceği bir yer olsun.',
@@ -477,6 +484,15 @@ class QuestBook {
       reward: VisualReward.bloom, check: _bloom40),
 
     // ── Tier 3 — Harmanı Taşan Kasaba ────────────────────────────────────
+    // Bu kademeden itibaren merdiven KARARLARI da ölçer. Aşağıdaki görevlerin
+    // hiçbiri bir bina dikilerek kapanmaz: hane kazanmak, haneleri bir arada
+    // tutmak ve hesaplaşmaya hazır olmak oyuncunun yönetişim siciline bakar.
+    Quest(
+      id: 'loyalHouse', icon: '🤝', label: 'Bir haneyi kazan',
+      hint: 'Bir hane sana borçlu kalsın. Bağış, nikâh, adil karar: hangisi '
+          'olursa olsun bir ocağın gözünde iyi bir yere geç.',
+      category: QuestCategory.governance, tier: 3,
+      reward: VisualReward.festival, check: _loyalHouse),
     Quest(
       id: 'fivePolicies', icon: '👑', label: 'Beş beratlık tüzük',
       hint: 'Beş politikayı aynı anda yürürlükte tut. Bu artık bir usul, bir '
@@ -575,6 +591,19 @@ class QuestBook {
       hint: 'Elli köylü. Buraya artık köy diyen kalmadı.',
       category: QuestCategory.population, tier: 5,
       reward: VisualReward.festival, check: _pop50),
+    Quest(
+      id: 'housesUnited', icon: '🏘', label: 'Haneleri bir arada tut',
+      hint: 'Üç hane ya da daha fazlası olsun ve hiçbiri elini çekmiş '
+          'olmasın. Kalabalık köy kolay, küsmeyen köy zordur.',
+      category: QuestCategory.governance, tier: 5,
+      reward: VisualReward.festival, check: _housesUnited),
+    Quest(
+      id: 'beratReady', icon: '📜', label: 'Berat gününe hazır ol',
+      hint: 'İmparatorluk gelip defteri açtığında köy kendi ayakları üstünde '
+          'durabilsin: hanelerin rızası, tüzüğün kalınlığı ve köyün ağırlığı '
+          'birlikte tartılacak.',
+      category: QuestCategory.governance, tier: 5,
+      reward: VisualReward.landmark, check: _beratReady),
   ];
 
   // ── Görev kontrolleri ─────────────────────────────────────────────────────
@@ -583,24 +612,14 @@ class QuestBook {
   // "İlk dam" ÇADIR DEĞİL: çadırın kendi görevi var ve `hasRole(housing)`
   // onunla zaten dolardı → iki görev tek hamleyle biterdi.
   static bool _house(QuestContext c) => c.has(BuildingType.woodenHouse);
-  // ── Kuruluş: karar adımları ──────────────────────────────────────────────
-  // KARAR + SONUÇ DENENDİ, GERİ ALINDI. Bu iki adım bir süre "işi ver VE ilk
-  // meyvesi gelsin" diye kuruldu (sepet dolsun, kazan kaynasın). Kâğıtta
-  // doğruydu; oyunda oyuncu hamlesini yapıyor, sonra köylünün çalıya yürümesini,
-  // toplamasını, ambara dönmesini SEYREDİYORDU. Tik o sırada gelmiyor: adım
-  // kapanmıyor, öğretici sıradakine geçmiyor, oyuncunun elinden oyun alınıyor.
+  // KURAL: BİR ADIM OYUNCUNUN HAMLESİNİ ÖLÇER, NPC'NİN HIZINI ÖLÇMEZ.
   //
-  // Kural: BİR ADIM OYUNCUNUN HAMLESİNİ ÖLÇER, NPC'NİN HIZINI ÖLÇMEZ. Karar
-  // verildiği anda kapanır. Sonuç kaybolmuyor — ilk sepet ve ilk yemek zaten
-  // kendi bildirimini/anını taşıyor (`_berriesPicked`, `_firstMealShown`);
-  // sadece artık merdivenin önünde durmuyorlar.
-  static bool _forageStarted(QuestContext c) =>
-      c.playerAssignedRoles.contains(JobRole.forager);
-  static bool _kitchenStarted(QuestContext c) =>
-      c.playerAssignedRoles.contains(JobRole.cook);
-  static bool _woodStarted(QuestContext c) =>
-      c.has(BuildingType.lumberCamp) &&
-      c.playerAssignedRoles.contains(JobRole.woodcutter);
+  // İki kez kırıldı, iki kez aynı yere çıktı. Önce adımlar kararın SONUCUNU
+  // istedi (sepet dolsun, kazan kaynasın): oyuncu hamlesini yapıyor, sonra
+  // köylünün çalıya yürümesini seyrediyordu. Sonra yalnız kararı istedi ama
+  // karar "şu köylüye şu işi ver"di: bu da hamle değil mikro kontroldü.
+  // Kadro artık köyün kendi refleksi; adım kulübenin dikildiğini ölçer.
+  static bool _lumberCamp(QuestContext c) => c.has(BuildingType.lumberCamp);
   static bool _survivedFirstNight(QuestContext c) => c.dayCount >= 2;
   static bool _farm(QuestContext c) => c.farmTiles.isNotEmpty;
   static bool _well(QuestContext c) => c.has(BuildingType.well);
@@ -633,4 +652,18 @@ class QuestBook {
   static bool _pop50(QuestContext c) => c.population >= 50;
   static bool _sevenPolicies(QuestContext c) => c.enactedPolicies >= 7;
   static bool _regimeNamed(QuestContext c) => c.regimeNamed;
+
+  // ── Karar ölçen adımlar ───────────────────────────────────────────────────
+  static bool _loyalHouse(QuestContext c) => c.loyalHouses >= 1;
+
+  /// Üç hane eşiği bilinçli: tek haneli köyde "hiçbiri küsmedi" bedava
+  /// geçerdi ve görev bir hediyeye dönerdi. Zorluk hane SAYISINDA değil,
+  /// çoğaldıkça hepsini birden memnun tutmanın imkânsıza yaklaşmasında.
+  static bool _housesUnited(QuestContext c) =>
+      c.houseCount >= 3 && c.withheldHouses == 0;
+
+  /// Kapanış ölçüsünün oyun içindeki karşılığı (bkz. systems/reckoning.dart).
+  /// Eşik berat eşiğiyle AYNI sayı olmalı; iki ayrı sabit tutulursa görev
+  /// "hazırsın" derken hesaplaşma "değildin" der.
+  static bool _beratReady(QuestContext c) => c.standing >= kBeratThreshold;
 }

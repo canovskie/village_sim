@@ -311,6 +311,10 @@ extension _SceneWinter on _VillageSceneState {
       fodder: _stockpile.reed.toDouble() + _hayEntities.length.toDouble(),
       coats: coats,
       days: days,
+      // Yıl geçtikçe kış sertleşir (bkz. systems/village_year.dart). Gösterge
+      // de aynı sayıyı okur: panelde yazan hazırlık oranı, simin kullandığı
+      // oranın ta kendisi olmalı — iki ayrı hesap iki ayrı kış demektir.
+      bite: pressureForDay(_dayCount).winterBite,
     );
   }
 

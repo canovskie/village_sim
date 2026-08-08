@@ -21,17 +21,30 @@ extension _SceneFlow on _VillageSceneState {
         // Kimlik seçilmez, mühürlerin toplamından doğar (bkz. scene_regime);
         // "ılımlı" = henüz bir duruş yok demek.
         regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
-        // ── Kuruluş kademesi ────────────────────────────────────────────────
         dayCount: _dayCount,
-        everCooked: _firstMealShown,
-        berriesPicked: _berriesPicked,
-        // YALNIZ elle verilen roller: kuruluş görevleri oyuncunun kararını
-        // ölçüyor, köyün kendi kendine yaptığını değil.
-        playerAssignedRoles: {
-          for (final v in _villagers) ?v.assignedRole,
-        },
+        // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
+        loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
+        withheldHouses: _houseCountWhere((s) => s.withholds),
+        houseCount: _livingHouseCount,
+        // Kapanış ölçüsünün ta kendisi (bkz. scene_reckoning) — "berat
+        // gününe hazır ol" adımı ile hesaplaşma AYNI sayıya bakar.
+        standing: _reckoningInput().standing,
         speakerNames: _founderNames(),
       );
+
+  /// Üyesi olan hanelerden duruşu koşulu sağlayanların sayısı.
+  int _houseCountWhere(bool Function(HouseStance) test) {
+    var n = 0;
+    for (final h in _houses.snapshot()) {
+      if (h.members > 0 && test(h.stance)) n++;
+    }
+    return n;
+  }
+
+  /// Üyesi olan hane sayısı. Boşalmış hane (üyesi ölmüş/gitmiş) sayılmaz:
+  /// yoksa "bütün haneler razı" ölçüsü hayalet bir ocağa takılırdı.
+  int get _livingHouseCount =>
+      _houses.snapshot().where((h) => h.members > 0).length;
 
   /// Kurucu meslek → o meslekten YAŞAYAN bir köylünün adı.
   ///
@@ -87,6 +100,10 @@ extension _SceneFlow on _VillageSceneState {
         'yün=${_stockpile.wool} giysi=${_villagers.where((v) => v.hasCoat).length}/${_villagers.length} '
         'soğukEv=${_coldHouses.length} '
         'dokumacı=${_villagers.where((v) => v.job?.role == JobRole.weaver).length} '
+        // KÖY KENDİ AÇLIĞINA BAKIYOR MU — mikro kontrol kalkınca tek soru bu.
+        'toplayıcı=${_jobCount(JobRole.forager)}/${_foragerTarget()} '
+        'aşçı=${_jobCount(JobRole.cook)}/${_cookTarget()} '
+        'yiyecek=${_stockpile.food} yemek=$_cookedMeals '
         'bekleyenGiysi=$_coatsMade '
         'işaret=${_stepBeacon == null ? "yok" : "var"} '
         'öğretici=${_guideOpen ? "AÇIK" : _guideWanted ? "bekliyor(${_guideDelay.toStringAsFixed(1)})" : "kapalı"} '
@@ -163,17 +180,14 @@ extension _SceneFlow on _VillageSceneState {
   /// ADIMIN HEDEFİNİ DÜNYADA İŞARETLE — "nereye bakacağım"ın cevabı.
   ///
   /// Kuruluş adımları metin olarak doğruydu ama ekranda hiçbir yeri
-  /// göstermiyordu: oyuncu "böğürtlen çalısı"nı, "ağaçların dibi"ni, "bir
-  /// köylü"yü kendisi aramak zorundaydı. Yönlendirmenin yetersiz kalmasının
-  /// asıl sebebi cümlelerin kötü olması değil, hiçbir cümlenin bir YERİ
-  /// göstermemesiydi.
+  /// göstermiyordu: oyuncu "ağaçların dibi"ni kendisi aramak zorundaydı.
+  /// Yönlendirmenin yetersiz kalmasının asıl sebebi cümlelerin kötü olması
+  /// değil, hiçbir cümlenin bir YERİ göstermemesiydi.
   ///
-  /// İki kanal: yer hedefi `_stepBeacon`'a (ızgara koordinatı) yazılır ve
-  /// çizim oraya sakin bir işaret koyar; kişi hedefi ise köylünün mevcut
-  /// `highlightTimer` halkasını tazeler (yeni bir görsel dil icat etmeye gerek
-  /// yok, o halka zaten "şuna bak" demek için var).
+  /// Yer hedefi `_stepBeacon`'a (ızgara koordinatı) yazılır; çizim oraya sakin
+  /// bir işaret koyar.
   ///
-  /// Tarama başına bir kez çalışır (0.5 sn) — her karede en yakın çalıyı
+  /// Tarama başına bir kez çalışır (0.5 sn) — her karede en yakın ağacı
   /// aramak boşuna tarama olurdu.
   void _refreshStepBeacon() {
     final q = _stepCache?.quest;
@@ -184,19 +198,6 @@ extension _SceneFlow on _VillageSceneState {
     switch (q.pointer) {
       case QuestPointer.none:
         _stepBeacon = null;
-
-      case QuestPointer.villager:
-        // Hedef: oyuncunun iş verebileceği biri. Halkayı TAZELE (timer sürekli
-        // dolduruluyor) ki adım bitene kadar yansın; adım bitince kendiliğinden
-        // söner, ayrıca temizlemeye gerek kalmaz.
-        _stepBeacon = null;
-        final who = _stepVillager();
-        if (who != null) who.highlightTimer = 1.2;
-
-      case QuestPointer.berryBush:
-        _stepBeacon = _nearestSpot([
-          for (final b in _berryBushes) (b.col.toDouble(), b.row.toDouble()),
-        ]);
 
       case QuestPointer.forest:
         _stepBeacon = _nearestSpot([
@@ -212,21 +213,6 @@ extension _SceneFlow on _VillageSceneState {
       case QuestPointer.villageCenter:
         _stepBeacon = _villageHeart();
     }
-  }
-
-  /// İşi olmayan (ya da en azından boşta) bir köylü — "birine iş ver" adımının
-  /// hedefi. Kurucu konuşmacı varsa ONU seçer: adımı söyleyen kişiyle
-  /// işaretlenen kişi aynı olsun, oyuncu iki farklı yere bakmasın.
-  VillagerEntity? _stepVillager() {
-    final spoken = _questSpeaker(_stepCache!.quest);
-    if (spoken != null && !spoken.isDying) return spoken;
-    for (final v in _villagers) {
-      if (v.isDying || v.isInsideBuilding) continue;
-      if (!v.lifeStage.hasProfession) continue;
-      if (v.hasActiveJob) continue;
-      return v;
-    }
-    return null;
   }
 
   /// Verilen noktalardan köyün kalbine EN YAKIN olanı. "En yakın çalı" değil
@@ -259,11 +245,6 @@ extension _SceneFlow on _VillageSceneState {
     if (_buildings.any((b) => b.type == t)) return null;
     return t;
   }
-
-  /// Şu anki adımın istediği iş rolü — öğreticinin hangi İŞ YERİNİ
-  /// göstereceğini bu belirler (bkz. `_guidedSiteId`). Adım tamamlanmışsa
-  /// (oyuncu o eli verdiyse) işaret düşer.
-  JobRole? get _stepJobTarget => _stepCache?.quest.jobTarget;
 
   /// Köyün kalbi — ocak varsa orası, yoksa köylülerin ortalama konumu
   /// (kuruluşun ilk saniyesinde henüz hiçbir bina yok, ama insanlar var).

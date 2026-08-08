@@ -2,18 +2,24 @@ part of '../main.dart';
 
 /// KURULUŞ ÖĞRETİCİSİ — "şimdi ne yapacağım"ın ekrandaki karşılığı.
 ///
-/// Sorun şuydu: kuruluş adımlarının metni doğruydu ama oyuncunun izleyeceği
-/// YOL görünmüyordu. "Bir köylüye tıkla, İŞ bölümünden Toplayıcı de" cümlesi
-/// üç ayrı tıklama tarif ediyor (köylüyü seç → Detay → rol) ve üçü de kendini
-/// göstermiyor. Üstelik o cümle oyunda hiç çizilmiyordu bile: sağ üstteki
-/// takipçi yalnız görev BAŞLIĞINI gösteriyor, ipucu Defter'in içinde kalıyordu.
-///
 /// Bu dosya adımı bir HEDEFE çevirir ve hedefi kademeli çözer: oyuncu bir
-/// tıklık ilerleyince spot kendiliğinden bir sonraki halkaya geçer. Kimseyi
-/// kilitlemez (karartma tıklamayı geçirir), kimseyi zorlamaz (Anladım hep var).
+/// tıklık ilerleyince işaret kendiliğinden bir sonraki halkaya geçer. Kimseyi
+/// kilitlemez (vinyet tıklamayı geçirir), kimseyi zorlamaz (karta dokunmak
+/// kapatır).
 ///
-/// KAPSAM: yalnız kuruluş (kademe 0). Sonrası oyuncunun zaten bildiği
-/// fiillerin tekrarı; orada spot öğretmez, dırdır eder.
+/// KAPSAM — İKİ KEZ DARALDI, İKİ KEZ AYNI SEBEPLE.
+///
+/// Önce "kademe 0"dı, yani kuruluşun dokuz adımının dokuzu da rehberliydi:
+/// oyuncu köyü kurarken sürekli birinin parmağını izliyordu, öğretici
+/// öğretmiyor EŞLİK EDİYORDU. Şimdi kapsam adımın kendisinde yazıyor
+/// ([Quest.guided]) ve yalnız DÖRT adım rehberli — dördü de kendi başına
+/// bulunamayacak şeyler. Gerisi o dördünün tekrarı; orada işaret öğretmez,
+/// dırdır eder.
+///
+/// İkinci daralma iş vermeydi: "bir köylüye tıkla, İŞ bölümünden Toplayıcı de"
+/// zinciri tamamen kalktı, çünkü artık köy kadrosunu kendi kuruyor
+/// (bkz. scene_jobs `_foragerTarget`). Öğretilecek bir şey kalmayınca
+/// öğreten katman da kalkar.
 extension _SceneGuide on _VillageSceneState {
   /// Yeni adımdan sonra spotun EN AZ bekleyeceği süre. Asıl bekleme kapısı
   /// aşağıdaki konuşma gatei: önce köyün sesi, SONRA parmak. İlk denemede spot
@@ -34,25 +40,9 @@ extension _SceneGuide on _VillageSceneState {
   /// sönüyor; oyuncu erken davranırsa spot onu beklemez.
   static const double _kQuestVoiceLife = 2.8;
 
-  /// Öğretici çalışıyor mu — köy kendi ayakları üstünde durunca susar.
-  bool get _guideActive => _charterTier == 0;
-
-  /// Bu iş yerinin kartı şu an seçili mi. Bina iş yerleri binanın kendi
-  /// kartından, binasızlar `_selectedSiteId`'den açılır — öğreticinin
-  /// "seçildi mi" sorusu ikisini de tek yerden sormalı.
-  bool _isSiteSelected(WorkSite s) =>
-      _selectedSiteId == s.id ||
-      (s.source != null && identical(_selectedBuilding, s.source));
-
-  /// ÖĞRETİCİNİN gösterdiği iş yeri — paneller bu kimliği alıp o yerin ilk boş
-  /// yuvasını spot hedefi olarak işaretler. Öğretici susmuşsa ya da adımın iş
-  /// hedefi yoksa null (yuvalar sade kalır).
-  String? get _guidedSiteId {
-    if (!_guideActive) return null;
-    final job = _stepJobTarget;
-    if (job == null) return null;
-    return _siteForRole(job)?.id;
-  }
+  /// Öğretici bu adıma eşlik ediyor mu — kapsam artık görevin kendisinde
+  /// yazıyor (bkz. [Quest.guided]), sahnede değil.
+  bool get _guideActive => _stepCache?.quest.guided ?? false;
 
   // ── Hedef çözümü ─────────────────────────────────────────────────────────
   //
@@ -61,51 +51,39 @@ extension _SceneGuide on _VillageSceneState {
   // döndürür. "Şunu, sonra şunu, sonra şunu" diyen bir öğretici okunmaz.
   GuideCue? _resolveGuideCue() {
     final q = _stepCache?.quest;
-    if (q == null) return null;
+    if (q == null || !q.guided) return null;
 
-    // Sinematik/karar ekranı önde — öğretici onların üstüne çıkmaz.
-    if (_activeCutscene != null || _pendingChoice != null) return null;
+    // Sinematik/karar/modal önde — öğretici onların üstüne çıkmaz. Bu liste
+    // Stack sırasıyla el ele gider: spot katmanı defterin üstünde çizildiği
+    // için modalların da üstünde; "hiç çizilmesin" kararı burada verilir.
+    if (_activeCutscene != null ||
+        _pendingChoice != null ||
+        _petitionModalOpen ||
+        _lawRitual != null ||
+        _imperialDemand != null) {
+      return null;
+    }
 
-    // ── 1) İŞ VERME ADIMI ─────────────────────────────────────────────────
-    //
-    // Üç halka: İŞ YERİNİ seç → kartı aç → boş yuvayı doldur.
-    //
-    // Eskiden zincir kişiden başlıyordu (köylüyü seç → kartı aç → rolü ver).
-    // İş verme yere taşınınca zincirin başı da yere taşındı — ve öğretici
-    // artık oyuncuya doğru soruyu öğretiyor: "kim boşta?" değil, "hangi yer el
-    // istiyor?".
-    //
-    // YERİ YOKSA BU HALKA ATLANIR. "Baltayı ormana sok" adımı hem kereste
-    // kampını diktirir hem de kadro ister; kamp yokken burada durup null
-    // dönseydik öğretici tam o anda susardı — oysa söylenecek şey var:
-    // önce kampı kur. Aşağıdaki inşa halkası devralsın diye düşüyoruz.
-    final job = q.jobTarget;
-    final jobSite = job == null ? null : _siteForRole(job);
-    if (job != null && jobSite != null) {
-      final site = jobSite;
-      if (_isSiteSelected(site)) {
-        if (_detailExpanded) {
-          return GuideCue(
-            anchorId: GuideAnchors.slot(job.name),
-            title: 'Bir el ver',
-            body: 'Boş yuvaya bas. ${site.label} bir el istiyor; köy oraya en '
-                'yakın boş köylüyü yollar.',
-          );
-        }
-        return GuideCue(
-          anchorId: GuideAnchors.command('Detay'),
-          title: 'Kartı aç',
-          body: '${site.label} seçili. "Detay"a bas — kadro kartın içinde.',
+    // ── 1) YÖNETİŞİM ADIMI ────────────────────────────────────────────────
+    // İki halka: Defter'i aç → KANUNNAME rafına geç. (Mühür ânı rafın içinde;
+    // orası artık oyuncunun kendi kararı, işaret oraya kadar götürür.)
+    if (q.uiTarget == QuestUi.lawBook) {
+      if (_ledgerSection == null) {
+        return const GuideCue(
+          anchorId: GuideAnchors.gateDefter,
+          title: 'Defter\'i aç',
+          body: 'Köyün yazılı işleri burada döner: divan, kanunname, nüfus. '
+              'Berat da buradan çıkar.',
         );
       }
-      final at = _guideScreenOf(site.cx, site.cy);
-      if (at == null) return null;
-      return GuideCue(
-        spot: at,
-        radius: 58,
-        title: '${site.label} el bekliyor',
-        body: 'Işığın yandığı yere tıkla. Köyde her işin bir yeri var; '
-            'kadroyu oradan verirsin.',
+      if (_ledgerSection == LedgerSection.kanun) return null; // raf açık, yol belli
+      const railId = GuideAnchors.sectionKanun;
+      if (!GuideAnchors.has(railId)) return null; // telefon rayı çapasız
+      return const GuideCue(
+        anchorId: railId,
+        title: 'Kanunname',
+        body: 'Hükümler bu rafta. Birini seç ve mührü bas — geri alınmaz, '
+            'köyün huyu o satırdan başlar.',
       );
     }
 
@@ -205,20 +183,22 @@ extension _SceneGuide on _VillageSceneState {
         _questVoiceLine = '';
       }
     }
-    if (!_guideActive) {
-      if (_guideOpen) _guideOpen = false;
-      return;
-    }
     final id = _stepCache?.quest.id ?? '';
 
     // Adım değişti → açık spotu indir, yenisi için nefes payı ver.
     // İstek (`_guideWanted`) ile açılış AYRI: hedef o an çözülemiyor olabilir
     // (kamera kayıyor, panel kapalı, köylü ekran dışında). İstek durur,
     // açılış hedef belirince olur.
+    //
+    // BU BLOK ÖĞRETİCİDEN BAĞIMSIZ ÇALIŞIR. Kapsam dörde inince ilk hâlinde
+    // `_guideActive` kapısının ARKASINDA kaldı ve rehbersiz adımların
+    // cümlelerini de sustururdu: köy artık yalnız dört adımda konuşurdu.
+    // Oysa spot ile ses ayrı iki şey — biri yol gösterir, öbürü köyü canlı
+    // tutar. Ses HER adımda düşer, parmak yalnız dört adımda çıkar.
     if (id != _guideStepId) {
       _guideStepId = id;
       _guideDelay = _kGuideLead;
-      _guideWanted = id.isNotEmpty && !_guideShown.contains(id);
+      _guideWanted = _guideActive && id.isNotEmpty && !_guideShown.contains(id);
       _guideOpen = false;
       // ÖNCE KÖY KONUŞUR. Adımı isteyen kurucu cümlesini söyler ve görünür
       // biçimde umutlanır; spot ancak o cümle okunduktan sonra gelir.
@@ -229,6 +209,10 @@ extension _SceneGuide on _VillageSceneState {
         who?.feel(NpcEmotion.wonder, 4, moodDelta: 0.03);
       }
     }
+    if (!_guideActive) {
+      if (_guideOpen) _guideOpen = false;
+      return;
+    }
     if (id.isEmpty) return;
 
     if (_guideOpen) {
@@ -238,8 +222,14 @@ extension _SceneGuide on _VillageSceneState {
     }
 
     if (!_guideWanted) return;
-    // Defter/dilekçe/modal açıkken öğretme — oyuncu başka bir işin içinde.
-    if (_ledgerSection != null || _petitionModalOpen || _imperialDemand != null) {
+    // Dilekçe/modal açıkken öğretme — oyuncu başka bir işin içinde.
+    //
+    // DEFTER İSTİSNA: berat adımının hedefi Defter'in İÇİNDE (kanunname rafı).
+    // Genel kural burada uygulansaydı öğretici tam gideceği yerde susardı.
+    final inLedgerStep = _stepCache?.quest.uiTarget == QuestUi.lawBook;
+    if ((_ledgerSection != null && !inLedgerStep) ||
+        _petitionModalOpen ||
+        _imperialDemand != null) {
       return;
     }
     _guideDelay -= dt;
@@ -267,7 +257,7 @@ extension _SceneGuide on _VillageSceneState {
       _watchY = beacon.$2;
       _watchLeft = 2.2;
     } else {
-      final who = q.jobTarget != null ? _stepVillager() : _questSpeaker(q);
+      final who = _questSpeaker(q);
       if (who != null) {
         _watchX = who.gridX;
         _watchY = who.gridY;
@@ -344,10 +334,9 @@ extension _SceneGuide on _VillageSceneState {
     return x.clamp(lo, hi).toDouble();
   }
 
-  /// Spot katmanı — Stack'te PANELLERİN ÜSTÜNDE durmalı: iş verme adımı köylü
-  /// kartının İÇİNDEKİ rol düğmesini gösterir, altta kalsa deliğin içi karanlık
-  /// olurdu. Modalların (dilekçe/karar/defter) altında: `_tickGuide` zaten
-  /// onlar açıkken spot açmaz.
+  /// Spot katmanı — Stack'te Köy Defteri'nin ÜSTÜNDE (bkz. main.dart'taki
+  /// yerleşim notu). Hangi durumlarda hiç çizilmeyeceği [_resolveGuideCue]'nun
+  /// erken çıkışlarında tek yerden karara bağlanır.
   Widget buildGuideSpotlight() {
     return Positioned.fill(
       child: RepaintBoundary(

@@ -120,6 +120,10 @@ extension _SceneWedding on _VillageSceneState {
     final byHome = <Object, List<VillagerEntity>>{};
     for (final v in _villagers) {
       if (v.lifeStage != LifeStage.adult || v.isDying || v.wed) continue;
+      // KOPMUŞ HANE KIZ/OĞUL VERMEZ — hane esirgemenin son basamağında köyle
+      // akrabalık da kurmaz (bkz. scene_house_stance). Kur hiç başlamaz;
+      // hane razı olunca aday havuzuna kendiliğinden döner.
+      if (_houseRefusesBetrothal(v)) continue;
       final h = v.homeBuilding;
       if (h == null) continue;
       (byHome[h] ??= []).add(v);

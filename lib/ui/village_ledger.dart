@@ -9,6 +9,7 @@ import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
 import '../rendering/character_renderer.dart';
 import '../systems/chronicle.dart';
+import '../systems/house_stance.dart';
 import '../systems/house_system.dart';
 import '../systems/law_book.dart';
 import '../systems/law_compass.dart';
@@ -17,6 +18,7 @@ import '../systems/quest_book.dart';
 import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
+import 'guide_spotlight.dart';
 import 'law_book_panel.dart';
 import 'ledger_board.dart';
 import 'mobile_ui.dart';
@@ -120,6 +122,15 @@ class DivanSeat {
   final bool ascendant; // köyün gölgesine kaydığı hane mi (altın halka)
   final int members; // canlı üye sayısı (eylem kartı başlığı)
   final double swayShare; // köy içi nüfuz payı 0..1
+
+  /// Hanenin köye karşı DURUŞU — masada da görünür (bkz. house_stance).
+  final HouseStance stance;
+
+  /// Reis masaya oturmuyor mu — kopmuş hane sandalyesini boş bırakır.
+  /// Sandalye listeden ÇIKARILMAZ: oyuncu boykot eden haneye hâlâ dokunabilmeli
+  /// (barıştırmak da bir eylemdir). Figür yalnızca "orada değil" gibi çizilir.
+  bool get absent => stance.withholds && stance == HouseStance.defiant;
+
   const DivanSeat({
     required this.visual,
     required this.type,
@@ -130,6 +141,7 @@ class DivanSeat {
     required this.ascendant,
     this.members = 0,
     this.swayShare = 0,
+    this.stance = HouseStance.content,
   });
 }
 
@@ -1479,7 +1491,7 @@ class VillageLedger extends StatelessWidget {
   Widget _houseRow(HouseSnapshot s) {
     final tone = moodTone(s.mood);
     final idColor = _houseColor(s.surname);
-    return Row(
+    final row = Row(
       children: [
         Container(
           width: 9,
@@ -1563,6 +1575,59 @@ class VillageLedger extends StatelessWidget {
           ),
         ),
       ],
+    );
+    // Hane bir şey ESİRGİYORSA satırın altına ne esirgediği yazılır. Rakam
+    // değil CÜMLE: "hâl %31" oyuncuya hiçbir şey söylemez, "üç el işe çıkmıyor"
+    // söyler. Panelde okunan sayı simin okuduğu sayıdır (tek kaynak: snapshot).
+    if (!s.stance.withholds) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [row, const SizedBox(height: 4), _withholdLine(s)],
+    );
+  }
+
+  /// Esirgeyen hanenin bedel şeridi — ne çekiliyor, ne saklanıyor.
+  Widget _withholdLine(HouseSnapshot s) {
+    final w = s.withholding;
+    final hands = (s.members * w.labor).round();
+    final parts = <String>[
+      if (hands > 0) '$hands el işe çıkmıyor',
+      if (s.stash > 0) '${s.stash} kile saklı',
+      if (w.council) 'masada yok',
+      if (w.betrothal) 'nikâh vermiyor',
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(left: 22, right: 6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: const Color(0x14D9534F),
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: const Color(0x40D9534F)),
+        ),
+        child: Row(
+          children: [
+            Text(s.stance.icon, style: const TextStyle(fontSize: 11)),
+            const SizedBox(width: 6),
+            Text(
+              s.stance.label,
+              style: AppUi.body.copyWith(
+                  fontSize: 10.5,
+                  color: AppUi.textMid,
+                  fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                parts.join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2046,7 +2111,14 @@ class _LedgerShellState extends State<_LedgerShell> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (final s in _sections) ...[
-              _railItem(s),
+              // Kuruluşun berat adımı bu rafı gösterir (bkz. scene_guide).
+              if (s == LedgerSection.kanun)
+                GuideTarget(
+                  id: GuideAnchors.sectionKanun,
+                  child: _railItem(s),
+                )
+              else
+                _railItem(s),
               const SizedBox(height: 6),
             ],
           ],

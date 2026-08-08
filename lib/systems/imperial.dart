@@ -61,6 +61,33 @@ class ImperialDemand {
 // ImperialSnapshot hiç örneklenmiyordu (ölü kod) → kaldırıldı; EstateSnapshot
 // ile aynı hikâye. Madalyon istenirse alanları imparatorluk state'inden okur.
 
+/// ÖŞÜR RAKAMI — vergicinin defterden okuduğu sayı.
+///
+/// Sahnede üç satırdı ve orada test edilemiyordu; oysa bu bir DENGE kararı ve
+/// denge kararları ölçülebilir bir yerde durmalı.
+///
+/// İki taban vardır, büyüğü geçerlidir:
+///   • NÜFUS tabanı — fakir köyü korur. Kese boşsa talep insaflı kalır.
+///   • KESE payı — zengin köyü yakalar. Ölçüm gösterdi ki altın nüfustan çok
+///     daha hızlı birikiyor (17 canlık köyde ~27 altın/gün) ve yalnız nüfusa
+///     bakan bir vergi istif yapan köyün yanından geçip gidiyordu: kese
+///     doluyor, hiçbir karar zorlaşmıyordu.
+///
+/// [severity] itibardan gelen sertlik (1.0–1.8), [appetite] yılın iştahı
+/// (1.0–2.0), [treasuryShare] yılın kese payı (0.20–0.45).
+int imperialGoldDemand({
+  required int population,
+  required int treasury,
+  required double severity,
+  required double appetite,
+  required double treasuryShare,
+}) {
+  final byPop = population * 1.6 * severity * appetite;
+  final byPurse = (treasury < 0 ? 0 : treasury) * treasuryShare * severity;
+  final take = byPop > byPurse ? byPop : byPurse;
+  return take.round().clamp(6, 9999);
+}
+
 /// İmparatorluk geliş sinematiğini TALEBE + İTİBARA göre kurar. Süvariler
 /// ufuktan gelir; komutanın sözü talebin türünü, tonu da ilişkiyi (düşman/
 /// tarafsız/dostane) yansıtır. Devşirmede ek bir tehdit çekimi. Mevcut guard

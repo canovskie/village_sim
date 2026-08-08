@@ -241,11 +241,19 @@ extension _SceneHouseActions on _VillageSceneState {
     for (final v in members) {
       v.feel(NpcEmotion.anger, 6.0, moodDelta: -0.12);
     }
+    // SAKLADIKLARI DA ÇIKAR — hane küskünlükten ötürü ürününü kendi ambarına
+    // indirdiyse (bkz. scene_house_stance) mühür onu da bulur. "Mala el koy"un
+    // esirgeyen haneye karşı asıl anlamı bu: gizlediğini görünür kılar.
+    final hidden = _houses.drainStash(surname);
+    if (hidden > 0) _stockpile.food += hidden;
     _chronicle(
-        '$surname Hanesinin ambarı mühürlendi: ${o.gold} altın, ${o.food} kile '
-        'köyün kesesine yazıldı.',
+        '$surname Hanesinin ambarı mühürlendi: ${o.gold} altın, '
+        '${o.food + hidden} kile köyün kesesine yazıldı.',
         icon: '🏚', milestone: true);
-    _showNotification('🏚 $surname Hanesinin malına el kondu — köy bunu konuşacak.');
+    _showNotification(hidden > 0
+        ? '🏚 $surname Hanesinin malına el kondu — sakladıkları $hidden kile '
+            'de ambara indi.'
+        : '🏚 $surname Hanesinin malına el kondu — köy bunu konuşacak.');
   }
 
   /// 💍 NİKÂH BAĞLA — iki haneyi kanla bağlar. Hür rejimde öneri, baskıda

@@ -20,6 +20,10 @@ extension _SceneJobs on _VillageSceneState {
   /// kadro onu ne kapar ne de başka role çeker.
   bool _freeForJob(VillagerEntity v) =>
       v.assignedRole == null &&
+      // HANE ELİNİ ÇEKTİ — küskün hanenin üyesi otomatik kadroya girmez
+      // (bkz. scene_house_stance). Kadro açığı bir HATA değil, bir SONUÇ:
+      // köy o hane ile arasını düzeltene kadar o eller boş kalır.
+      !_houseWithholdsLabor(v) &&
       !v.hasActiveJob &&
       v.jobReassignCd <= 0 &&
       v.canRunErrands &&
@@ -190,15 +194,33 @@ extension _SceneJobs on _VillageSceneState {
       blockMsg: '🪓 Kereste kampı var ama oduncu yok.',
     );
 
-    // TOPLAYICI / AŞÇI — otomatik kadro hedefi 0 (bkz. aşağıdaki not).
-    // Bu iki iş bilinçli olarak KENDİLİĞİNDEN dağıtılmaz: erken oyunun tek
-    // amacı oyuncunun "kim ne yapsın" kararını vermesi. Otomatik atansalardı
-    // köy kendi kendini doyurur, oyuncunun ilk kararı da anlamsızlaşırdı.
-    // Elle atanmış köylüler `_reconcileRole`'ün fazlalık kapısından zaten muaf
-    // (bkz. `assignedRole` kontrolü), o yüzden burada hedefi 0 bırakmak onları
-    // işten ALMAZ — yalnız yenisini otomatik atamaz.
-    _reconcileRole(JobRole.forager, 0, matchType: null, blockMsg: '');
-    _reconcileRole(JobRole.cook, 0, matchType: null, blockMsg: '');
+    // TOPLAYICI / AŞÇI — KÖY KENDİ AÇLIĞINA BAKAR.
+    //
+    // Bu iki hedef uzun süre 0'dı: erken oyunun tek amacı oyuncunun "kim ne
+    // yapsın" kararını vermesiydi, o yüzden köy kendiliğinden ne toplayıcı ne
+    // aşçı atıyordu. Oyundaki karşılığı karar değil MİKRO KONTROL oldu —
+    // oyuncu tek tek köylüye böğürtlen atıyor, atamazsa kimse yemek yapmıyordu.
+    // Bir karar tek seferliktir; bu her seferlikti.
+    //
+    // Elle atananlar bu hedeflerden MUAF (bkz. `assignedRole`): oyuncu üç kişiyi
+    // sepete koyduysa otomatik kadro onları geri almaz. Oyuncunun eli üstüne
+    // yazar, yerine geçmez.
+    _reconcileRole(
+      JobRole.forager,
+      _foragerTarget(),
+      matchType: null,
+      near: _nearestSpot([
+        for (final b in _berryBushes) (b.col + 0.5, b.row + 0.5),
+      ]),
+      blockMsg: '',
+    );
+    _reconcileRole(
+      JobRole.cook,
+      _cookTarget(),
+      matchType: null,
+      near: nearBuilding(BuildingType.firepit),
+      blockMsg: '',
+    );
 
     // DOKUMACI — KIŞIN İŞİ. Tarla donunca çiftçi kadrosu boşa düşüyordu:
     // köyün yarısı kış boyunca ortalıkta dolanıyor, mevsim "ölü zaman" gibi
@@ -224,6 +246,32 @@ extension _SceneJobs on _VillageSceneState {
       matchType: null,
       blockMsg: '',
     );
+  }
+
+  /// Kaç el sepete gitsin — İHTİYAÇ KADAR, sessizce.
+  ///
+  /// Sofra dolduğunda 0'a iner: köy gereksiz yere çalı yolmaz, çalılar da
+  /// yenilenmeye vakit bulur (bkz. [kBerryRegrowSeconds]). Kışın 0 — çalı
+  /// meyve vermez, oraya el yollamak köylüyü boşuna yürütmek olurdu.
+  int _foragerTarget() {
+    if (_berryBushes.isEmpty || _season.isFrozen) return 0;
+    final mouths = _villagers.length;
+    if (mouths == 0) return 0;
+    final perMouth = (_stockpile.food + _cookedMeals) / mouths;
+    if (perMouth >= kForageComfort) return 0;
+    if (perMouth >= kForageLow) return 1;
+    // Aç köyde her üç ağıza bir sepet — nüfusun yarısını çalıya sürmez.
+    return (mouths / 3).ceil().clamp(1, kMaxForagers);
+  }
+
+  /// Ocağın başında kaç el — ateş yanıyorsa, pişirecek ham yiyecek varsa ve
+  /// sofra tavanı dolmadıysa. Tavan dolunca aşçı zaten boş dururdu; hedefi
+  /// düşürüp köye karışması daha doğru.
+  int _cookTarget() {
+    if (_firepitBuilding == null) return 0;
+    if (_stockpile.food < kCookFoodCost) return 0;
+    if (_cookedMeals >= _mealCap) return 0;
+    return _villagers.length >= kSecondCookPop ? 2 : 1;
   }
 
   // ── KERESTE KAMPI BÖLGE YÖNETİMİ ────────────────────────────────────────────
@@ -382,6 +430,11 @@ extension _SceneJobs on _VillageSceneState {
       // kendi işine döner. (Kararı burada sıfırlasaydık oyuncu bir hastalıktan
       // sonra kurduğu iş bölümünü sessizce kaybederdi.)
       if (!v.canRunErrands || v.isDying) continue;
+      // Hane elini çekmişse oyuncunun kararı da SAKLANIR ama uygulanmaz —
+      // hastalık deseniyle birebir aynı. Bu kapı olmadan iki döngü çakışırdı:
+      // `_applyPlayerAssignments` (2 sn) işi geri verir, `_dropWithheldJobs`
+      // (4 sn) alırdı; köylü sürekli işe girip çıkar, sahne titrerdi.
+      if (_houseWithholdsLabor(v)) continue;
       if (v.job != null) _releaseJob(v); // eski claim'ler salıverilsin
       if (want != JobRole.none) v.job = VillagerJob(want);
     }
@@ -395,6 +448,10 @@ extension _SceneJobs on _VillageSceneState {
   /// (bkz. `_fillSlot` / `_emptySlot`). Burası o yüzeyin altındaki ilkel işlem
   /// olarak kaldı; öğretici, dev konsolu ve senaryolar buradan geçer.
   void _assignVillagerJob(VillagerEntity v, JobRole? role) {
+    // Hane esirgiyorsa oyuncunun eli de geçmez — reddin sesi vardır. Bu kapı
+    // olmasaydı sistem defolu olurdu: oyuncu grevdeki herkesi elle atayıp
+    // esirgemeyi tümüyle etkisizleştirebilirdi.
+    if (role != null && _refuseAssignment(v, role)) return;
     v.assignedRole = role;
     // Kilit kalkıyorsa YER mührü de düşer — yoksa köylü otomatik havuza döner
     // ama panelde hâlâ o ocağın yuvasında görünürdü.
@@ -453,8 +510,11 @@ extension _SceneJobs on _VillageSceneState {
         v.job = VillagerJob(role);
         need--;
       }
-      // Hâlâ eksikse (nüfus yetmedi) nazik uyar — spam'siz.
-      if (need > 0 && target > 0 && _jobBlockWarnCd <= 0) {
+      // Hâlâ eksikse (nüfus yetmedi) nazik uyar — spam'siz. Boş [blockMsg]
+      // "bu rolün uyarısı yok" demek: sessiz roller (toplayıcı/aşçı/dokumacı)
+      // köyün kendi refleksi, oyuncunun yapabileceği bir şey yok — o kapı
+      // kapalıyken boş bir bildirim düşerdi.
+      if (need > 0 && target > 0 && blockMsg.isNotEmpty && _jobBlockWarnCd <= 0) {
         _jobBlockWarnCd = 60.0;
         _showNotification(blockMsg);
       }
@@ -1171,7 +1231,7 @@ extension _SceneJobs on _VillageSceneState {
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 0.8) % (2 * pi);
     if (job.timer >= kFishDuration) {
-      _stockpile.food += 1;
+      _deliverFoodFrom(v, 1);
       job.phase = 0;
       job.working = false;
       job.phaseAnim = 0;
@@ -1257,7 +1317,7 @@ extension _SceneJobs on _VillageSceneState {
       job.phase = 0;
       job.working = false;
       job.phaseAnim = 0;
-      _stockpile.food += 1;
+      _deliverFoodFrom(v, 1);
     }
   }
 

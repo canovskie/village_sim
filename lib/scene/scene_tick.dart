@@ -73,7 +73,8 @@ extension _SceneTick on _VillageSceneState {
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
     // arası DevPanel slider'ından gelir; normal oyunda 1.0.
     final effectiveScale =
-        (_pendingChoice != null ||
+        (_collapsed || // köy dağıldı → dünya durur
+            _pendingChoice != null ||
             _activeCutscene != null ||
             _imperialDemand != null ||
             // Mühlet dolup zorla açılan dilekçe — köy yanıt bekler, sim durur.
@@ -89,7 +90,13 @@ extension _SceneTick on _VillageSceneState {
     // Bu sayede normal oynanış güvenli, denge testi 30x'te tam hızlı.
     final clampMax = effectiveScale > 1.5 ? effectiveScale * 0.05 : 0.05;
     if (kCaptureMode) {
-      kProbePause = _pendingChoice != null
+      // Dağılma telemetrisi BURADA yazılır: köy dağılınca dt sıfırlanır ve
+      // tick zinciri (dolayısıyla _tickCollapse) hiç koşmaz. Sayaç orada
+      // kalsaydı prova sonsuza dek "dağılmadı" derdi.
+      kProbeCollapsed = _collapsed;
+      kProbePause = _collapsed
+          ? 'dağıldı'
+          : _pendingChoice != null
           ? 'olay:${_pendingChoice!.id}'
           : _activeCutscene != null
           ? 'sinematik'
@@ -701,6 +708,9 @@ extension _SceneTick on _VillageSceneState {
             _identityYieldMul * // kimlik bonusu: Zanaat Kasabası +%15
             _regimeWorkMul * // rejim çürümesi: tembellik krizi verimi kısar
             _millerYieldMul(), // değirmenin başında değirmenci varsa +%25
+        // Balyayı ambara İNDİREN köylünün hanesi esirgiyorsa ürün köye değil
+        // o hanenin kendi ambarına gider (bkz. scene_house_stance).
+        routeFood: _deliverFoodFrom,
       );
     }
   }
@@ -1009,12 +1019,27 @@ extension _SceneTick on _VillageSceneState {
     ); // haneler karşılık verir (ittifak/gizleme/kışkırtma) // hane baskı sayacı sönümlenir (eylem bedeli normale döner)
     // Zümre dengesi — moral tabana süzülür + küskün zümre diegetik somurtma.
     _tickEstates(dt);
+    // HANE KARŞILIĞI — hane elini/ürününü/masasını geri çeker ya da geri verir.
+    // _tickEstates'ten SONRA: duruş o tick'te güncellenmiş mood'dan türer.
+    if (_stashOpenedCd > 0) _stashOpenedCd -= dt;
+    _tickHouseStance(dt);
+    // KAYBETME EŞİĞİ — ayrılık sayacı + köyün ayakta kalabilirliği. Hane
+    // katmanından SONRA: ayrılık kopuş duruşundan, dağılma da ayrılıktan doğar.
+    _tickCollapse(dt);
+    // HESAPLAŞMA — koşunun kazanılabilir kapanışı. Dağılmadan SONRA: köy zaten
+    // dağıldıysa berat konuşmaz (kapanmış defterin üstüne ikinci kapanış).
+    _tickReckoning(dt);
 
     // Köy Akışı — görev tamamlanması → görsel ödül + politika-odaklı kademe.
     _tickFlow(dt);
     // KIŞ — kırkım/dokuma/giysi dağıtımı + ev ocaklarının yakacağı + hazırlık
     // uyarısı. Kendi içinde saniyelik taramaya iner (gün başına muhasebe).
     _tickWinter(dt);
+    // ORTA OYUN DERSLERİ — kuruluştan sonra açılan sistemlerin öğretmeni.
+    // _tickGuide'dan ÖNCE: ders penceresi kuruluş öğreticisinin açık olup
+    // olmadığına bakıyor, o bayrak bu karede güncellenmeden okunmalı ki iki
+    // anlatım aynı karede birden açılmasın.
+    _tickLessons(dt);
     // Kuruluş öğreticisi — adımı ekranda GÖSTEREN spot (yalnız kademe 0).
     // _tickFlow'dan SONRA: adım cache'i bu karede tazelenmiş olsun, spot bir
     // tarama geriden gelmesin.

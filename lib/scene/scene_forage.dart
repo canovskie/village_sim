@@ -88,7 +88,7 @@ extension _SceneForage on _VillageSceneState {
     if (job.timer >= kBerryPickDuration) {
       bush.harvest();
       bush.isBeingPicked = false;
-      _stockpile.food += kBerryYield;
+      _deliverFoodFrom(v, kBerryYield);
       _berriesPicked++;
       job.claim = null;
       job.phase = 0;

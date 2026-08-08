@@ -202,8 +202,13 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
     }
     if (slots.isEmpty) return _empty();
 
-    final latest = slots.first;
-    final rest = slots.skip(1).toList();
+    // Dağılmış köyler baş köşeye oturmaz: "Devam et" kartı sürdürülebilir bir
+    // kayıt olmalı. Kapanmış defterler aşağıdaki listeye düşer.
+    final live = [for (final s in slots) if (!s.ended) s];
+    final closed = [for (final s in slots) if (s.ended) s];
+    if (live.isEmpty) return _onlyClosed(closed);
+    final latest = live.first;
+    final rest = [...live.skip(1), ...closed];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(
@@ -227,7 +232,7 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
               _SlotCard(
                 key: ValueKey(s.id),
                 meta: s,
-                onOpen: () => widget.onContinue(s),
+                onOpen: s.ended ? null : () => widget.onContinue(s),
                 onRename: (n) => _rename(s, n),
                 onDelete: () => _delete(s),
               ),
@@ -238,6 +243,29 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
       ),
     );
   }
+
+  /// Elde yalnız KAPANMIŞ defter kaldı — devam edilecek köy yok. Kartlar yine
+  /// listelenir (okunabilir/silinebilir) ama hiçbiri açılmaz.
+  Widget _onlyClosed(List<SaveSlotMeta> closed) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const AppSectionLabel('KAPANMIŞ DEFTERLER'),
+            const SizedBox(height: 4),
+            for (final s in closed) ...[
+              _SlotCard(
+                key: ValueKey(s.id),
+                meta: s,
+                onRename: (n) => _rename(s, n),
+                onDelete: () => _delete(s),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ),
+      );
 
   Widget _empty() {
     return Padding(
@@ -275,14 +303,15 @@ enum _CardMode { idle, renaming, confirmDelete }
 class _SlotCard extends StatefulWidget {
   final SaveSlotMeta meta;
   final bool hero;
-  final VoidCallback onOpen;
+  /// null = kapanmış defter (dağılmış köy) — açılamaz, yalnız okunur/silinir.
+  final VoidCallback? onOpen;
   final void Function(String) onRename;
   final VoidCallback onDelete;
 
   const _SlotCard({
     super.key,
     required this.meta,
-    required this.onOpen,
+    this.onOpen,
     required this.onRename,
     required this.onDelete,
     this.hero = false,
@@ -452,13 +481,39 @@ class _SlotCardState extends State<_SlotCard> {
                     ),
                   ),
                 ),
-              Text(
-                m.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppUi.title.copyWith(fontSize: hero ? 17 : 14),
+              Row(
+                children: [
+                  if (m.ended)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 6),
+                      child: Text('☠', style: TextStyle(fontSize: 12)),
+                    ),
+                  Flexible(
+                    child: Text(
+                      m.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.title.copyWith(
+                        fontSize: hero ? 17 : 14,
+                        // Kapanmış defter sönük okunur — listede canlı köyle
+                        // aynı ağırlıkta durmamalı.
+                        color: m.ended ? AppUi.textLo : null,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 3),
+              if (m.ended) ...[
+                Text(
+                  'Dağıldı — ${m.endedReason ?? "defteri kapandı"}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.body.copyWith(
+                      fontSize: 11, color: const Color(0xFFB07A78)),
+                ),
+                const SizedBox(height: 3),
+              ],
               Row(
                 children: [
                   Flexible(

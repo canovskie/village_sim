@@ -14,6 +14,15 @@ class SaveSlotMeta {
   final int population;
   final String identity;
 
+  /// Bu köyün defteri KAPANDI mı (dağıldı). Kapanmış kayıt sürdürülemez ama
+  /// SİLİNMEZ: menüde okunabilir bir mezar taşı olarak durur, silmek oyuncunun
+  /// kararıdır (bkz. scene_collapse — oyun kimsenin köyünü kendi eliyle yok
+  /// etmez). null/false = normal, sürdürülebilir kayıt.
+  final bool ended;
+
+  /// Dağılma nedeni (kapanmış kayıtlarda) — mezar taşı kartında yazar.
+  final String? endedReason;
+
   const SaveSlotMeta({
     required this.id,
     required this.name,
@@ -21,6 +30,8 @@ class SaveSlotMeta {
     required this.day,
     required this.population,
     required this.identity,
+    this.ended = false,
+    this.endedReason,
   });
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +41,8 @@ class SaveSlotMeta {
         'day': day,
         'population': population,
         'identity': identity,
+        if (ended) 'ended': true,
+        if (endedReason != null) 'endedReason': endedReason,
       };
 
   factory SaveSlotMeta.fromJson(Map<String, dynamic> j) => SaveSlotMeta(
@@ -40,6 +53,8 @@ class SaveSlotMeta {
         day: (j['day'] as num?)?.toInt() ?? 1,
         population: (j['population'] as num?)?.toInt() ?? 0,
         identity: (j['identity'] as String?) ?? 'Dengeli Köy',
+        ended: j['ended'] == true,
+        endedReason: j['endedReason'] as String?,
       );
 }
 

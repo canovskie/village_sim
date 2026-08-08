@@ -315,7 +315,7 @@ extension _SceneWork on _VillageSceneState {
     if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten ava yürüyor
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       // Pusu → av. Kaynak yaratır (et), ağaca DOKUNMAZ (o oduncunun işi).
-      _stockpile.food += _kHuntFood;
+      _deliverFoodFrom(v, _kHuntFood);
       v.feel(NpcEmotion.joy, 3.5, moodDelta: 0.05);
       v.glanceAround(duration: _kHuntStalk);
       _setWorkPose(v, ActPose.stoop); // pusuda çömelir

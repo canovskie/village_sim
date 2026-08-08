@@ -42,6 +42,12 @@ enum PetitionFx {
   crimeWatch,    // asayiş kararı — şüphe defteri kapanır (gece nöbeti/kayıtsızlık)
   ransomPaid,    // BESPOKE: fidye ödenir, kaçırılan köylü köye döner
   ransomRefused, // BESPOKE: fidye reddedilir, rehin bir daha dönmez
+  // ── HANE KARŞILIĞI (scene_house_stance) ───────────────────────────────────
+  // Esirgeyen haneyi iki yoldan biriyle çözersin: GÖNLÜNÜ alırsın (hâl yükselir,
+  // merdivenden iner) ya da BELİNİ kırarsın (nüfuz düşer, esirgeyecek kozu
+  // kalmaz). İkisi de işe yarar; bedelleri farklıdır.
+  houseAppeased, // hanenin gönlü alınır — esirgeme çözülür, ambarını açar
+  houseRebuked,  // hanenin nüfuzu kırılır — küskün kalır ama kozu kalmaz
 }
 
 /// Dilekçenin duygu tonu — modal/mühür vurgu rengini ve havasını belirler.
@@ -303,6 +309,10 @@ class PetitionContext {
   /// Köyde aktif bir kan davası var mı — sulh (barışma) dilekçesinin kapısı.
   final bool hasFeud;
 
+  /// ŞU AN bir şey ESİRGEYEN hanenin soyadı (en sert olanı) — hane karşılığı
+  /// dilekçesinin kapısı. null = her hane veriyor (bkz. house_stance).
+  final String? withholdingHouse;
+
   /// MEÇHUL kalan suçların biriktirdiği şüphe (scene_crime) — asayiş
   /// dilekçesinin kapısı. Faili yakalanan suç şüphe biriktirmez.
   final int crimeSuspicion;
@@ -370,6 +380,7 @@ class PetitionContext {
     this.hasCrops = false,
     this.hasResentful = false,
     this.hasFeud = false,
+    this.withholdingHouse,
     this.crimeSuspicion = 0,
     this.cropRotation = false,
     this.hospitality = false,

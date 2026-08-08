@@ -223,14 +223,7 @@ GameIconData questGlyph(String id) => switch (id) {
       'farm' => GameIconData.wheat,
       'well' => GameIconData.drop,
       // ── Kuruluş mikro adımları ──────────────────────────────────────────
-      // Karar adımları (birine iş ver) insan glyph'i, sonuç adımları o işin
-      // ürününü taşır → panelde "ben ne yaptım / ne oldu" ritmi okunur.
-      'giveBasket' => GameIconData.people,
-      'firstBerries' => GameIconData.wheat,
-      'giveCook' => GameIconData.people,
-      'firstMeal' => GameIconData.flame,
       'tent' => GameIconData.home,
-      'giveAxe' => GameIconData.axe,
       'firstNight' => GameIconData.moon,
       'townhall' => GameIconData.bank,
       'firstPolicy' => GameIconData.scroll,

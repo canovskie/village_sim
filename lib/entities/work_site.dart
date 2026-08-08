@@ -72,11 +72,6 @@ class WorkSite {
   /// oyuncu yine de kadro bırakabilir (mevsim döner).
   final String? idleReason;
 
-  /// Bu iş yeri kendiliğinden dolar mı. false ise köy oraya kimseyi
-  /// yollamaz; yuvayı yalnız oyuncu doldurur (toplayıcı + aşçı — erken oyunun
-  /// ilk kararı bilerek oyuncuya bırakılmıştır, bkz. `_syncJobWorkforce`).
-  final bool autoStaffed;
-
   const WorkSite({
     required this.id,
     required this.kind,
@@ -88,7 +83,6 @@ class WorkSite {
     required this.crew,
     this.source,
     this.idleReason,
-    this.autoStaffed = true,
   });
 
   /// Panelde çizilecek yuva sayısı — dolu olanlar + HER ZAMAN bir boş yuva.

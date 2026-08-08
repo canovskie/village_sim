@@ -50,11 +50,20 @@
 //   scene_regime         pusula → rejim kimliği; scene_estates hane/zümre dengesi
 //   scene_house_actions  oyuncunun hanelere proaktif müdahalesi
 //
+//  ── KOŞUNUN YAYI (başı ve sonu) ───────────────────────────────────────────
+//   scene_flow           görev akışı + Tüzük kademesi (merdivenin kendisi)
+//   scene_guide          KURULUŞ öğreticisi — parmakla gösteren spot
+//   scene_lessons        ORTA OYUN dersleri — sonradan açılan sistemlerin kartı
+//   scene_collapse       kaybetme eşiği: ayrılık → köy dağılır
+//   scene_reckoning      HESAPLAŞMA: 6. yılda sancak/berat/ilhak, koşu biter
+//   (eskalasyonun tek kaynağı systems/village_year.dart — sistemler kendi
+//    içinde "gün N'den sonra" DEMEZ, oradan okur)
+//
 //  ── OLAYLAR & HİKÂYE ──────────────────────────────────────────────────────
 //   scene_events         rastgele olay + fx; scene_imperial dış tehdit
 //   scene_crime          suç evreleri; scene_conflict çekişme/kan davası
 //   scene_illness        hastalık/salgın; scene_funeral cenaze; scene_wedding düğün
-//   scene_merchant       gezgin tüccar; scene_flow görev akışı
+//   scene_merchant       gezgin tüccar (görev akışı için bkz. KOŞUNUN YAYI)
 //   scene_chronicle      vakanüvis (kalıcı günce + başarımlar)
 //   scene_voice          sahnenin metin ağzı (tüm oyuncu-yüzü cümleler)
 //
@@ -133,6 +142,7 @@ import 'systems/hay_processor.dart';
 import 'systems/hearth_warmth.dart';
 import 'systems/house_action.dart';
 import 'systems/house_head.dart';
+import 'systems/house_stance.dart';
 import 'systems/house_system.dart';
 import 'systems/imperial.dart';
 import 'systems/law_book.dart';
@@ -142,11 +152,15 @@ import 'systems/path_context.dart';
 import 'systems/petition_system.dart';
 import 'systems/platform_adapt.dart';
 import 'systems/quest_book.dart';
+import 'systems/reckoning.dart';
 import 'systems/regime.dart';
 import 'systems/road_route.dart';
 import 'systems/road_system.dart';
 import 'systems/separation_system.dart';
+import 'systems/village_collapse.dart';
 import 'systems/village_custom.dart';
+import 'systems/village_lessons.dart';
+import 'systems/village_year.dart';
 import 'systems/villager_act.dart';
 import 'systems/villager_memory.dart';
 import 'systems/villager_mind.dart';
@@ -159,6 +173,7 @@ import 'ui/app_ui.dart';
 import 'ui/building_brief.dart';
 import 'ui/building_info_panel.dart';
 import 'ui/building_panel.dart';
+import 'ui/collapse_screen.dart';
 import 'ui/command_bar.dart';
 import 'ui/dev_panel.dart';
 import 'ui/event_banner.dart';
@@ -167,12 +182,14 @@ import 'ui/guide_spotlight.dart';
 import 'ui/hud.dart';
 import 'ui/imperial_modal.dart';
 import 'ui/law_book_panel.dart';
+import 'ui/lesson_card.dart';
 import 'ui/loading_screen.dart';
 import 'ui/main_menu_screen.dart';
 import 'ui/mobile_ui.dart';
 import 'ui/mode_button.dart';
 import 'ui/objective_panel.dart';
 import 'ui/petition_modal.dart';
+import 'ui/reckoning_screen.dart';
 import 'ui/road_panel.dart';
 import 'ui/save_slots_screen.dart';
 import 'ui/settings_model.dart';
@@ -206,6 +223,7 @@ import 'world/world_generator.dart';
 
 part 'scene/scene_act.dart';
 part 'scene/scene_building_spawn.dart';
+part 'scene/scene_collapse.dart';
 part 'scene/scene_chronicle.dart';
 part 'scene/scene_conflict.dart';
 part 'scene/scene_craft.dart';
@@ -222,12 +240,14 @@ part 'scene/scene_forage.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_guide.dart';
 part 'scene/scene_house_actions.dart';
+part 'scene/scene_house_stance.dart';
 part 'scene/scene_illness.dart';
 part 'scene/scene_imperial.dart';
 part 'scene/scene_input.dart';
 part 'scene/scene_jobs.dart';
 part 'scene/scene_land.dart';
 part 'scene/scene_law.dart';
+part 'scene/scene_lessons.dart';
 part 'scene/scene_loot.dart';
 part 'scene/scene_merchant.dart';
 part 'scene/scene_mind.dart';
@@ -240,6 +260,7 @@ part 'scene/scene_placement.dart';
 part 'scene/scene_pressure.dart';
 part 'scene/scene_probe.dart';
 part 'scene/scene_reactions.dart';
+part 'scene/scene_reckoning.dart';
 part 'scene/scene_reed.dart';
 part 'scene/scene_reference_village.dart';
 part 'scene/scene_regime.dart';
@@ -265,6 +286,10 @@ Future<void> main() async {
   // Mobilde: yatay kilit + tam ekran + kenardan kenara (bkz. PlatformAdapt).
   // Masaüstünde no-op.
   await PlatformAdapt.applyMobileChrome();
+  // Kullanıcı tercihleri (ses/sarsıntı/dil) diskten — runApp'ten ÖNCE, yoksa
+  // ilk kare varsayılan seviyeyle çalar ve sessize almış oyuncu bir "pat"
+  // duyar. Okuma başarısız olursa varsayılanlarda kalır, açılış engellenmez.
+  await SettingsModel.instance.load();
   runApp(const VillageSimApp());
 }
 
@@ -509,6 +534,99 @@ int kProbeStockTotal = 0;
 /// oynar. Sözleşme: `çalınan == toprakta duran + geri alınan`.
 int kProbeTheftTaken = 0;
 int kProbeLootRecovered = 0;
+
+// ── HANE KARŞILIĞI provası (bkz. scene_house_stance) ────────────────────────
+// "Yapıldı ama canlı görülmedi" tuzağına karşı: esirgeme merdiveni gerçek
+// sahnede döndüğünde ölçülebilsin. Harness [kProbeHouseWithhold] ile en nüfuzlu
+// haneyi küstürür, [kProbeHouseAppease] ile barıştırır; sayaçlar sonucu söyler.
+
+/// Harness true yapınca sahne en nüfuzlu haneyi merdivenin ambar basamağına
+/// iter. Sahne tüketip false'a çeker.
+bool kProbeHouseWithhold = false;
+
+/// Harness true yapınca esirgeyen hanenin gönlü alınır (dilekçe hükmü ile aynı
+/// yol). Sahne tüketip false'a çeker.
+bool kProbeHouseAppease = false;
+
+/// Küstürülen hanenin soyadı — testin doğru haneyi izlemesi için.
+String kProbeHouseName = '';
+
+/// Şu an bir şey esirgeyen hane sayısı + o hanelerin ambarlarında saklı toplam.
+int kProbeHousesWithholding = 0;
+int kProbeHouseStash = 0;
+
+/// Hanesi elini çektiği için işsiz kalan köylü sayısı (o andaki fotoğraf).
+int kProbeHouseIdled = 0;
+
+// ── Hesaplaşma provası (bkz. scene_reckoning) ───────────────────────────────
+
+/// Harness bunu true yaparsa hesaplaşma PROVA köyünde de işler. Dağılmanın
+/// [kProbeCollapseArmed] muafiyetiyle aynı sözleşme.
+bool kProbeReckoningArmed = false;
+
+/// >0 ise sahne gün sayacını buraya ATLATIR (tek atışlık, sahne sıfırlar).
+/// Hesaplaşma altıncı yıldadır; oraya gerçek zamanda pump ederek varmak
+/// dakikalar sürer ve ölçülen şey zamanın geçişi değil, tarihin geldiğinde
+/// ne olduğudur.
+int kProbeJumpToDay = 0;
+
+/// Orta oyun dersleri provası (bkz. scene_lessons). Harness bunu true yaparsa
+/// dersler PROVA köyünde de açılır; normalde kapalıdır (kare yakalama ders
+/// kartını çekerdi).
+bool kProbeLessonsArmed = false;
+int kProbeLessonsShown = 0;
+String kProbeLastLesson = '';
+
+/// Prova telemetrisi — sahnenin okuduğu değerlerin ta kendisi.
+int kProbeYear = 0;
+bool kProbeReckoningHeralded = false;
+String kProbeVerdict = '';
+double kProbeStanding = 0;
+
+/// Denge ölçümü için gün/kese/nüfus. Hesaplaşma "köyün ağırlığını" refahtan
+/// da okuyor (bkz. ReckoningInput.grit) ve vergi iştahı yılla iki katına
+/// çıkıyor — kesenin o eğriyi taşıyıp taşımadığı ölçülebilir olmalı.
+int kProbeDay = 0;
+int kProbeGold = 0;
+int kProbePop = 0;
+
+// ── Kaybetme eşiği provası (bkz. scene_collapse) ────────────────────────────
+
+/// Harness bunu true yaparsa kaybetme eşiği PROVA köyünde de işler. Normalde
+/// referans/showcase/capture köyleri ölümsüzdür (harness ölürse prova ölür);
+/// bu bayrak o muafiyeti bilerek kaldırır.
+bool kProbeCollapseArmed = false;
+
+/// Harness true yapınca sahnede aşamalı OLAY patlamaz. Karar isteyen olay
+/// modali simi durdurur; prova bunu "sistem çalışmıyor" sanır.
+bool kProbeNoEvents = false;
+
+/// Harness true yapınca en nüfuzlu hane kopuşa itilir ve ayrılık sayacı
+/// eşiğin hemen altına kurulur.
+///
+/// Kanca KALICIDIR (bkz. [kProbeSchismHouse]): tek atışlık bir dürtme yetmez,
+/// çünkü oyun küskünlüğü geri çeker — hane mood'u üye moraline gravite eder,
+/// moral de koşullara. Sistem kendini toparladığı için sayaç sıfırlanıyor ve
+/// prova "ayrılık kolu ölü" diye YANLIŞ yerden düşüyordu.
+bool kProbeForceSchism = false;
+
+/// Kopuşta TUTULAN hane (prova). Boş = tutma yok. Test temizler.
+String kProbeSchismHouse = '';
+
+/// Harness true olduğu SÜRECE köy geri sayım bandında tutulur (yetişkinler
+/// budanır). Aynı sebeple kalıcı: referans köyde çocuklar yetişkinliğe geçip
+/// köyü banttan çıkarıyor ve geri sayım sıfırlanıyordu — ki bu oyunun DOĞRU
+/// davranışı (köy toparlandı), yalnız provanın kurgusu yanlıştı.
+bool kProbeDrainVillage = false;
+
+/// Telemetri: köyün evresi, geri sayımın kalanı, dağıldı mı, kaç hane gitti.
+String kProbeVitality = '';
+double kProbeCollapseDaysLeft = -1;
+bool kProbeCollapsed = false;
+int kProbeHousesLeft = 0;
+
+/// Köyü döndüren el sayısı (prova tanısı) — evre beklenmedikse önce buna bak.
+int kProbeAdults = 0;
 
 /// Harness bunu true yapınca sahne meydana GÖRÜLMÜŞ bir zula gömer — zulanın
 /// bulunma+iade yolunun gerçekten koştuğunu sınamak için. Sahne tüketip
@@ -1121,6 +1239,12 @@ class _VillageSceneState extends State<VillageScene>
   /// seçimine (gerçek harita) yönlendir.
   void _onCutsceneDone() {
     setStateHere(() => _activeCutscene = null);
+    // Kapanış sinematiği bitti → karne ekranı. Bayrağı burada düşürmek şart:
+    // `_reckoned` bunu okuyor ve build bir sonraki karede ekranı açar.
+    if (_reckoningPlaying) {
+      setStateHere(() => _reckoningPlaying = false);
+      return;
+    }
     if (_introPlaceFire) {
       _introPlaceFire = false;
       // Sinematik ATLANDIYSA kapılar hiç açılmamış olur; köy yine de bir
@@ -1388,6 +1512,95 @@ class _VillageSceneState extends State<VillageScene>
 
   /// Küskün hane postürü poll sayacı — ~5s aralıkla diegetik somurtma.
   double _estateMoodScan = 0;
+
+  // ── Hane karşılığı (bkz. systems/house_stance + scene_house_stance) ────────
+  // Hanenin sana ne verdiği / neyi geri çektiği. Duruş türetilmiştir (mood +
+  // nüfuz payı), KAYDEDİLMEZ — mood/sway/stash kayıttan gelince kendi doğar.
+
+  /// Soyad → en son DUYURULAN duruş. Merdiven basamağı değiştiğinde köy
+  /// konuşsun diye tutulur; sessiz kaymalar (aynı basamakta ince oynama)
+  /// bildirim üretmez.
+  final Map<String, HouseStance> _houseStanceSeen = {};
+
+  /// Duruş tarama sayacı (sn) — merdiven basamağı bu aralıkla yoklanır.
+  double _houseStanceScan = 0;
+
+  /// Hanelerin sakladığı ambarların geri akışı için gün kesri biriktirici.
+  double _stashReturnAccum = 0;
+
+  /// Yiyecek girişlerinin KESİR artığı. Hane payı/ikramı kesirli olabilir
+  /// (1 balık × %45 saklama); artık burada birikir, bir kile bile yok olmaz.
+  double _foodCarry = 0;
+
+  /// "Hane ambarını açtı" bildirimi soğuması (sn) — geri akış birkaç gün
+  /// sürdüğünden her taramada tekrar duyurulmasın.
+  double _stashOpenedCd = 0;
+
+  // ── Kaybetme eşiği (bkz. systems/village_collapse + scene_collapse) ───────
+
+  /// Köyün BUGÜNE DEK gördüğü en yüksek yetişkin sayısı. "Ancak kurduğunu
+  /// kaybedersin" kuralının filigranı — kuruluş kadrosu uyarı üretmesin.
+  int _peakAdults = 0;
+
+  /// Dağılma geri sayımında geçen oyun günü. Köy toparlanınca sıfırlanır.
+  double _collapseCountdown = 0;
+
+  /// Köyün o anki ayakta kalabilirliği — HUD şeridi bunu okur.
+  CollapseState _collapse =
+      const CollapseState(vitality: VillageVitality.healthy);
+
+  /// En son DUYURULAN evre — aynı evrede tekrar konuşulmasın.
+  VillageVitality _vitalitySeen = VillageVitality.healthy;
+
+  /// Köy dağıldı mı — true ise sim durur ve mezar taşı ekranı açılır.
+  bool _collapsed = false;
+  CollapseCause? _collapseCause;
+
+  /// Ayrılık son uyarısı verilmiş haneler (hane başına bir kez).
+  final Set<String> _schismWarned = {};
+
+  // ── Hesaplaşma (bkz. systems/reckoning + scene_reckoning) ────────────────
+  //
+  // Dağılmanın simetriği: koşunun KAZANILABİLİR kapanışı. Alanlar dağılma
+  // bloğunun hemen ardında duruyor çünkü ikisi tek bir soruyu paylaşır —
+  // bu köyün defteri nasıl kapandı.
+
+  /// Berat yılı ilan edildi mi (bir kez, [kReckoningHeraldYear] yılında).
+  bool _reckoningHeralded = false;
+
+  /// Verilen karar. null = koşu sürüyor. Doluysa oyun bitmiştir.
+  ReckoningVerdict? _reckoningVerdict;
+
+  /// Kapanış sinematiği hâlâ oynuyor mu — bitince kapanış ekranı açılır.
+  /// Karar ile ekran arasındaki bu tampon olmazsa sinematik hiç görünmez.
+  bool _reckoningPlaying = false;
+
+  /// Karneyi besleyen girdiler — karar ANINDAKİ hâl. Ekran bunu yeniden
+  /// hesaplamaz: sim durduktan sonra okunan değerler kararı vereni yansıtmaz.
+  ReckoningInput? _reckoningInputCache;
+
+  /// Hesaplaşma tarama sayacı (sn).
+  double _reckoningScan = 0;
+
+  // ── Orta oyun dersleri (bkz. systems/village_lessons + scene_lessons) ─────
+
+  /// Görülmüş dersler — bir ders bir kez açılır. KAYDEDİLİR: yüklenen köyde
+  /// oyuncuya kışı ikinci kez anlatmak, öğretmek değil dırdır etmektir.
+  final Set<String> _lessonsSeen = {};
+
+  /// Ekranda duran ders kartı (null = yok).
+  Lesson? _activeLesson;
+
+  /// Ders tarama sayacı + kartlar arası nefes payı (sn).
+  double _lessonScan = 0;
+  double _lessonGap = 0;
+
+  /// Ayakta kalabilirlik tarama sayacı + gün kesri biriktirici (sn).
+  double _vitalityScan = 0;
+  double _collapseAccum = 0;
+
+  /// Esirgeyen hane üyesinin görünür "işi bıraktı" jesti için sayaç (sn).
+  double _withheldGesture = 0;
 
   /// Köyün kimliği = baskın hanenin baskın hizbi; kimlik mekanik bonuslarını
   /// (_identityFarmMul / _identityYieldMul / _identityFoodMul /
@@ -1900,6 +2113,16 @@ class _VillageSceneState extends State<VillageScene>
           village: _villageName, onCancel: widget.onExitToMenu);
     }
 
+    // KÖY DAĞILDI — koşu bitti. Sahnenin geri kalanı hiç kurulmaz: dünyanın
+    // altında dönmeye devam eden bir sim, kapanmış bir defterin arkasında
+    // anlamsızdır (ve mezar taşının üstüne bildirim düşürürdü).
+    if (_collapsed) return buildCollapseScreen();
+
+    // HESAPLAŞMA — koşu bir KARARLA bitti (berat/sancak/ilhak). Kapanış
+    // sinematiği bittikten sonra açılır; oynarken sahne normal kalır ki film
+    // köyün üstünde geçsin, boş bir ekranın üstünde değil.
+    if (_reckoned) return buildReckoningScreen();
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -1974,10 +2197,6 @@ class _VillageSceneState extends State<VillageScene>
                 buildSelectedVillagerPanel(),
               if (_selectedSiteId != null && _detailExpanded)
                 buildSelectedWorkSitePanel(),
-              // KURULUŞ ÖĞRETİCİSİ — karartma + hedefte delik. Tıklamayı
-              // GEÇİRİR (bkz. guide_spotlight): gösterdiği düğmeye oyuncu
-              // doğrudan basar. Panellerin üstünde, modalların altında.
-              buildGuideSpotlight(),
               // Karar bekleyen olay — modal açıkken simülasyon dt = 0 (tick
               // yarıduraklatılır), oyuncu seçene kadar.
               if (_pendingChoice != null) buildEventChoiceModal(),
@@ -1997,9 +2216,22 @@ class _VillageSceneState extends State<VillageScene>
               if (_ledgerSection != null && !_petitionModalOpen)
                 buildVillageLedger(),
               if (_lawRitual != null && !_petitionModalOpen) buildLawRitual(),
+              // KURULUŞ ÖĞRETİCİSİ — vinyet + hedefte ince çerçeve. Tıklamayı
+              // GEÇİRİR (bkz. guide_spotlight): gösterdiği düğmeye oyuncu
+              // doğrudan basar.
+              //
+              // KÖY DEFTERİ'NİN ÜSTÜNDE olmak ZORUNDA: berat adımının hedefi
+              // defterin İÇİNDEKİ kanunname rafı. Altta çizilseydi tam
+              // gideceği yerde defterin arkasında kalırdı. Modalların üstünde
+              // duruyor ama onlar açıkken hedef zaten çözülmez
+              // (`_resolveGuideCue` erken çıkar), yani hiç çizilmez.
+              buildGuideSpotlight(),
               if (_exitConfirmOpen) buildExitConfirm(),
               if (_pendingJudgment != null) buildJudgmentConfirm(),
               buildEventBanner(),
+              // Ders kartı olay banner'ıyla AYNI yeri kullanır; ikisi asla
+              // birlikte çizilmez (kontrol scene_lessons içinde).
+              buildLessonCard(),
               // NOT: ObjectivePanel (görev takipçisine) ve EstateBanner (Divan'a)
               // Komuta yapısında toplandı — sürekli-açık sol/sağ yüzen panel yok.
               // Menü kümesi Stack'te tam ekran panellerden SONRA çiziliyor, yani
@@ -2025,6 +2257,13 @@ class _VillageSceneState extends State<VillageScene>
               // Koşul İÇERİDE (_frame'e bağlı): dış ağaç her frame rebuild
               // olmadığından buradaki bir `if` anonsu donuk bir karede dondurur.
               buildImperialAlert(),
+              // KAYBETME EŞİĞİ şeridi — köy gergin/çöküyor evresindeyse geri
+              // sayım HER AN görünür. Dağılmanın haber verilmiş olmasının
+              // yarısı bu şerit (diğer yarısı bildirim/kronik).
+              buildCollapseBanner(),
+              // Berat geri sayımı — dağılma şeridine ÖNCELİK verir (ikisi aynı
+              // yeri paylaşır; kontrol buildReckoningBanner içinde).
+              buildReckoningBanner(),
               // Sinematik — her şeyin üstünde, tam ekran. Sim duraklı.
               if (_activeCutscene != null)
                 Positioned.fill(

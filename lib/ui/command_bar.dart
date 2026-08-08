@@ -121,11 +121,16 @@ class _CommandBarState extends State<CommandBar> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _MenuButton(
-                  icon: GameIconData.scroll,
-                  label: 'Defter',
-                  badge: widget.agenda,
-                  onTap: widget.onDefter,
+                // Öğretici yönetişim adımında bu kapıyı gösterir — berat bir
+                // bina değil, defterin içindeki bir hüküm.
+                GuideTarget(
+                  id: GuideAnchors.gateDefter,
+                  child: _MenuButton(
+                    icon: GameIconData.scroll,
+                    label: 'Defter',
+                    badge: widget.agenda,
+                    onTap: widget.onDefter,
+                  ),
                 ),
                 const SizedBox(width: 4),
                 _MenuButton(
@@ -214,12 +219,15 @@ class _CommandBarState extends State<CommandBar> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _MenuButton(
-                          icon: GameIconData.scroll,
-                          label: 'Defter',
-                          badge: widget.agenda,
-                          compact: true,
-                          onTap: widget.onDefter,
+                        GuideTarget(
+                          id: GuideAnchors.gateDefter,
+                          child: _MenuButton(
+                            icon: GameIconData.scroll,
+                            label: 'Defter',
+                            badge: widget.agenda,
+                            compact: true,
+                            onTap: widget.onDefter,
+                          ),
                         ),
                         _MenuButton(
                           icon: GameIconData.bank,

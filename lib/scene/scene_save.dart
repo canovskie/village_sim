@@ -97,6 +97,17 @@ extension _SceneSave on _VillageSceneState {
           day: _dayCount,
           population: _villagers.length,
           identity: _houses.identityName,
+          // Defteri KAPANMIŞ köyün kaydı mühürlü yazılır — bir daha yüklenemez.
+          // İki kapanış da buradan geçer: dağılma (kayıp) ve hesaplaşma
+          // (berat/sancak/ilhak). Mühür tek yerde basılsın; iki ayrı yol iki
+          // ayrı "ended" tanımı demektir ve biri er geç unutulur.
+          ended: _collapsed || _reckoningVerdict != null,
+          endedReason: _reckoningVerdict?.sealReason ??
+              (_collapsed
+                  ? (_collapseCause == CollapseCause.emptied
+                      ? 'Son can da gitti'
+                      : 'Köyü döndürecek el kalmadı')
+                  : null),
         ).toJson(),
         'world': captureWorld(),
       };
@@ -109,6 +120,15 @@ extension _SceneSave on _VillageSceneState {
     } finally {
       _saving = false;
     }
+  }
+
+  /// Köy dağıldı — kaydı KAPANMIŞ olarak mühürle. Silmez: oyuncunun onlarca
+  /// saatlik köyünü oyun kendi eliyle yok etmez; kayıt menüde okunabilir bir
+  /// mezar taşı olarak kalır, silmek oyuncunun kararıdır.
+  void _sealSaveAsEnded() {
+    if (_slotId.isEmpty) return;
+    // `_collapsed` zaten true → normal kayıt yolu mührü meta'ya yazar.
+    _saveNow();
   }
 
   /// Sol-alttaki menü kümesi — tek "⚙" tutamağı altında OYUN dışı işler:
@@ -271,6 +291,20 @@ extension _SceneSave on _VillageSceneState {
       'stockpile': _stockpileToJson(),
       'policies': _policiesToJson(),
       'houses': _houses.toJson(),
+      // Kaybetme eşiği: kurulmuşluk filigranı + geri sayım. İkisi de KAYDEDİLİR
+      // — yoksa yüklenen köyde "ancak kurduğunu kaybedersin" kuralı sıfırlanır
+      // (peak 0'a düşer, sistem yeniden uyur) ve tükenmekte olan bir köy
+      // kaydedip yükleyerek sayacı silebilirdi.
+      'peakAdults': _peakAdults,
+      'collapseCountdown': _collapseCountdown,
+      // Hesaplaşma: ilan BİR KEZ düşer, dolayısıyla kaydedilmeli — yoksa
+      // yüklenen köy berat yılını her açılışta yeniden ilan eder. Kararın
+      // kendisi de yazılır ki mühürlü kaydın gerekçesi menüde okunsun.
+      'reckoningHeralded': _reckoningHeralded,
+      'reckoningVerdict': _reckoningVerdict?.name,
+      // Görülen orta oyun dersleri — yüklenen köyde kış ikinci kez
+      // anlatılmasın (öğretmek değil dırdır etmek olurdu).
+      'lessonsSeen': _lessonsSeen.toList(),
       'completedQuests': _completedQuests.toList(),
       // Öğretici spotu görülmüş adımlar — yüklenen köyde ders tekrarlanmaz.
       'guideShown': _guideShown.toList(),
@@ -827,6 +861,18 @@ extension _SceneSave on _VillageSceneState {
     if (w['houses'] is Map) {
       _houses.loadJson(Map<String, dynamic>.from(w['houses'] as Map));
     }
+    _peakAdults = (w['peakAdults'] as num?)?.toInt() ?? 0;
+    _collapseCountdown = (w['collapseCountdown'] as num?)?.toDouble() ?? 0;
+    for (final id in (w['lessonsSeen'] as List? ?? const [])) {
+      _lessonsSeen.add(id as String);
+    }
+    _reckoningHeralded = w['reckoningHeralded'] == true;
+    _reckoningVerdict = switch (w['reckoningVerdict'] as String?) {
+      'sancak' => ReckoningVerdict.sancak,
+      'berat' => ReckoningVerdict.berat,
+      'ilhak' => ReckoningVerdict.ilhak,
+      _ => null,
+    };
     for (final q in (w['completedQuests'] as List? ?? const [])) {
       _completedQuests.add(q as String);
     }

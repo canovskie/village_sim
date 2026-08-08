@@ -179,6 +179,9 @@ extension _SceneDivan on _VillageSceneState {
             ascendant: s?.ascendant ?? false,
             members: e.value.length,
             swayShare: s?.swayShare ?? 0,
+            // Hane karşılığı — kopmuş hane sandalyesini boş bırakır
+            // (bkz. scene_house_stance / DivanSeat.absent).
+            stance: s?.stance ?? HouseStance.content,
           );
         }(),
     ];
@@ -278,7 +281,39 @@ extension _SceneDivan on _VillageSceneState {
 
     // Küskün/huzursuz haneler — gönülleri alınmazsa dilekçe yazarlar.
     // (Salience sıralı gelir; en huzursuzları zaten başa düşer.)
+    // Masa eksik: boykot eden hane varsa bu gündemin kendisidir.
+    final away = _councilBoycottCount;
+    if (away > 0) {
+      brewing.add(DivanMatter(
+        icon: '🪑',
+        title: away == 1 ? 'Masada bir sandalye boş' : 'Masada $away sandalye boş',
+        sub: 'Kopan hane divana oturmuyor. Onlar yokken alınan karar, '
+            'onları bağlamıyor.',
+        pressure: 0.92,
+        tone: PetitionTone.ominous,
+      ));
+    }
+
     for (final h in _houses.snapshot()) {
+      // ESİRGEYEN hane artık "mayalanan" değil, OLMUŞ bir meseledir: gündemde
+      // hâlinin tarifi değil BEDELİ yazar (kaç el, kaç kile).
+      if (h.stance.withholds) {
+        final w = h.withholding;
+        final hands = (h.members * w.labor).round();
+        brewing.add(DivanMatter(
+          icon: h.stance.icon,
+          title: '${h.label} — ${h.stance.label.toLowerCase()}',
+          sub: '${[
+            if (hands > 0) '$hands el işe çıkmıyor',
+            if (h.stash > 0) '${h.stash} kile kendi ambarlarında',
+            if (w.betrothal) 'kız/oğul vermiyorlar',
+          ].join(', ')}. Gönülleri alınmadan bu geri dönmez.',
+          pressure: 0.80 +
+              0.06 * (h.stance.index - HouseStance.withdrawn.index),
+          tone: PetitionTone.ominous,
+        ));
+        continue;
+      }
       final mood = h.mood;
       if (mood >= _kDivanUneasy) continue;
       final sullen = mood < 0.40;

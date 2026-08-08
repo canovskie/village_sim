@@ -5,7 +5,6 @@ import '../entities/villager_job.dart';
 import '../entities/work_site.dart';
 import '../rendering/portrait_renderer.dart';
 import 'app_ui.dart';
-import 'guide_spotlight.dart';
 
 /// KADRO — bir iş yerinin oyuncuya bakan yüzü.
 ///
@@ -31,25 +30,18 @@ class WorkCrewSection extends StatelessWidget {
   /// Yuvadaki isme dokunuldu — o köylünün kartına geç.
   final void Function(VillagerEntity)? onSelect;
 
-  /// Öğretici bu iş yerinin boş yuvasını mı gösteriyor — true ise ilk boş yuva
-  /// [GuideTarget] ile işaretlenir ve sakin bir hâle taşır.
-  final bool guided;
-
   const WorkCrewSection({
     super.key,
     required this.site,
     required this.onRemoveHand,
     this.onAddHand,
     this.onSelect,
-    this.guided = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final crew = site.crew;
     final slots = site.slots;
-    // İlk boş yuvanın sırası — öğretici ışığı ve "ekle" göstergesi oraya bakar.
-    final firstEmpty = crew.length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,20 +63,12 @@ class WorkCrewSection extends StatelessWidget {
                   onSelect: onSelect == null ? null : () => onSelect!(crew[i]),
                 )
               else
-                _emptySlot(i, isGuideTarget: guided && i == firstEmpty),
+                _emptySlot(i),
           ],
         ),
         if (site.idleReason != null) ...[
           const SizedBox(height: 7),
           _note(site.idleReason!, AppUi.gold),
-        ],
-        if (!site.autoStaffed) ...[
-          const SizedBox(height: 7),
-          // Toplayıcı ve aşçı köyün kendiliğinden dağıtmadığı iki iştir; bunu
-          // söylemezsek oyuncu boş yuvaya bakıp "köy nasılsa halleder" sanır ve
-          // erken oyunun tek kararı sessizce kaçırılırdı.
-          _note('Köy buraya kendiliğinden kimseyi yollamaz — bu eli sen verirsin.',
-              AppUi.textLo),
         ],
       ],
     );
@@ -124,17 +108,18 @@ class WorkCrewSection extends StatelessWidget {
     style: AppUi.body.copyWith(fontSize: 11, height: 1.3, color: color),
   );
 
-  Widget _emptySlot(int index, {required bool isGuideTarget}) {
+  /// Boş yuva. ÖĞRETİCİ BURAYA ARTIK DOKUNMAZ: kadro köyün kendi refleksi
+  /// (bkz. scene_jobs), yuva oyuncunun isteğe bağlı müdahalesi. Öğretilecek
+  /// bir zorunluluk kalmayınca öğreten işaret de kalktı.
+  Widget _emptySlot(int index) {
     final extra = site.isExtraSlot(index);
-    final slot = _EmptySlot(
+    return _EmptySlot(
       // Köyün İSTEDİĞİ yuva çağırır (ember çeper), fazladan yuva yalnız
       // durur (soluk) — ikisi aynı görünürse "kaç el gerek" okunmaz olur.
       calling: !extra && onAddHand != null,
       enabled: onAddHand != null,
       onTap: onAddHand,
     );
-    if (!isGuideTarget) return slot;
-    return GuideTarget(id: GuideAnchors.slot(site.role.name), child: slot);
   }
 }
 

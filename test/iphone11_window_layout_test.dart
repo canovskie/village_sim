@@ -3,13 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:village_sim/systems/event_system.dart';
 import 'package:village_sim/systems/imperial.dart';
+import 'package:village_sim/systems/law_compass.dart';
 import 'package:village_sim/systems/petition_system.dart';
+import 'package:village_sim/systems/reckoning.dart';
+import 'package:village_sim/systems/village_lessons.dart';
 import 'package:village_sim/ui/about_screen.dart';
 import 'package:village_sim/ui/app_ui.dart';
 import 'package:village_sim/ui/event_choice_modal.dart';
 import 'package:village_sim/ui/imperial_modal.dart';
+import 'package:village_sim/ui/lesson_card.dart';
 import 'package:village_sim/ui/mobile_ui.dart';
 import 'package:village_sim/ui/petition_modal.dart';
+import 'package:village_sim/ui/reckoning_screen.dart';
 import 'package:village_sim/ui/save_slots_screen.dart';
 import 'package:village_sim/ui/settings_screen.dart';
 
@@ -190,5 +195,102 @@ void main() {
       const Size(720, 360),
     );
     expect(find.byType(Scrollable), findsOneWidget);
+  });
+
+  // ── Koşunun kapanışı + orta oyun dersleri (yeni yüzeyler) ────────────────
+  //
+  // İkisi de masaüstünde yazıldı. Telefon 414 piksel yüksekliğinde ve
+  // güvenli alandan sonra elde 360 kalıyor: masaüstünde rahat duran uzun bir
+  // kolon burada sessizce taşar (sarı-siyah şerit) ya da düğmeyi ekran
+  // dışında bırakır. Kapanış ekranının "Ana Menü" düğmesine ulaşılamazsa
+  // oyuncu koşusunu bitiremez.
+
+  testWidgets('hesaplaşma ekranı telefonda taşmıyor ve kayabiliyor', (
+    tester,
+  ) async {
+    for (final v in ReckoningVerdict.values) {
+      await _pumpPhone(
+        tester,
+        ReckoningScreen(
+          village: 'Pınarbaşı',
+          verdict: v,
+          epilogue: verdictEpilogue(v, VillageRegime.commune),
+          identity: 'Ortak Ocak',
+          years: 6,
+          days: 81,
+          population: 34,
+          rows: reckoningLedger(const ReckoningInput(
+              unity: 0.7, charter: 0.5, grit: 0.4, legacy: 0.5, favor: 0.6)),
+          milestones: const ['📜 Berat yılı ilan edildi.'],
+          onExit: () {},
+        ),
+      );
+      expect(tester.takeException(), isNull, reason: v.name);
+      expect(find.text(v.title), findsOneWidget, reason: v.name);
+      // Uzun içerik kaydırılabilir olmalı; yoksa alttaki çıkış düğmesi
+      // telefonda erişilemez kalır.
+      expect(find.byType(Scrollable), findsWidgets, reason: v.name);
+    }
+  });
+
+  testWidgets('hesaplaşma ekranındaki çıkış düğmesine telefonda ulaşılabiliyor',
+      (tester) async {
+    var exited = false;
+    await _pumpPhone(
+      tester,
+      ReckoningScreen(
+        village: 'Pınarbaşı',
+        verdict: ReckoningVerdict.berat,
+        epilogue: verdictEpilogue(ReckoningVerdict.berat, VillageRegime.market),
+        identity: 'Açık Pazar',
+        years: 6,
+        days: 81,
+        population: 34,
+        rows: reckoningLedger(const ReckoningInput(
+            unity: 0.7, charter: 0.5, grit: 0.4, legacy: 0.5, favor: 0.6)),
+        milestones: const [],
+        onExit: () => exited = true,
+      ),
+    );
+    await tester.scrollUntilVisible(find.text('Ana Menü'), 120);
+    await tester.tap(find.text('Ana Menü'));
+    expect(exited, isTrue,
+        reason: 'kapanış ekranından çıkılamıyor — oyuncu koşusunu bitiremez');
+  });
+
+  testWidgets('ders kartı telefon penceresine sığıyor', (tester) async {
+    await _pumpPhone(
+      tester,
+      Stack(children: [
+        LessonCard(lesson: VillageLessons.all.first, onClose: () {}),
+      ]),
+    );
+    expect(tester.takeException(), isNull);
+    final card = tester.getSize(find.byType(AppPanel).first);
+    // 760x360'lık telefon bütçesini aşmamalı (bkz. MobileUi.windowSize).
+    expect(card.width, lessThanOrEqualTo(760));
+    expect(card.height, lessThanOrEqualTo(360));
+    expect(find.text('NE YAPABİLİRSİN'), findsOneWidget);
+  });
+
+  testWidgets('en uzun ders kartı da telefonda taşmıyor', (tester) async {
+    // Katalogdaki en uzun metin: kart bir dersle çalışıp ötekiyle taşarsa
+    // hata ancak o ders tetiklendiğinde görülür — yani oyunun ortasında.
+    var longest = VillageLessons.all.first;
+    for (final l in VillageLessons.all) {
+      if ((l.body.length + l.action.length) >
+          (longest.body.length + longest.action.length)) {
+        longest = l;
+      }
+    }
+    await _pumpPhone(
+      tester,
+      Stack(children: [LessonCard(lesson: longest, onClose: () {})]),
+    );
+    expect(tester.takeException(), isNull,
+        reason: 'en uzun ders ("${longest.id}") telefonda taşıyor');
+    expect(tester.getSize(find.byType(AppPanel).first).height,
+        lessThanOrEqualTo(360),
+        reason: 'en uzun ders ("${longest.id}") telefon penceresini aşıyor');
   });
 }

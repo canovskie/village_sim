@@ -65,6 +65,87 @@ final List<_PetitionDef> _kEstatePetitions = [
       ),
     ),
 
+    // ✋ HANE ELİNİ ÇEKTİ — köyün emeğini/ürününü esirgeyen hane masaya gelir.
+    // Bu dilekçe hane karşılığı merdiveninin (bkz. systems/house_stance) oyuncuya
+    // SORU sorduğu yer: statü değil KARAR. İki gerçek yol var — gönlünü al
+    // (pahalı, hane geri döner, sakladığını da geri verir) ya da belini kır
+    // (bedava değil ama kesenden çıkmaz; hane küskün kalır, esirgeyecek kozu
+    // kalmaz). Üçüncüsü savsaklamaktır ve savsaklamanın da bir faturası vardır.
+    _PetitionDef(
+      (c) => c.withholdingHouse != null,
+      2.2, // gündemin en ağır maddelerinden — köyün eli boş kalıyor
+      const Petition(
+        id: 'houseWithholding',
+        petitioner: '{ad}, {hane} Hanesi\'nin reisi',
+        icon: '✋',
+        title: '{hane} Hanesi Elini Çekti',
+        tone: PetitionTone.ominous,
+        note: '↩ Emek de ürün de gelmiyor',
+        stakes: 'Gönüllerini almak keseden çıkar; belini kırmak köyün '
+            'sabrından.',
+        bodyPool: [
+          '“Kapıya kadar geldim, içeri girmedim; girsem oturmam gerekirdi. '
+              'Adamlarımı tarladan çektim, evet. Sebebini sen benden iyi '
+              'biliyorsun. Bu köyde bizim payımıza düşen hep en ağır iş, en '
+              'ince dilim oldu. Bir şey değişecekse şimdi değişsin; yoksa '
+              'ambarımız bize yeter.”',
+          '“Kızma. Kimse isyan etmiyor, kimse silah kuşanmıyor. Sadece '
+              'ellerimizi cebimize koyduk. {köy} bizsiz de döner mi, onu '
+              'birlikte göreceğiz. Ben adamıma ‘çık’ demem — sen bana bir '
+              'sebep verirsen, o başka.”',
+          '“Babam bu köyün ilk taşını taşıdı. Bugün aynı köyde bizim sözümüz '
+              'en son soruluyor. Ne altın istiyorum ne toprak; hakkımızın '
+              'sayıldığını görmek istiyorum. Görmezsem, bu böyle sürer.”',
+        ],
+        options: [
+          PetitionOption(
+            label: 'Gönüllerini al',
+            detail: '{hane} Hanesi\'na hakkı teslim edilir. Ellerine dönerler, '
+                'sakladıklarını da birkaç gün içinde ambara indirirler.',
+            resolutionPool: [
+              '🤝 {ad} elini uzattı. {hane} Hanesi sabah tarlada olacak.',
+              '🤝 {hane} Hanesi\'nin hakkı teslim edildi. Ambarlarının kapağı '
+                  'bu akşam köye doğru açıldı.',
+            ],
+            goldDelta: -22,
+            moraleAmount: 0.05,
+            moraleDays: 3,
+            fx: PetitionFx.houseAppeased,
+            estateMood: [(Estate.hearth, 0.06)],
+          ),
+          PetitionOption(
+            label: 'Belini kır',
+            detail: '{hane} Hanesi\'nin sözü meclis önünde kesilir. Küskün '
+                'kalırlar ama esirgeyecek ağırlıkları kalmaz. Köy ürperir.',
+            resolutionPool: [
+              '⚖ {ad} meclisin önünde susturuldu. {hane} Hanesi\'nin sözü '
+                  'artık eskisi kadar ağır değil.',
+              '⚖ {hane} Hanesi\'nin belini kırdın. Kimse itiraz etmedi; '
+                  'kimse de yüzüne bakmadı.',
+            ],
+            moraleAmount: -0.05,
+            moraleDays: 3,
+            fx: PetitionFx.houseRebuked,
+            estateMood: [(Estate.hearth, -0.06)],
+          ),
+          PetitionOption(
+            label: 'Bırak somursunlar',
+            detail: 'Hiçbir şey yapılmaz. {hane} Hanesi esirgemeye devam eder; '
+                'bu iş büyürse bir daha kapına gelirler.',
+            resolutionPool: [
+              '✋ Cevap verilmedi. {ad} arkasına bakmadan gitti.',
+              '✋ {hane} Hanesi kapıda bekletildi. Bekleyen küskünlük ucuza '
+                  'kapanmaz.',
+            ],
+            moraleAmount: -0.02,
+            moraleDays: 2,
+            followUpId: 'houseWithholding',
+            followUpDelayDays: 3.0,
+          ),
+        ],
+      ),
+    ),
+
     // 🩸 Kan davası — köy yaşlıları iki aileyi barıştırman için yalvarır.
     _PetitionDef(
       (c) => c.hasFeud,

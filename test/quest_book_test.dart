@@ -15,16 +15,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/resources.dart';
-import 'package:village_sim/entities/villager_job.dart';
 import 'package:village_sim/scene/scene_data.dart';
 import 'package:village_sim/systems/quest_book.dart';
 
 QuestContext _ctx({
   int charterTier = 0,
   int dayCount = 1,
-  bool everCooked = false,
-  int berriesPicked = 0,
-  Set<JobRole> assigned = const {},
   Map<VillagerType, String> names = const {},
 }) =>
     QuestContext(
@@ -36,9 +32,6 @@ QuestContext _ctx({
       decorCount: 0,
       charterTier: charterTier,
       dayCount: dayCount,
-      everCooked: everCooked,
-      berriesPicked: berriesPicked,
-      playerAssignedRoles: assigned,
       speakerNames: names,
     );
 
@@ -143,56 +136,73 @@ void main() {
 
   // ── KURULUŞ KADEMESİ ───────────────────────────────────────────────────────
   // Buradaki sözleşme bir sayı değil bir TASARIM: erken oyunun boş hissetmesinin
-  // sebebi kuruluşun beş "bina dik" görevinden ibaret olmasıydı. Biri o beşe
-  // geri dönerse ya da adımları bina-only hâle getirirse burası kırılmalı.
+  // sebebi kuruluşun beş "bina dik" görevinden ibaret olmasıydı. Sonraki
+  // sarkaç ters yöne gitti — on iki adımın üçü "şu köylüye şu işi ver"di ve
+  // karar diye eklenen şey mikro kontrol çıktı. Burası ikisini de tutar.
   group('kuruluş kademesi boş bırakmaz', () {
     List<Quest> tier0() => QuestBook.all.where((q) => q.tier == 0).toList();
 
-    test('kuruluş 8-10 mikro adım bandında kalır', () {
+    test('kuruluş 7-10 mikro adım bandında kalır', () {
       // ALT sınır: beş "bina dik" görevine geri dönülürse oyuncu ilk on
       // dakikayı yine bekleyerek geçirir — boşluğun kaynağı buydu.
-      // ÜST sınır: on ikiye çıktığında liste bir iş listesi gibi okundu ve
-      // kuruluş uzun geldi; karar+sonuç adımları birleştirilerek dokuza indi.
-      expect(tier0().length, greaterThanOrEqualTo(8));
+      // ÜST sınır: on ikiye çıktığında liste bir iş listesi gibi okundu.
+      expect(tier0().length, greaterThanOrEqualTo(7));
       expect(tier0().length, lessThanOrEqualTo(10));
     });
 
-    test('kuruluş yalnız bina dikmekten ibaret değil', () {
-      // En az bir adım oyuncunun KARARINI (elle iş verme) istemeli — kuruluş
-      // "şu binayı dik" listesine geri dönmesin.
-      final q = QuestBook.all.firstWhere((q) => q.id == 'giveBasket');
-      expect(q.jobTarget, isNotNull,
-          reason: 'kuruluşta oyuncunun bir KARAR verdiği adım kalmamış');
-      expect(q.check(_ctx(assigned: {JobRole.forager})), isTrue);
+    test('hiçbir adım tek tek köylü atamasına dayanmaz', () {
+      // MİKRO KONTROL NÖBETÇİSİ. "Sepeti birine ver / ocağa aşçı ver" adımları
+      // kâğıtta karardı, oyunda her seferlik bir angaryaydı: köy kendi
+      // açlığına bakmıyordu, oyuncu tek tek köylüye böğürtlen atıyordu. Kadro
+      // artık köyün refleksi (scene_jobs `_foragerTarget`/`_cookTarget`);
+      // buraya rol ataması isteyen bir adım geri dönerse o refleks de
+      // anlamsızlaşır.
+      expect(QuestBook.all.any((q) => q.id == 'giveBasket'), isFalse);
+      expect(QuestBook.all.any((q) => q.id == 'giveCook'), isFalse);
+    });
+
+    test('kuruluş yönetişime DEĞER — yalnız bina dikmekten ibaret değil', () {
+      // Berat uzun süre tier 1'deydi: oyuncu köyü kuruyor, öğretici susuyor ve
+      // oyunun asıl konusuna (mühür/divan/hane) kendi başına çarpması
+      // bekleniyordu. Kuruluşta en az bir yönetişim adımı olmalı.
+      expect(tier0().any((q) => q.category == QuestCategory.governance), isTrue,
+          reason: 'kuruluş yeniden saf inşaat listesine dönmüş');
+    });
+
+    test('öğretici 3-5 adıma eşlik eder, kuruluşun tamamına değil', () {
+      // Kapsam bir süre "kademe 0"dı: dokuz adımın dokuzunda da spot açılıyor,
+      // oyuncu köyü kurarken sürekli birinin parmağını izliyordu. Rehberli
+      // adım sayısı büyürse öğretici yine eşlikçiye döner.
+      final guided = QuestBook.all.where((q) => q.guided).toList();
+      expect(guided.length, greaterThanOrEqualTo(3));
+      expect(guided.length, lessThanOrEqualTo(5));
+      expect(guided.every((q) => q.tier == 0), isTrue,
+          reason: 'kuruluştan sonra spot öğretmez, dırdır eder');
+    });
+
+    test('rehberli adımlar listenin BAŞINDA ve kesintisiz', () {
+      // Adım sırası = `all` sırası (bkz. activeQuests). Rehberli adımlar araya
+      // dağılırsa öğretici susup susup yeniden konuşur; oyuncu için bu
+      // "öğretici bozuldu" demektir.
+      final t0 = tier0();
+      final lastGuided = t0.lastIndexWhere((q) => q.guided);
+      expect(lastGuided, greaterThanOrEqualTo(0));
+      expect(t0.take(lastGuided + 1).every((q) => q.guided), isTrue,
+          reason: 'rehberli adımların arasına rehbersiz bir adım girmiş');
+    });
+
+    test('her rehberli adımın gösterecek bir hedefi var', () {
+      // Hedefsiz rehberli adım = ekranda hiçbir yeri göstermeyen bir spot.
+      for (final q in QuestBook.all.where((q) => q.guided)) {
+        expect(q.buildTarget != null || q.uiTarget != QuestUi.none, isTrue,
+            reason: '${q.id} rehberli ama gösterecek bir şeyi yok');
+      }
     });
 
     test('kuruluş adımlarının çoğunu bir kurucu ister', () {
       final withSpeaker = tier0().where((q) => q.speaker != null).length;
       expect(withSpeaker, greaterThanOrEqualTo(tier0().length ~/ 2),
           reason: 'görevler yeniden isimsiz bir alışveriş listesine dönmüş');
-    });
-
-    test('elle atama görevi OTOMATİK işle tamamlanmaz', () {
-      // Boş küme = oyuncu kimseye iş vermedi. Köy kendiliğinden birini
-      // toplayıcı yapıp sepet doldursa bile bu görev açık kalmalı.
-      final q = QuestBook.all.firstWhere((q) => q.id == 'giveBasket');
-      expect(q.check(_ctx()), isFalse);
-      expect(q.check(_ctx(berriesPicked: 3)), isFalse);
-    });
-
-    test('karar adımı NPC\'nin işini bitirmesini BEKLEMEZ', () {
-      // Bu iki adım bir süre kararın SONUCUNU da istiyordu (sepet dolsun,
-      // kazan kaynasın). Oyunda karşılığı şu oldu: oyuncu hamlesini yapıyor,
-      // sonra köylünün çalıya yürümesini seyrederken adım kapanmıyor, öğretici
-      // duruyordu. Bir adım oyuncunun hamlesini ölçer, NPC'nin hızını ölçmez.
-      final basket = QuestBook.all.firstWhere((q) => q.id == 'giveBasket');
-      expect(basket.check(_ctx(assigned: {JobRole.forager}, berriesPicked: 0)),
-          isTrue,
-          reason: 'sepet dolmasını beklemek oyuncuyu izleyiciye çeviriyor');
-      final cook = QuestBook.all.firstWhere((q) => q.id == 'giveCook');
-      expect(cook.check(_ctx(assigned: {JobRole.cook}, everCooked: false)),
-          isTrue,
-          reason: 'kazanın kaynamasını beklemek oyuncuyu izleyiciye çeviriyor');
     });
 
     test('ilk gece ikinci güne çıkınca tamamlanır', () {

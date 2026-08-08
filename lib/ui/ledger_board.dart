@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'app_ui.dart';
+import 'guide_spotlight.dart';
 import 'mobile_ui.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -85,12 +86,18 @@ class BoardRailItem {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Öğreticinin bu rafı gösterebilmesi için çapa kimliği (bkz. [GuideAnchors]).
+  /// null = öğreticinin işi yok. Masaüstü rayı ile telefon rayı AYRI dosyalar;
+  /// çapa yalnız birinde olursa öğretici platformların birinde susar.
+  final String? guideId;
+
   const BoardRailItem({
     required this.icon,
     required this.label,
     required this.selected,
     required this.onTap,
     this.badge = 0,
+    this.guideId,
   });
 }
 
@@ -158,7 +165,13 @@ class BoardRail extends StatelessWidget {
               SizedBox(height: head, child: header),
               SizedBox(height: headGap),
               for (final it in items) ...[
-                _RailButton(item: it, height: itemH),
+                if (it.guideId != null)
+                  GuideTarget(
+                    id: it.guideId!,
+                    child: _RailButton(item: it, height: itemH),
+                  )
+                else
+                  _RailButton(item: it, height: itemH),
                 SizedBox(height: gap),
               ],
               const Spacer(),

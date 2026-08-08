@@ -343,10 +343,21 @@ extension _SceneEstates on _VillageSceneState {
     // korunur; godMode/showcase'te kapalı. Tek seferde bir kişi.
     if (!_godMode && _villagers.length > 3) {
       for (final v in _villagers) {
-        if (!v.isDying && v.lowMoraleTime > 2.2 * kGameDaySeconds) {
-          _emigrateVillager(v);
-          break;
+        if (v.isDying || v.lowMoraleTime <= 2.2 * kGameDaySeconds) continue;
+        // KOPMUŞ HANE TEK TEK SIZMAZ — hanesi köyden ayrılmaya hazırlanan
+        // köylü, gecenin bir yarısı çıkınını bağlayıp yalnız gitmez; hanesiyle
+        // birlikte gider (bkz. scene_collapse `_houseLeavesVillage`).
+        //
+        // Bu kapı olmadan ayrılık PRATİKTE İMKÂNSIZDI: bireysel göç 2.2 günde,
+        // ayrılık 6 günde tetiklenir → küskün hane, kopuş sayacı dolmadan
+        // üye üye eriyor, üyesi kalmayınca da "razı" sayılıp sayacı sıfırlanıyordu.
+        // Provada birebir bu görüldü: 18 yetişkin 3'e indi, hane hiç ayrılmadı.
+        if (v.surname.isNotEmpty &&
+            _houses.stanceOf(v.surname) == HouseStance.defiant) {
+          continue;
         }
+        _emigrateVillager(v);
+        break;
       }
     }
   }
@@ -368,6 +379,16 @@ extension _SceneEstates on _VillageSceneState {
     if (p.id == 'professionCalling') {
       final r = _resentfulVillager();
       if (r != null) return r;
+    }
+    // Hane karşılığı: konuşan, elini çeken hanenin REİSİDİR — metindeki
+    // {hane}/{ad} ondan gelir ve hükümler (`_appeaseWithholdingHouse`) doğru
+    // haneye iner. Yazar yanlış seçilirse hüküm başka haneye vururdu.
+    if (p.id == 'houseWithholding') {
+      final sn = _withholdingHouseSurname;
+      if (sn != null) {
+        final head = _headOfSurname(sn);
+        if (head != null) return head;
+      }
     }
     // Sulh dilekçesi: kan davasının yaşayan bir tarafı konuşur.
     if (p.id == 'feudReconcile') {
