@@ -83,7 +83,7 @@ extension _SceneLoot on _VillageSceneState {
           '🪏 Eşelenmiş toprak ele verdi: gömülü zula bulundu.',
           '🪏 Kaybolan mal bulundu — birileri onu gömmeyi denemişti.',
         ], _voice(finder, seed: _stableSeed('zula${l.gridX}${l.gridY}', _dayCount))),
-        icon: '🪏');
+        icon: '🪏', kind: ChronicleKind.crisis);
   }
 
   /// DEV/TEST — köy meydanına görülmüş bir zula göm.

@@ -288,7 +288,7 @@ extension _SceneEvents on _VillageSceneState {
     _stageEventResponse(base, choiceId: c.id);
     // Vakanüvis: kararın kuru izi ("Kova zinciri kuruldu. Ev kurtarıldı.").
     _chronicle(c.annal.isEmpty ? '${base.title}: ${c.label}' : c.annal,
-        icon: base.icon);
+        icon: base.icon, kind: ChronicleKind.decision);
     _activeEvent = EventOutcome(
       id:       base.id,
       title:    base.title,

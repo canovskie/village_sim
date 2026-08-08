@@ -381,7 +381,7 @@ extension _SceneWinter on _VillageSceneState {
             extra: {'kalem': w.label.toLowerCase()}),
       ));
       _feelVillage(NpcEmotion.fear, 4, -0.05);
-      _chronicle('Köy kışa eksik girdi: ${w.label.toLowerCase()}', icon: '❄️');
+      _chronicle('Köy kışa eksik girdi: ${w.label.toLowerCase()}', icon: '❄️', kind: ChronicleKind.crisis);
     }
   }
 

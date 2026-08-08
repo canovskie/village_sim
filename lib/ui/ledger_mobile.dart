@@ -270,6 +270,7 @@ extension LedgerMobileBoards on VillageLedger {
   Widget _kanunBoard() {
     return LawBookView(
       sealed: sealed,
+      sealedOn: sealedOn,
       ctx: lawContext,
       spotlightId: lawSpotlightId,
       inkDrySec: inkDrySec,
@@ -381,30 +382,45 @@ extension LedgerMobileBoards on VillageLedger {
   // çevirerek. "Gün" etiketi kendi satırını yemez, metinle aynı satırda durur.
 
   Widget _kronikBoard() {
-    final entries = chronicle.reversed.toList(growable: false);
     // BoardCol bir Expanded'dır — tek sütun bile olsa BoardRow (yani bir Flex)
     // içinde durmalı; yoksa ParentDataWidget hatası atar.
-    return BoardRow(
-      children: [
-        BoardCol(
-          head: milestoneCount > 0
-              ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
-              : 'BÜYÜK ANLAR',
-          headTrailing: BoardCount('${entries.length} kayıt'),
-          child: BoardPager(
-            count: entries.length,
-            columns: 2,
-            rowH: 42,
-            rowGap: 6,
-            emptyText: Voice.pick(const [
-              'Defterin bu sayfası boş. Köy henüz anlatılacak bir şey yaşamadı.',
-              'Henüz yazılacak bir şey yok — ilk büyük gün gelmedi.',
-              'Kronik sayfası temiz. Bu da bir başlangıç.',
-            ], seed),
-            itemBuilder: (_, i) => _MiniChronicle(entry: entries[i]),
+    //
+    // Süzgeç şeridi sayfanın DIŞINDA, başlığın altında durur: sayfalayıcının
+    // içine girse her sayfa çevrildiğinde yeniden çizilir ve dikey bütçeden
+    // sürekli bir satır yerdi.
+    return ChronicleFilter(
+      entries: chronicle,
+      compact: true,
+      builder: (_, entries, chips) => BoardRow(
+        children: [
+          BoardCol(
+            head: milestoneCount > 0
+                ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
+                : 'BÜYÜK ANLAR',
+            headTrailing: BoardCount('${entries.length} kayıt'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                chips,
+                Expanded(
+                  child: BoardPager(
+                    count: entries.length,
+                    columns: 2,
+                    rowH: 42,
+                    rowGap: 6,
+                    emptyText: Voice.pick(const [
+                      'Defterin bu sayfası boş. Köy henüz anlatılacak bir şey yaşamadı.',
+                      'Henüz yazılacak bir şey yok — ilk büyük gün gelmedi.',
+                      'Kronik sayfası temiz. Bu da bir başlangıç.',
+                    ], seed),
+                    itemBuilder: (_, i) => _MiniChronicle(entry: entries[i]),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -141,7 +141,7 @@ extension _SceneHouseStance on _VillageSceneState {
     // Yalnız ESİRGEME basamakları vakanüvise düşer — serzeniş günlük bir şey,
     // kroniği doldurmasın.
     if (s.stance.withholds || (!worse && s.stance == HouseStance.content)) {
-      _chronicle(Voice.say(_kStanceAnnal, ctx), icon: s.stance.icon);
+      _chronicle(Voice.say(_kStanceAnnal, ctx), icon: s.stance.icon, kind: ChronicleKind.crisis);
     }
     logDev('hane duruş: ${s.surname} → ${s.stance.name} '
         '(hâl ${s.mood.toStringAsFixed(2)}, pay ${s.swayShare.toStringAsFixed(2)})');
@@ -307,7 +307,7 @@ extension _SceneHouseStance on _VillageSceneState {
     // Merdivenin en az iki basamak inmesini garantileyecek kadar — "gönlünü
     // aldım ama hâlâ elini çekiyor" hissi kararı anlamsız kılardı.
     _houses.nudge(surname, moodDelta: 0.34);
-    _chronicle('$surname Hanesi ile arası düzeltildi.', icon: '🤝');
+    _chronicle('$surname Hanesi ile arası düzeltildi.', icon: '🤝', kind: ChronicleKind.decision);
     logDev('hane hükmü: $surname gönlü alındı (+0.34 hâl)');
     // Hanenin insanları da bunu hissetsin — moral gövde dilinden okunur.
     for (final v in _villagers) {
@@ -327,7 +327,7 @@ extension _SceneHouseStance on _VillageSceneState {
     _houses.drainSway(surname, 1.6);
     _houses.nudge(surname, moodDelta: -0.10);
     _unrest = (_unrest + 0.06).clamp(0.0, 1.0);
-    _chronicle('$surname Hanesi\'nin sözü meclis önünde kesildi.', icon: '⚖');
+    _chronicle('$surname Hanesi\'nin sözü meclis önünde kesildi.', icon: '⚖', kind: ChronicleKind.decision);
     logDev('hane hükmü: $surname beli kırıldı (−1.6 nüfuz)');
     for (final v in _villagers) {
       if (v.isDying || v.surname != surname) continue;

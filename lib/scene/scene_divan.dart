@@ -57,6 +57,7 @@ extension _SceneDivan on _VillageSceneState {
                   }),
           // 📜 KANUNNAME — fermana dokun → meclis toplanır (mühür ritüeli).
           sealed: _policies.sealed,
+          sealedOn: _policies.sealedOn,
           lawContext: _lawContext,
           lawSpotlightId: _lawSpotlightId,
           inkDrySec: _inkDryRemaining(),
@@ -525,6 +526,25 @@ extension _SceneDivan on _VillageSceneState {
       'dergah.tithe': const DivanFact('🍞', 'Öşür toplanıyor', accent),
       'dergah.penance': const DivanFact('🙏', 'Günah meydanda söyleniyor', accent),
       'dergah.oneFaith': const DivanFact('⚑', 'Köy bir dergâh oldu', accent),
+      // Dilekçe kararlarının bıraktığı izler. Bunlar bir zaman haritada YOKTU:
+      // bayrak basılıyor, sonraki dilekçeler onu okuyup dallanıyor, ama köyün
+      // hâlinde hiçbir yerde yazmıyordu. Karar görünmez bir kural hâline
+      // geliyordu — "neden bu dilekçe hiç gelmiyor?" sorusunun cevabı yoktu.
+      'assembly.tradition': const DivanFact('🗣', 'Meydan günü gelenek', sage),
+      'charter.read': const DivanFact('📖', 'Kanunname yılda bir okunur', sage),
+      'craft.school': const DivanFact('🪚', 'Zanaat atölyede öğretiliyor', sage),
+      'craft.guild': const DivanFact('📋', 'Tezgâhta sıra defteri var', accent),
+      'craft.hoarded': const DivanFact('🔒', 'Zanaat tek elde tutuluyor', rust),
+      'crime.watch': const DivanFact('🌙', 'Gece nöbeti tutuluyor', accent),
+      'dissent.heard': const DivanFact('🗣', 'İtiraz meydanda dinlendi', sage),
+      'dissent.silenced': const DivanFact('🤐', 'İtiraz susturuldu', rust),
+      'village.hushed': const DivanFact('🤐', 'Köy konuşmuyor', rust),
+      'founders.remembered':
+          const DivanFact('🕯️', 'Kurucular her yıl anılıyor', sage),
+      'house.blessed': const DivanFact('🏛', 'Büyük hane gözetiliyor', accent),
+      'house.curbed': const DivanFact('⚖', 'Söz hanelere eşit bölündü', accent),
+      'imperial.prepared': const DivanFact('★', 'Öşür kesesi ayrı duruyor', sage),
+      'legacy.owned': const DivanFact('⚑', 'Kararın arkasında durdun', accent),
     };
     final out = <DivanFact>[];
     for (final flag in _villageMemory) {

@@ -471,6 +471,8 @@ extension _SceneSave on _VillageSceneState {
   /// kaynağı `sealed`; bool'lar yüklemede ondan türer (bkz. restoreSealed).
   Map<String, dynamic> _policiesToJson() => {
     'sealed': _policies.sealed.toList(),
+    // Mühür günleri — hüküm hangi gün deftere girdi (defterde yanında yazar).
+    'sealedOn': _policies.sealedOn,
     'inkDryUntilSim': _policies.inkDryUntilSim,
     // Gündeme gelmiş hüküm id'leri — yüklemede bütün defter "yeni açıldı"
     // diye bağırmasın diye taşınır (bkz. _tickLawGates).
@@ -1290,7 +1292,16 @@ extension _SceneSave on _VillageSceneState {
     if (j is! Map) return;
     final ids = (j['sealed'] as List?)?.whereType<String>() ?? const <String>[];
     // 'path' eski kayıtlarda vardı (dava kolu) — artık yok, sessizce yok sayılır.
-    _policies.restoreSealed(ids);
+    // Mühür günleri eski kayıtta yoktur: damgasız dönerler (defter "gün"
+    // yazmaz, hüküm yine yerinde durur).
+    final raw = j['sealedOn'];
+    final days = <String, int>{
+      if (raw is Map)
+        for (final e in raw.entries)
+          if (e.key is String && e.value is num)
+            e.key as String: (e.value as num).toInt(),
+    };
+    _policies.restoreSealed(ids, days: days);
     _policies.inkDryUntilSim = _d(j['inkDryUntilSim']);
     _lawSeen
       ..clear()

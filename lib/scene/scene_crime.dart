@@ -1208,7 +1208,7 @@ extension _SceneCrime on _VillageSceneState {
             '📖 Sabaha kalmadan sicile bakıldı; {ad-in} adı çıktı. Meçhul suç yok artık.',
           ], _voice(v, seed: _stableSeed('sicil${v.name}', _dayCount))),
           icon: '📖',
-          milestone: c.def.isGrave);
+          milestone: c.def.isGrave, kind: ChronicleKind.crisis);
       _openVerdict(v, c, prevented: false, guard: null);
       return;
     }
@@ -1226,7 +1226,7 @@ extension _SceneCrime on _VillageSceneState {
             _voice(null,
                 seed: _stableSeed('meçhul${c.kind.name}$_dayCount', _dayCount))),
         icon: c.def.icon,
-        milestone: c.def.isGrave);
+        milestone: c.def.isGrave, kind: ChronicleKind.crisis);
     _showNotification(Voice.say(
         _kEscapedPool, _voice(null, seed: _stableSeed('kaçtı${v.name}', _dayCount))));
 
@@ -1443,7 +1443,7 @@ extension _SceneCrime on _VillageSceneState {
     _showNotification(Voice.say(
         guard != null ? _kCaughtGuardPool : _kCaughtPlayerPool, ctx));
     _chronicle(Voice.say(c.def.caughtAnnalPool, ctx),
-        icon: c.def.icon, milestone: c.def.isGrave);
+        icon: c.def.icon, milestone: c.def.isGrave, kind: ChronicleKind.crisis);
     _lifeEvent(v, Voice.say(c.def.caughtAnnalPool, ctx),
         icon: c.def.icon, milestone: true);
 
@@ -1550,7 +1550,7 @@ extension _SceneCrime on _VillageSceneState {
     v.crimeCooldown = _kCrimeCooldown * 2;
     _feelVillage(NpcEmotion.wonder, 6, -0.02);
     final ctx = _voice(v, seed: _stableSeed('af${v.name}', _dayCount));
-    _chronicle(Voice.say(_kPardonAnnalPool, ctx), icon: '🕊️');
+    _chronicle(Voice.say(_kPardonAnnalPool, ctx), icon: '🕊️', kind: ChronicleKind.decision);
     _showNotification(Voice.say(_kPardonPool, ctx));
   }
 
@@ -1569,7 +1569,7 @@ extension _SceneCrime on _VillageSceneState {
     _feelVillage(NpcEmotion.wonder, 8, 0.03); // düzen görüldü
     addCameraShake(4.0, dur: 0.4);
     final ctx = _voice(v, seed: _stableSeed('ceza${v.name}', _dayCount));
-    _chronicle(Voice.say(_kPunishAnnalPool, ctx), icon: '⛓️');
+    _chronicle(Voice.say(_kPunishAnnalPool, ctx), icon: '⛓️', kind: ChronicleKind.decision);
     _showNotification(Voice.say(_kPunishPool, ctx));
   }
 
@@ -1616,7 +1616,7 @@ extension _SceneCrime on _VillageSceneState {
           '⛓ {ad} taş ocağına koşuldu. Borcunu gün gün taşla ödeyecek.',
           '⛓ Kürek hükmü: {ad} zindanda, gündüzleri ocakta.',
         ], ctx),
-        icon: '⛓️');
+        icon: '⛓️', kind: ChronicleKind.decision);
     _showNotification(Voice.say(const [
       '⛓ {ad} kürek cezasına çarptırıldı — {süre} gün ocakta.',
       '⛓ {ad} taş ocağında. Sert ama üretken bir hüküm.',
@@ -1648,7 +1648,7 @@ extension _SceneCrime on _VillageSceneState {
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.04);
     _feelVillage(NpcEmotion.wonder, 8, 0.02);
     final ctx = _voice(v, seed: _stableSeed('tövbe${v.name}', _dayCount));
-    _chronicle(Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏');
+    _chronicle(Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏', kind: ChronicleKind.decision);
     _lifeEvent(v, Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏');
     _showNotification(Voice.say(_kPenancePool, ctx));
   }
@@ -1764,7 +1764,7 @@ extension _SceneCrime on _VillageSceneState {
           '{ad-in} bedeli ödendi, köye geri geldi.',
         ], ctx),
         icon: '🕊️',
-        milestone: true);
+        milestone: true, kind: ChronicleKind.decision);
     _showNotification(Voice.say(_kRansomReturnPool, ctx));
   }
 
@@ -1777,7 +1777,7 @@ extension _SceneCrime on _VillageSceneState {
     pushPolicyMorale(-0.08, 5.0);
     final ctx = _voice(v, seed: _stableSeed('fidyeret${v.name}', _dayCount));
     _chronicle(Voice.say(_kRansomLostAnnalPool, ctx),
-        icon: '🕯️', milestone: true);
+        icon: '🕯️', milestone: true, kind: ChronicleKind.crisis);
     _showNotification(Voice.say(_kRansomLostPool, ctx));
   }
 

@@ -39,6 +39,10 @@ Color themeColor(LawTheme t) => switch (t) {
 
 class LawBookView extends StatefulWidget {
   final Set<String> sealed;
+
+  /// Mühür günleri (ferman id → oyun günü). Boş/eksik = damgasız defter.
+  final Map<String, int> sealedOn;
+
   final LawContext ctx;
   final String? spotlightId;
   final double inkDrySec;
@@ -70,6 +74,7 @@ class LawBookView extends StatefulWidget {
     super.key,
     required this.sealed,
     required this.onOpenLaw,
+    this.sealedOn = const {},
     this.ctx = const LawContext(),
     this.spotlightId,
     this.inkDrySec = 0,
@@ -408,7 +413,7 @@ class _LawBookViewState extends State<LawBookView>
     final color = branchColor(l.branch);
     final tappable = st == _LawState.available && !_inkWet;
     final spotlight = l.id == widget.spotlightId && st == _LawState.available;
-    final (tag, tagColor) = _tagFor(st, color, spotlight);
+    final (tag, tagColor) = _tagFor(st, color, spotlight, day: widget.sealedOn[l.id]);
     return AnimatedBuilder(
       animation: _pulse,
       builder: (_, _) => BoardTile(
@@ -904,7 +909,7 @@ class _LawBookViewState extends State<LawBookView>
     final color = branchColor(l.branch);
     final tappable = st == _LawState.available && !_inkWet;
     final spotlight = l.id == widget.spotlightId && st == _LawState.available;
-    final (tag, tagColor) = _tagFor(st, color, spotlight);
+    final (tag, tagColor) = _tagFor(st, color, spotlight, day: widget.sealedOn[l.id]);
 
     return GestureDetector(
       onTap: tappable ? () => widget.onOpenLaw(l) : null,
@@ -1045,9 +1050,16 @@ class _LawBookViewState extends State<LawBookView>
         ),
       );
 
-  (String, Color) _tagFor(_LawState st, Color color, bool spotlight) =>
+  /// Hükmün altındaki tek satırlık künye. Mühürlü fermanda GÜN de yazar:
+  /// "hangi kışın ortasında imzalamıştım?" sorusunun cevabı kararın yanında
+  /// dursun (damgasız eski kayıtlar sade hâline döner).
+  (String, Color) _tagFor(_LawState st, Color color, bool spotlight,
+          {int? day}) =>
       switch (st) {
-        _LawState.enacted => ('deftere girdi', AppUi.gold),
+        _LawState.enacted => (
+            day != null && day > 0 ? '$day. gün mühürlendi' : 'deftere girdi',
+            AppUi.gold
+          ),
         _LawState.graveLocked => ('kilitli — köy büyüyünce', AppUi.textLo),
         _ => _inkWet
             ? ('müzakere bekliyor', AppUi.textLo)

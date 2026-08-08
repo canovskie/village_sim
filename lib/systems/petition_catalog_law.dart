@@ -361,6 +361,14 @@ final List<_PetitionDef> _kLawPetitions = [
             label: 'Anma töreni düzenle',
             detail: 'Köy ateşin başında toplanır, mumlar yakılır. Acı ortaklaşır.',
             resolutionPool: [''], // dinamik mesaj reaksiyondan gelir (isimle)
+            // Çözüm metni boş (isim reaksiyondan gelir) → günceye düşecek
+            // cümlenin ayrıca yazılması gerekir; yoksa kâtip "Köy Yasta: Anma
+            // töreni düzenle" diye kuru bir başlık yazardı.
+            annalPool: [
+              'Anma töreni yapıldı. Ateşin başında mumlar sabaha kadar yandı.',
+              'Köy giden için toplandı. Ad okundu, kimse acele etmedi.',
+              'Yas ortak tutuldu. O akşam hiçbir kapı erken kapanmadı.',
+            ],
             fx: PetitionFx.vigil,
             estateMood: [(Estate.hearth, 0.08), (Estate.faithful, 0.06)],
           ),
@@ -368,6 +376,11 @@ final List<_PetitionDef> _kLawPetitions = [
             label: 'Sessizce uğurla',
             detail: 'Tören yok. Herkes kendi kapısının ardında yas tutar.',
             resolutionPool: [''],
+            annalPool: [
+              'Tören yapılmadı. Giden sessizce uğurlandı.',
+              'Yas kapıların ardında tutuldu. Meydan boş kaldı.',
+              'Anma verilmedi. Mumlar sandıkta kaldı.',
+            ],
             fx: PetitionFx.mourn,
             estateMood: [(Estate.hearth, -0.08), (Estate.faithful, -0.05)],
           ),

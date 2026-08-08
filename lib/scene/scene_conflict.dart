@@ -488,7 +488,7 @@ extension _SceneConflict on _VillageSceneState {
       // Yalnız YUMRUKLAŞMADA ses var: atışma sık, sesli olsaydı köy sürekli
       // gürültülü olurdu (ve gerçek kavganın ağırlığı kaybolurdu).
       AudioManager.instance.playSfx(Sfx.fightScuffle);
-      _chronicle(Voice.say(_kBrawlChroniclePool, ctx), icon: '💢');
+      _chronicle(Voice.say(_kBrawlChroniclePool, ctx), icon: '💢', kind: ChronicleKind.crisis);
       // Escalation/yaralanma kendi bildirimini verdiyse base'i tekrarlama.
       if (!escalated && !injured) {
         _showNotification(Voice.say(_kBrawlPool, ctx));
@@ -797,7 +797,7 @@ extension _SceneConflict on _VillageSceneState {
       v.injuryDays = 1.5 + _rng.nextDouble() * 1.5; // başta ağrılı dönem de var
       v.feel(NpcEmotion.grief, 5.0, moodDelta: -0.18);
       _chronicle(Voice.say(_kCrippledChroniclePool, ctx),
-          icon: '🩼', milestone: true);
+          icon: '🩼', milestone: true, kind: ChronicleKind.crisis);
       _showNotification(Voice.say(_kCrippledPool, ctx));
     } else {
       final days =
@@ -913,22 +913,22 @@ extension _SceneConflict on _VillageSceneState {
                 'bıçak çekmedi.',
           ], ctx),
           icon: '🩸',
-          milestone: true);
+          milestone: true, kind: ChronicleKind.crisis);
       _showNotification(Voice.say(const [
         '🩸 {ad} kan döktü. Diyet ödendi — kan davası doğmadı.',
         '🩸 Bedel kesildi, öç elden alınmadı. {öteki-in} hanesi keseyi aldı.',
       ], ctx));
     } else if (feudPair) {
       _chronicle(Voice.say(_kRevengeChroniclePool, ctx),
-          icon: '🩸', milestone: true);
+          icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
       _showNotification(Voice.say(_kRevengePool, ctx));
     } else if (feudFormed) {
       _chronicle(Voice.say(_kFeudStartChroniclePool, ctx),
-          icon: '🩸', milestone: true);
+          icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
       _showNotification(Voice.say(_kFeudStartPool, ctx));
     } else {
       _chronicle(Voice.say(_kKillChroniclePool, ctx),
-          icon: '🩸', milestone: true);
+          icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
       _showNotification(Voice.say(_kKillPool, ctx));
     }
     return true;
@@ -1065,7 +1065,7 @@ extension _SceneConflict on _VillageSceneState {
     _chronicle(
         Voice.say(
             wasFeud ? _kExileFeudChroniclePool : _kExileChroniclePool, ctx),
-        icon: '🚷', milestone: wasFeud);
+        icon: '🚷', milestone: wasFeud, kind: ChronicleKind.decision);
     _showNotification(Voice.say(_kExilePool, ctx));
   }
 
@@ -1102,7 +1102,7 @@ extension _SceneConflict on _VillageSceneState {
     _chronicle(
         Voice.say(
             wasFeud ? _kExecuteFeudChroniclePool : _kExecuteChroniclePool, ctx),
-        icon: '⚖️', milestone: true);
+        icon: '⚖️', milestone: true, kind: ChronicleKind.decision);
     _showNotification(Voice.say(_kExecutePool, ctx));
   }
 

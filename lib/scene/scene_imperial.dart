@@ -26,6 +26,7 @@ extension _SceneImperial on _VillageSceneState {
       _buildings.length * 2.5;
 
   void _tickImperial(double dt) {
+    if (kProbeNoImperial) return; // prova: heyet yok (bkz. kProbeNoEvents)
     // Fiziksel heyet sahnedeyse formasyonu yürüt (yaklaşma/ayrılış). Pazarlıkta
     // sim zaten duraklı olduğundan buraya dt gelmez.
     if (_imperialPhase != ImperialVisitPhase.idle) {
@@ -511,7 +512,7 @@ extension _SceneImperial on _VillageSceneState {
       _payCouncilOverride(violent: false);
     }
     _chronicle('Öşür ödendi: ${d.label}. Komutan satırın yanına bir çentik attı.',
-        icon: '⚔️');
+        icon: '⚔️', kind: ChronicleKind.decision);
     _showNotification('⚔️ ${Voice.say(const [
           'Yük arabalara bindi. {köy} bu akşam sağ, yalnız daha fakir.',
           'Defter kapandı, kolon yola çıktı. Kimse arkalarından bakmadı.',
@@ -532,7 +533,7 @@ extension _SceneImperial on _VillageSceneState {
       _payCouncilOverride(violent: false);
     }
     _chronicle('Bir gencin yerine kese verildi ($cost★); çocuk ocağında kaldı.',
-        icon: '★');
+        icon: '★', kind: ChronicleKind.decision);
     _showNotification('★ ${Voice.say([
           'Altın sayıldı, çocuğun kolu bırakıldı. {köy-de} kalıyor. (-$cost★)',
           'Komutan keseyi tarttı, gence bir daha bakmadı. Kaldı. (-$cost★)',
@@ -556,7 +557,7 @@ extension _SceneImperial on _VillageSceneState {
         _payCouncilOverride(violent: false);
       }
       _chronicle('Komutan rakamı çizip $pay yazdı; köy o kadarını ödedi.',
-          icon: '🤝');
+          icon: '🤝', kind: ChronicleKind.decision);
       _showNotification('🤝 ${Voice.say([
             'Komutan sayıyı çizdi, altına $pay${d.icon} yazdı. Fark {köy-de} kaldı.',
             'Kalem oynadı. $pay${d.icon} ile kapandı bu iş.',
@@ -569,7 +570,7 @@ extension _SceneImperial on _VillageSceneState {
       _imperialInternalToll(d, 0.7); // ağır fatura: hem ödedi hem küçük düştü
       _chronicle(
           'Teklif komutanı güldürmedi. Rakam olduğu gibi tahsil edildi.',
-          icon: '⚔️');
+          icon: '⚔️', kind: ChronicleKind.decision);
       _showNotification('⚔️ ${Voice.say(const [
             'Komutan defteri kapatmadı bile. Rakamın tamamı alındı.',
             'Teklif havada kaldı. Askerler ambara kendileri girdi; tam ödendi.',
@@ -646,7 +647,7 @@ extension _SceneImperial on _VillageSceneState {
       _chronicle(
           '$_villageName tırpanla, baltayla eşiğe dizildi. Heyet defteri kapatıp '
           'geri döndü.',
-          icon: '🛡️', milestone: true);
+          icon: '🛡️', milestone: true, kind: ChronicleKind.decision);
       _showNotification('🛡️ ${Voice.say(const [
             'Heyet geri çekildi. {köy} bu akşam kimseyi gömmüyor.',
             'Mızraklar geri döndü. Kimse bağırmadı; herkes yerinde durdu, yetti.',
@@ -675,7 +676,7 @@ extension _SceneImperial on _VillageSceneState {
       _imperialInternalToll(d, 1.0, raid: true); // ezilen direniş: huzursuzluk sıçrar
       _chronicle(
           'Direniş eşikte kırıldı. $killed köylü yerde kaldı, ambar boşaltıldı.',
-          icon: '⚔️', milestone: true);
+          icon: '⚔️', milestone: true, kind: ChronicleKind.crisis);
       _showNotification('⚔️ ${Voice.say(const [
             'Sıra bozuldu. Askerler meydana giriyor.',
             'Baltalar yetmedi. Atlılar {köy-in} içinde.',
@@ -711,7 +712,7 @@ extension _SceneImperial on _VillageSceneState {
     _chronicle(
         '$_villageName ödemedi. Komutan defteri kapattı ve $killed kişiyi bedel '
         'olarak aldı.',
-        icon: '⚔️', milestone: true);
+        icon: '⚔️', milestone: true, kind: ChronicleKind.crisis);
     _showNotification('⚔️ ${Voice.say(const [
           'Komutan sessizce başını salladı. Mızraklar indi, atlar {köy-e} sürüldü.',
           'Cevabı aldı. Şimdi bedelini kendi eliyle topluyor.',
@@ -739,7 +740,7 @@ extension _SceneImperial on _VillageSceneState {
           'Askerler {ad-i} aldı. {hane} ocağında bir yastık boş kaldı.',
           '{ad-in} adı deftere yazıldı. Köy kapısı ardından uzun süre kapanmadı.',
         ], _voice(v, seed: _impSeed(27))),
-        icon: '🧑');
+        icon: '🧑', kind: ChronicleKind.crisis);
   }
 
   void _endImperialVisit(double prosp) {

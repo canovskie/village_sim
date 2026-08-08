@@ -18,6 +18,7 @@ import '../systems/quest_book.dart';
 import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
+import 'chronicle_filter.dart';
 import 'guide_spotlight.dart';
 import 'law_book_panel.dart';
 import 'ledger_board.dart';
@@ -239,6 +240,10 @@ class VillageLedger extends StatelessWidget {
   // düğmeydi. İkisi de öldü. Yerine tek bir yüzey: defter. Fermana dokun →
   // meclis toplanır (LawSealRitual) → mühür basılı tutularak basılır.
   final Set<String> sealed;
+
+  /// Mühür günleri (ferman id → oyun günü); defterde hükmün yanında yazar.
+  final Map<String, int> sealedOn;
+
   final LawContext lawContext;
   final String? lawSpotlightId;
   final double inkDrySec;
@@ -321,6 +326,7 @@ class VillageLedger extends StatelessWidget {
     this.legacy = 0,
     required this.onOpenPetition,
     this.sealed = const {},
+    this.sealedOn = const {},
     this.lawContext = const LawContext(),
     this.lawSpotlightId,
     this.inkDrySec = 0,
@@ -592,6 +598,7 @@ class VillageLedger extends StatelessWidget {
       children: [
         LawBookView(
           sealed: sealed,
+          sealedOn: sealedOn,
           ctx: lawContext,
           spotlightId: lawSpotlightId,
           inkDrySec: inkDrySec,
@@ -830,18 +837,30 @@ class VillageLedger extends StatelessWidget {
         ),
       );
     }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppSectionLabel(
-          milestoneCount > 0
-              ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
-              : 'BÜYÜK ANLAR',
-        ),
-        const SizedBox(height: 6),
-        for (final e in chronicle.reversed) _chronicleRow(e),
-      ],
+    // Süzgeç (bkz. ui/chronicle_filter.dart): "ne karar vermiştim?" sorusunun
+    // cevabı listede vardı ama bulunamıyordu.
+    return ChronicleFilter(
+      entries: chronicle,
+      builder: (_, filtered, chips) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppSectionLabel(
+            milestoneCount > 0
+                ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
+                : 'BÜYÜK ANLAR',
+          ),
+          const SizedBox(height: 6),
+          chips,
+          if (filtered.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text('Bu türde kayıt yok.',
+                  style: AppUi.body.copyWith(color: AppUi.textLo)),
+            ),
+          for (final e in filtered) _chronicleRow(e),
+        ],
+      ),
     );
   }
 

@@ -64,7 +64,8 @@
 //   scene_crime          suç evreleri; scene_conflict çekişme/kan davası
 //   scene_illness        hastalık/salgın; scene_funeral cenaze; scene_wedding düğün
 //   scene_merchant       gezgin tüccar (görev akışı için bkz. KOŞUNUN YAYI)
-//   scene_chronicle      vakanüvis (kalıcı günce + başarımlar)
+//   scene_chronicle      vakanüvis (kalıcı günce + başarımlar; her satırın bir
+//                        TÜRÜ var → defterin süzgeci ui/chronicle_filter)
 //   scene_voice          sahnenin metin ağzı (tüm oyuncu-yüzü cümleler)
 //
 //  ── TEST YATAKLARI ────────────────────────────────────────────────────────
@@ -632,6 +633,32 @@ int kProbeAdults = 0;
 /// bulunma+iade yolunun gerçekten koştuğunu sınamak için. Sahne tüketip
 /// false'a çeker.
 bool kProbePlantLoot = false;
+
+/// PROVA: imparatorluk heyetini bastırır. Pazarlık modali simi DONDURUR
+/// (kProbePause 'imparatorluk') ve heyeti ölçmeyen harness'lar bu pencerede
+/// ölür — olay modalinin kProbeNoEvents'i neyse bu da odur.
+bool kProbeNoImperial = false;
+
+/// KARAR İZİ provası — harness bunu true yapınca sahne bekleyen dilekçenin İLK
+/// şıkkını seçer (oyuncunun kararı gibi); bekleyen yoksa dilekçe kuyruğunu
+/// hemen açar. Sahne tüketip false'a çeker.
+bool kProbeDecideNow = false;
+
+/// Güncedeki KARAR türü satır sayısı — "karar verildi ama hiçbir yere
+/// yazılmadı" hatasının tek görünür kanıtı.
+int kProbeDecisionLines = 0;
+
+/// Son karar satırının metni (tanı için).
+String kProbeLastDecision = '';
+
+/// Bespoke sahnesi OLMAYAN kararların günceye düşen satır sayısı — yani bu
+/// turda eklenen yolun (`_chronicleDecision`) gerçekten koştuğunun kanıtı.
+/// Kendi cümlesini zaten yazan fx'ler (sulh/çağrı/suç hükmü) buraya sayılmaz.
+int kProbePlainDecisions = 0;
+
+/// Bekleyen dilekçenin id'si (tanı) — 'karar düşmedi' bulgusunda ilk bakılacak
+/// yer: dilekçe hiç gelmedi mi, yoksa gelip kaydedilmedi mi?
+String kProbePendingPetition = '';
 
 /// TEST/capture: hakem telemetrisi. Açıkken scene_mind her müzakere turunda
 /// köyün canlılık kanıtını buraya yazar — kaç köylü yürüdü, kaç farklı niyet

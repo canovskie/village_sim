@@ -52,6 +52,15 @@ class VillagePolicies {
   /// Mühürlenmiş ferman id'leri (bkz. [kLawBook]). Defterin kendisi.
   final Set<String> sealed = {};
 
+  /// MÜHÜR GÜNÜ — ferman id → deftere girdiği oyun günü (1-bazlı; 0/eksik =
+  /// bilinmiyor, eski kayıt ya da hazır kurulmuş köy).
+  ///
+  /// Neden ayrı bir harita: `sealed` bir küme, sırası bile yok. "Bu fermanı ne
+  /// zaman, hangi kışın ortasında imzalamıştım?" sorusunun cevabı hiçbir yerde
+  /// durmuyordu — kararın kendisi kalıyor, bağlamı uçuyordu. Defterde hükmün
+  /// yanında duran gün, kararı köyün hikâyesine bağlar.
+  final Map<String, int> sealedOn = {};
+
   /// Mürekkep bu sim time'a kadar ıslak — o ana dek yeni mühür basılamaz.
   /// Cooldown bir ceza değil, oyunun ritmi: "bugün hangi TEK fermanı?"
   double inkDryUntilSim;
@@ -87,10 +96,12 @@ class VillagePolicies {
   /// sınıfı hatalar mümkün olmaz. Sahne kurulmadan önce null.
   void Function()? onChanged;
 
-  /// Bir fermanı deftere geçir. GERİ ALINMAZ — [sealed]'den bir şey çıkmaz.
-  /// Sıra/path/foreclosure YOK: serbest katalog, tek sınır bedel+tempo+siyaset.
-  void seal(LawDef l) {
+  /// Bir fermanı deftere geçir. Sıra/path/foreclosure YOK: serbest katalog,
+  /// tek sınır bedel+tempo+siyaset. [day] = oyun günü (mühür damgası); 0
+  /// geçilirse damga yazılmaz (harness/hazır köy).
+  void seal(LawDef l, {int day = 0}) {
     sealed.add(l.id);
+    if (day > 0) sealedOn[l.id] = day;
     _mirror(l.id);
     onChanged?.call();
   }
@@ -124,7 +135,12 @@ class VillagePolicies {
 
   /// Kayıttan dönüş (ve dev "defteri yak") — mühür setini olduğu gibi kur,
   /// bool'ları SIFIRDAN ondan türet. Tek yerde `sealed` boşalabilir: burası.
-  void restoreSealed(Iterable<String> ids) {
+  ///
+  /// [days] verilirse mühür damgaları da baştan kurulur (kayıttan dönüş).
+  /// Verilmezse eldeki damgalar KORUNUR ama defterden düşen fermanınki silinir
+  /// — fesih yolu buradan geçer ([_SceneRegime._repealLaw]) ve o fermanın gün
+  /// damgası da onunla birlikte defterden çıkmalı.
+  void restoreSealed(Iterable<String> ids, {Map<String, int>? days}) {
     familyEncouragement = false;
     peacefulEnd = false;
     eldersExemptFromFood = false;
@@ -149,6 +165,12 @@ class VillagePolicies {
     sealed
       ..clear()
       ..addAll(ids);
+    if (days != null) {
+      sealedOn
+        ..clear()
+        ..addAll(days);
+    }
+    sealedOn.removeWhere((id, _) => !sealed.contains(id));
     for (final id in sealed) {
       _mirror(id);
     }

@@ -148,6 +148,15 @@ final List<_PetitionDef> _kChainPetitions = [
             label: 'Bir hizbi destekle',
             detail: 'Net taraf tutarsın. Kaybeden hizip çıkınını toplar.',
             resolutionPool: [''], // dinamik: ayrılanın ismi reaksiyondan
+            // Çözüm metni boş (isim reaksiyondan gelir) → kâtibin satırı ayrıca
+            // yazılır; yoksa günceye "İnançta Bölünme: Bir hizbi destekle"
+            // diye kuru bir başlık düşerdi.
+            annalPool: [
+              'Bir hizip tutuldu. Kaybeden taraf çıkınını topladı, tapınağın '
+                  'kapısındaki işaretlerden biri kazındı.',
+              'Taraf tutuldu. Sabahçılarla gececiler bir daha aynı duayı okumadı.',
+              'Bölünme hükümle bitti. Kapıdaki iki işaretten biri silindi.',
+            ],
             moraleAmount: -0.04,
             moraleDays: 4,
             fx: PetitionFx.vigil, // ayrılış — mum töreni havası

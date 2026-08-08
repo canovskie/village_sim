@@ -135,6 +135,59 @@ class BuildingRenderer {
       BuildingType.library,
       'assets/buildings/library_winter.png',
     );
+    // Kış varyantları — üretim/ticaret yapıları.
+    await _loadWinterSprite(
+      BuildingType.market,
+      'assets/buildings/market_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.fisherCabin,
+      'assets/buildings/fishercabin_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.warehouse,
+      'assets/buildings/warehouse_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.lumberCamp,
+      'assets/buildings/lumberjack_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.mineBuilding,
+      'assets/buildings/mine_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.barn,
+      'assets/buildings/barn_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.floristCottage,
+      'assets/buildings/floristcottage_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.tailor,
+      'assets/buildings/tailor_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.chickenCoop,
+      'assets/buildings/chickencoop_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.bathhouse,
+      'assets/buildings/bathhouse_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.caravanserai,
+      'assets/buildings/caravanserai_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.shrine,
+      'assets/buildings/shrine_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.belltower,
+      'assets/buildings/belltower_winter.png',
+    );
   }
 
   static Future<void> _loadWinterSprite(BuildingType type, String path) async {

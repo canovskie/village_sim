@@ -247,7 +247,7 @@ extension _ScenePetitions on _VillageSceneState {
           '{ad-in} ailesiyle {öteki-in} ailesi barıştı. Husumet defterden silindi.',
           'Sulh oldu. İki soy artık birbirinin adını anabiliyor.',
         ], peaceCtx),
-        icon: '🕊️', milestone: true);
+        icon: '🕊️', milestone: true, kind: ChronicleKind.decision);
     _showNotification(Voice.say(const [
       '🕊️ {ad} ile {öteki} el sıkıştı. Kan davası bitti.',
       '🕊️ Diyet ödendi, husumet kapandı. {ad-in} ailesi de {öteki-in} ailesi de nefes aldı.',
@@ -302,7 +302,7 @@ extension _ScenePetitions on _VillageSceneState {
           '{ad-in} tezgâhı el değiştirdi. Kendi işine geçti: {yeni}.',
           '{ad} sonunda çağrısının ardına düştü. {eski} değil, {yeni}.',
         ], callCtx),
-        icon: '🌟', milestone: true);
+        icon: '🌟', milestone: true, kind: ChronicleKind.decision);
     _showNotification(Voice.say(const [
       '🌟 {ad} artık {yeni}. Ellerini ilk kez kendi seçtiği işe verdi.',
       '🌟 {ad} {eski} işini bıraktı, {yeni} oldu. Yüzü gülüyor.',
@@ -389,9 +389,13 @@ extension _ScenePetitions on _VillageSceneState {
   /// Oyuncu bir seçeneği seçti: deltaları + morali + yasayı + fx'i uygula.
   void _resolvePetition(Petition p, PetitionOption o) {
     setStateHere(() {
+      // Karardan ÖNCEKİ günce uzunluğu — fx kendi satırını yazdıysa (sulh,
+      // çağrı, suç hükmü…) üstüne ikinci bir satır atmayalım diye ölçülür.
+      final logBefore = _storyLog.length;
       // Bildirimsel etkiler (dilekçe + meclis ortak) — fx/tepki dilekçeyi
       // getiren köylüye bağlanır.
       _applyDecisionEffects(p, o, _petitionAuthor);
+      _chronicleDecision(p, o, wroteOwnLine: _storyLog.length > logBefore);
       // Rejim krizinin şıkka bağlı huzursuzluk etkisi (yalnız regime.* için).
       _applyRegimeChoice(p, o);
 
@@ -408,6 +412,59 @@ extension _ScenePetitions on _VillageSceneState {
     // Boş resolution → mesaj reaksiyonun kendisinden gelir (ör. kayıp ismi).
     if (o.resolution.isNotEmpty) _showNotification(o.resolution);
   }
+
+  /// KARARIN İZİ — verdiğin her dilekçe kararı günceye düşer.
+  ///
+  /// Eskiden bu satır YOKTU: 41 dilekçenin 87 şıkkı, yani oyunun en geniş karar
+  /// yüzeyi, geriye hiçbir kayıt bırakmıyordu. Karar anı bildirimle geçiyor,
+  /// bildirim uçuyor, geriye yalnız değişmiş sayılar kalıyordu — "ben ne karar
+  /// vermiştim?" sorusunun cevabı hiçbir yerde yazmıyordu.
+  ///
+  /// [wroteOwnLine] true ise fx zaten kendi (daha zengin) satırını yazmıştır;
+  /// aynı karar iki kez kaydedilmez. Bu ölçümle yapılır, sabit fx listesiyle
+  /// değil: yeni bir bespoke sahne eklendiğinde burayı güncellemek gerekmesin.
+  void _chronicleDecision(Petition p, PetitionOption o,
+      {required bool wroteOwnLine}) {
+    if (wroteOwnLine) return;
+    // Sırayla: kâtibin kendi cümlesi → şıkkın çözüm metni → en kaba hâli.
+    //
+    // İkinci basamak niye var: her şıkkın zaten geçmiş zaman kipinde, olanı
+    // anlatan bir çözüm cümlesi var ("Nöbet başladı. Fenerler geç saate kadar
+    // yanıyor."). Bu bildirim olarak uçup gidiyordu; günceye düşünce kayda
+    // dönüşür. Yani 114 şıkkın tamamı tek satır metin yazmadan kayda girer,
+    // `annalPool` de kâtibin başka bir şey söylemesi gereken yerlere kalır.
+    final text = o.annal.isNotEmpty
+        ? o.annal
+        : o.resolution.isNotEmpty
+            ? _plainAnnal(o.resolution)
+            : '${p.title}: ${o.label}';
+    _chronicle(text, icon: p.icon, kind: ChronicleKind.decision);
+    kProbePlainDecisions++;
+  }
+
+  /// Çözüm metnini günce satırına çevirir: baştaki SİMGEYİ atar. Satırın kendi
+  /// ikonu solda zaten duruyor; ikisi yan yana gelince satır iki kez bağırır.
+  ///
+  /// Yalnız simge atılır, noktalama DEĞİL: ilk hâli "harf/rakam görene kadar
+  /// kırp" diyordu ve tırnakla açılan cümlenin (“Bu köy kimsenin çiftliği
+  /// değil”) açılış tırnağını yutup kapanışını ortada bırakıyordu.
+  String _plainAnnal(String s) {
+    final runes = s.trim().runes.toList();
+    var i = 0;
+    while (i < runes.length && _isDecorationRune(runes[i])) {
+      i++;
+    }
+    if (i == 0) return s.trim();
+    return String.fromCharCodes(runes.sublist(i)).trimLeft();
+  }
+
+  /// Emoji / simge / birleştirici — cümlenin önündeki süs.
+  bool _isDecorationRune(int r) =>
+      r == 0x20 ||
+      r == 0xFE0F || // variation selector
+      r == 0x200D || // zero-width joiner
+      (r >= 0x2190 && r <= 0x2BFF) || // oklar + çeşitli simgeler (⚖ ★ ⛓ …)
+      (r >= 0x1F000 && r <= 0x1FAFF); // emoji blokları (🌾 🔮 …)
 
   /// Bir kararın (dilekçe YA DA meclis oturumu) bildirimsel etkilerini uygular:
   /// kaynak/moral/fx/zümre/hafıza/zincir + sahnede yaşanan tepki. Tek doğruluk —
@@ -841,7 +898,7 @@ extension _ScenePetitions on _VillageSceneState {
       return;
     }
     _feelVillage(NpcEmotion.wonder, 10, 0.03);
-    _chronicle('Köyün ortasına bir mabet dikildi.', icon: '⛪', milestone: true);
+    _chronicle('Köyün ortasına bir mabet dikildi.', icon: '⛪', milestone: true, kind: ChronicleKind.decision);
   }
 
   /// BESPOKE mantar tepkisi: tarlalarda yayılan mantar animasyonu + günlerce

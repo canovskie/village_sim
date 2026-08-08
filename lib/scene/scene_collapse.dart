@@ -84,10 +84,10 @@ extension _SceneCollapse on _VillageSceneState {
     switch (st.vitality) {
       case VillageVitality.strained:
         _showNotification('⚠ ${Voice.pick(worse ? _kStrainedLines : _kRecoverLines, seed)}');
-        if (worse) _chronicle(Voice.pick(_kStrainedAnnal, seed), icon: '⚠');
+        if (worse) _chronicle(Voice.pick(_kStrainedAnnal, seed), icon: '⚠', kind: ChronicleKind.crisis);
       case VillageVitality.failing:
         _showNotification('☠ ${Voice.pick(_kFailingLines, seed)}');
-        _chronicle(Voice.pick(_kFailingAnnal, seed), icon: '☠', milestone: true);
+        _chronicle(Voice.pick(_kFailingAnnal, seed), icon: '☠', milestone: true, kind: ChronicleKind.crisis);
       case VillageVitality.healthy:
         if (!worse) {
           _showNotification('🌤 ${Voice.pick(_kRecoverLines, seed)}');
@@ -107,7 +107,7 @@ extension _SceneCollapse on _VillageSceneState {
             ? 'Son can da gitti. Ocak söndü.'
             : 'Köyü döndürecek el kalmadı. Ocak söndü.',
         icon: '☠',
-        milestone: true);
+        milestone: true, kind: ChronicleKind.crisis);
     // Kaydı MÜHÜRLE — sürdürülemez olur ama SİLİNMEZ: oyuncunun köyünü oyun
     // kendi eliyle yok etmez, kapanmış bir defter olarak menüde durur (silmek
     // oyuncunun kararı). Mühür kaydın kendi meta'sındadır (bkz. scene_save).
@@ -268,7 +268,7 @@ extension _SceneCollapse on _VillageSceneState {
       final ctx = _voice(_headOfSurname(s),
           seed: _stableSeed('ayrılık$s', _dayCount), extra: {'hane': s});
       _showNotification('🚪 ${Voice.say(_kSchismWarn, ctx)}');
-      _chronicle(Voice.say(_kSchismWarnAnnal, ctx), icon: '🚪');
+      _chronicle(Voice.say(_kSchismWarnAnnal, ctx), icon: '🚪', kind: ChronicleKind.crisis);
     }
 
     for (final s in _houses.tickDefiance(dayFrac)) {
@@ -292,7 +292,7 @@ extension _SceneCollapse on _VillageSceneState {
         '$surname Hanesi ${_villageWith(Suffix.ablative)} ayrıldı: '
         '${members.length} can, $hidden kile.',
         icon: '💔',
-        milestone: true);
+        milestone: true, kind: ChronicleKind.crisis);
     logDev('AYRILIK: $surname (${members.length} kişi, $hidden kile)');
 
     for (final v in members) {

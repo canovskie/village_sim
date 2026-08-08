@@ -157,7 +157,7 @@ extension _SceneLaw on _VillageSceneState {
         final no = vote.voices.where((v) => !v.yes).map((v) => v.line).take(2);
         _showNotification('🏛 Meclis fermanı geçirmedi '
             '(${(vote.support * 100).round()}% destek). ${no.join(' ')}');
-        _chronicle('${l.title} meclisten döndü.', icon: '🏛');
+        _chronicle('${l.title} meclisten döndü.', icon: '🏛', kind: ChronicleKind.decision);
         // Reddedilen ferman meşruiyeti aşındırır: ısrar edersen köy gerilir.
         _unrest = (_unrest + 0.04).clamp(0.0, 1.0);
         return;
@@ -168,7 +168,7 @@ extension _SceneLaw on _VillageSceneState {
     // duyuluyordu; kararın en ağır ânı ayrı bir ses hak ediyor.
     AudioManager.instance.playSfx(Sfx.sealStamp);
     setStateHere(() {
-      _policies.seal(l);
+      _policies.seal(l, day: _dayCount); // defterde hükmün yanında duran gün
       _applyDecisionEffects(_lawAsDecision(l), l.seal, null);
       // Büyük fermanlar geçici moralle kalmaz — köy ruhunda sönmeyen bir iz.
       if (l.legacy != 0) {
@@ -191,7 +191,7 @@ extension _SceneLaw on _VillageSceneState {
       _announceLawInVillage(l);
     });
     _chronicle('${l.title} deftere girdi.',
-        icon: l.icon, milestone: l.isGrave);
+        icon: l.icon, milestone: l.isGrave, kind: ChronicleKind.decision);
     if (l.seal.resolution.isNotEmpty) _showNotification(l.seal.resolution);
   }
 

@@ -117,7 +117,7 @@ extension _SceneRegime on _VillageSceneState {
     if (base != null) _nudgeHousesByEstate(base, moodDelta: -0.08 * mult);
     _chronicle(
         'Meclisin duruşuna rağmen imparatorluk kararını sen verdin.',
-        icon: '🏛');
+        icon: '🏛', kind: ChronicleKind.decision);
     _showNotification('🏛 Meclisi dinlemedin — köy sesini bir kez daha yuttu.');
   }
 
@@ -188,7 +188,7 @@ extension _SceneRegime on _VillageSceneState {
       _showNotification('⚠ Köy huzursuz — ${_regimeIdentity.title} '
           'altında sabır azalıyor.${title.isEmpty ? '' : ' ($title yaklaşıyor)'}');
       _chronicle('${_regimeIdentity.title} altında köy homurdanmaya başladı.',
-          icon: '⚠');
+          icon: '⚠', kind: ChronicleKind.crisis);
     }
     if (_unrest < Regime.kStir * 0.7) _unrestStirShown = false;
 
@@ -235,7 +235,7 @@ extension _SceneRegime on _VillageSceneState {
       _chronicShown = true;
       final (title, body) = Regime.chronicText(_regimeRule.crisis);
       _showNotification('🕯 $title — ${_regimeIdentity.title} artık eskisi gibi değil.');
-      _chronicle('$title  $body', icon: '🕯', milestone: true);
+      _chronicle('$title  $body', icon: '🕯', milestone: true, kind: ChronicleKind.crisis);
       _award('regime.chronic.${_regimeRule.crisis.name}', title, '🕯');
     } else if (!now && was) {
       _chronicShown = false;
@@ -302,7 +302,7 @@ extension _SceneRegime on _VillageSceneState {
     _regimeRot = (_regimeRot + Regime.kRotPerCrisis).clamp(0.0, 1.0);
     final (title, body) = Regime.crisisText(c);
     addCameraShake(2.2, dur: 0.5);
-    _chronicle(title, icon: '🔥', milestone: true);
+    _chronicle(title, icon: '🔥', milestone: true, kind: ChronicleKind.crisis);
 
     final options = <PetitionOption>[];
     final unrestByLabel = <String, double>{};
@@ -564,7 +564,7 @@ extension _SceneRegime on _VillageSceneState {
     // demez, köyün adını söyler (bkz. scene_voice `_villageWith` kuralı).
     _showNotification(
         '${id.icon} $title. ${_villageWith(Suffix.genitive)} yemini.');
-    _chronicle('$title  $decree', icon: id.icon, milestone: true);
+    _chronicle('$title  $decree', icon: id.icon, milestone: true, kind: ChronicleKind.decision);
     _award('oath.${id.regime.name}', '${id.title}: $_villageName yeminini etti',
         id.icon);
   }
@@ -583,7 +583,7 @@ extension _SceneRegime on _VillageSceneState {
     final o = p.options[i];
     _showNotification('🏛 Meclis sen olmadan karar verdi: ${o.label}');
     _chronicle('Meclis "${p.title}" için kendi kararını verdi: ${o.label}.',
-        icon: '🏛');
+        icon: '🏛', kind: ChronicleKind.decision);
     _resolvePetition(p, o);
     // Köy kendi işini gördü — bu bir başarısızlık değil, rejimin doğası.
     // Yine de senin sesin duyulmadı: küçük bir meşruiyet aşınması.
@@ -610,7 +610,7 @@ extension _SceneRegime on _VillageSceneState {
       _petitionTimer = _petitionInterval();
     });
     _showNotification('✋ Dilekçeyi reddettin. Meydan sessiz — ama boş değil.');
-    _chronicle('"${p.title}" dilekçesi meclise varmadan reddedildi.', icon: '✋');
+    _chronicle('"${p.title}" dilekçesi meclise varmadan reddedildi.', icon: '✋', kind: ChronicleKind.decision);
   }
 
   /// Baskı rejimi: mühlet dolan dilekçe zorunlu huzura ÇIKMAZ, sessizce düşer.
@@ -679,6 +679,6 @@ extension _SceneRegime on _VillageSceneState {
       _lawRitual = null;
     });
     _showNotification('🕯 ${l.title} defterden silindi. Mürekkep uzun kuruyacak.');
-    _chronicle('${l.title} feshedildi.', icon: '🕯', milestone: true);
+    _chronicle('${l.title} feshedildi.', icon: '🕯', milestone: true, kind: ChronicleKind.decision);
   }
 }

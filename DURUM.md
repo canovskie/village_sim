@@ -16,7 +16,7 @@ Boş bir liste iyi haber değil, bakımsız bir belgedir.
 | | |
 |---|---|
 | Kaynak | 275 dosya, ~107.600 satır (`lib/`) |
-| Test | 69 dosya, ~10.250 satır, **659 test** |
+| Test | 71 dosya, ~10.500 satır, **671 test** |
 | `flutter analyze` | temiz |
 | Varlıklar | 94 MB (62 MB'ı `assets/buildings`) |
 | İçerik | 31 bina, 11 meslek, 8 kaynak, 34 hüküm, 10 suç türü |
@@ -37,6 +37,7 @@ Bunların hepsi kurulu, bağlı ve testli.
 - **Orta oyun dersleri** — 7 sistemin kart öğreticisi *(2026-08-08)*
 - **Yıl omurgası** — eskalasyonun tek kaynağı; vergi/olay/kış yılla sertleşir *(2026-08-08)*
 - **Hesaplaşma** — 6. yılda sancak/berat/ilhak, rejime göre kapanış *(2026-08-08)*
+- **Yaşayan köy showcase görseli** — merkez yerleşim, binalar ve doğal çeper görünür *(2026-08-08)*
 - Kaybetme eşiği — hane ayrılığı → köy dağılır, kayıt mühürlenir
 
 **Yönetişim (oyunun kalbi)**
@@ -46,6 +47,8 @@ Bunların hepsi kurulu, bağlı ve testli.
 - Haneler: duruş merdiveni (sadık→razı→serzeniş→el çekti→ambar→kopuş) +
   oyuncunun proaktif eylemleri (bağış/ceza/nikâh/sürgün/entrika)
 - İmparatorluk: vergici heyeti, pazarlık, itibar, iki tabanlı öşür
+- **Kararın izi** — verilen her dilekçe kararı ve mühür günceye düşer; KRONİK
+  süzgeci (kararlar/yaşam/sıkıntı), mühür günü, 14 eksik hafıza izi *(2026-08-08)*
 
 **Yaşayan köy**
 - NPC beyni 6 fazın tamamı (WorldPressure → Mind/Bid → Algı/Hafıza/Dedikodu →
@@ -68,34 +71,27 @@ Bunların hepsi kurulu, bağlı ve testli.
 
 ## ⚠️ Eksik — öncelik sırasıyla
 
-### 1. Canlı köy hiç CANLI görülmedi
-Faz 0-5'in tamamı yazıldı ve testli, ama kullanıcı bunların ekranda
-karşılığını **bir kez bile görmedi**. Yani elimizde değeri kanıtlanmamış,
-sim'in en pahalı katmanı var.
-
-> Yapılacak: bir izleme oturumu. Görünmüyorsa ya bağlanmamıştır ya da
-> görünürlüğü yoktur — ikisi de silmeyi ya da düzeltmeyi gerektirir.
-> Üstüne yeni faz İNŞA EDİLMEMELİ.
-
-### 2. Kararsız (flaky) test
+### 1. Kararsız (flaky) test
 Bir tam koşuda tek bir hata düştü (`Expected: true / Actual: false`), adı
 yakalanamadı. Ardından **8 temiz tam koşu** geldi; tekrarlanmadı.
 Çözülmedi, yalnız görülmedi. Avlama komutu CLAUDE.md §6'da.
 
-### 3. Tablet doğrulanmadı
+### 2. Tablet doğrulanmadı
 Referans cihaz iPhone 11 (telefon). Tablet HUD'ı ve köylü paneli hiç
 sınanmadı.
 
-### 4. Dilekçe katalogları testsiz
-9 dosya, ~3.000 satır, **sıfır test** — projedeki en büyük test boşluğu.
-Çoğu veri ama `petition_catalog_estates` (644 satır) mantık taşıyor.
+### 3. Dilekçe katalogları testsiz
+9 dosya, ~3.000 satır, neredeyse **sıfır test** — projedeki en büyük test
+boşluğu. Çoğu veri ama `petition_catalog_estates` (644 satır) mantık taşıyor.
+İlk kanca atıldı: `decision_trace_test` her şıkkın günceye yazacak bir cümlesi
+olduğunu tarıyor (iki suskun şık böyle bulundu).
 
-### 5. Tek dil
+### 4. Tek dil
 `AppLanguage` enum'unda `tr` ve `en` var, yalnız `tr` dolu. Türkçe ek motoru
 (`voice.dart`) dile bağlı — İngilizce eklemek metin çevirisi değil, motorun
 ikinci bir gramere açılması demek. Küçük bir iş değil.
 
-### 6. Kalan küçük eksikler
+### 5. Kalan küçük eksikler
 - `main.dart` tepesinde 4 Ağustos'tan kalma **"YARIN İLK İŞ"** notu duruyor:
   el sallama sohbet balonundan çıkarılıp gövde animasyonuna çevrilecek.
 - Ses: `ui_tap` + 2 müzik parçası. **Kullanıcı kararıyla İSTENMEDİ** —

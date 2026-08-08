@@ -1054,8 +1054,22 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       _stockpile.food  = 9999;
       _stockpile.gold  = 999;
 
-      // Grid layout — tüm bina tipleri, çakışmasız. Safe area (col 1..22,
-      // row 1..18). Sıra: erken/orta/ileri oyun + dekoratif.
+      // Grid layout — tüm bina tipleri, çakışmasız. Dünya 128×128 olduğu için
+      // showcase'u (1..22) köşeye değil, kameranın baktığı merkez açıklığa
+      // yerleştir. Eski yerleşim köşede kalıyor, capture karesi ise merkezi
+      // gösterdiği için bütün bina asset'leri görünmez oluyordu.
+      const showOx = kCols ~/ 2 - 11;
+      const showOy = kRows ~/ 2 - 9;
+      // Showcase bir katalog karesi: yapıların siluetleri okunmalı. Dünya
+      // üreticisinin doğal kanopisi aynı merkezde kalabildiği için yalnızca
+      // yerleşim kutusunu temizle; kutunun dışındaki orman/nehir atmosferi
+      // korunur.
+      bool inShowcaseClear(int c, int r) =>
+          c >= showOx - 2 && c <= showOx + 22 &&
+          r >= showOy - 2 && r <= showOy + 17;
+      _trees.removeWhere((t) => inShowcaseClear(t.col, t.row));
+      _reeds.removeWhere((r) =>
+          inShowcaseClear(r.col, r.row) || inShowcaseClear(r.col2, r.row2));
       const layout = <(BuildingType, int, int)>[
         // Sıra 1: ateş yeri + temel
         (BuildingType.firepit,         10, 2),
@@ -1096,7 +1110,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       // taverna/kilise böyle kaybolup iş döngüsü testini yanılttı). Artık
       // atlananlar sayılıp bildirimde açıkça söyleniyor.
       _showcaseSkipped.clear();
-      for (final (type, col, row) in layout) {
+      for (final (type, localCol, localRow) in layout) {
+        final col = showOx + localCol;
+        final row = showOy + localRow;
         if (!_isValidPlacement(col, row, type)) {
           _showcaseSkipped.add(type.name);
           continue;
@@ -1114,8 +1130,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
 
       // Tarla + çiftçiler — pazarın üstü
       const farmC1 = 14, farmR1 = 1, farmC2 = 20, farmR2 = 3;
-      for (int c = farmC1; c <= farmC2; c++) {
-        for (int r = farmR1; r <= farmR2; r++) {
+      for (int localC = farmC1; localC <= farmC2; localC++) {
+        for (int localR = farmR1; localR <= farmR2; localR++) {
+          final c = showOx + localC;
+          final r = showOy + localR;
           if (_waterTiles.contains((c, r))) continue;
           bool overlap = false;
           for (final b in _buildings) {

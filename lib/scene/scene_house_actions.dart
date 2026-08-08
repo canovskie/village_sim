@@ -161,7 +161,7 @@ extension _SceneHouseActions on _VillageSceneState {
     _chronicle(
         '$surname Hanesine ${_grantTierName(tier).toLowerCase()} bağışlandı; '
         'ocakları bu akşam yeni bir çatının altında yandı.',
-        icon: '🎁', milestone: true);
+        icon: '🎁', milestone: true, kind: ChronicleKind.decision);
     _showNotification(
         '🎁 $surname Hanesi ${_grantTierName(tier).toLowerCase()} aldı — '
         'minnet de nüfuz da onların.');
@@ -230,7 +230,7 @@ extension _SceneHouseActions on _VillageSceneState {
       v.feel(NpcEmotion.grief, 5.0, moodDelta: -0.08);
     }
     _chronicle('$surname Hanesi meydanda cezalandırıldı; kimse sesini çıkarmadı.',
-        icon: '⚖');
+        icon: '⚖', kind: ChronicleKind.decision);
     _showNotification('⚖ $surname Hanesine ceza kesildi.');
   }
 
@@ -249,7 +249,7 @@ extension _SceneHouseActions on _VillageSceneState {
     _chronicle(
         '$surname Hanesinin ambarı mühürlendi: ${o.gold} altın, '
         '${o.food + hidden} kile köyün kesesine yazıldı.',
-        icon: '🏚', milestone: true);
+        icon: '🏚', milestone: true, kind: ChronicleKind.decision);
     _showNotification(hidden > 0
         ? '🏚 $surname Hanesinin malına el kondu — sakladıkları $hidden kile '
             'de ambara indi.'
@@ -276,7 +276,7 @@ extension _SceneHouseActions on _VillageSceneState {
     _chronicle(
         '${bride.name} ile ${groom.name} nikâhla bağlandı — $surname ile $other '
         'artık aynı kandan sayılıyor.',
-        icon: '💍', milestone: true);
+        icon: '💍', milestone: true, kind: ChronicleKind.decision);
     _showNotification('💍 ${bride.name} ile ${groom.name} nikâha bağlandı.');
   }
 
@@ -315,7 +315,7 @@ extension _SceneHouseActions on _VillageSceneState {
     final head = headOfHouse(_houseMembers(surname));
     if (head == null) return;
     _chronicle('$surname Hanesinin reisi ${head.name} yola vuruldu.',
-        icon: '🚷', milestone: true);
+        icon: '🚷', milestone: true, kind: ChronicleKind.decision);
     _exileVillager(head); // mevcut sürgün mekanizması (kronik + moral + tepki)
   }
 
@@ -331,7 +331,7 @@ extension _SceneHouseActions on _VillageSceneState {
 
     if (!exposed) {
       _chronicle('$surname Hanesinin işleri sebepsiz aksadı; kimse nedenini bilmiyor.',
-          icon: '🕯');
+          icon: '🕯', kind: ChronicleKind.decision);
       _showNotification('🕯 İş görüldü. Kimse bir şey bilmiyor.');
       return;
     }
@@ -348,7 +348,7 @@ extension _SceneHouseActions on _VillageSceneState {
     _chronicle(
         'Fısıltı büyüdü: $surname Hanesinin başına gelenler tesadüf değilmiş. '
         'Parmaklar seni gösteriyor.',
-        icon: '👁', milestone: true);
+        icon: '👁', milestone: true, kind: ChronicleKind.crisis);
     _showNotification('👁 Entrikan ifşa oldu — köy senden şüpheleniyor.');
   }
 
@@ -444,7 +444,7 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           _chronicle(
               '${h.surname} ile ${ally.surname} haneleri sofrayı birleştirdi. '
               'İki küskün bir arada, artık tek ses.',
-              icon: '🤝', milestone: true);
+              icon: '🤝', milestone: true, kind: ChronicleKind.crisis);
           _showNotification(
               '🤝 ${h.surname} ve ${ally.surname} el sıkıştı — bu ittifak sana karşı.');
 
@@ -457,7 +457,7 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           _houses.nudge(h.surname, moodDelta: 0.04); // işlerine geldi
           _chronicle(
               '${h.surname} Hanesi payını ambara götürmedi; defterde eksik var.',
-              icon: '🏚');
+              icon: '🏚', kind: ChronicleKind.crisis);
           _showNotification('🏚 ${h.surname} Hanesi mahsulünü sakladı '
               '(−$gold altın, −$food erzak).');
 
@@ -467,7 +467,7 @@ extension _SceneHouseIntrigue on _VillageSceneState {
             _unrest = (_unrest + 0.06).clamp(0.0, 1.0);
             _chronicle(
                 '${h.surname} Hanesi eski bir husumeti kaşıdı; kan yeniden aktı.',
-                icon: '🩸', milestone: true);
+                icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
             _showNotification('🩸 ${h.surname} Hanesi husumeti körükledi.');
           }
 
@@ -479,7 +479,7 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           _chronicle(
               '${h.surname} Hanesi meclisi kendi çatısı altında topladı. '
               'Konuşulanı sen duymadın.',
-              icon: '⚖', milestone: true);
+              icon: '⚖', milestone: true, kind: ChronicleKind.crisis);
           _showNotification('⚖ ${h.surname} Hanesi meclisi sana karşı topluyor.');
 
         default: // rumor
@@ -488,7 +488,7 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           _unrest = (_unrest + 0.03).clamp(0.0, 1.0);
           _chronicle(
               'Köyde bir söylenti dolaşıyor; kaynağı ${h.surname} Hanesinin kapısı.',
-              icon: '👁');
+              icon: '👁', kind: ChronicleKind.crisis);
           _showNotification('👁 ${h.surname} Hanesi arkandan konuşuyor.');
       }
     });

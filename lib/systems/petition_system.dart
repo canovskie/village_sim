@@ -76,6 +76,19 @@ class PetitionOption {
   /// havuz tek elemana indiği için bu, o köye özel dokunmuş cümledir.
   String get resolution => resolutionPool.isEmpty ? '' : resolutionPool.first;
 
+  /// VAKANÜVİS satırı — bu şıkkın köyün güncesine düşen kalıcı izi. Havuzdur:
+  /// aynı karar ikinci kez verilince yıllık aynı kelimeleri kullanmasın.
+  ///
+  /// Neden ayrı bir alan: [resolution] bir BİLDİRİM (uçar, birkaç saniye durur),
+  /// bu ise KAYIT. Üslup da farklı — çözüm metni köye seslenir, annal kâtibin
+  /// kuru cümlesidir: ne istendi, ne verildi. Boş bırakılırsa sahne yine de bir
+  /// satır yazar ("Başlık: Şık") — yani hiçbir karar kayıtsız kalmaz, yalnız
+  /// yazılmamış olanın cümlesi cılız durur.
+  final List<String> annalPool;
+
+  /// Seçili annal metni ([spoken] sonrası havuz tek elemana iner).
+  String get annal => annalPool.isEmpty ? '' : annalPool.first;
+
   // Kaynak deltaları (negatif = harcama).
   final int foodDelta;
   final int woodDelta;
@@ -112,6 +125,7 @@ class PetitionOption {
     required this.label,
     required this.detail,
     required this.resolutionPool,
+    this.annalPool = const <String>[],
     this.foodDelta = 0,
     this.woodDelta = 0,
     this.stoneDelta = 0,
@@ -132,6 +146,11 @@ class PetitionOption {
         label: Voice.weave(label, c),
         detail: Voice.weave(detail, c),
         resolutionPool: [Voice.say(resolutionPool, c)],
+        // Annal da bağlamla dokunur ama KENDİ tohumundan varyant seçer: çözüm
+        // metniyle aynı kalıba düşüp cümleyi ikizlemesin.
+        annalPool: annalPool.isEmpty
+            ? const <String>[]
+            : [Voice.say(annalPool, c.copyWith(seed: c.seed + 7717))],
         foodDelta: foodDelta,
         woodDelta: woodDelta,
         stoneDelta: stoneDelta,

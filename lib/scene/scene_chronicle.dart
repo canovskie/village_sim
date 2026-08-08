@@ -19,9 +19,21 @@ part of '../main.dart';
 /// kez yazıldığında yıllık aynı kelimeleri kullanmaz.
 extension _SceneChronicle on _VillageSceneState {
   /// Günceye bir satır yazar — gün otomatik damgalanır.
-  void _chronicle(String text, {String icon = '📜', bool milestone = false}) {
+  ///
+  /// [kind] panelin süzgecidir; varsayılanı "köyün yaşadığı". Oyuncunun VERDİĞİ
+  /// bir kararı yazıyorsan [ChronicleKind.decision], köyün başına GELEN bir şeyi
+  /// yazıyorsan [ChronicleKind.crisis] geç — yoksa satır süzgeçte yanlış rafa
+  /// düşer ve "ne karar vermiştim" listesi eksik kalır.
+  void _chronicle(String text,
+      {String icon = '📜',
+      bool milestone = false,
+      ChronicleKind kind = ChronicleKind.life}) {
     _storyLog.add(ChronicleEntry(
-        day: _dayCount, icon: icon, text: text, milestone: milestone));
+        day: _dayCount,
+        icon: icon,
+        text: text,
+        milestone: milestone,
+        kind: kind));
   }
 
   /// Bir KÖYLÜNÜN kişisel yaşam öyküsüne olay ekler — gün damgalı. Panelde

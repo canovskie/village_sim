@@ -212,7 +212,7 @@ extension _SceneIllness on _VillageSceneState {
           '{ad} hastalandı.',
           '{ad} yatağa düştü; köy iyileşmesini bekliyor.',
         ], ctx),
-        icon: '🤒');
+        icon: '🤒', kind: ChronicleKind.crisis);
   }
 
   /// VEBA TOLÜ — toplu salgının bedeli (scene_events plague kararı çağırır).
@@ -290,7 +290,7 @@ extension _SceneIllness on _VillageSceneState {
                   ],
             ctx),
         icon: '⚰️',
-        milestone: true);
+        milestone: true, kind: ChronicleKind.crisis);
     v.startDying(funeral: true);
   }
 }

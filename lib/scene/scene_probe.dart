@@ -30,6 +30,30 @@ extension _SceneProbe on _VillageSceneState {
       _devPlantLoot();
     }
 
+    // KARAR İZİ — güncedeki karar satırları. En sinsi hata "kod var ama hiç
+    // tetiklenmiyor": dilekçe kararının kroniğe düşmesi ancak GERÇEK sahnede,
+    // gerçek bir kararla görülür (bkz. test/decision_trace_probe_test.dart).
+    var decisions = 0;
+    for (final e in _storyLog) {
+      if (e.kind != ChronicleKind.decision) continue;
+      decisions++;
+      kProbeLastDecision = e.text;
+    }
+    kProbeDecisionLines = decisions;
+
+    // Harness karar istiyorsa: bekleyen dilekçe varsa İLK şıkkı seç (oyuncu
+    // gibi), yoksa kuyruğu hemen aç.
+    kProbePendingPetition = _pendingPetition?.id ?? '';
+    if (kProbeDecideNow) {
+      final p = _pendingPetition;
+      if (p != null && p.options.isNotEmpty) {
+        kProbeDecideNow = false;
+        _resolvePetition(p, p.options.first);
+      } else {
+        _petitionTimer = 0; // kuyruk hemen açılsın (yönetişim uyanıksa)
+      }
+    }
+
     // Harness suç istediyse tüket (aktif suç yoksa ve nüfus yeterse).
     if (kProbeTriggerCrime && _activeCrime == null && _villagers.length >= 5) {
       kProbeTriggerCrime = false;

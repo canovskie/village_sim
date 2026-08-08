@@ -219,7 +219,7 @@ extension _SceneUiPanels on _VillageSceneState {
           onAllPolicies: () => setStateHere(() {
             for (final l in LawBook.ofBranch(LawBranch.gecim)) {
               if (LawBook.available(l, _policies.sealed, _lawContext)) {
-                _policies.seal(l);
+                _policies.seal(l, day: _dayCount);
               }
             }
             _policies.inkDryUntilSim = 0;
