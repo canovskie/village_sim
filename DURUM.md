@@ -1,6 +1,6 @@
 # DURUM — projenin o anki hâli
 
-**Son güncelleme: 8 Ağustos 2026.**
+**Son güncelleme: 12 Ağustos 2026.**
 
 Bu dosya ESKİR. Kalıcı kurallar için [CLAUDE.md](CLAUDE.md), "bu iş nerede
 yaşıyor" için `lib/main.dart` başındaki HARİTA yorumu. Burası yalnız üç
@@ -15,15 +15,15 @@ Boş bir liste iyi haber değil, bakımsız bir belgedir.
 
 | | |
 |---|---|
-| Kaynak | 275 dosya, ~107.600 satır (`lib/`) |
-| Test | 71 dosya, ~10.500 satır, **671 test** |
+| Kaynak | 276 dosya, ~109.700 satır (`lib/`) |
+| Test | 75 dosya, ~11.000 satır, **677 test** (~4 dk) |
 | `flutter analyze` | temiz |
-| Varlıklar | 94 MB (62 MB'ı `assets/buildings`) |
+| Varlıklar | 122 MB (85 MB'ı `assets/buildings`) |
 | İçerik | 31 bina, 11 meslek, 8 kaynak, 34 hüküm, 10 suç türü |
 
-En büyük dosyalar: `game_painter` (2406), `character_renderer` (2369),
-`village_ledger` (2307), `main.dart` (2288), `scene_tick` (1832),
-`scene_crime` (1810).
+En büyük dosyalar: `character_renderer` (2420), `game_painter` (2412),
+`main.dart` (2364), `village_ledger` (2326), `scene_crime` (1990),
+`scene_tick` (1848).
 
 ---
 
@@ -36,17 +36,41 @@ Bunların hepsi kurulu, bağlı ve testli.
 - Tüzük merdiveni: 6 kimlik kademesi, ~40 görev (geç kademeler kararla ölçülür)
 - **Orta oyun dersleri** — 7 sistemin kart öğreticisi *(2026-08-08)*
 - **Yıl omurgası** — eskalasyonun tek kaynağı; vergi/olay/kış yılla sertleşir *(2026-08-08)*
+- **Eğlence paketi** — hane uyarı rampası, karar anında 1× nefes, dilekçe temposu/kuyruğu ve yıllık imparatorluk karnesi *(2026-08-14)*
 - **Hesaplaşma** — 6. yılda sancak/berat/ilhak, rejime göre kapanış *(2026-08-08)*
 - **Yaşayan köy showcase görseli** — merkez yerleşim, binalar ve doğal çeper görünür *(2026-08-08)*
+- **Sinematik seyreltmesi** — tam ekran film artık yalnız kuruluş / imparatorluk /
+  hesaplaşma. Nikâh, ilk ateş, kıtlık ve tüzük kademesi filmden çıkarıldı;
+  karşılıkları dünya içinde (şenlik FX, ateş başı toplanma, gövde dili, günce).
+  İmparatorluk filmi üç "ilk kez" anına indi (ilk ziyaret / ilk devşirme /
+  ret sonrası ilk dönüş), her biri koşuda bir kez. `lib/cutscene/` duruyor —
+  animasyon odası hepsini hâlâ oynatabiliyor *(2026-08-10)*
 - Kaybetme eşiği — hane ayrılığı → köy dağılır, kayıt mühürlenir
 
 **Yönetişim (oyunun kalbi)**
+- **Kapıda kuyruk** — SOSYAL DOKU TURU dilim 1/5 *(2026-08-12)*: karar isteyen
+  olay ve dilekçe artık simi DONDURMUYOR ve modal kendiliğinden AÇILMIYOR.
+  Olay vurunca HUD'a KARAR mührü iner (tükenen mühlet halkası; major %20 gün,
+  minor %30), mühlet dolarsa köy PASİF seçeneği kendi yaşar
+  (`EventOutcome.timeoutChoice` sözleşmesi: pasif şık hep SONDA; günceye
+  "Söz gelmedi." düşer). Dilekçede zorunlu huzur donması → "kapıda bekleyen
+  huzur": sözcü merkeze yürür, mühür kalıcı kızarır, bedel GÜN BAŞINA işler
+  (hane −0.03/gün + moral sızıntısı); otomatik ret YOK, karar oyuncunun.
+  Rejim yolları (sessiz düşürme / meclis çözer) aynen. Simi durduran yalnız
+  üç şey kaldı: dağılma, sinematik, imparatorluk pazarlığı.
+  Prova: `decision_queue_probe_test` (kuyruk + akış + eskalasyon + sözleşme).
+  Sıradaki dilimler: baloncuk borcu (7 emoji) → sokak görünürlüğü →
+  gün koreografisi → ritüel takvimi.
 - Dilekçe/Divan/Meclis + governanceLegacy mirası
 - Kanunname: 34 hüküm, altıgen petek UI, mühür töreni
 - Politik pusula → 4 rejim (kimlik seçilmez, kazanılır) + huzursuzluk/kriz
 - Haneler: duruş merdiveni (sadık→razı→serzeniş→el çekti→ambar→kopuş) +
   oyuncunun proaktif eylemleri (bağış/ceza/nikâh/sürgün/entrika)
 - İmparatorluk: vergici heyeti, pazarlık, itibar, iki tabanlı öşür
+- **Eşik sahnesi** — kazanılan direniş artık dünyada oynuyor: köy tırpan/balta
+  ile heyetle meydan arasına dizilir, heyet bekler, bir hamle yapar, döner.
+  Kronik yıllardır bu cümleyi yazıyordu ama sahnede dizilen kimse yoktu; kayıp
+  sahneliydi, KAZANÇ bildirimdi *(2026-08-08)*
 - **Kararın izi** — verilen her dilekçe kararı ve mühür günceye düşer; KRONİK
   süzgeci (kararlar/yaşam/sıkıntı), mühür günü, 14 eksik hafıza izi *(2026-08-08)*
 
@@ -54,6 +78,11 @@ Bunların hepsi kurulu, bağlı ve testli.
 - NPC beyni 6 fazın tamamı (WorldPressure → Mind/Bid → Algı/Hafıza/Dedikodu →
   Act/Prop → hırsızlık tam sahnesi → basınç/siluet). **Hepsi DONE ve testli.**
 - Kişilik, meslek çağrısı, yaşam evresi, yaşam öyküsü, moral
+- **Baş üstü emoji borcu ödendi** — selam (👋) ve hikâye anlatımı (📖) gövdeye
+  taşındı (`CharGesture.wave` / `.tell`: sağ kolu devralan jest katmanı),
+  göktaşı (🌠) zaten var olan `wonder` postürüne bırakıldı. Baş üstünde
+  yalnız NESNE anlatan işaretler kaldı (🌿 hasta ev, 🕊️ kavgadan çekilme) +
+  sohbetin konu ikonları *(2026-08-08)*
 - Suç + devriye + yargı; çekişme + kan davası; hastalık/veba; düğün/cenaze
 
 **Üretim & hayatta kalma**
@@ -80,11 +109,13 @@ yakalanamadı. Ardından **8 temiz tam koşu** geldi; tekrarlanmadı.
 Referans cihaz iPhone 11 (telefon). Tablet HUD'ı ve köylü paneli hiç
 sınanmadı.
 
-### 3. Dilekçe katalogları testsiz
-9 dosya, ~3.000 satır, neredeyse **sıfır test** — projedeki en büyük test
-boşluğu. Çoğu veri ama `petition_catalog_estates` (644 satır) mantık taşıyor.
-İlk kanca atıldı: `decision_trace_test` her şıkkın günceye yazacak bir cümlesi
-olduğunu tarıyor (iki suskun şık böyle bulundu).
+### 3. Dilekçe katalogları — bütünlük kapandı, denge açık
+`petition_catalog_test` (2026-08-10) katalogun **yapısını** koruyor: ölü
+zincir bağı, öksüz takip halkası, hiçbir köyde açılmayan kapı, iki özdeş şık,
+em-dash. Kurulurken dört ölü dilekçe ve 17 em-dash buldu.
+
+Kalan boşluk **denge**: hangi dilekçe ne sıklıkta geliyor, ağırlıklar köyün
+gündemini doğru mu kuruyor. Bu ölçüm işi, sözleşme işi değil.
 
 ### 4. Tek dil
 `AppLanguage` enum'unda `tr` ve `en` var, yalnız `tr` dolu. Türkçe ek motoru
@@ -92,39 +123,28 @@ olduğunu tarıyor (iki suskun şık böyle bulundu).
 ikinci bir gramere açılması demek. Küçük bir iş değil.
 
 ### 5. Kalan küçük eksikler
-- `main.dart` tepesinde 4 Ağustos'tan kalma **"YARIN İLK İŞ"** notu duruyor:
-  el sallama sohbet balonundan çıkarılıp gövde animasyonuna çevrilecek.
 - Ses: `ui_tap` + 2 müzik parçası. **Kullanıcı kararıyla İSTENMEDİ** —
   yeniden önerme, kanca kodda sessiz duruyor.
-- 70 dosya commit'siz (8 Ağustos itibarıyla).
+- 55 dosya commit'siz (10 Ağustos itibarıyla): combat/prop/mezar varlıkları,
+  `imperial_defense_test`, `save_roundtrip_test` ve sinematik seyreltmesi.
 
 ---
 
 ## 🗑️ Fazla — silinecek ya da küçültülecek
 
-### 1. README.md yalan söylüyor  ← en acili
-452 satır ve **belgelediği mimari artık yok**. Saydığı 9 dosyadan 8'i
-silinmiş (`builder_entity`, `woodcutter_entity`, `miner_entity`,
-`fisher_entity`, `farm_farmer`, `lumber_camp_entity`, `axe_renderer`,
-`bale_test`). `kCols=96, kRows=64` diyor — harita 128×128. "12 bina tipi"
-diyor — 31 tane var.
-
-Bu bir eksik değil **tuzak**: yeni bir yapay zeka bunu okuyup silinmiş bir
-katmanın üstüne kod yazar. Kısa ve doğru bir dosyayla değiştirilmeli
-(CLAUDE.md + DURUM.md'ye işaret eden).
-
-### 2. `lib/ui/ui_icon.dart` — ölü özellik
+### 1. `lib/ui/ui_icon.dart` — ölü özellik
 `UiIcon` sınıfı tanımlı, **hiçbir yerden import edilmiyor**. Karşılığı olan
 `assets/ui/icon_*.png` dosyaları da hiç üretilmemiş (klasörde yalnız
 `app_icon.svg` ve iki menü arka planı var). HUD `app_ui.dart`'taki `GameIcon`
 kullanıyor. Ya ikonlar üretilmeli ya dosya silinmeli.
 
-### 3. Varlık boyutu — 94 MB
-62 MB'ı `assets/buildings`. Mobil için ağır. Bina PNG'leri muhtemelen
+### 2. Varlık boyutu — 122 MB  ← büyüyor
+85 MB'ı `assets/buildings`. Mobil için ağır ve **son ölçümden 28 MB arttı**.
+Bina PNG'leri muhtemelen
 gereğinden yüksek çözünürlükte; oyun onları `spriteScale` ile küçültüyor.
 Ölçülmeden dokunulmamalı ama bakılmalı.
 
-### 4. `lib/tools/` — 35 dosya, 9.076 satır
+### 3. `lib/tools/` — 35 dosya, 9.076 satır
 Kaynağın %8,4'ü geliştirici aracı. Çoğu tek seferlik capture harness'ı.
 Silmek şart değil ama hangisinin hâlâ koştuğu bilinmiyor; ölmüş olanlar
 bakım yükü.

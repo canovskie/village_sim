@@ -488,6 +488,17 @@ class VillagerEntity extends WorkerEntity {
   double chatBubbleTime = 0;
   String chatBubbleIcon = '';
   VillagerActivity activity = VillagerActivity.none;
+
+  /// EL SALLAMA — komşuluk selamının gövdedeki karşılığı (bkz. scene_tick
+  /// `_tickNeighborGreet`). Kalan süre (sn); çizim tarafı bunu bir kol
+  /// kaldırma + salınım zarfına çevirir (bkz. `CharGesture.wave`).
+  ///
+  /// Selam eskiden başın üstünde bir 👋 baloncuğuydu. Baloncuk hiçbir şey
+  /// anlatmıyordu: aynı çerçeve, aynı yerde, yalnız içindeki karakter
+  /// değişiyordu — oyun "birileri selamlaştı" diye YAZIYORDU, göstermiyordu.
+  /// Transient: kayda YAZILMAZ (1,6 sn'lik bir jest kaydı hak etmez).
+  double waveTime = 0;
+  static const double kWaveDuration = 1.6;
   /// Bu NPC'nin son aktiviteden sonraki kişisel cooldown'u (sn). Her NPC
   /// kendi başına değerlendirilir → global cap yok, nüfus arttıkça toplam
   /// aktivite doğal artar. 60-180 sn.

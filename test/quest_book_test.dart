@@ -13,6 +13,8 @@
 //   • Kademe ilerlemesi tek yönlü ve eşiklerle tutarlı.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:village_sim/buildings/building_entity.dart';
+import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/resources.dart';
 import 'package:village_sim/scene/scene_data.dart';
@@ -21,19 +23,21 @@ import 'package:village_sim/systems/quest_book.dart';
 QuestContext _ctx({
   int charterTier = 0,
   int dayCount = 1,
+  int woodHarvested = 0,
+  List<BuildingEntity> buildings = const [],
   Map<VillagerType, String> names = const {},
-}) =>
-    QuestContext(
-      buildings: const [],
-      farmTiles: const [],
-      population: 0,
-      stock: ResourceBundle(),
-      policies: VillagePolicies(),
-      decorCount: 0,
-      charterTier: charterTier,
-      dayCount: dayCount,
-      speakerNames: names,
-    );
+}) => QuestContext(
+  buildings: buildings,
+  farmTiles: const [],
+  population: 0,
+  stock: ResourceBundle(),
+  policies: VillagePolicies(),
+  decorCount: 0,
+  charterTier: charterTier,
+  dayCount: dayCount,
+  woodHarvested: woodHarvested,
+  speakerNames: names,
+);
 
 void main() {
   group('merdiven kilitlenmez', () {
@@ -41,13 +45,16 @@ void main() {
       // i. kademeye geçerken elde olabilecek en fazla görev: tier <= i-1 olan
       // TÜM görevler (üst kademe görevleri henüz açılmamıştır).
       for (var i = 1; i < QuestBook.tiers.length; i++) {
-        final reachable =
-            QuestBook.all.where((q) => q.tier <= i - 1).length;
-        expect(QuestBook.tiers[i].minQuests, lessThanOrEqualTo(reachable),
-            reason: '"${QuestBook.tiers[i].name}" kademesi '
-                '${QuestBook.tiers[i].minQuests} görev istiyor ama o noktaya '
-                'kadar yalnız $reachable görev açılıyor. Merdiven burada '
-                'kilitlenir: kademe hiç gelmez, üstündeki görevler hiç açılmaz.');
+        final reachable = QuestBook.all.where((q) => q.tier <= i - 1).length;
+        expect(
+          QuestBook.tiers[i].minQuests,
+          lessThanOrEqualTo(reachable),
+          reason:
+              '"${QuestBook.tiers[i].name}" kademesi '
+              '${QuestBook.tiers[i].minQuests} görev istiyor ama o noktaya '
+              'kadar yalnız $reachable görev açılıyor. Merdiven burada '
+              'kilitlenir: kademe hiç gelmez, üstündeki görevler hiç açılmaz.',
+        );
       }
     });
 
@@ -57,45 +64,64 @@ void main() {
       // kademelerde en az 3 görevlik pay şart.
       for (var i = 4; i < QuestBook.tiers.length; i++) {
         final reachable = QuestBook.all.where((q) => q.tier <= i - 1).length;
-        expect(reachable - QuestBook.tiers[i].minQuests,
-            greaterThanOrEqualTo(3),
-            reason: '"${QuestBook.tiers[i].name}" eşiği çok dar: '
-                '$reachable görevin ${QuestBook.tiers[i].minQuests} tanesi '
-                'zorunlu. İsteğe bağlı bir görevi atlayan oyuncu tavana çarpar.');
+        expect(
+          reachable - QuestBook.tiers[i].minQuests,
+          greaterThanOrEqualTo(3),
+          reason:
+              '"${QuestBook.tiers[i].name}" eşiği çok dar: '
+              '$reachable görevin ${QuestBook.tiers[i].minQuests} tanesi '
+              'zorunlu. İsteğe bağlı bir görevi atlayan oyuncu tavana çarpar.',
+        );
       }
     });
 
     test('eşikler yukarı doğru gevşemez', () {
       for (var i = 1; i < QuestBook.tiers.length; i++) {
-        expect(QuestBook.tiers[i].minQuests,
-            greaterThanOrEqualTo(QuestBook.tiers[i - 1].minQuests));
-        expect(QuestBook.tiers[i].minPolicies,
-            greaterThanOrEqualTo(QuestBook.tiers[i - 1].minPolicies));
+        expect(
+          QuestBook.tiers[i].minQuests,
+          greaterThanOrEqualTo(QuestBook.tiers[i - 1].minQuests),
+        );
+        expect(
+          QuestBook.tiers[i].minPolicies,
+          greaterThanOrEqualTo(QuestBook.tiers[i - 1].minPolicies),
+        );
       }
     });
 
     test('her kademede en az bir görev var', () {
       for (var i = 0; i < QuestBook.tiers.length; i++) {
-        expect(QuestBook.all.any((q) => q.tier == i), isTrue,
-            reason: '${QuestBook.tiers[i].name} kademesinde hiç görev yok — '
-                'oyuncu oraya çıkıp boş bir panel görür');
+        expect(
+          QuestBook.all.any((q) => q.tier == i),
+          isTrue,
+          reason:
+              '${QuestBook.tiers[i].name} kademesinde hiç görev yok — '
+              'oyuncu oraya çıkıp boş bir panel görür',
+        );
       }
     });
 
     test('görev var olmayan kademeye asılı kalmaz', () {
       for (final q in QuestBook.all) {
-        expect(q.tier, inInclusiveRange(0, QuestBook.maxTier),
-            reason: '${q.id} görevi ${q.tier}. kademede ama merdiven '
-                '${QuestBook.maxTier}. kademede bitiyor → görev hiç açılmaz');
+        expect(
+          q.tier,
+          inInclusiveRange(0, QuestBook.maxTier),
+          reason:
+              '${q.id} görevi ${q.tier}. kademede ama merdiven '
+              '${QuestBook.maxTier}. kademede bitiyor → görev hiç açılmaz',
+        );
       }
     });
   });
 
   test('görev id\'leri tekil', () {
     final ids = QuestBook.all.map((q) => q.id).toList();
-    expect(ids.toSet().length, ids.length,
-        reason: 'tekrar eden id: tamamlanma seti tek girdi tutar, '
-            'ikinci görev sessizce ölü kalır');
+    expect(
+      ids.toSet().length,
+      ids.length,
+      reason:
+          'tekrar eden id: tamamlanma seti tek girdi tutar, '
+          'ikinci görev sessizce ölü kalır',
+    );
   });
 
   group('kademe hesabı', () {
@@ -106,19 +132,26 @@ void main() {
     test('eşik dolunca kademe atlar, dolmadan atlamaz', () {
       for (var i = 1; i < QuestBook.tiers.length; i++) {
         final t = QuestBook.tiers[i];
-        expect(QuestBook.charterTier(t.minQuests, t.minPolicies),
-            greaterThanOrEqualTo(i),
-            reason: '${t.name} eşiği tam dolduğunda kademe gelmedi');
+        expect(
+          QuestBook.charterTier(t.minQuests, t.minPolicies),
+          greaterThanOrEqualTo(i),
+          reason: '${t.name} eşiği tam dolduğunda kademe gelmedi',
+        );
         if (t.minQuests > 0) {
-          expect(QuestBook.charterTier(t.minQuests - 1, t.minPolicies),
-              lessThan(i),
-              reason: '${t.name} eşiği eksikken kademe verildi');
+          expect(
+            QuestBook.charterTier(t.minQuests - 1, t.minPolicies),
+            lessThan(i),
+            reason: '${t.name} eşiği eksikken kademe verildi',
+          );
         }
       }
     });
 
     test('her şey tamamlanınca son kademeye çıkılır', () {
-      expect(QuestBook.charterTier(QuestBook.all.length, 99), QuestBook.maxTier);
+      expect(
+        QuestBook.charterTier(QuestBook.all.length, 99),
+        QuestBook.maxTier,
+      );
     });
 
     test('son kademede sonraki kademe yok', () {
@@ -129,8 +162,11 @@ void main() {
 
   test('görev listesi yalnız açık kademeyi gösterir', () {
     final open = QuestBook.activeQuests(_ctx(), const {});
-    expect(open.every((s) => s.quest.tier == 0), isTrue,
-        reason: 'kademe 0\'daki oyuncuya üst kademe görevi gösteriliyor');
+    expect(
+      open.every((s) => s.quest.tier == 0),
+      isTrue,
+      reason: 'kademe 0\'daki oyuncuya üst kademe görevi gösteriliyor',
+    );
     expect(open.first.active, isTrue, reason: 'ilk görev vurgulanmalı');
   });
 
@@ -165,8 +201,11 @@ void main() {
       // Berat uzun süre tier 1'deydi: oyuncu köyü kuruyor, öğretici susuyor ve
       // oyunun asıl konusuna (mühür/divan/hane) kendi başına çarpması
       // bekleniyordu. Kuruluşta en az bir yönetişim adımı olmalı.
-      expect(tier0().any((q) => q.category == QuestCategory.governance), isTrue,
-          reason: 'kuruluş yeniden saf inşaat listesine dönmüş');
+      expect(
+        tier0().any((q) => q.category == QuestCategory.governance),
+        isTrue,
+        reason: 'kuruluş yeniden saf inşaat listesine dönmüş',
+      );
     });
 
     test('öğretici 3-5 adıma eşlik eder, kuruluşun tamamına değil', () {
@@ -176,8 +215,11 @@ void main() {
       final guided = QuestBook.all.where((q) => q.guided).toList();
       expect(guided.length, greaterThanOrEqualTo(3));
       expect(guided.length, lessThanOrEqualTo(5));
-      expect(guided.every((q) => q.tier == 0), isTrue,
-          reason: 'kuruluştan sonra spot öğretmez, dırdır eder');
+      expect(
+        guided.every((q) => q.tier == 0),
+        isTrue,
+        reason: 'kuruluştan sonra spot öğretmez, dırdır eder',
+      );
     });
 
     test('rehberli adımlar listenin BAŞINDA ve kesintisiz', () {
@@ -187,22 +229,31 @@ void main() {
       final t0 = tier0();
       final lastGuided = t0.lastIndexWhere((q) => q.guided);
       expect(lastGuided, greaterThanOrEqualTo(0));
-      expect(t0.take(lastGuided + 1).every((q) => q.guided), isTrue,
-          reason: 'rehberli adımların arasına rehbersiz bir adım girmiş');
+      expect(
+        t0.take(lastGuided + 1).every((q) => q.guided),
+        isTrue,
+        reason: 'rehberli adımların arasına rehbersiz bir adım girmiş',
+      );
     });
 
     test('her rehberli adımın gösterecek bir hedefi var', () {
       // Hedefsiz rehberli adım = ekranda hiçbir yeri göstermeyen bir spot.
       for (final q in QuestBook.all.where((q) => q.guided)) {
-        expect(q.buildTarget != null || q.uiTarget != QuestUi.none, isTrue,
-            reason: '${q.id} rehberli ama gösterecek bir şeyi yok');
+        expect(
+          q.buildTarget != null || q.uiTarget != QuestUi.none,
+          isTrue,
+          reason: '${q.id} rehberli ama gösterecek bir şeyi yok',
+        );
       }
     });
 
     test('kuruluş adımlarının çoğunu bir kurucu ister', () {
       final withSpeaker = tier0().where((q) => q.speaker != null).length;
-      expect(withSpeaker, greaterThanOrEqualTo(tier0().length ~/ 2),
-          reason: 'görevler yeniden isimsiz bir alışveriş listesine dönmüş');
+      expect(
+        withSpeaker,
+        greaterThanOrEqualTo(tier0().length ~/ 2),
+        reason: 'görevler yeniden isimsiz bir alışveriş listesine dönmüş',
+      );
     });
 
     test('ilk gece ikinci güne çıkınca tamamlanır', () {
@@ -219,11 +270,25 @@ void main() {
       expect(tent.check, isNot(same(house.check)));
     });
 
+    test('oduncu görevi kulübe dikilince değil ilk kütük inince biter', () {
+      final q = QuestBook.all.firstWhere((q) => q.id == 'lumber');
+      final camp = BuildingEntity(
+        type: BuildingType.lumberCamp,
+        col: 1,
+        row: 1,
+      );
+      expect(q.check(_ctx()), isFalse);
+      expect(q.check(_ctx(buildings: [camp])), isFalse);
+      expect(q.check(_ctx(buildings: [camp], woodHarvested: 1)), isTrue);
+    });
+
     test('isteyen köylü yaşıyorsa adı panele düşer, yoksa düşmez', () {
       final q = QuestBook.all.firstWhere((q) => q.id == 'firepit');
       final speaker = q.speaker!;
       final withName = QuestBook.activeQuests(
-          _ctx(names: {speaker: 'Dede'}), const {});
+        _ctx(names: {speaker: 'Dede'}),
+        const {},
+      );
       expect(withName.first.speakerName, 'Dede');
       // Kurucu öldü → görev isimsiz ama YİNE DE listede.
       final without = QuestBook.activeQuests(_ctx(), const {});

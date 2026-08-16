@@ -6,9 +6,9 @@ class BuildOrder {
   final int col;
   final int row;
 
-  bool completed = false;  // building has been placed
+  bool completed = false; // building has been placed
 
-  double progress = 0.0;   // 0..1 during construction
+  double progress = 0.0; // 0..1 during construction
 
   /// Bu şantiyede kaç el gerekiyor — GÖVDE ANCAK KADRO TAM OLUNCA yükselir.
   /// Küçük yapı tek kişilik, ev iki, büyük yapı üç.
@@ -32,10 +32,16 @@ class BuildOrder {
   /// dolunca eldeki el işe tek başına başlar.
   double waited = 0;
 
+  /// Şantiyenin gerçekten başladığına dair bildirimin tek-atışlık kilidi.
+  /// Simülasyon kuralı değildir; oyuncunun "emri verdim, kimse takmadı mı?"
+  /// boşluğunu kapatan görünür karşılıktır.
+  bool startAnnounced = false;
+
   BuildOrder({required this.type, required this.col, required this.row})
-      : requiredWorkers = buildWorkersFor(type);
+    : requiredWorkers = buildWorkersFor(type);
 
   bool get assigned => crew > 0;
+
   /// Gövde yükselebilir mi — kadro tam VEYA (köy o kadar el veremiyorsa)
   /// sabır dolmuş ve şantiyede en az bir el var.
   bool get crewReady =>

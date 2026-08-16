@@ -31,13 +31,18 @@ extension _SceneLoot on _VillageSceneState {
     LootCache? found;
     VillagerEntity? finder;
     for (final l in _lootCaches) {
-      final trace =
-          lootTrace(l.age, _SceneCrime._kLootFade, witnessed: l.witnessed);
+      final trace = lootTrace(
+        l.age,
+        _SceneCrime._kLootFade,
+        witnessed: l.witnessed,
+      );
       for (final v in _villagers) {
         if (v.isDying || v.isSleeping || v.isInsideBuilding) continue;
         // Gömen kendi zulasını "bulmaz" — üstünü örtmeye gider.
         if (identical(v, l.culprit)) continue;
-        final alert = v.type == VillagerType.guard && v.hasProfession ? 1.5 : 1.0;
+        final alert = v.type == VillagerType.guard && v.hasProfession
+            ? 1.5
+            : 1.0;
         final r = lootFindRadius(trace, alert: alert);
         if (_wdist(v.gridX, v.gridY, l.gridX, l.gridY) <= r) {
           found = l;
@@ -55,7 +60,8 @@ extension _SceneLoot on _VillageSceneState {
   void _uncoverLoot(LootCache l, VillagerEntity finder) {
     _lootCaches.remove(l);
     _stockpile.add(l.kind, l.amount);
-    kProbeLootRecovered += l.amount;
+    if (l.weaponAmount > 0) _stockpile.weapons += l.weaponAmount;
+    kProbeLootRecovered += l.amount + l.weaponAmount;
 
     finder.feel(NpcEmotion.wonder, 4.0, moodDelta: 0.04);
     finder.lookToward(l.gridX, l.gridY);
@@ -75,15 +81,25 @@ extension _SceneLoot on _VillageSceneState {
       finder.memory.nudgeOpinion(culprit, -0.35);
     }
 
+    final weaponText = l.weaponAmount > 0 ? ' ve ${l.weaponAmount} silah' : '';
     _showNotification(
-        '🪏 Zula bulundu — ${l.amount} ${l.kind.label.toLowerCase()} ambara döndü.');
+      '🪏 Zula bulundu — ${l.amount} ${l.kind.label.toLowerCase()}$weaponText ambara döndü.',
+    );
     _chronicle(
-        Voice.say(const [
+      Voice.say(
+        const [
           '🪏 Toprakta bir çuval çıktı. Kayıp mal köye döndü.',
           '🪏 Eşelenmiş toprak ele verdi: gömülü zula bulundu.',
           '🪏 Kaybolan mal bulundu — birileri onu gömmeyi denemişti.',
-        ], _voice(finder, seed: _stableSeed('zula${l.gridX}${l.gridY}', _dayCount))),
-        icon: '🪏', kind: ChronicleKind.crisis);
+        ],
+        _voice(
+          finder,
+          seed: _stableSeed('zula${l.gridX}${l.gridY}', _dayCount),
+        ),
+      ),
+      icon: '🪏',
+      kind: ChronicleKind.crisis,
+    );
   }
 
   /// DEV/TEST — köy meydanına görülmüş bir zula göm.
@@ -94,13 +110,15 @@ extension _SceneLoot on _VillageSceneState {
   /// ama kurtarma yolunun aylarca hiç çalışmaması demektir.
   void _devPlantLoot() {
     final (cc, cr) = _villageCenter();
-    _lootCaches.add(LootCache(
-      gridX: cc.toDouble(),
-      gridY: cr.toDouble(),
-      kind: ResourceKind.food,
-      amount: 10,
-      culpritName: 'bilinmeyen',
-    )..witnessed = true);
+    _lootCaches.add(
+      LootCache(
+        gridX: cc.toDouble(),
+        gridY: cr.toDouble(),
+        kind: ResourceKind.food,
+        amount: 10,
+        culpritName: 'bilinmeyen',
+      )..witnessed = true,
+    );
     _showNotification('🪏 Meydana görülmüş bir zula gömüldü (dev).');
   }
 

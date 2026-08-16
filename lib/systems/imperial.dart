@@ -9,20 +9,92 @@ import '../text/voice.dart';
 
 enum ImperialDemandKind { goldTax, foodLevy, woodLevy, conscript }
 
+/// Oyuncunun çatışmayı yönetmediği savunma önizlemesi. Panel bunu gösterir;
+/// aynı [chance] değeri karar anında otomatik çözümde kullanılır.
+class ImperialDefensePreview {
+  final int guards;
+  final int weapons;
+  final int tools;
+  final double chance;
+  final String note;
+
+  const ImperialDefensePreview({
+    required this.guards,
+    required this.weapons,
+    required this.tools,
+    required this.chance,
+    required this.note,
+  });
+}
+
+ImperialDefensePreview imperialDefensePreview({
+  required int guards,
+  required int population,
+  required int weapons,
+  required int iron,
+  required int wood,
+  required int stone,
+  required double favor,
+  double regimeBonus = 0,
+}) {
+  // Silah yoksa balta, tırpan, kazma gibi günlük araçlar savunmaya katılır.
+  final tools = (iron ~/ 2 + wood ~/ 3 + stone ~/ 5).clamp(0, population);
+  final weaponPower = weapons * 0.10;
+  final toolPower = tools * 0.035;
+  final base =
+      guards * 0.18 +
+      (population - 10).clamp(0, 20) * 0.012 +
+      weaponPower +
+      toolPower +
+      (favor - 0.5) * 0.08 +
+      regimeBonus;
+  final chance = (0.10 + base).clamp(0.0, 0.92);
+  final note = weapons > 0
+      ? 'Silahlı muhafızlar önde; araç gereçler yedek güç.'
+      : tools > 0
+      ? 'Silah yok. Balta, tırpan ve kazmalarla karşılık verilecek.'
+      : 'Silah ve araç gereç yok; savunma yalnızca kalabalığa dayanıyor.';
+  return ImperialDefensePreview(
+    guards: guards,
+    weapons: weapons,
+    tools: tools,
+    chance: chance,
+    note: note,
+  );
+}
+
 /// Fiziksel asker heyetinin ziyaret evresi (bkz. scene_imperial `_tickImperial`).
 ///   - [idle]        : heyet yok; sayaç sıradaki ziyareti bekler.
 ///   - [approaching] : harita kenarından köy eşiğine formasyonla yürüyorlar
 ///                     (sim AKAR; oyuncu yaklaşan kolonu görür). Varınca pazarlık.
 ///   - [parley]      : eşikte dizilip beklerler; talep modalı/sinematiği açık
 ///                     (sim DURUR). Oyuncu karar verince ayrılışa geçer.
+///   - [clashing]    : direniş KAZANILDI → eşikte kısa bir karşılaşma. Köy
+///                     hatta dizilirken (bkz. scene_vignette `_vgThreshold`)
+///                     heyet önce bekler, bir hamle yapar, sonra geri döner:
+///                     evre sırf o hamle için değil, HATTIN KURULMASINA zaman
+///                     tanımak için uzun tutulur.
 ///   - [raiding]     : reddedildi/direniş ezildi → askerler köy MERKEZİNE dalar;
 ///                     varışta "darbe" (kurbanlar çöker + sarsıntı + kızıl tint),
 ///                     kısa bekleyiş, sonra ayrılışa geçer. Şiddetin görünür anı.
 ///   - [leaving]     : geldikleri köşeye geri yürürler; varınca despawn → idle.
-enum ImperialVisitPhase { idle, approaching, parley, raiding, leaving }
+enum ImperialVisitPhase {
+  idle,
+  approaching,
+  parley,
+  clashing,
+  raiding,
+  leaving,
+}
+
+/// Direniş kazanıldığında sahnelenen "eşik" vinyetinin kimliği. Sahne
+/// tarafında [_vgThreshold] kurar, prova telemetrisi (`kProbeVignetteId`) bunu
+/// yazar — testin sahneyi tanıdığı tek isim burasıdır.
+const String kThresholdVignetteId = 'imperial.threshold';
 
 class ImperialDemand {
   final ImperialDemandKind kind;
+
   /// goldTax/foodLevy/woodLevy → miktar; conscript → 1 (bir genç).
   final int amount;
   const ImperialDemand(this.kind, this.amount);
@@ -30,32 +102,32 @@ class ImperialDemand {
   bool get isConscript => kind == ImperialDemandKind.conscript;
 
   String get icon => switch (kind) {
-        ImperialDemandKind.goldTax => '★',
-        ImperialDemandKind.foodLevy => '🌾',
-        ImperialDemandKind.woodLevy => '🪵',
-        ImperialDemandKind.conscript => '🧑',
-      };
+    ImperialDemandKind.goldTax => '★',
+    ImperialDemandKind.foodLevy => '🌾',
+    ImperialDemandKind.woodLevy => '🪵',
+    ImperialDemandKind.conscript => '🧑',
+  };
 
   /// Talebin tam karşılığının okunur özeti — defterdeki satır.
   String get label => switch (kind) {
-        ImperialDemandKind.goldTax => '$amount altın öşür',
-        ImperialDemandKind.foodLevy => '$amount kile tahıl',
-        ImperialDemandKind.woodLevy => '$amount kütük kereste',
-        ImperialDemandKind.conscript => 'bir genç (devşirme)',
-      };
+    ImperialDemandKind.goldTax => '$amount altın öşür',
+    ImperialDemandKind.foodLevy => '$amount kile tahıl',
+    ImperialDemandKind.woodLevy => '$amount kütük kereste',
+    ImperialDemandKind.conscript => 'bir genç (devşirme)',
+  };
 
   /// Rakamın köye gerçek faturası. Komutan sayıyı okur; köy bunu öder. Talep
   /// metinlerinde sayının yanına bu cümle konur ki "%s kütük" soyut kalmasın.
   String get bite => switch (kind) {
-        ImperialDemandKind.goldTax =>
-          'Kese dibine kadar boşalır. Kışa girerken avucunuzda bakır bile kalmaz.',
-        ImperialDemandKind.foodLevy =>
-          'Ambarın tabanı görünür. Harmandan ne arttıysa arabalara yüklenir.',
-        ImperialDemandKind.woodLevy =>
-          'Ahırın çatı kirişleri sökülür, istif yol kenarına dizilir.',
-        ImperialDemandKind.conscript =>
-          'Bir ocaktan bir evlat eksilir. Anası kapıda bekler, çocuk dönmez.',
-      };
+    ImperialDemandKind.goldTax =>
+      'Kese dibine kadar boşalır. Kışa girerken avucunuzda bakır bile kalmaz.',
+    ImperialDemandKind.foodLevy =>
+      'Ambarın tabanı görünür. Harmandan ne arttıysa arabalara yüklenir.',
+    ImperialDemandKind.woodLevy =>
+      'Ahırın çatı kirişleri sökülür, istif yol kenarına dizilir.',
+    ImperialDemandKind.conscript =>
+      'Bir ocaktan bir evlat eksilir. Anası kapıda bekler, çocuk dönmez.',
+  };
 }
 
 // ImperialSnapshot hiç örneklenmiyordu (ölü kod) → kaldırıldı; EstateSnapshot
@@ -100,28 +172,34 @@ int imperialGoldDemand({
 /// ADI — komutan onu defterden okur; imparatorluk için burası bir yurt değil,
 /// kayıtlı bir yer adıdır. Boş bırakılırsa cümleler jenerik "bu köy"e düşer
 /// (animasyon odası/capture köy adı olmadan da bu sahneyi oynatabilsin).
-Cutscene imperialArrivalCutscene(ImperialDemand d,
-    {required double favor, required int seed, String village = ''}) {
+Cutscene imperialArrivalCutscene(
+  ImperialDemand d, {
+  required double favor,
+  required int seed,
+  String village = '',
+}) {
   final f = favor;
-  final named = village.trim().isNotEmpty && village.trim().toLowerCase() != 'köy';
+  final named =
+      village.trim().isNotEmpty && village.trim().toLowerCase() != 'köy';
   final vName = village.trim();
   // İlişki tonuna göre giriş anlatımı.
   final arrival = Voice.pick(
-      f < 0.3
-          ? const [
-              'Ufukta kara bir toz. Bu sefer selam vermeden geliyorlar.',
-              'Yol boyunca kimse tarlada kalmadı. Herkes toza baktı, herkes anladı.',
-            ]
-          : f >= 0.7
-              ? const [
-                  'Tanıdık sancak. Aynı komutan, aynı defter, yine kapıda.',
-                  'Heyet ağır ağır geldi. Kimse koşmadı, kimse kaçmadı; bu iş artık bir usul.',
-                ]
-              : const [
-                  'Toynak sesi tepeyi aştı. Köpekler sustu.',
-                  'Toz bulutu yola oturdu. Ateş başındakiler ayağa kalktı.',
-                ],
-      seed);
+    f < 0.3
+        ? const [
+            'Ufukta kara bir toz. Bu sefer selam vermeden geliyorlar.',
+            'Yol boyunca kimse tarlada kalmadı. Herkes toza baktı, herkes anladı.',
+          ]
+        : f >= 0.7
+        ? const [
+            'Tanıdık sancak. Aynı komutan, aynı defter, yine kapıda.',
+            'Heyet ağır ağır geldi. Kimse koşmadı, kimse kaçmadı; bu iş artık bir usul.',
+          ]
+        : const [
+            'Toynak sesi tepeyi aştı. Köpekler sustu.',
+            'Toz bulutu yola oturdu. Ateş başındakiler ayağa kalktı.',
+          ],
+    seed,
+  );
   // Komutanın talebe özel buyruğu — defterden okunan satır + faturası.
   final order = switch (d.kind) {
     ImperialDemandKind.goldTax => '${d.amount} altın. Bugünün rakamı bu.',
@@ -129,29 +207,31 @@ Cutscene imperialArrivalCutscene(ImperialDemand d,
       '${d.amount} kile tahıl. Ambarınızı ben saymam, siz doldurursunuz.',
     ImperialDemandKind.woodLevy =>
       '${d.amount} kütük. Kalenin duvarı bir yerden yükselecek.',
-    ImperialDemandKind.conscript => named
-        ? '$vName bir genç verecek. Adını siz koyun, yoksa ben seçerim.'
-        : 'Bu köyden bir genç. Adını siz verin, yoksa ben seçerim.',
+    ImperialDemandKind.conscript =>
+      named
+          ? '$vName bir genç verecek. Adını siz koyun, yoksa ben seçerim.'
+          : 'Bu köyden bir genç. Adını siz verin, yoksa ben seçerim.',
   };
   // İtibara göre komutanın tonu: yüksek itibarda neredeyse nazik, düşükte
   // sıkılmış ve ölümcül. Sesini hiç yükseltmez.
   final threat = Voice.pick(
-      f < 0.3
-          ? const [
-              'Geçen kış iki köy sildim. İkisi de son ana kadar konuşacağını sandı.',
-              'Bu satırın altını çizmek zorunda kalırsam, sabah burada duman durur.',
-              'Yorgunum. Yorgun adamla pazarlık edilmez.',
-            ]
-          : f >= 0.7
-              ? const [
-                  'Sizinle hep kolay oldu. Bozmayalım, ikimiz de rahat edelim.',
-                  'Defterde adınız temiz sayfada duruyor. Orada kalması işime gelir.',
-                ]
-              : const [
-                  'Borç ödenir. Nasıl ödendiğini defter yazmaz.',
-                  'İki yol var. İkisi de aynı rakamda biter, biri daha ucuza.',
-                ],
-      seed + 1);
+    f < 0.3
+        ? const [
+            'Geçen kış iki köy sildim. İkisi de son ana kadar konuşacağını sandı.',
+            'Bu satırın altını çizmek zorunda kalırsam, sabah burada duman durur.',
+            'Yorgunum. Yorgun adamla pazarlık edilmez.',
+          ]
+        : f >= 0.7
+        ? const [
+            'Sizinle hep kolay oldu. Bozmayalım, ikimiz de rahat edelim.',
+            'Defterde adınız temiz sayfada duruyor. Orada kalması işime gelir.',
+          ]
+        : const [
+            'Borç ödenir. Nasıl ödendiğini defter yazmaz.',
+            'İki yol var. İkisi de aynı rakamda biter, biri daha ucuza.',
+          ],
+    seed + 1,
+  );
 
   return Cutscene([
     CutsceneShot(
@@ -161,14 +241,42 @@ Cutscene imperialArrivalCutscene(ImperialDemand d,
       zoomFrom: 1.02,
       zoomTo: 1.08,
       actors: const [
-        CutsceneActor(type: VillagerType.guard, seed: 31, fromX: 1.25, toX: 0.66, y: 0.84, scale: 1.2, flip: true, walk: true),
-        CutsceneActor(type: VillagerType.guard, seed: 44, fromX: 1.5, toX: 0.50, y: 0.80, scale: 1.1, flip: true, walk: true),
-        CutsceneActor(type: VillagerType.guard, seed: 52, fromX: 1.75, toX: 0.36, y: 0.86, scale: 1.25, flip: true, walk: true),
+        CutsceneActor(
+          type: VillagerType.guard,
+          seed: 31,
+          fromX: 1.25,
+          toX: 0.66,
+          y: 0.84,
+          scale: 1.2,
+          flip: true,
+          walk: true,
+        ),
+        CutsceneActor(
+          type: VillagerType.guard,
+          seed: 44,
+          fromX: 1.5,
+          toX: 0.50,
+          y: 0.80,
+          scale: 1.1,
+          flip: true,
+          walk: true,
+        ),
+        CutsceneActor(
+          type: VillagerType.guard,
+          seed: 52,
+          fromX: 1.75,
+          toX: 0.36,
+          y: 0.86,
+          scale: 1.25,
+          flip: true,
+          walk: true,
+        ),
       ],
       lines: [
         CutsceneLine(arrival),
         const CutsceneLine(
-            'Süvariler eşikte durdu. Kimse inmedi, kimse acele etmedi.'),
+          'Süvariler eşikte durdu. Kimse inmedi, kimse acele etmedi.',
+        ),
       ],
     ),
     CutsceneShot(
@@ -179,28 +287,38 @@ Cutscene imperialArrivalCutscene(ImperialDemand d,
       zoomFrom: 1.1,
       zoomTo: 1.0,
       actors: const [
-        CutsceneActor(type: VillagerType.guard, name: 'Komutan', seed: 31, fromX: 0.5, y: 0.80, scale: 1.6, flip: true),
+        CutsceneActor(
+          type: VillagerType.guard,
+          name: 'Komutan',
+          seed: 31,
+          fromX: 0.5,
+          y: 0.80,
+          scale: 1.6,
+          flip: true,
+        ),
       ],
       lines: [
         // Komutanın AÇILIŞ satırı köyün adını okur: defterde bir satırsınız
         // ve o satırın bir adı var. Adı ilk kez bir yabancının ağzından
         // duymak, adı ekranda bir etiket olmaktan çıkarır.
         CutsceneLine(
-            Voice.pick(
-                named
-                    ? [
-                        '$vName. Defterde kayıtlı. Kayıtlı olan öder.',
-                        'Sayfayı açıyorum: $vName. Bakalım bu yıl ne yazmışlar size.',
-                        '$vName adını deftere ben yazmadım. Ben yalnız karşısındaki '
-                            'haneyi doldurmaya geldim.',
-                      ]
-                    : const [
-                        'Bu köy defterde kayıtlı. Kayıtlı olan öder.',
-                        'Adınızı deftere ben yazmadım. Ben yalnız karşısındaki haneyi doldurmaya geldim.',
-                        'Sayfayı açıyorum. Bakalım bu yıl ne yazmışlar size.',
-                      ],
-                seed + 2),
-            speaker: 'Komutan'),
+          Voice.pick(
+            named
+                ? [
+                    '$vName. Defterde kayıtlı. Kayıtlı olan öder.',
+                    'Sayfayı açıyorum: $vName. Bakalım bu yıl ne yazmışlar size.',
+                    '$vName adını deftere ben yazmadım. Ben yalnız karşısındaki '
+                        'haneyi doldurmaya geldim.',
+                  ]
+                : const [
+                    'Bu köy defterde kayıtlı. Kayıtlı olan öder.',
+                    'Adınızı deftere ben yazmadım. Ben yalnız karşısındaki haneyi doldurmaya geldim.',
+                    'Sayfayı açıyorum. Bakalım bu yıl ne yazmışlar size.',
+                  ],
+            seed + 2,
+          ),
+          speaker: 'Komutan',
+        ),
         CutsceneLine(order, speaker: 'Komutan'),
         CutsceneLine(d.bite, speaker: 'Komutan'),
         CutsceneLine(threat, speaker: 'Komutan'),
@@ -213,13 +331,27 @@ Cutscene imperialArrivalCutscene(ImperialDemand d,
         zoomFrom: 1.0,
         zoomTo: 1.06,
         actors: [
-          CutsceneActor(type: VillagerType.guard, seed: 52, fromX: 0.30, y: 0.82, scale: 1.3, flip: true),
+          CutsceneActor(
+            type: VillagerType.guard,
+            seed: 52,
+            fromX: 0.30,
+            y: 0.82,
+            scale: 1.3,
+            flip: true,
+          ),
           // Küçük ölçekli köylü → genç hissi (ayrı "genç" sprite'ı yok).
-          CutsceneActor(type: VillagerType.farmer, seed: 9, fromX: 0.62, y: 0.84, scale: 0.85),
+          CutsceneActor(
+            type: VillagerType.farmer,
+            seed: 9,
+            fromX: 0.62,
+            y: 0.84,
+            scale: 0.85,
+          ),
         ],
         lines: [
           CutsceneLine(
-              'Komutan gençlerin durduğu sıraya baktı. Analar bir adım öne çıktı, o hiç oynamadı.'),
+            'Komutan gençlerin durduğu sıraya baktı. Analar bir adım öne çıktı, o hiç oynamadı.',
+          ),
         ],
       ),
   ]);

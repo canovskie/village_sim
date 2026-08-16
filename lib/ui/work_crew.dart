@@ -5,6 +5,7 @@ import '../entities/villager_job.dart';
 import '../entities/work_site.dart';
 import '../rendering/portrait_renderer.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// KADRO — bir iş yerinin oyuncuya bakan yüzü.
 ///
@@ -85,7 +86,8 @@ class WorkCrewSection extends StatelessWidget {
         : AppUi.gold;
     return Row(
       children: [
-        Text(site.role.icon, style: const TextStyle(fontSize: 12)),
+        SemanticIcon(site.role.icon,
+            size: 12, color: tone, fallback: GameIconData.hammer),
         const SizedBox(width: 6),
         Text(
           site.role.label.toUpperCase(),

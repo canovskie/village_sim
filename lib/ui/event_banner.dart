@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// Bir rastgele olay tetiklendiğinde ekranın üst-ortasında çıkan zengin
 /// banner kartı. Kategoriye göre renklenir (pozitif sage, negatif rust,
@@ -92,9 +93,13 @@ class EventBanner extends StatelessWidget {
                             blurRadius: 8),
                       ],
                     ),
-                    // event.icon emoji — korunuyor.
-                    child:
-                        Text(event.icon, style: const TextStyle(fontSize: 24)),
+                    child: SemanticIcon(
+                      event.icon,
+                      size: 24,
+                      color: _accent,
+                      fallback: GameIconData.dice,
+                      label: event.title,
+                    ),
                   ),
                   const SizedBox(width: 11),
                   Expanded(
@@ -193,8 +198,12 @@ class EventBanner extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // delta icon emoji — korunuyor.
-          Text(icon, style: const TextStyle(fontSize: 12)),
+          SemanticIcon(
+            icon,
+            size: 12,
+            color: color,
+            fallback: isMoral ? GameIconData.heart : GameIconData.star,
+          ),
           const SizedBox(width: 5),
           Text(label,
               style: AppUi.button.copyWith(

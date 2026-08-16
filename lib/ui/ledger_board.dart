@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app_ui.dart';
 import 'guide_spotlight.dart';
 import 'mobile_ui.dart';
+import 'semantic_icon.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TAHTA — telefon yatayda YÖNETİM EKRANI yerleşimi
@@ -220,7 +221,10 @@ class _RailButton extends StatelessWidget {
             children: [
               Opacity(
                 opacity: on ? 1 : 0.7,
-                child: Text(item.icon, style: const TextStyle(fontSize: 14)),
+                child: SemanticIcon(item.icon,
+                    size: 14,
+                    color: on ? AppUi.accentSoft : AppUi.textMid,
+                    fallback: GameIconData.scroll),
               ),
               const SizedBox(width: 6),
               Expanded(

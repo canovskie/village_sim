@@ -36,6 +36,24 @@ extension _SceneJobs on _VillageSceneState {
           IntentPriority.ceremony && // sahnedekine iş verme
       v.activity == VillagerActivity.none;
 
+  /// Açılışta kurucular ateş etrafında kısa süreliğine toplanır. Normal iş
+  /// filtresi bu kişilerin tamamını meşgul saydığı için ilk çadır emri boşta
+  /// kalabiliyordu. Öğreticiye özel bu kapı yalnız uyuyan, içerideki, taşıyan
+  /// veya çocuk köylüleri dışarıda bırakır; sıcaklık/sohbet rezervasyonu iş
+  /// geldiğinde usulünce iptal edilir.
+  bool _freeForTutorialBuilder(VillagerEntity v) =>
+      _charterTier == 0 &&
+      (_guideActive || _guideWanted || _guideOpen) &&
+      v.assignedRole == null &&
+      !_houseWithholdsLabor(v) &&
+      !v.hasActiveJob &&
+      v.jobReassignCd <= 0 &&
+      v.canRunErrands &&
+      !v.isDying &&
+      !v.isInsideBuilding &&
+      !v.isSleeping &&
+      !v.isCarrying;
+
   /// Atanmış bir köylünün iş state-machine'i BU FRAME çalışmalı mı — uyku/taşıma/
   /// oturma/ölüm/sosyal aktivite işi askıya alır (köylü onu bitirince iş devam
   /// eder; claim korunur). Bu koşullarda `goTo` verilmez.
@@ -240,12 +258,7 @@ extension _SceneJobs on _VillageSceneState {
     final wantWeavers = weaveSeason && _stockpile.wool >= 3
         ? (_stockpile.wool ~/ 9).clamp(1, 2)
         : 0;
-    _reconcileRole(
-      JobRole.weaver,
-      wantWeavers,
-      matchType: null,
-      blockMsg: '',
-    );
+    _reconcileRole(JobRole.weaver, wantWeavers, matchType: null, blockMsg: '');
   }
 
   /// Kaç el sepete gitsin — İHTİYAÇ KADAR, sessizce.
@@ -397,19 +410,30 @@ extension _SceneJobs on _VillageSceneState {
       job.phase = 0;
       job.working = false;
       job.phaseAnim = 0;
-      final box = ResourceBox(
-        type: ResourceBoxType.woodChunk,
-        gridX: hc.toDouble(),
-        gridY: hr.toDouble(),
-      );
-      ResourcePlacement.placeBox(
-        box,
-        hc.toDouble(),
-        hr.toDouble(),
-        _resourceBoxes,
-        _time,
-      );
-      _resourceBoxes.add(box);
+      // Bir ağaç tek odun değil, küçük bir kütük yığını bırakır. Her kütük
+      // ayrı kutu olduğundan taşıyıcıların görünür emeği ve HUD'daki "yolda"
+      // sayısı korunur.
+      for (var i = 0; i < kWoodYieldPerTree; i++) {
+        final box = ResourceBox(
+          type: ResourceBoxType.woodChunk,
+          gridX: hc.toDouble(),
+          gridY: hr.toDouble(),
+        );
+        ResourcePlacement.placeBox(
+          box,
+          hc.toDouble(),
+          hr.toDouble(),
+          _resourceBoxes,
+          _time,
+        );
+        _resourceBoxes.add(box);
+      }
+      _woodHarvested++;
+      if (_woodHarvested == 1) {
+        _showNotification(
+          '🪵 İlk kütük indi. Taşıyacak biri depoya götürecek.',
+        );
+      }
     }
   }
 
@@ -496,17 +520,31 @@ extension _SceneJobs on _VillageSceneState {
         return dx * dx + dy * dy;
       }
 
-      final pool = _villagers.where(_freeForJob).toList()
-        ..sort((a, b) {
-          if (matchType != null) {
-            final am = a.type == matchType ? 0 : 1;
-            final bm = b.type == matchType ? 0 : 1;
-            if (am != bm) return am - bm;
-          }
-          return d2(a).compareTo(d2(b));
-        });
+      final pool =
+          _villagers
+              .where(
+                role == JobRole.builder
+                    ? (v) => _freeForJob(v) || _freeForTutorialBuilder(v)
+                    : _freeForJob,
+              )
+              .toList()
+            ..sort((a, b) {
+              if (matchType != null) {
+                final am = a.type == matchType ? 0 : 1;
+                final bm = b.type == matchType ? 0 : 1;
+                if (am != bm) return am - bm;
+              }
+              return d2(a).compareTo(d2(b));
+            });
       for (final v in pool) {
         if (need <= 0) break;
+        if (role == JobRole.builder && _freeForTutorialBuilder(v)) {
+          if (v.sitClaimed) v.cancelSit();
+          if (v.mind.intent.priority >= IntentPriority.ceremony) {
+            v.mind.clear();
+          }
+          v.activity = VillagerActivity.none;
+        }
         v.job = VillagerJob(role);
         need--;
       }
@@ -514,7 +552,10 @@ extension _SceneJobs on _VillageSceneState {
       // "bu rolün uyarısı yok" demek: sessiz roller (toplayıcı/aşçı/dokumacı)
       // köyün kendi refleksi, oyuncunun yapabileceği bir şey yok — o kapı
       // kapalıyken boş bir bildirim düşerdi.
-      if (need > 0 && target > 0 && blockMsg.isNotEmpty && _jobBlockWarnCd <= 0) {
+      if (need > 0 &&
+          target > 0 &&
+          blockMsg.isNotEmpty &&
+          _jobBlockWarnCd <= 0) {
         _jobBlockWarnCd = 60.0;
         _showNotification(blockMsg);
       }
@@ -638,7 +679,8 @@ extension _SceneJobs on _VillageSceneState {
       // dolan köylü yavaşlar (bkz. systems/winter.dart chillWorkPenalty).
       // Eşikli — hafif üşüme kimseyi yavaşlatmaz, yoksa kış boyunca köy
       // sürekli ağır çekim olurdu.
-      final cm = VillageCustom.speedMul(job.role, male: v.isMale) *
+      final cm =
+          VillageCustom.speedMul(job.role, male: v.isMale) *
           chillWorkPenalty(v.mind.drive(Drive.chill));
       switch (job.role) {
         case JobRole.builder:
@@ -844,6 +886,11 @@ extension _SceneJobs on _VillageSceneState {
       job.progress = bo.progress;
       v.facingRight = (bo.col + 1.0) > v.gridX;
       return;
+    }
+    if (!bo.startAnnounced) {
+      bo.startAnnounced = true;
+      final label = kBuildingMeta[bo.type]?.label ?? 'Yapı';
+      _showNotification('🔨 $label inşası başladı.');
     }
     job.working = true;
     job.phaseAnim = (job.phaseAnim + dt * 4.0) % (pi * 2);

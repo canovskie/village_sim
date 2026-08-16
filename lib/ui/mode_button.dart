@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// HUD altındaki mod butonu (Tarla / Kes / Kaz). Koyu rafine sekme —
 /// pasifken solgun ikon + etiket, aktifken accent renkli halo + kenar.
@@ -62,8 +63,8 @@ class _ModeButtonState extends State<ModeButton> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(widget.icon,
-                  style: TextStyle(fontSize: 18, color: fg)),
+              SemanticIcon(widget.icon,
+                  size: 18, color: fg, fallback: GameIconData.hammer),
               const SizedBox(height: 2),
               Text(widget.label.toUpperCase(),
                   style: AppUi.label.copyWith(

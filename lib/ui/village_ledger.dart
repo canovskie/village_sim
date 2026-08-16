@@ -15,6 +15,7 @@ import '../systems/law_book.dart';
 import '../systems/law_compass.dart';
 import '../systems/petition_system.dart';
 import '../systems/quest_book.dart';
+import '../systems/reckoning.dart';
 import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
@@ -23,7 +24,9 @@ import 'guide_spotlight.dart';
 import 'law_book_panel.dart';
 import 'ledger_board.dart';
 import 'mobile_ui.dart';
+import 'objective_panel.dart';
 import 'petition_scene_card.dart';
+import 'semantic_icon.dart';
 import 'villager_roster_view.dart';
 
 part 'ledger_council.dart';
@@ -197,6 +200,11 @@ class VillageLedger extends StatelessWidget {
   final int food;
   final int gold;
 
+  final List<ReckoningLedgerRow> karne;
+  final int karneYear;
+  final String karneVerdict;
+  final String karneAdviceLine;
+
   /// Gündem — bekleyenler önce, sonra mayalananlar (baskıya göre sıralı gelir).
   final List<DivanMatter> agenda;
 
@@ -314,6 +322,10 @@ class VillageLedger extends StatelessWidget {
     required this.population,
     required this.food,
     required this.gold,
+    this.karne = const [],
+    this.karneYear = 0,
+    this.karneVerdict = '',
+    this.karneAdviceLine = '',
     required this.agenda,
     required this.houses,
     this.seats = const [],
@@ -573,6 +585,10 @@ class VillageLedger extends StatelessWidget {
             const SizedBox(height: 8),
             _identityBonusRow(),
           ],
+          if (karne.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _karneBlock(),
+          ],
         ];
         // TELEFON YATAY: defterin gövdesine ~300dp kalıyor; masa + künye ilk
         // ekranı doldurunca Divan açıldığında YANIT BEKLEYEN İŞ görünmüyordu.
@@ -588,6 +604,41 @@ class VillageLedger extends StatelessWidget {
       },
     );
   }
+
+  Widget _karneBlock() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppSectionLabel('İMPARATORLUĞUN GÖZÜ — $karneYear. YIL'),
+          const SizedBox(height: 7),
+          for (final row in karne) ...[
+            Text(row.label,
+                style: AppUi.label.copyWith(color: AppUi.textMid)),
+            const SizedBox(height: 3),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: row.value.clamp(0.0, 1.0),
+                minHeight: 5,
+                backgroundColor: AppUi.surface2,
+                valueColor: const AlwaysStoppedAnimation(AppUi.gold),
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(row.note,
+                style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
+            const SizedBox(height: 7),
+          ],
+          if (karneVerdict.isNotEmpty)
+            Text('Defter bugün kapansaydı: $karneVerdict',
+                style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.gold)),
+          if (karneAdviceLine.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Text(karneAdviceLine,
+                  style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textMid)),
+            ),
+        ],
+      );
 
   /// KANUNNAME sekmesi — yasa defteri + kararların köyde bıraktığı kalıcı iz.
   Widget _kararTab() {
@@ -679,7 +730,8 @@ class VillageLedger extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('👉', style: TextStyle(fontSize: 12)),
+                const GameIcon(GameIconData.chevron,
+                    size: 12, color: AppUi.accentSoft),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -742,7 +794,8 @@ class VillageLedger extends StatelessWidget {
         children: [
           Opacity(
             opacity: passed || current ? 1 : 0.45,
-            child: Text(t.icon, style: const TextStyle(fontSize: 15)),
+            child: SemanticIcon(t.icon,
+                size: 15, color: AppUi.gold, fallback: GameIconData.crown),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -798,7 +851,8 @@ class VillageLedger extends StatelessWidget {
         children: [
           SizedBox(
             width: 20,
-            child: Text(s.quest.icon, style: const TextStyle(fontSize: 12)),
+            child: GameIcon(questGlyph(s.quest.id),
+                size: 12, color: on ? AppUi.accent : AppUi.textLo),
           ),
           Expanded(
             child: Text(
@@ -872,7 +926,8 @@ class VillageLedger extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: Text(e.icon, style: const TextStyle(fontSize: 15)),
+            child: SemanticIcon(e.icon,
+                size: 15, color: AppUi.textLo, fallback: GameIconData.scroll),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1191,7 +1246,7 @@ class VillageLedger extends StatelessWidget {
           const BoxShadow(color: Color(0x99000000), blurRadius: 6),
         ],
       ),
-      child: const Text('⚖', style: TextStyle(fontSize: 24)),
+      child: const GameIcon(GameIconData.scales, size: 24, color: AppUi.gold),
     );
   }
 
@@ -1275,7 +1330,8 @@ class VillageLedger extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
-                const Text('🕊️', style: TextStyle(fontSize: 15)),
+                const GameIcon(GameIconData.handshake,
+                    size: 15, color: AppUi.sage),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -1327,7 +1383,8 @@ class VillageLedger extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(m.icon, style: const TextStyle(fontSize: 16)),
+                  SemanticIcon(m.icon,
+                      size: 16, color: c, fallback: GameIconData.scroll),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1595,38 +1652,49 @@ class VillageLedger extends StatelessWidget {
         ),
       ],
     );
-    // Hane bir şey ESİRGİYORSA satırın altına ne esirgediği yazılır. Rakam
-    // değil CÜMLE: "hâl %31" oyuncuya hiçbir şey söylemez, "üç el işe çıkmıyor"
-    // söyler. Panelde okunan sayı simin okuduğu sayıdır (tek kaynak: snapshot).
-    if (!s.stance.withholds) return row;
+    // Hane SESİNİ ÇIKARIYORSA (serzeniş ve üstü) satırın altına hâli yazılır.
+    // Rakam değil CÜMLE: "hâl %31" oyuncuya hiçbir şey söylemez, "üç el işe
+    // çıkmıyor" söyler. Serzeniş de görünür — o basamak oyuncunun ÜCRETSİZ
+    // uyarı penceresidir; defterde susarsa rampa ilk bedelli basamaktan başlar
+    // ve "kayıp her zaman haber verilir" sözü delinir.
+    // Panelde okunan sayı simin okuduğu sayıdır (tek kaynak: snapshot).
+    if (!s.stance.audible) return row;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [row, const SizedBox(height: 4), _withholdLine(s)],
+      children: [row, const SizedBox(height: 4), _stanceStrip(s)],
     );
   }
 
-  /// Esirgeyen hanenin bedel şeridi — ne çekiliyor, ne saklanıyor.
-  Widget _withholdLine(HouseSnapshot s) {
+  /// Duruş şeridi — ne çekiliyor, ne saklanıyor, BİR ADIM ÖTEDE ne var.
+  /// Serzeniş (bedelsiz uyarı) kehribar okunur, esirgeyen basamaklar kızıl.
+  /// [nextRung] önizlemesi bedeli ÖNCEDEN gösterir: oyuncu merdivenin bir
+  /// sonraki basamağını çıkmadan okuyabilmeli.
+  Widget _stanceStrip(HouseSnapshot s) {
     final w = s.withholding;
     final hands = (s.members * w.labor).round();
+    final next = nextRung(s.stance);
     final parts = <String>[
+      if (!s.stance.withholds) 'henüz esirgemiyor',
       if (hands > 0) '$hands el işe çıkmıyor',
       if (s.stash > 0) '${s.stash} kile saklı',
       if (w.council) 'masada yok',
       if (w.betrothal) 'nikâh vermiyor',
+      if (next != null) 'bir adım ötede: ${next.costHint}',
     ];
+    final tint = s.stance.withholds ? AppUi.rust : AppUi.gold;
     return Padding(
       padding: const EdgeInsets.only(left: 22, right: 6),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         decoration: BoxDecoration(
-          color: const Color(0x14D9534F),
+          color: tint.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(AppUi.radiusSm),
-          border: Border.all(color: const Color(0x40D9534F)),
+          border: Border.all(color: tint.withValues(alpha: 0.25)),
         ),
         child: Row(
           children: [
-            Text(s.stance.icon, style: const TextStyle(fontSize: 11)),
+            SemanticIcon(s.stance.icon,
+                size: 11, color: tint, fallback: GameIconData.scales),
             const SizedBox(width: 6),
             Text(
               s.stance.label,
@@ -1689,7 +1757,7 @@ class VillageLedger extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Text('📜', style: TextStyle(fontSize: 12)),
+          const GameIcon(GameIconData.scroll, size: 12, color: AppUi.textLo),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -1727,7 +1795,8 @@ class VillageLedger extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(f.icon, style: const TextStyle(fontSize: 11)),
+          SemanticIcon(f.icon,
+              size: 11, color: f.color, fallback: GameIconData.star),
           const SizedBox(width: 5),
           Text(
             f.label,
@@ -2178,7 +2247,10 @@ class _LedgerShellState extends State<_LedgerShell> {
             children: [
               Opacity(
                 opacity: on ? 1 : 0.72,
-                child: Text(s.icon, style: const TextStyle(fontSize: 15)),
+                child: SemanticIcon(s.icon,
+                    size: 15,
+                    color: on ? AppUi.accentSoft : AppUi.textMid,
+                    fallback: GameIconData.scroll),
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -2280,7 +2352,10 @@ class _LedgerShellState extends State<_LedgerShell> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(s.icon, style: const TextStyle(fontSize: 13)),
+            SemanticIcon(s.icon,
+                size: 13,
+                color: on ? AppUi.accentSoft : AppUi.textLo,
+                fallback: GameIconData.scroll),
             const SizedBox(width: 7),
             Text(
               s.label,

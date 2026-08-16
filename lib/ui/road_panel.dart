@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/resources.dart';
 import '../world/road_surface.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// Yol rafı — 3 surface chip (toprak / taş / köprü) + SİLGİ. Modern koyu panel;
 /// bir chip seçilince yol modu aktif, accent (ember) vurgu çevreliyor.
@@ -89,7 +90,10 @@ class _EraseChip extends StatelessWidget {
           children: [
             const SizedBox(
               height: 26,
-              child: Center(child: Text('🧹', style: TextStyle(fontSize: 20))),
+              child: Center(
+                child: GameIcon(GameIconData.demolish,
+                    size: 20, color: AppUi.rust),
+              ),
             ),
             const SizedBox(height: 3),
             SizedBox(
@@ -169,8 +173,8 @@ class _Chip extends StatelessWidget {
               SizedBox(
                 height: 26,
                 child: Center(
-                  // surface.icon emoji — app_ui'de karşılığı yok, korunuyor.
-                  child: Text(surface.icon, style: const TextStyle(fontSize: 20)),
+                  child: SemanticIcon(surface.icon,
+                      size: 20, color: tint, fallback: GameIconData.map),
                 ),
               ),
               const SizedBox(height: 3),
@@ -224,15 +228,33 @@ class _CostLine extends StatelessWidget {
       runSpacing: 1,
       children: [
         for (final (kind, amount) in cost.entries)
-          // kind.icon emoji — korunuyor.
-          Text('${kind.icon}$amount',
-              style: AppUi.body.copyWith(
-                color: stockpile.get(kind) >= amount
-                    ? AppUi.textMid
-                    : AppUi.rust,
-                fontSize: 9.5,
-                fontWeight: FontWeight.w700,
-              )),
+          _ResourceCost(kind: kind, amount: amount, available: stockpile.get(kind)),
+      ],
+    );
+  }
+}
+
+class _ResourceCost extends StatelessWidget {
+  const _ResourceCost({required this.kind, required this.amount, required this.available});
+  final ResourceKind kind;
+  final int amount;
+  final int available;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = available >= amount ? AppUi.textMid : AppUi.rust;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SemanticIcon(kind.icon,
+            size: 10, color: color, fallback: GameIconData.star),
+        const SizedBox(width: 2),
+        Text('$amount',
+            style: AppUi.body.copyWith(
+              color: color,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+            )),
       ],
     );
   }

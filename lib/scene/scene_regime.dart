@@ -606,7 +606,8 @@ extension _SceneRegime on _VillageSceneState {
       _petitionAuthor = null;
       _petitionExtra = const {};
       _petitionModalOpen = false;
-      _petitionForced = false;
+      _petitionOverdue = false;
+      _petitionOverdueTimer = 0;
       _petitionTimer = _petitionInterval();
     });
     _showNotification('✋ Dilekçeyi reddettin. Meydan sessiz — ama boş değil.');
@@ -627,7 +628,8 @@ extension _SceneRegime on _VillageSceneState {
       _petitionAuthor = null;
       _petitionExtra = const {};
       _petitionModalOpen = false;
-      _petitionForced = false;
+      _petitionOverdue = false;
+      _petitionOverdueTimer = 0;
       _petitionTimer = _petitionInterval();
     });
     _showNotification('⚑ Dilekçe kapıda kaldı. Kimse bir daha sormadı.');

@@ -32,11 +32,11 @@ final List<_PetitionDef> _kTreePetitions = [
         bodyPool: [
           '“Efendim, döndüm. {giden} olarak gittim, aynı adam olarak dönmedim. '
               'Ustanın yanında bir mevsim durdum, elimi tuttu, gösterdi. Şimdi '
-              'biliyorum. Ama bir başıma bilmek yetmez — bana bir dam altı verin, '
+              'biliyorum. Ama bir başıma bilmek yetmez; bana bir dam altı verin, '
               'öğreteyim. Yoksa benimle birlikte bu iş yine gider.”',
           '“Geldim işte. Aletleri getirdim, ellerim de öğrendi. Köyün ortasında '
               'bir yer isterim, çıraklar gelsin otursun. Ya da istemem, kendi '
-              'köşemde çalışırım — o zaman da bu iş benim işim olur, köyün değil.”',
+              'köşemde çalışırım; o zaman da bu iş benim işim olur, köyün değil.”',
         ],
         options: [
           PetitionOption(
@@ -136,7 +136,7 @@ final List<_PetitionDef> _kTreePetitions = [
               'nasıl yapıldığını gören yok. Köy parasını veriyor, köy öğrenmiyor. '
               'Bu iş kimin oldu şimdi?”',
           '“{giden} yolculuğa köyün kesesiyle çıktı. Döndü, kapısını kapattı. '
-              'Kimse hırsız demiyor — ama herkes düşünüyor.”',
+              'Kimse hırsız demiyor; ama herkes düşünüyor.”',
         ],
         options: [
           PetitionOption(
@@ -196,7 +196,7 @@ final List<_PetitionDef> _kTreePetitions = [
             detail: 'Ayda bir gün söz köyün. Otoriten paylaşılır, huzursuzluk iner.',
             resolutionPool: [
               '🗣 Meydan günü kuruldu. İlk gün beş kişi konuştu, üçü ilk kez sesini duydu.',
-              '🗣 Gelenek başladı. {ad} artık sırasını bekliyor — ama bekliyor.',
+              '🗣 Gelenek başladı. {ad} artık sırasını bekliyor; ama bekliyor.',
             ],
             moraleAmount: 0.07,
             moraleDays: 6,

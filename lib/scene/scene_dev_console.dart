@@ -26,8 +26,10 @@ extension _SceneDevConsole on _VillageSceneState {
     }
     final jumped = d - _dayCount;
     _dayCount = d;
-    logDev('${target.icon} ${target.label} — takvim $jumped gün ileri',
-        tag: '🗓️');
+    logDev(
+      '${target.icon} ${target.label} — takvim $jumped gün ileri',
+      tag: '🗓️',
+    );
   }
 
   // ── Komut kayıt defteri ─────────────────────────────────────────────────
@@ -49,7 +51,13 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.nufus,
         hint: 'Ateş başında N yetişkin köylü',
         params: const [
-          DevParam.integer('count', 'Adet', intDefault: 1, intMin: 1, intMax: 20),
+          DevParam.integer(
+            'count',
+            'Adet',
+            intDefault: 1,
+            intMin: 1,
+            intMax: 20,
+          ),
         ],
         run: (a) {
           final fp = _firepitBuilding;
@@ -67,7 +75,13 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.nufus,
         hint: 'Dışarıdan yeni hane',
         params: const [
-          DevParam.integer('count', 'Adet', intDefault: 1, intMin: 1, intMax: 10),
+          DevParam.integer(
+            'count',
+            'Adet',
+            intDefault: 1,
+            intMin: 1,
+            intMax: 10,
+          ),
         ],
         run: (a) => setStateHere(() {
           for (var i = 0; i < a.getInt('count', 1); i++) {
@@ -115,10 +129,22 @@ extension _SceneDevConsole on _VillageSceneState {
         run: (a) {
           setStateHere(() {
             _devConsoleOpen = false;
-            _impGrudge = true; // merdiveni tetikler (bkz. _startImperialParley)
+            // Merdiveni tetikler (bkz. _startImperialParley). Film koşuda bir
+            // kez oynadığı için dev komutu o kilidi de açar, yoksa ikinci
+            // çağrıda hiçbir şey göstermez.
+            _impGrudge = true;
+            _impFilmsShown.remove('grudge');
           });
           _devSummonImperial();
         },
+      ),
+      DevCommand(
+        id: 'imperial.deathNotice',
+        label: 'İmparatorluk Ölüm Bildirimi Testi',
+        category: DevCat.yonetisim,
+        hint:
+            'İki köylüyü seçer; ölüm toastı + kronik + cenaze akışını başlatır',
+        run: (a) => setStateHere(_devStageImperialDeathNotice),
       ),
       DevCommand(
         id: 'anim.room',
@@ -180,38 +206,50 @@ extension _SceneDevConsole on _VillageSceneState {
           final p = _compassPos;
           final id = _regimeIdentity;
           final r = _regimeRule;
-          logDev('⚑ ${id.icon} ${id.title} — ${r.powerTitle} '
-              '${id.committed ? '(kökleşti)' : '(eğilim)'}'
-              '${_oathRegime != null ? ' · YEMİNLİ' : ''}');
-          logDev('⚑ otorite ${p.authority.toStringAsFixed(2)} · '
-              'iktisat ${p.economy.toStringAsFixed(2)} · '
-              'iman ${p.faith.toStringAsFixed(2)} · '
-              'mühür ${p.lawCount}');
-          logDev('⚑ huzursuzluk ${(_unrest * 100).round()}% '
-              '(${Regime.unrestLabel(_unrest)}) · kriz ${r.crisis.name} · '
-              'mürekkep ×${r.inkDryMul} · '
-              'meclis ${r.councilDecides ? 'karar verir' : 'karar vermez'}');
+          logDev(
+            '⚑ ${id.icon} ${id.title} — ${r.powerTitle} '
+            '${id.committed ? '(kökleşti)' : '(eğilim)'}'
+            '${_oathRegime != null ? ' · YEMİNLİ' : ''}',
+          );
+          logDev(
+            '⚑ otorite ${p.authority.toStringAsFixed(2)} · '
+            'iktisat ${p.economy.toStringAsFixed(2)} · '
+            'iman ${p.faith.toStringAsFixed(2)} · '
+            'mühür ${p.lawCount}',
+          );
+          logDev(
+            '⚑ huzursuzluk ${(_unrest * 100).round()}% '
+            '(${Regime.unrestLabel(_unrest)}) · kriz ${r.crisis.name} · '
+            'mürekkep ×${r.inkDryMul} · '
+            'meclis ${r.councilDecides ? 'karar verir' : 'karar vermez'}',
+          );
           // Çürüme (Faz 3) + iman (overlay mekaniği).
           final fe = _faithEffect;
-          logDev('🕯 çürüme ${(_regimeRot * 100).round()}% '
-              '(${Regime.rotLabel(_regimeRot)})'
-              '${_isChronic ? ' · KRONİK: ${Regime.chronicText(r.crisis).$1}' : ''}'
-              '${_isFailing ? ' · ÇÖZÜLÜYOR' : ''} · '
-              'iş ×${_regimeWorkMul.toStringAsFixed(2)} · '
-              'mürekkep ×${_chronicInkMul.toStringAsFixed(2)}');
-          logDev('☾ iman ${(p.faith * 100).round()}% → sabır '
-              '+${fe.unrestRelief.toStringAsFixed(3)}/gün · direniş '
-              '+${(fe.resistBonus * 100).round()} · suç '
-              '×${fe.crimeDamp.toStringAsFixed(2)} · moral taban '
-              '+${fe.moraleFloor.toStringAsFixed(3)} · devşirme yarası '
-              '×${fe.conscriptSting.toStringAsFixed(2)}');
+          logDev(
+            '🕯 çürüme ${(_regimeRot * 100).round()}% '
+            '(${Regime.rotLabel(_regimeRot)})'
+            '${_isChronic ? ' · KRONİK: ${Regime.chronicText(r.crisis).$1}' : ''}'
+            '${_isFailing ? ' · ÇÖZÜLÜYOR' : ''} · '
+            'iş ×${_regimeWorkMul.toStringAsFixed(2)} · '
+            'mürekkep ×${_chronicInkMul.toStringAsFixed(2)}',
+          );
+          logDev(
+            '☾ iman ${(p.faith * 100).round()}% → sabır '
+            '+${fe.unrestRelief.toStringAsFixed(3)}/gün · direniş '
+            '+${(fe.resistBonus * 100).round()} · suç '
+            '×${fe.crimeDamp.toStringAsFixed(2)} · moral taban '
+            '+${fe.moraleFloor.toStringAsFixed(3)} · devşirme yarası '
+            '×${fe.conscriptSting.toStringAsFixed(2)}',
+          );
           // Dış güç: rejimin imparatorluk masasını nasıl büktüğü.
           final ip = _imperialPosture;
           final cv = _imperialGoesToCouncil ? 'meclis seçer' : 'sen seçersin';
-          logDev('⚔ imparatorluk: itibar ${(_imperialFavor * 100).round()}% · '
-              'dikkat ×${ip.attentionMul.toStringAsFixed(2)} · '
-              'direniş +${(ip.resistBonus * 100).round()} · '
-              'pazarlık kolaylığı ${(ip.haggleEase * 100).round()} · $cv');
+          logDev(
+            '⚔ imparatorluk: itibar ${(_imperialFavor * 100).round()}% · '
+            'dikkat ×${ip.attentionMul.toStringAsFixed(2)} · '
+            'direniş +${(ip.resistBonus * 100).round()} · '
+            'pazarlık kolaylığı ${(ip.haggleEase * 100).round()} · $cv',
+          );
         },
       ),
       DevCommand(
@@ -267,15 +305,23 @@ extension _SceneDevConsole on _VillageSceneState {
           _recomputePressure();
           final p = _pressure;
           final r = p.readout;
-          logDev('🌡️ KÖYÜN HÂLİ — ${_regimeIdentity.title} · ${_season.label} · '
-              'mühür ${_policies.sealed.length} · huzursuzluk '
-              '${(_unrest * 100).round()} · yoksunluk '
-              '${(_scarcity * 100).round()}');
-          logDev(r.isEmpty ? '   (taban — hiçbir basınç yok)' : '   ${r.join(' · ')}');
+          logDev(
+            '🌡️ KÖYÜN HÂLİ — ${_regimeIdentity.title} · ${_season.label} · '
+            'mühür ${_policies.sealed.length} · huzursuzluk '
+            '${(_unrest * 100).round()} · yoksunluk '
+            '${(_scarcity * 100).round()}',
+          );
+          logDev(
+            r.isEmpty
+                ? '   (taban — hiçbir basınç yok)'
+                : '   ${r.join(' · ')}',
+          );
           final duty = _villagers.where((v) => v.nightDuty).length;
           final paused = _villagers.where((v) => v.workPause > 0).length;
-          logDev('   nöbetçi $duty · paydosta $paused · '
-              'gece eşiği ${(kNightThreshold + p.curfewBias).toStringAsFixed(2)}');
+          logDev(
+            '   nöbetçi $duty · paydosta $paused · '
+            'gece eşiği ${(kNightThreshold + p.curfewBias).toStringAsFixed(2)}',
+          );
         },
       ),
       // KÖYLÜLERİN AKLI — kim ne yapıyor ve NEDEN. "Köy rastgele davranıyor"
@@ -298,10 +344,12 @@ extension _SceneDevConsole on _VillageSceneState {
             kMindDistance = 0;
             logDev('🧠 Canlılık ölçümü açıldı — birazdan tekrar çalıştır.');
           } else {
-            logDev('🧠 CANLILIK — kat edilen yol '
-                '${kMindDistance.toStringAsFixed(1)} tile · '
-                'farklı niyet $kMindDistinctIntents · '
-                'en eski niyet ${kMindOldestIntent.toStringAsFixed(0)} sn');
+            logDev(
+              '🧠 CANLILIK — kat edilen yol '
+              '${kMindDistance.toStringAsFixed(1)} tile · '
+              'farklı niyet $kMindDistinctIntents · '
+              'en eski niyet ${kMindOldestIntent.toStringAsFixed(0)} sn',
+            );
           }
           final tally = <IntentKind, int>{};
           for (final v in _villagers) {
@@ -318,10 +366,12 @@ extension _SceneDevConsole on _VillageSceneState {
             final m = v.mind;
             final drives = m.readout;
             final mem = v.memory.readout(max: 2);
-            logDev('   ${v.name}: ${intentLabel(m.intent.kind)} '
-                '— "${m.intent.reason}"'
-                '${drives.isEmpty ? '' : ' [${drives.join(', ')}]'}'
-                '${mem.isEmpty ? '' : ' 👁️ ${mem.join(' / ')}'}');
+            logDev(
+              '   ${v.name}: ${intentLabel(m.intent.kind)} '
+              '— "${m.intent.reason}"'
+              '${drives.isEmpty ? '' : ' [${drives.join(', ')}]'}'
+              '${mem.isEmpty ? '' : ' 👁️ ${mem.join(' / ')}'}',
+            );
           }
         },
       ),
@@ -335,12 +385,16 @@ extension _SceneDevConsole on _VillageSceneState {
         run: (a) {
           final ctx = _lawContext;
           final open = LawBook.openAgenda(_policies.sealed, ctx);
-          logDev('📜 KAPILAR — nüfus ${ctx.population} · gün ${ctx.dayCount} · '
-              'hane ${ctx.households} · tarla ${ctx.farmTiles} · '
-              'hayvan ${ctx.animals} · mezar ${ctx.deaths} · '
-              'suç ${ctx.crimesSeen} · zanaat ${ctx.knownCrafts.length}');
-          logDev('📜 AÇIK (${open.length}/${kLawBook.length}): '
-              '${open.map((l) => l.title).join(', ')}');
+          logDev(
+            '📜 KAPILAR — nüfus ${ctx.population} · gün ${ctx.dayCount} · '
+            'hane ${ctx.households} · tarla ${ctx.farmTiles} · '
+            'hayvan ${ctx.animals} · mezar ${ctx.deaths} · '
+            'suç ${ctx.crimesSeen} · zanaat ${ctx.knownCrafts.length}',
+          );
+          logDev(
+            '📜 AÇIK (${open.length}/${kLawBook.length}): '
+            '${open.map((l) => l.title).join(', ')}',
+          );
           for (final l in kLawBook) {
             if (_policies.sealed.contains(l.id)) continue;
             if (!LawBook.gateLocked(l, ctx)) continue;
@@ -410,9 +464,11 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.olay,
         run: (a) => setStateHere(() {
           if (!_devRandomCrime()) {
-            _showNotification(_activeCrime != null
-                ? 'Zaten bir suç işleniyor'
-                : 'Uygun fail/hedef bulunamadı');
+            _showNotification(
+              _activeCrime != null
+                  ? 'Zaten bir suç işleniyor'
+                  : 'Uygun fail/hedef bulunamadı',
+            );
           }
         }),
       ),
@@ -541,12 +597,19 @@ extension _SceneDevConsole on _VillageSceneState {
         category: DevCat.ekonomi,
         params: [
           DevParam.choice('kind', 'Kaynak', resourceChoices),
-          const DevParam.integer('amount', 'Miktar',
-              intDefault: 50, intMin: 1, intMax: 999),
+          const DevParam.integer(
+            'amount',
+            'Miktar',
+            intDefault: 50,
+            intMin: 1,
+            intMax: 999,
+          ),
         ],
         run: (a) {
-          final kind = ResourceKind.values
-              .firstWhere((k) => k.name == a.getStr('kind'), orElse: () => ResourceKind.wood);
+          final kind = ResourceKind.values.firstWhere(
+            (k) => k.name == a.getStr('kind'),
+            orElse: () => ResourceKind.wood,
+          );
           setStateHere(() {
             _stockpile.add(kind, a.getInt('amount', 50));
             final cur = _stockpile.get(kind);
@@ -596,7 +659,9 @@ extension _SceneDevConsole on _VillageSceneState {
     for (final v in _villagers) {
       v.isSage = false;
     }
-    var elders = _villagers.where((v) => v.lifeStage == LifeStage.elder).toList();
+    var elders = _villagers
+        .where((v) => v.lifeStage == LifeStage.elder)
+        .toList();
     if (elders.isEmpty) {
       final fp = _firepitBuilding;
       if (fp != null) {
@@ -615,42 +680,30 @@ extension _SceneDevConsole on _VillageSceneState {
   // ── Built-in senaryolar (kodda gömülü, silinemez) ────────────────────────
   /// Kayıt yapmadan bile tek tıkla bir DURUMU kuran hazır diziler.
   List<DevScript> _devBuiltinScripts() => const [
-        DevScript(
-          '⚔ Politik Fırtına',
-          [
-            DevInvocation('feud.ignite'),
-            DevInvocation('crime.random'),
-            DevInvocation('petition.force'),
-          ],
-          builtin: true,
-        ),
-        DevScript(
-          '🏛 İmparatorluk Baskını',
-          [DevInvocation('imperial.summon')],
-          builtin: true,
-        ),
-        DevScript(
-          '🌾 Canlı Köy + Göç',
-          [
-            DevInvocation('village.seedLiving'),
-            DevInvocation('spawn.migrant', {'count': 3}),
-          ],
-          builtin: true,
-        ),
-        DevScript(
-          '🌙 Gece Hayatı',
-          [
-            DevInvocation('time.set', {'phase': 'night'}),
-            DevInvocation('activity.music'),
-            DevInvocation('activity.dance'),
-          ],
-          builtin: true,
-        ),
-      ];
+    DevScript('⚔ Politik Fırtına', [
+      DevInvocation('feud.ignite'),
+      DevInvocation('crime.random'),
+      DevInvocation('petition.force'),
+    ], builtin: true),
+    DevScript('🏛 İmparatorluk Baskını', [
+      DevInvocation('imperial.summon'),
+    ], builtin: true),
+    DevScript('🌾 Canlı Köy + Göç', [
+      DevInvocation('village.seedLiving'),
+      DevInvocation('spawn.migrant', {'count': 3}),
+    ], builtin: true),
+    DevScript('🌙 Gece Hayatı', [
+      DevInvocation('time.set', {'phase': 'night'}),
+      DevInvocation('activity.music'),
+      DevInvocation('activity.dance'),
+    ], builtin: true),
+  ];
 
   /// Built-in + oturumda kaydedilmiş senaryolar birlikte.
-  List<DevScript> get _devAllScripts =>
-      [..._devBuiltinScripts(), ..._devUserScripts];
+  List<DevScript> get _devAllScripts => [
+    ..._devBuiltinScripts(),
+    ..._devUserScripts,
+  ];
 
   // ── Çalıştırma & oynatma ─────────────────────────────────────────────────
   /// Konsoldan tek komut çalıştır + kayıt açıksa adımı yakala.
@@ -667,7 +720,9 @@ extension _SceneDevConsole on _VillageSceneState {
       final cmd = byId[step.commandId];
       if (cmd != null) cmd.run(DevArgs(step.args));
     }
-    _showNotification('▶ "${script.name}" oynatıldı (${script.steps.length} adım)');
+    _showNotification(
+      '▶ "${script.name}" oynatıldı (${script.steps.length} adım)',
+    );
   }
 
   // ── Kalıcılık ────────────────────────────────────────────────────────────

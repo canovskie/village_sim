@@ -79,6 +79,9 @@ class EraPressure {
   /// yani geç oyun daha OLAYLI olur, daha cezalı değil.
   final double eventTempo;
 
+  /// Dilekçe geliş aralığı çarpanı; köy yaşlandıkça kapı sıklaşır.
+  final double petitionTempo;
+
   /// Kışın sertlik çarpanı — yakacak ihtiyacına biner (bkz. `winterReadiness`).
   /// Sertleşen şey İHTİYAÇ, ceza değil: hazırlıklı köyde altıncı kış da
   /// sakindir, yalnız daha çok odun ister.
@@ -104,6 +107,7 @@ class EraPressure {
     required this.imperialAppetite,
     required this.imperialTempo,
     required this.eventTempo,
+    required this.petitionTempo,
     required this.winterBite,
     required this.treasuryShare,
   });
@@ -129,6 +133,7 @@ EraPressure pressureForYear(int year) {
     imperialTempo: 1.0 - 0.09 * step,
     // 1.0 → 0.65. Taban 3-6 gün → son yılda ~2-4 gün.
     eventTempo: 1.0 - 0.07 * step,
+    petitionTempo: 1.0 - 0.06 * step,
     // 1.0 → 1.35. Vergiden (2.0×) bilerek DAHA YUMUŞAK: kış zaten hazırlık
     // isteyen bir mevsim, üstüne iki katı yük binerse geç oyun bir odun
     // toplama angaryasına döner. Çeyrek fazlası fark edilir, boğmaz.

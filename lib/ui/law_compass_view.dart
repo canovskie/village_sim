@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../systems/law_compass.dart';
 import '../systems/regime.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// POLİTİK PUSULA'nın görünen yüzü — Kanunname'nin başına konan pirinç kadran.
 ///
@@ -138,7 +139,10 @@ class LawCompassCard extends StatelessWidget {
       ]),
       SizedBox(height: tight ? 3 : 5),
       Row(children: [
-        Text(id.icon, style: TextStyle(fontSize: tight ? 13 : 15)),
+        SemanticIcon(id.icon,
+            size: tight ? 13 : 15,
+            color: tint,
+            fallback: GameIconData.scales),
         const SizedBox(width: 6),
         Expanded(
           child: Text(id.title,
@@ -246,7 +250,8 @@ class LawCompassCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(children: [
-                    Text(id.icon, style: const TextStyle(fontSize: 13)),
+                    SemanticIcon(id.icon,
+                        size: 13, color: tint, fallback: GameIconData.scales),
                     const SizedBox(width: 6),
                     Flexible(
                       child: Text(id.title,

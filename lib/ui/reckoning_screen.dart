@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../systems/reckoning.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// HESAPLAŞMA EKRANI — koşunun kapanışı.
 ///
@@ -81,8 +82,8 @@ class ReckoningScreen extends StatelessWidget {
                       ]),
                     ),
                     child: Center(
-                      child: Text(verdict.icon,
-                          style: const TextStyle(fontSize: 25)),
+                      child: SemanticIcon(verdict.icon,
+                          size: 25, color: _accent, fallback: GameIconData.crown),
                     ),
                   ),
                 ),

@@ -478,7 +478,20 @@
       "Bash(curl -sL --max-time 25 -A \"Mozilla/5.0 \\(Macintosh; Intel Mac OS X 10_15_7\\) AppleWebKit/537.36 \\(KHTML, like Gecko\\) Chrome/131.0 Safari/537.36\" \"https://www.aliexpress.com/item/1005010089120685.html\" -o /tmp/ae.html -w \"HTTP %{http_code} | %{size_download} bayt\\\\n\")",
       "Bash(curl -s http://127.0.0.1:9292 -o /tmp/v.html -w \"HTTP %{http_code}\\\\n\")",
       "Bash(curl -s http://127.0.0.1:9292 -o /tmp/f.html -w \"HTTP %{http_code}\\\\n\")",
-      "Bash(ToolSearchDummy)"
+      "Bash(ToolSearchDummy)",
+      "Bash(ps -o pid,rss,%cpu,etime,comm -p 22338)",
+      "Bash(log show *)",
+      "Bash(pkill -f \"Products/Debug/Luw.app\")",
+      "Bash(ps -eo pid,%cpu,etime,command)",
+      "Bash(sample 5293 3 -f /private/tmp/claude-501/-Users-cankaynar-Desktop-FlutterProj-village-sim/9122b70f-7a58-4cda-a189-be70346463d5/scratchpad/sample_5293.txt)",
+      "Bash(ps -o ppid= -p 5293)",
+      "Bash(xargs -I{} ps -o pid,command -p {})",
+      "Bash(curl -sL \"https://0f9i0i-9w.myshopify.com/?_cd=432b42ff5ee7f8021b06b00cc66aa0bc89b6fc47c870c62a9bd201c36ccacfa7&_uid=99855728827&preview_theme_id=150036381883&preview_token=cxewywjfkg1ztgtg57st67vzuru9w8hg\" -o /private/tmp/claude-501/-Users-cankaynar-Desktop-FlutterProj-village-sim/de55eb4c-1911-4e2a-9edd-14ccf1d6e4f8/scratchpad/page.html -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(curl -s \"https://cdn.shopify.com/extensions/019febb1-d744-7272-a796-f862e12c1416/judgeme-693/assets/shopify_v2.css\" -o jm.css -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(curl -s \"https://0f9i0i-9w.myshopify.com/products/dr-fan%E2%84%A2-four-blade-ceiling-fan?preview_theme_id=150036381883&preview_token=cxewywjfkg1ztgtg57st67vzuru9w8hg&_cd=432b42ff5ee7f8021b06b00cc66aa0bc89b6fc47c870c62a9bd201c36ccacfa7&_uid=99855728827\" -o prod.html -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(curl -sL -c jar.txt -b jar.txt \"https://0f9i0i-9w.myshopify.com/?_cd=432b42ff5ee7f8021b06b00cc66aa0bc89b6fc47c870c62a9bd201c36ccacfa7&_uid=99855728827&preview_theme_id=150036381883&preview_token=cxewywjfkg1ztgtg57st67vzuru9w8hg\" -o /dev/null)",
+      "Bash(curl -sL -c jar.txt -b jar.txt \"https://0f9i0i-9w.myshopify.com/products/dr-fan%E2%84%A2-four-blade-ceiling-fan\" -o prod.html -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(curl -sL -b jar.txt \"https://0f9i0i-9w.myshopify.com/products/dr-fan%E2%84%A2-four-blade-ceiling-fan\" -o prod2.html -w \"%{http_code}\\\\n\")"
     ]
   }
 }

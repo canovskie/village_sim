@@ -25,6 +25,11 @@ class CutscenePlayer extends StatefulWidget {
   final Cutscene cutscene;
   final VoidCallback onDone;
 
+  /// Gerçek açılışta isim formu ateş kurulduktan sonra dünya üstünde açılır.
+  /// Varsayılan true, bağımsız cutscene kullanımlarında kapı sözleşmesini
+  /// korur.
+  final bool showNameGate;
+
   /// nameVillage kapısı onaylanınca girilen adlar — köyün adı + hanenin (soy)
   /// adı. Hane adı kurucuların hepsine soyad olarak işlenir ("X Hanesi"),
   /// köyün adı kayıt slotuna geçer.
@@ -51,6 +56,7 @@ class CutscenePlayer extends StatefulWidget {
     super.key,
     required this.cutscene,
     required this.onDone,
+    this.showNameGate = true,
     this.onNameChosen,
     this.onFoundingChoice,
     this.timeScale = 1.0,
@@ -88,9 +94,9 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   static const int _ideaWindow = 3;
 
   List<VillageNameIdea> get _nameIdeas => [
-        for (var i = 0; i < _ideaWindow; i++)
-          _ideaPool[(_ideaOffset + i) % _ideaPool.length],
-      ];
+    for (var i = 0; i < _ideaWindow; i++)
+      _ideaPool[(_ideaOffset + i) % _ideaPool.length],
+  ];
 
   /// Diyalog kutusunun ÖLÇÜLEN yüksekliği (px). Kamera özneyi kutunun üstünde
   /// tutabilmek için ekranın altında ne kadar yer kaldığını bilmek zorunda;
@@ -133,7 +139,12 @@ class _CutscenePlayerState extends State<CutscenePlayer>
     super.dispose();
   }
 
-  bool get _gated => _shot.gate != CutsceneGate.none && !_gateSatisfied;
+  bool get _gated =>
+      _shot.gate != CutsceneGate.none &&
+      !(widget.cutscene == kOpeningCutscene &&
+          _shot.gate == CutsceneGate.nameVillage &&
+          !widget.showNameGate) &&
+      !_gateSatisfied;
 
   void _onTick(Duration elapsed) {
     var dt = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.05);
@@ -202,8 +213,8 @@ class _CutscenePlayerState extends State<CutscenePlayer>
 
   /// Bir sonraki üç öneri. Havuz döngüseldir; "başka" hiç tükenmez.
   void _rerollIdeas() => setState(
-        () => _ideaOffset = (_ideaOffset + _ideaWindow) % _ideaPool.length,
-      );
+    () => _ideaOffset = (_ideaOffset + _ideaWindow) % _ideaPool.length,
+  );
 
   /// Kutudaki adın (havuzdaysa) gerekçesi — başlık satırı bunu gösterir.
   String? get _nameMeaning => meaningOfVillageName(_nameCtrl.text);
@@ -352,7 +363,8 @@ class _CutscenePlayerState extends State<CutscenePlayer>
     final reservedBottom = shown.isEmpty ? 0.0 : _boxHeight + _kBoxMargin;
 
     final igniteShot = _shot.gate == CutsceneGate.tapToIgnite;
-    final nameShot = _shot.gate == CutsceneGate.nameVillage;
+    final nameShot =
+        _shot.gate == CutsceneGate.nameVillage && widget.showNameGate;
     final caravanShot = _shot.gate == CutsceneGate.chooseCaravan;
     final ignited = !igniteShot || _gateSatisfied;
     final igniteElapsed = _gateSatisfied ? (_time - _gateSatisfiedAt) : -1.0;
@@ -397,7 +409,7 @@ class _CutscenePlayerState extends State<CutscenePlayer>
             // Diyalog kutusu.
             // Ad verme kapısı açıldığında diyalog kutusu yerini bütünüyle
             // kuruluş ekranına bırakır. İki ayrı koyu panel üst üste binmez.
-            if (shown.isNotEmpty && !(nameShot && _gateReady))
+            if (shown.isNotEmpty && !((nameShot || caravanShot) && _gateReady))
               _dialogueBox(line!, shown),
             // "▸ Devam" göstergesi — satır tam yazıldığında, kapı yokken belirir.
             // Böylece ilerlemenin ekrana dokunmakla olduğu NET (rastgele değil).
@@ -565,40 +577,83 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   /// Kartlar ekranın ÜST yarısına oturur: alttaki diyalog kutusu (Maple'ın
   /// sorusu) ekranda kalmalı — soru görünmeden seçenek okunmaz.
   Widget _caravanChoice() {
-    return Positioned(
-      left: 0,
-      right: 0,
-      top: 0,
+    final touch = useTouchUi(context);
+    final screen = MediaQuery.sizeOf(context);
+    return Positioned.fill(
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
+          padding: const EdgeInsets.all(12),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'ARABAYA NE YÜKLEDİK?',
-                    style: AppUi.label.copyWith(
-                      color: AppUi.accent,
-                      letterSpacing: 2.0,
-                    ),
+              constraints: BoxConstraints(
+                maxWidth: touch ? 540 : 760,
+                maxHeight: touch ? screen.height - 24 : 520,
+              ),
+              child: Container(
+                padding: EdgeInsets.fromLTRB(
+                  touch ? 14 : 18,
+                  touch ? 14 : 18,
+                  touch ? 14 : 18,
+                  touch ? 12 : 16,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xF214151A),
+                  borderRadius: BorderRadius.circular(AppUi.radius),
+                  border: Border.all(
+                    color: AppUi.accent.withValues(alpha: 0.55),
                   ),
-                  const SizedBox(height: 10),
-                  IntrinsicHeight(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (final c in FoundingChoice.all) ...[
-                          Expanded(child: _caravanCard(c)),
-                          if (c != FoundingChoice.all.last)
-                            const SizedBox(width: 10),
-                        ],
-                      ],
+                  boxShadow: AppUi.softShadow,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'ARABAYA NE YÜKLEDİK?',
+                      style: AppUi.label.copyWith(
+                        color: AppUi.accent,
+                        letterSpacing: 2.0,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'İlk günlerin nasıl geçeceğini seç.',
+                      style: AppUi.body.copyWith(color: AppUi.textMid),
+                    ),
+                    const SizedBox(height: 12),
+                    if (touch)
+                      SizedBox(
+                        // Column'un yüksekliği içerikten türediği için burada
+                        // Expanded kullanılamaz: telefonda kartlar sonsuz
+                        // yüksekliğe açılıp başlık ve alt metinle çakışıyordu.
+                        height: (screen.height - 24).clamp(260.0, 420.0),
+                        child: PageView.builder(
+                          itemCount: FoundingChoice.all.length,
+                          itemBuilder: (_, index) =>
+                              _caravanCard(FoundingChoice.all[index]),
+                        ),
+                      )
+                    else
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final c in FoundingChoice.all) ...[
+                              Expanded(child: _caravanCard(c)),
+                              if (c != FoundingChoice.all.last)
+                                const SizedBox(width: 10),
+                            ],
+                          ],
+                        ),
+                      ),
+                    if (touch) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Kartı yana kaydır · Birini seç',
+                        style: AppUi.label.copyWith(color: AppUi.textLo),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -647,7 +702,9 @@ class _CutscenePlayerState extends State<CutscenePlayer>
             ),
             const SizedBox(height: 9),
             Text(
-              '🪵 ${c.wood}   🪨 ${c.stone}   🥖 ${c.food}   👤 ${c.people}',
+              c.choiceSummary,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: AppUi.label.copyWith(color: AppUi.accentSoft),
             ),
           ],
@@ -998,8 +1055,10 @@ class _CutscenePlayerState extends State<CutscenePlayer>
           children: [
             Text(
               'OCAĞIN ADI — SOY',
-              style: AppUi.label
-                  .copyWith(color: AppUi.textMid, letterSpacing: 1.8),
+              style: AppUi.label.copyWith(
+                color: AppUi.textMid,
+                letterSpacing: 1.8,
+              ),
             ),
             const Spacer(),
             _IdeaChip(label: '🎲 çek', onTap: _rollHouseName),

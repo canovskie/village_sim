@@ -6,6 +6,7 @@ import '../systems/village_year.dart';
 import '../world/season.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
+import 'ui_icon.dart';
 
 /// Oyun HUD'u — Manor Lords çıtası: çerçevesiz, ferah ince üst şerit.
 /// Kutu YOK; üstte aşağı solan okunabilirlik scrim'i, tek satır kaynak/nüfus/
@@ -49,6 +50,10 @@ class GameHUD extends StatelessWidget {
 
   /// 0..1 nabız (sahneden _time türevi) — dolu kaynak hücresi bununla yanar.
   final double fullPulse;
+
+  /// Öğreticinin ilk dakikaları: oyuncuya yalnız hemen işine yarayan omurga
+  /// kaynaklarını göster. Gelişmiş stoklar köy kurulduktan sonra açılır.
+  final bool onboarding;
 
   /// Moral katkı kırılımı (etiket, delta) — moral barı hover tooltip'i.
   final List<(String, double)> moraleBreakdown;
@@ -95,6 +100,7 @@ class GameHUD extends StatelessWidget {
   /// `null` ise (merdivenin sonu) hiç çizilmez.
   final String? stepText;
   final GameIconData? stepIcon;
+
   /// Adımı isteyen köylünün adı — varsa satırın başında durur.
   final String? stepWho;
 
@@ -131,6 +137,7 @@ class GameHUD extends StatelessWidget {
     this.stockCapacity = 1 << 30,
     this.showOre = true,
     this.fullPulse = 0,
+    this.onboarding = false,
     this.moraleBreakdown = const [],
     this.onHighlightHomeless,
     required this.godMode,
@@ -202,14 +209,6 @@ class GameHUD extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    assert(() {
-      debugPrint(
-        'HUDPROBE size=${MediaQuery.sizeOf(context)} '
-        'pad=${MediaQuery.paddingOf(context)} '
-        'compact=${useCompactGameUi(context)}',
-      );
-      return true;
-    }());
     // MOBİL: SafeArea YOK — şerit kendi kenar boşluğunu [MobileUi.edgeLeft]/
     // [edgeRight] ile hesaplar. SafeArea yatayda çentiğin tam inset'ini (59dp)
     // uygulayıp şeridi iki yandan kenardan koparıyordu; şerit çentik bandının
@@ -329,13 +328,18 @@ class GameHUD extends StatelessWidget {
             color: const Color(0xCC0C0D0F),
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             border: Border.all(
-                color: AppUi.accent.withValues(alpha: 0.38), width: 1),
+              color: AppUi.accent.withValues(alpha: 0.38),
+              width: 1,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              GameIcon(stepIcon ?? GameIconData.star,
-                  size: 12, color: AppUi.accent),
+              GameIcon(
+                stepIcon ?? GameIconData.star,
+                size: 12,
+                color: AppUi.accent,
+              ),
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
@@ -343,7 +347,10 @@ class GameHUD extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppUi.body.copyWith(
-                      fontSize: 11, color: AppUi.textHi, height: 1.2),
+                    fontSize: 11,
+                    color: AppUi.textHi,
+                    height: 1.2,
+                  ),
                 ),
               ),
             ],
@@ -475,13 +482,14 @@ class GameHUD extends StatelessWidget {
             stockpile.wood,
             woodInTransit,
           ),
-          _mobileRes(
-            GameIconData.stone,
-            const Color(0xFFC0C0C0),
-            stockpile.stone,
-            stoneInTransit,
-          ),
-          if (showOre) ...[
+          if (!onboarding)
+            _mobileRes(
+              GameIconData.stone,
+              const Color(0xFFC0C0C0),
+              stockpile.stone,
+              stoneInTransit,
+            ),
+          if (!onboarding && showOre) ...[
             _mobileRes(
               GameIconData.iron,
               const Color(0xFFCED2EC),
@@ -495,19 +503,22 @@ class GameHUD extends StatelessWidget {
               coalInTransit,
             ),
           ],
+          if (!onboarding)
+            _mobileRes(GameIconData.hammer, AppUi.accent, stockpile.weapons, 0),
           _mobileRes(
             GameIconData.wheat,
             AppUi.sage,
             stockpile.food,
             foodInTransit,
           ),
-          _mobileRes(
-            GameIconData.coin,
-            AppUi.gold,
-            stockpile.gold,
-            0,
-            last: true,
-          ),
+          if (!onboarding)
+            _mobileRes(
+              GameIconData.coin,
+              AppUi.gold,
+              stockpile.gold,
+              0,
+              last: true,
+            ),
           // Nüfus + moral aynı kapsülde: ikisi de "köyün durumu".
           // Ayrı bir bar açmak ekranın bir katını daha yerdi.
           _pillDivider(),
@@ -520,7 +531,7 @@ class GameHUD extends StatelessWidget {
                 // Sıfır genişlikte yükseklik dayatması: opaque hit alanı
                 // kapsülün tamamını kaplasın, yalnız yazının satırını değil.
                 const SizedBox(height: 44),
-                const GameIcon(GameIconData.people, size: 14, color: AppUi.textMid),
+                _hudIcon(GameIconData.people, size: 14, color: AppUi.textMid),
                 const SizedBox(width: 4),
                 Text(
                   '$_totalPop',
@@ -528,7 +539,11 @@ class GameHUD extends StatelessWidget {
                 ),
                 if (homelessCount > 0) ...[
                   const SizedBox(width: 8),
-                  const GameIcon(GameIconData.home, size: 14, color: AppUi.rust),
+                  const GameIcon(
+                    GameIconData.home,
+                    size: 14,
+                    color: AppUi.rust,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     '$homelessCount',
@@ -568,11 +583,7 @@ class GameHUD extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GameIcon(
-            icon,
-            size: 14,
-            color: empty ? tint.withValues(alpha: 0.5) : tint,
-          ),
+          _hudIcon(icon, size: 14, opacity: empty ? 0.5 : 1.0, color: tint),
           const SizedBox(width: 4),
           Text(
             '$stored',
@@ -603,7 +614,7 @@ class GameHUD extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GameIcon(_weatherIcon, size: 15, color: _seasonColor),
+          _hudIcon(_weatherIcon, size: 15, color: _seasonColor),
           const SizedBox(width: 6),
           Text(_clockText, style: AppUi.number.copyWith(fontSize: 16)),
           const SizedBox(width: 7),
@@ -735,14 +746,15 @@ class GameHUD extends StatelessWidget {
         woodInTransit,
         capped: true,
       ),
-      _res(
-        GameIconData.stone,
-        const Color(0xFFC0C0C0),
-        stockpile.stone,
-        stoneInTransit,
-        capped: true,
-      ),
-      if (showOre) ...[
+      if (!onboarding)
+        _res(
+          GameIconData.stone,
+          const Color(0xFFC0C0C0),
+          stockpile.stone,
+          stoneInTransit,
+          capped: true,
+        ),
+      if (!onboarding && showOre) ...[
         _res(
           GameIconData.iron,
           const Color(0xFFCED2EC),
@@ -758,6 +770,8 @@ class GameHUD extends StatelessWidget {
           capped: true,
         ),
       ],
+      if (!onboarding)
+        _res(GameIconData.hammer, AppUi.accent, stockpile.weapons, 0),
       _res(
         GameIconData.wheat,
         AppUi.sage,
@@ -765,7 +779,7 @@ class GameHUD extends StatelessWidget {
         foodInTransit,
         capped: true,
       ),
-      _res(GameIconData.coin, AppUi.gold, stockpile.gold, 0),
+      if (!onboarding) _res(GameIconData.coin, AppUi.gold, stockpile.gold, 0),
     ],
   );
 
@@ -790,10 +804,11 @@ class GameHUD extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GameIcon(
+          _hudIcon(
             icon,
             size: 16,
-            color: empty ? iconColor.withValues(alpha: 0.45) : iconColor,
+            opacity: empty ? 0.45 : 1.0,
+            color: iconColor,
           ),
           const SizedBox(width: 5),
           Text(
@@ -813,6 +828,41 @@ class GameHUD extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+
+  /// HUD'da üretilen pixel-art seti önceliklidir; menü/aksiyon ikonları ise
+  /// mevcut tek renkli glif dilini korur. Böylece kaynaklar ve hava dünyaya
+  /// ait görünürken kontrol yüzeyi gereksiz görsel ağırlık kazanmaz.
+  Widget _hudIcon(
+    GameIconData icon, {
+    required double size,
+    required Color color,
+    double opacity = 1.0,
+  }) {
+    final name = switch (icon) {
+      GameIconData.wood => 'wood',
+      GameIconData.stone => 'stone',
+      GameIconData.iron => 'iron',
+      GameIconData.coal => 'coal',
+      GameIconData.wheat => 'food',
+      GameIconData.honey => 'honey',
+      GameIconData.coin => 'gold',
+      GameIconData.people => 'pop',
+      GameIconData.axe => 'woodcutter',
+      GameIconData.pickaxe => 'miner',
+      GameIconData.fish => 'fisher',
+      GameIconData.sun => 'sun',
+      GameIconData.dawn => 'dawn',
+      GameIconData.rain => 'rain',
+      GameIconData.storm => 'storm',
+      GameIconData.moon => 'night',
+      _ => null,
+    };
+    if (name == null) return GameIcon(icon, size: size, color: color);
+    return Opacity(
+      opacity: opacity,
+      child: UiIcon(name, fallback: '', size: size),
     );
   }
 
@@ -836,7 +886,7 @@ class GameHUD extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const GameIcon(GameIconData.people, size: 16, color: AppUi.textMid),
+          _hudIcon(GameIconData.people, size: 16, color: AppUi.textMid),
           const SizedBox(width: 6),
           Text('$_totalPop', style: AppUi.number.copyWith(fontSize: 15.5)),
           if (homelessCount > 0) ...[
@@ -847,7 +897,11 @@ class GameHUD extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const GameIcon(GameIconData.home, size: 15, color: AppUi.rust),
+                  const GameIcon(
+                    GameIconData.home,
+                    size: 15,
+                    color: AppUi.rust,
+                  ),
                   const SizedBox(width: 5),
                   Text(
                     '$homelessCount',

@@ -27,8 +27,8 @@ class _Anim {
 
   /// Tek parametre değiştirip kopya — meşale taşıyan sol kolu yukarı sabit
   /// tutmak gibi durumlar için. Diğer alanlar korunur.
-  _Anim copyWith({double? armL}) => _Anim(
-      legL, legR, armL ?? this.armL, armR, bob,
+  _Anim copyWith({double? armL, double? armR}) => _Anim(
+      legL, legR, armL ?? this.armL, armR ?? this.armR, bob,
       sway: sway, lean: lean,
       legLiftL: legLiftL, legLiftR: legLiftR,
       torsoTwist: torsoTwist);
@@ -103,6 +103,23 @@ enum CharPose {
   sit,    // bağdaş kurmuş — bacaklar öne katlı, eller kucakta, hafif öne
   kneel,  // ayin: dizüstü, gövde dik, kollar yukarı yakarış
   mourn,  // yas: çömelmiş, derin öne eğilme, kollar önde sarkık
+}
+
+// ─── JEST ─────────────────────────────────────────────────────────────────────
+/// Tek kolun üstlendiği kısa anlatım — [CharPose]'un aksine gövdenin geri
+/// kalanını ELE ALMAZ, yalnız sağ kolu (ön taraftaki kol) devralır. Bu yüzden
+/// yürürken de, otururken de, meşale taşırken de (o sol kol) oynayabilir.
+///
+/// Var oluş sebebi bir borç: selam başın üstünde bir 👋 baloncuğuydu, hikâye
+/// anlatımı bir 📖. Baş üstü emoji projede YASAK ve sebebi tam olarak bu:
+/// baloncuk olayın kendisini değil, olayın ADINI gösterir. El sallayan adam
+/// selam verir; başında 👋 duran adam "selam" yazısı taşır.
+enum CharGesture {
+  none,
+  /// Selam — kol omuz üstüne kalkar, bilek hızlı salınır.
+  wave,
+  /// Anlatım — el yarı yukarıda, yavaş ve geniş; oturarak da okunur.
+  tell,
 }
 
 // ─── RENDERER ─────────────────────────────────────────────────────────────────
@@ -227,6 +244,11 @@ class CharacterRenderer {
     double provision = 0,
     double shroud = 0,
     bool primitiveClothing = false,
+    /// Sağ kolun üstlendiği kısa jest (selam / anlatım) — bkz. [CharGesture].
+    CharGesture gesture = CharGesture.none,
+    /// Jestin gücü 0..1. Sıfırdan başlayıp sıfıra dönen bir ZARF beklenir:
+    /// kol aniden kalkarsa jest değil seğirme olur.
+    double gestureAmount = 0,
   }) {
     // İmparatorluk askeri köyün YABANCISI — hane kuşağı takmaz. Aksi halde
     // dışarıdan gelen vergici bir köy hanesinin rengiyle görünürdü.
@@ -251,6 +273,13 @@ class CharacterRenderer {
     } else if (torchLevel > 0.02) {
       // Meşale taşıyorsa sol kol yukarı kilitlenir → el ve meşale tek birim.
       anim = anim.copyWith(armL: _kTorchArmAngle);
+    }
+    // JEST — pozdan SONRA ve yalnız SAĞ kola. Sırası önemli: oturan hikâye
+    // anlatıcısının eli de kalkabilsin diye pozu ezmiyor, üstüne biniyor;
+    // sol kola dokunmadığı için meşale taşıyan da selam verebilir.
+    if (gesture != CharGesture.none && gestureAmount > 0.02) {
+      anim = anim.copyWith(
+          armR: _gestureArm(gesture, gestureAmount, time, anim.armR));
     }
 
     // Özel kostüm (imparatorluk askeri) tip/meslek/evreyi önceler — köyün
@@ -511,6 +540,28 @@ class CharacterRenderer {
   /// Hem helper rotate hem body sol kol bu açıya kilitlenir → kol + meşale
   /// tek birim olarak hareket eder.
   static const double _kTorchArmAngle = -2.55;
+
+  /// Jestin sağ kol açısı. Kol yerel uzayda AŞAĞI doğru çizilir (açı 0 = yana
+  /// sarkık), negatif dönüş kolu öne-yukarı kaldırır — meşale kolunun (-2.55)
+  /// aynı ekseni.
+  ///
+  /// [amount] zarfı hem yükselişi hem sönüşü taşır: kol dinlenme açısından
+  /// hedefe doğru İNTERPOLE edilir, böylece jest başladığı yerden çıkar ve
+  /// bittiğinde kola geri döner (sıçrama yok).
+  static double _gestureArm(
+      CharGesture g, double amount, double time, double rest) {
+    final k = amount.clamp(0.0, 1.0);
+    final (target, freq, swing) = switch (g) {
+      // Selam: omuz üstü, hızlı ve dar bilek salınımı.
+      CharGesture.wave => (-2.30, 11.0, 0.30),
+      // Anlatım: yarı yukarı, yavaş ve geniş — oturanda da okunsun diye
+      // salınım büyük, açı alçak (kalkık el hikâyeyi anlatır, selamı değil).
+      CharGesture.tell => (-1.25, 2.2, 0.38),
+      CharGesture.none => (0.0, 0.0, 0.0),
+    };
+    final swung = target + sin(time * freq) * swing * k;
+    return rest + (swung - rest) * k;
+  }
 
   /// Tek meşale helper — civilian + tüm worker tipleri buradan geçer.
   /// Sol omuz pivotu (off-hand); sağ kolda alet olabilir (balta/kazma/...).

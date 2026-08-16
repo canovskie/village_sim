@@ -312,7 +312,8 @@ extension _SceneWorld on _VillageSceneState {
     _beeSwarms.clear();
     _pendingPetition = null;
     _petitionModalOpen = false;
-    _petitionForced = false;
+    _petitionOverdue = false;
+    _petitionOverdueTimer = 0;
     _petitionTimer = 1.0 * kGameDaySeconds;
     _petitionDeadline = 0;
     _petitionFollowUps.clear();
@@ -363,6 +364,7 @@ extension _SceneWorld on _VillageSceneState {
     _customLessons.clear();
     _firstMealShown = false;
     _berriesPicked = 0;
+    _woodHarvested = 0;
     _foodHunger = 0.0;
     _dayCount = 1;
     _lastTimeOfDay = _cycle.timeOfDay;

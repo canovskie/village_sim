@@ -102,11 +102,12 @@ extension _SceneSave on _VillageSceneState {
           // (berat/sancak/ilhak). Mühür tek yerde basılsın; iki ayrı yol iki
           // ayrı "ended" tanımı demektir ve biri er geç unutulur.
           ended: _collapsed || _reckoningVerdict != null,
-          endedReason: _reckoningVerdict?.sealReason ??
+          endedReason:
+              _reckoningVerdict?.sealReason ??
               (_collapsed
                   ? (_collapseCause == CollapseCause.emptied
-                      ? 'Son can da gitti'
-                      : 'Köyü döndürecek el kalmadı')
+                        ? 'Son can da gitti'
+                        : 'Köyü döndürecek el kalmadı')
                   : null),
         ).toJson(),
         'world': captureWorld(),
@@ -301,6 +302,7 @@ extension _SceneSave on _VillageSceneState {
       // yüklenen köy berat yılını her açılışta yeniden ilan eder. Kararın
       // kendisi de yazılır ki mühürlü kaydın gerekçesi menüde okunsun.
       'reckoningHeralded': _reckoningHeralded,
+      'karneYear': _karneYear,
       'reckoningVerdict': _reckoningVerdict?.name,
       // Görülen orta oyun dersleri — yüklenen köyde kış ikinci kez
       // anlatılmasın (öğretmek değil dırdır etmek olurdu).
@@ -323,7 +325,6 @@ extension _SceneSave on _VillageSceneState {
       'oreDiscovered': _oreDiscovered.toList(),
       'villageName': _villageName,
       'famineShown': _famineShown,
-      'tierCutscenesShown': _tierCutscenesShown.toList(),
       'imperialFavor': _imperialFavor,
       'imperialTimer': _imperialTimer,
       // Sinematik merdiveni — yazılmazsa her yüklemede "ilk ziyaret" sanılır
@@ -333,7 +334,7 @@ extension _SceneSave on _VillageSceneState {
       'housePressure': _housePressure,
       'imperialVisits': _imperialVisits,
       'impGrudge': _impGrudge,
-      'impGrimShown': _impGrimShown,
+      'impFilmsShown': _impFilmsShown.toList(),
 
       // ── Varlıklar ──
       'buildings': [for (final b in _buildings) _buildingToJson(b)],
@@ -363,6 +364,7 @@ extension _SceneSave on _VillageSceneState {
       ],
       'cookedMeals': _cookedMeals,
       'berriesPicked': _berriesPicked,
+      'woodHarvested': _woodHarvested,
       if (_firstMealShown) 'firstMealShown': true,
       'decor': [for (final d in _decor) _decorToJson(d)],
       'graves': [for (final g in _graves) _graveToJson(g)],
@@ -381,6 +383,7 @@ extension _SceneSave on _VillageSceneState {
             'y': l.gridY,
             'kind': l.kind.name,
             'amount': l.amount,
+            'weaponAmount': l.weaponAmount,
             'age': l.age,
             // Görülmüş olmak zulanın bulunabilirliğini belirler → kalıcı.
             'witnessed': l.witnessed,
@@ -391,6 +394,8 @@ extension _SceneSave on _VillageSceneState {
 
       // ── Dilekçe / meclis ──
       'pendingPetition': _pendingPetition?.id,
+      'queuedPetition': _queuedPetition?.id,
+      'queuedPresentDelay': _queuedPresentDelay,
       'petitionAuthor': vRef(_petitionAuthor),
       // Bekleyen düğünün ÇİFTİ. Eskiden kaydedilmiyordu ve yüklemede
       // `_findCourtship()` ile RASTGELE yeni bir çift bağlanıyordu: modal
@@ -405,7 +410,10 @@ extension _SceneSave on _VillageSceneState {
       'petitionTimer': _petitionTimer,
       'petitionDeadline': _petitionDeadline,
       'petitionModalOpen': _petitionModalOpen,
-      'petitionForced': _petitionForced,
+      // Kapıda bekleyen huzur (eski adıyla 'petitionForced' — zorunlu huzur
+      // donması kaldırıldı; eski kayıtların bayrağı restore'da buna göçer).
+      'petitionOverdue': _petitionOverdue,
+      'petitionOverdueTimer': _petitionOverdueTimer,
       'petitionFollowUps': [
         for (final f in _petitionFollowUps)
           {
@@ -446,6 +454,12 @@ extension _SceneSave on _VillageSceneState {
       'eventMorale': _eventMorale,
       'eventMoraleLeft': _eventMoraleLeft,
       'eventLabel': _eventLabel,
+      // Kuyrukta bekleyen karar olayı — kapıda kuyruk sim'i durdurmadığı için
+      // oyuncu bekleyen kararla kaydedebilir; yazılmazsa yüklenen köyde karar
+      // sessizce buharlaşırdı (kayıp haber verilir kuralının kayıt hâli).
+      'pendingChoice': _pendingChoice?.id,
+      'choiceDeadline': _choiceDeadline,
+      'choiceGrace': _choiceGrace,
       'policyMoraleEffects': [
         for (final e in _policyMoraleEffects)
           {'untilSim': e.untilSim, 'amount': e.amount},
@@ -465,6 +479,7 @@ extension _SceneSave on _VillageSceneState {
     'reed': _stockpile.reed,
     'wool': _stockpile.wool,
     'gold': _stockpile.gold,
+    'weapons': _stockpile.weapons,
   };
 
   /// KANUNNAME — mühür seti + girilen dava kolu + ıslak mürekkep. Tek doğruluk
@@ -488,6 +503,7 @@ extension _SceneSave on _VillageSceneState {
     'incomeTimer': b.incomeTimer,
     'waterLevel': b.waterLevel,
     'occupants': b.occupants,
+    'damage': b.damage,
     'ownerSurname': b.ownerSurname,
     'eggTimer': b.eggTimer,
     'honeyTimer': b.honeyTimer,
@@ -802,7 +818,6 @@ extension _SceneSave on _VillageSceneState {
     _questVoiceLeft = 0;
     _storyLog.clear();
     _achievedMilestones.clear();
-    _tierCutscenesShown.clear();
     _activeCutscene = null; // yüklenen oyunda sinematik oynamaz
     // İmparatorluk sinematik merdiveni — restore aşağıda okur; okunmazsa
     // (yeni oyun) sıfırdan başlar: ilk ziyaret yine tam film.
@@ -810,7 +825,7 @@ extension _SceneSave on _VillageSceneState {
     _betrothalForced = false;
     _imperialVisits = 0;
     _impGrudge = false;
-    _impGrimShown = false;
+    _impFilmsShown.clear();
     _policyMoraleEffects.clear();
     // Düğün kur state'i geçici — önceki oyundan sızmasın (çift _villagers
     // yeniden kurulduğunda eski ref'ler geçersiz). _weddingCouple aşağıda
@@ -827,7 +842,14 @@ extension _SceneSave on _VillageSceneState {
     _selectedBuilding = null;
     _selectedVillager = null;
     _followedVillager = null;
+    // Karar kuyruğu — restore aşağıda kayıttan geri kurar (varsa).
     _pendingChoice = null;
+    _choiceModalOpen = false;
+    _choiceDeadline = 0;
+    _choiceGrace = 1;
+    _choiceUrgentWarned = false;
+    _petitionOverdue = false;
+    _petitionOverdueTimer = 0;
     _activeEvent = null;
 
     // 2) Skaler state.
@@ -869,6 +891,7 @@ extension _SceneSave on _VillageSceneState {
       _lessonsSeen.add(id as String);
     }
     _reckoningHeralded = w['reckoningHeralded'] == true;
+    _karneYear = _i(w['karneYear'], 0);
     _reckoningVerdict = switch (w['reckoningVerdict'] as String?) {
       'sancak' => ReckoningVerdict.sancak,
       'berat' => ReckoningVerdict.berat,
@@ -922,11 +945,12 @@ extension _SceneSave on _VillageSceneState {
     }
     _imperialVisits = _i(w['imperialVisits']);
     _impGrudge = _b(w['impGrudge']);
-    _impGrimShown = _b(w['impGrimShown']);
-    _famineShown = _b(w['famineShown']);
-    for (final t in (w['tierCutscenesShown'] as List? ?? const [])) {
-      _tierCutscenesShown.add(_i(t));
+    for (final f in (w['impFilmsShown'] as List? ?? const [])) {
+      _impFilmsShown.add(f as String);
     }
+    // NOT: eski kayıtlarda 'tierCutscenesShown' alanı var; kademe sinematiği
+    // kaldırıldığı için okunmaz (bilinmeyen alanlar sessizce yok sayılır).
+    _famineShown = _b(w['famineShown']);
     for (final f in (w['villageMemory'] as List? ?? const [])) {
       _villageMemory.add(f as String);
     }
@@ -1077,6 +1101,7 @@ extension _SceneSave on _VillageSceneState {
     }
     _cookedMeals = _i(w['cookedMeals']);
     _berriesPicked = _i(w['berriesPicked']);
+    _woodHarvested = _i(w['woodHarvested']);
     _firstMealShown = _b(w['firstMealShown']);
     for (final raw in (w['decor'] as List? ?? const [])) {
       _decor.add(_decorFromJson(Map<String, dynamic>.from(raw as Map)));
@@ -1134,6 +1159,7 @@ extension _SceneSave on _VillageSceneState {
               ResourceKind.food,
             ),
             amount: _i(j['amount']),
+            weaponAmount: _i(j['weaponAmount']),
             culpritName: '${j['culpritName'] ?? ''}',
             culprit: (ci >= 0 && ci < _villagers.length)
                 ? _villagers[ci]
@@ -1147,6 +1173,9 @@ extension _SceneSave on _VillageSceneState {
     // 9) Dilekçe / meclis.
     final pid = w['pendingPetition'];
     _pendingPetition = pid is String ? PetitionSystem.byId(pid) : null;
+    final qid = w['queuedPetition'];
+    _queuedPetition = qid is String ? PetitionSystem.byId(qid) : null;
+    _queuedPresentDelay = _d(w['queuedPresentDelay']);
     final paIdx = _i(w['petitionAuthor'], -1);
     _petitionAuthor = (paIdx >= 0 && paIdx < _villagers.length)
         ? _villagers[paIdx]
@@ -1183,6 +1212,8 @@ extension _SceneSave on _VillageSceneState {
     if (_pendingPetition?.id == 'ransom' ||
         (_pendingPetition?.id == 'crimeVerdict' && _accusedCriminal == null)) {
       _pendingPetition = null;
+      _queuedPetition = null;
+      _queuedPresentDelay = 0;
       _accusedCriminal = null;
     }
     // Kayıttaki dilekçe HAM hâliyle döner (havuz + yer tutucu). Modal'a ham
@@ -1208,7 +1239,28 @@ extension _SceneSave on _VillageSceneState {
     _petitionTimer = _d(w['petitionTimer'], 1.0 * kGameDaySeconds);
     _petitionDeadline = _d(w['petitionDeadline']);
     _petitionModalOpen = _b(w['petitionModalOpen']) && _pendingPetition != null;
-    _petitionForced = _b(w['petitionForced']) && _pendingPetition != null;
+    // Eski kayıtlarda alanın adı 'petitionForced' (zorunlu huzur) — donma
+    // kaldırıldı, bayrak kapıda bekleyen huzura göçer: aynı an, yeni bedeni.
+    _petitionOverdue =
+        (_b(w['petitionOverdue']) || _b(w['petitionForced'])) &&
+        _pendingPetition != null;
+    _petitionOverdueTimer = _d(w['petitionOverdueTimer']);
+    // Kuyrukta bekleyen karar olayı — id'den geri kur (bilinmeyen id = eski
+    // sürümden kalkmış olay → sessizce düşer; kalanı aynen kaldığı yerden).
+    final choiceId = w['pendingChoice'];
+    if (choiceId is String && choiceId.isNotEmpty) {
+      for (final ev in EventSystem.events) {
+        if (ev.id == choiceId && ev.needsChoice) {
+          // Metin varyantı gün+id tohumuyla yeniden dokunur — kayıttan dönen
+          // oyuncu mühre tıklayınca aynı cümleyi okur.
+          _pendingChoice = ev.withMessage(ev.messageFor(_eventSeed(ev)));
+          _choiceGrace = _d(w['choiceGrace'], kGameDaySeconds * 0.25);
+          _choiceDeadline = _d(w['choiceDeadline'], _choiceGrace);
+          kProbeChoiceWaiting = ev.id;
+          break;
+        }
+      }
+    }
     // Bekleyen düğünün çifti — kayıttaki İKİ İNDEKSTEN geri bağlanır, yeniden
     // seçilmez. Biri artık yoksa (eski kayıt / bozuk indeks) çift kurulmaz ve
     // dilekçe konusuz kalır → `_tickWedding` onu masadan kaldırır. Uydurma bir
@@ -1286,6 +1338,7 @@ extension _SceneSave on _VillageSceneState {
     _stockpile.reed = _i(j['reed']);
     _stockpile.wool = _i(j['wool']);
     _stockpile.gold = _i(j['gold']);
+    _stockpile.weapons = _i(j['weapons']);
   }
 
   void _restorePolicies(Object? j) {
@@ -1327,6 +1380,7 @@ extension _SceneSave on _VillageSceneState {
     b.incomeTimer = _d(j['incomeTimer']);
     b.waterLevel = _d(j['waterLevel'], 1.0);
     b.occupants = _i(j['occupants']);
+    b.damage = _d(j['damage']).clamp(0.0, 1.0).toDouble();
     b.ownerSurname = (j['ownerSurname'] as String?) ?? '';
     b.eggTimer = _d(j['eggTimer']);
     b.honeyTimer = _d(j['honeyTimer']);

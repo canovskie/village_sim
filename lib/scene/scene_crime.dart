@@ -4,8 +4,10 @@ part of '../main.dart';
 enum _CrimePhase {
   /// Hedefe sinsice sokulma (çömelmiş, tetikte). Henüz suç işlenmedi.
   prowl,
+
   /// Eylemin kendisi — oyuncunun suçüstü yakalama penceresi.
   act,
+
   /// Olay yerinden kaçış. Suç işlendi ama fail hâlâ yakalanabilir.
   flee,
 }
@@ -15,20 +17,27 @@ enum _CrimePhase {
 class _ActiveCrime {
   final VillagerEntity culprit;
   final CrimeKind kind;
+
   /// Kurban (kişiye karşı suçlar) — mala karşı suçlarda null.
   final VillagerEntity? victim;
+
   /// Hedef bina (hırsızlık/kundak/vandalizm/dolandırıcılık) — yoksa null.
   final BuildingEntity? building;
+
   /// Hedef hayvan (kaçak av) — yoksa null.
   final AnimalEntity? animal;
+
   /// Olay yerinin adı — ipucu metninde geçen `{yer}` (isim vermez, yer verir).
   final String place;
+
   /// Olay yeri (tile).
   double tx, ty;
 
   _CrimePhase phase = _CrimePhase.prowl;
+
   /// Bulunulan evrenin kalan süresi (sn).
   double phaseLeft;
+
   /// Suç TAMAMLANDI mı (etkiler uygulandı mı). Kaçış evresinde true olur;
   /// yakalanma bundan önce olursa suç ÖNLENMİŞ sayılır.
   bool done = false;
@@ -47,6 +56,7 @@ class _ActiveCrime {
   /// Çalınan mal buharlaşmaz; yeri değişir.
   ResourceKind? lootKind;
   int lootAmount = 0;
+  int weaponAmount = 0;
 
   /// Zulanın gömüleceği nokta — kaçışın hedefi.
   double bx = 0, by = 0;
@@ -89,37 +99,49 @@ extension _SceneCrime on _VillageSceneState {
   /// Hedefe sokulma için azami süre — bu kadarda varamazsa vazgeçer (takılma
   /// güvenliği: ulaşılamayan hedefte suç sonsuza kadar askıda kalmasın).
   static const double _kProwlTimeout = 40.0;
+
   /// Kaçış evresi (sn) — bu pencerede hâlâ yakalanabilir.
   static const double _kFleeSeconds = 9.0;
+
   /// Suçüstü yakalama mesafesi (tile) — muhafız bu kadar yaklaşırsa yakalar.
   static const double _kCatchDist = 1.3;
+
   /// Muhafızın GÖRÜŞ alanı (tile) — suç HENÜZ İŞLENİRKEN (sinsi yaklaşma/eylem)
   /// muhafız ancak bu kadar yakındaysa fark eder. Sinsi suç sessizdir: uzaktaki
   /// muhafız göremediği şeye koşamaz.
   static const double _kGuardSight = 7.0;
+
   /// Suç İŞLENDİKTEN sonra (kaçış) muhafızın duyabileceği azami uzaklık (tile) —
   /// gürültü/telaş köyü ayağa kaldırır, devriye bu menzilde peşine düşer.
   static const double _kGuardResponse = 16.0;
+
   /// Muhafızın suçu fark etmesi için geçen süre (sn) — anında ışınlanmaz;
   /// önce bir tuhaflık sezer, sonra üstüne yürür.
   static const double _kGuardNotice = 1.5;
+
   /// Muhafız kovalama hedefini kaç sn'de bir tazeler (fail kaçarken).
   static const double _kChaseRefresh = 0.5;
+
   /// Suç sonrası failin bekleme süresi (sn) — ~2 oyun günü.
   static const double _kCrimeCooldown = 2.0 * kGameDaySeconds;
+
   /// Bu kadar MEÇHUL suç birikince asayiş dilekçesi gelir.
   static const int _kSuspicionThreshold = 3;
+
   /// Ağır suç için gereken asgari sebep yükü — altındaysa yalnız hafif suç.
   static const double _kGraveMotive = 0.6;
 
   // ── Kürek cezası (zindan emeği) ────────────────────────────────────────────
   /// Kürek hükmünün süresi (oyun günü) — mahkûm bu kadar gün ocakta.
   static const double _kLaborSentenceDays = 3.0;
+
   /// Mahkûmun günlük taş üretimi — köy sert hükmün karşılığını yavaş ama
   /// süregelen bir akışla görür (eski anlık +14 yerine gün gün birikir).
   static const double _kLaborStonePerDay = 6.0;
+
   /// Hükmün ilk günü peşin verilen taş — "emeğin ilk hasadı" (jest, akış ayrı).
   static const int _kLaborUpfrontStone = 4;
+
   /// Mahkûmun ocağa "vardım" sayılma mesafesi (tile).
   static const double _kLaborAtQuarry = 1.6;
 
@@ -301,13 +323,15 @@ extension _SceneCrime on _VillageSceneState {
         final d = _wdist(g.gridX, g.gridY, v.gridX, v.gridY);
         if (dGuard < 0 || d < dGuard) dGuard = d;
       }
-      sb.write('${c.kind.name} fail=${v.name}(${v.type.name})'
-          ' evre=${c.phase.name} kalan=${c.phaseLeft.toStringAsFixed(1)}'
-          ' act=${v.activity.name} st=${v.state.name}'
-          ' dHedef=${dTarget.toStringAsFixed(1)}'
-          ' dMuhafız=${dGuard < 0 ? 'yok' : dGuard.toStringAsFixed(1)}'
-          ' yer=${c.place} done=${c.done ? 1 : 0}'
-          ' menzil=${c.done ? _kGuardResponse : _kGuardSight}');
+      sb.write(
+        '${c.kind.name} fail=${v.name}(${v.type.name})'
+        ' evre=${c.phase.name} kalan=${c.phaseLeft.toStringAsFixed(1)}'
+        ' act=${v.activity.name} st=${v.state.name}'
+        ' dHedef=${dTarget.toStringAsFixed(1)}'
+        ' dMuhafız=${dGuard < 0 ? 'yok' : dGuard.toStringAsFixed(1)}'
+        ' yer=${c.place} done=${c.done ? 1 : 0}'
+        ' menzil=${c.done ? _kGuardResponse : _kGuardSight}',
+      );
       if (c.victim != null) sb.write(' kurban=${c.victim!.name}');
     }
     final guards = _awakeGuards();
@@ -315,21 +339,27 @@ extension _SceneCrime on _VillageSceneState {
     for (final g in guards) {
       sb.write(' [${g.name} act=${g.activity.name}]');
     }
-    sb.write(' şüphe=$_crimeSuspicion sicilli='
-        '${_villagers.where((v) => v.crimeCount > 0).length}'
-        ' nüfus=${_villagers.length}'
-        ' dilekçe=${_pendingPetition?.id ?? '-'}'
-        ' rehin=${_ransomVictim?.name ?? '-'}'
-        ' yiyecek=${_stockpile.food} altın=${_stockpile.gold}'
-        ' taş=${_stockpile.stone}'
-        ' nizam=${_policies.sealed.where((f) => f.startsWith('nizam.')).length}'
-        ' kürek=$_captureLaborCount');
-    // Sim'i durduran modal'lar — harness'ta kimse tıklamadığı için "suç dondu"
-    // gibi görünen her şeyin gerçek sebebi burada okunur.
-    sb.write(' | durdu: seçim=${_pendingChoice != null ? 1 : 0}'
-        ' sinematik=${_activeCutscene != null ? 1 : 0}'
-        ' imparator=${_imperialDemand != null ? 1 : 0}'
-        ' zorunlu=${_petitionForced ? 1 : 0}');
+    sb.write(
+      ' şüphe=$_crimeSuspicion sicilli='
+      '${_villagers.where((v) => v.crimeCount > 0).length}'
+      ' nüfus=${_villagers.length}'
+      ' dilekçe=${_pendingPetition?.id ?? '-'}'
+      ' rehin=${_ransomVictim?.name ?? '-'}'
+      ' yiyecek=${_stockpile.food} altın=${_stockpile.gold}'
+      ' taş=${_stockpile.stone}'
+      ' nizam=${_policies.sealed.where((f) => f.startsWith('nizam.')).length}'
+      ' kürek=$_captureLaborCount',
+    );
+    // Sim'i durduran modal'lar (sinematik/imparator) + kuyrukta bekleyenler —
+    // harness'ta kimse tıklamadığı için "suç dondu" gibi görünen her şeyin
+    // gerçek sebebi burada okunur. (Olay/dilekçe artık DONDURMAZ: kapıda
+    // kuyruk — yine de bekliyorlarsa raporda görünsün.)
+    sb.write(
+      ' | durdu: sinematik=${_activeCutscene != null ? 1 : 0}'
+      ' imparator=${_imperialDemand != null ? 1 : 0}'
+      ' | bekleyen: seçim=${_pendingChoice != null ? 1 : 0}'
+      ' gecikmişDilekçe=${_petitionOverdue ? 1 : 0}',
+    );
     kCaptureCrimeReport = sb.toString();
   }
 
@@ -342,8 +372,8 @@ extension _SceneCrime on _VillageSceneState {
   /// Burada kalanlar yalnız suça ÖZGÜ, yerel etkenler.
   double _crimePressure() {
     double g = 1.0;
-    if (_stats.morale < 0.4) g += 0.5;          // köy morali dipte
-    if (_cycle.dayLight < 0.5) g += 0.4;        // alacakaranlık cesaret verir
+    if (_stats.morale < 0.4) g += 0.5; // köy morali dipte
+    if (_cycle.dayLight < 0.5) g += 0.4; // alacakaranlık cesaret verir
     // Bağışlanan suçlular cesaret verir — merhametin politik bedeli.
     g += (_crimePardons * 0.12).clamp(0.0, 0.5);
     // İMAN: cemaat gözü + günah korkusu suç baskısını kısar (crimeDamp < 1).
@@ -372,6 +402,7 @@ extension _SceneCrime on _VillageSceneState {
       v.injuryDays <= 0 &&
       v.activity == VillagerActivity.none &&
       v.chatBubbleTime <= 0 &&
+      v.waveTime <= 0 && // selamlaşmanın ortasında hırsızlığa kalkmaz
       v.crimeCooldown <= 0 &&
       v.conflictCooldown <= 0;
 
@@ -411,27 +442,29 @@ extension _SceneCrime on _VillageSceneState {
   /// Kan davası / kin / sefalet / dip moral / küskün hane besler.
   double _graveMotive(VillagerEntity v) {
     double m = 0;
-    if (v.inFeud) m += 1.0;                          // kan davası: en güçlü sebep
+    if (v.inFeud) m += 1.0; // kan davası: en güçlü sebep
     if (v.grudges.values.any((t) => t > _time)) m += 0.6; // taze kin
     if (v.morale < 0.22) {
-      m += 0.8;                                      // sefalet
+      m += 0.8; // sefalet
     } else if (v.morale < 0.35) {
       m += 0.4;
     }
-    if (_wasStarving) m += 0.5;                      // aç insan gözü dönmüş
+    if (_wasStarving) m += 0.5; // aç insan gözü dönmüş
     if (v.surname.isNotEmpty && _houses.moodOf(v.surname) < 0.3) m += 0.4;
-    if (v.crimeCount > 0) m += 0.2;                  // eşiği bir kez geçmiş
+    if (v.crimeCount > 0) m += 0.2; // eşiği bir kez geçmiş
     return m;
   }
 
   /// Uyanık, sahnedeki muhafızlar (caydırıcılık + müdahale).
   List<VillagerEntity> _awakeGuards() => _villagers
-      .where((v) =>
-          v.type == VillagerType.guard &&
-          !v.isDying &&
-          !v.isSleeping &&
-          !v.isInsideBuilding &&
-          v.hasProfession)
+      .where(
+        (v) =>
+            v.type == VillagerType.guard &&
+            !v.isDying &&
+            !v.isSleeping &&
+            !v.isInsideBuilding &&
+            v.hasProfession,
+      )
       .toList();
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -514,9 +547,11 @@ extension _SceneCrime on _VillageSceneState {
 
       case CrimeKind.fraud:
         if (_stockpile.gold < 8) return null;
-        return atBuilding(_nearestOf(BuildingType.market, v) ??
-            _nearestOf(BuildingType.mill, v) ??
-            _nearestOf(BuildingType.warehouse, v));
+        return atBuilding(
+          _nearestOf(BuildingType.market, v) ??
+              _nearestOf(BuildingType.mill, v) ??
+              _nearestOf(BuildingType.warehouse, v),
+        );
 
       case CrimeKind.poaching:
         final a = _nearestAnimal(v);
@@ -563,10 +598,12 @@ extension _SceneCrime on _VillageSceneState {
   /// (bunlar köyün canı; kundak/vandalizm hedefi olmaz).
   BuildingEntity? _damageableBuilding(VillagerEntity v) {
     final cands = _buildings
-        .where((b) =>
-            b.type != BuildingType.firepit &&
-            b.type != BuildingType.lamppost &&
-            b.type != BuildingType.well)
+        .where(
+          (b) =>
+              b.type != BuildingType.firepit &&
+              b.type != BuildingType.lamppost &&
+              b.type != BuildingType.well,
+        )
         .toList();
     if (cands.isEmpty) return null;
     return cands[_rng.nextInt(cands.length)];
@@ -575,13 +612,15 @@ extension _SceneCrime on _VillageSceneState {
   /// Failden belirgin biçimde zengin bir kurban (yankesicilik).
   VillagerEntity? _richVictim(VillagerEntity v) {
     final cands = _villagers
-        .where((o) =>
-            !identical(o, v) &&
-            !o.isDying &&
-            !o.isSleeping &&
-            !o.isInsideBuilding &&
-            o.hasProfession &&
-            o.wealth > v.wealth + 25)
+        .where(
+          (o) =>
+              !identical(o, v) &&
+              !o.isDying &&
+              !o.isSleeping &&
+              !o.isInsideBuilding &&
+              o.hasProfession &&
+              o.wealth > v.wealth + 25,
+        )
         .toList();
     if (cands.isEmpty) return null;
     return cands[_rng.nextInt(cands.length)];
@@ -591,14 +630,16 @@ extension _SceneCrime on _VillageSceneState {
   /// Favoriler korunur (cozy sözleşmesi: oyuncunun sevdiği köylü maktul olmaz).
   VillagerEntity? _enemyVictim(VillagerEntity v) {
     final cands = _villagers
-        .where((o) =>
-            !identical(o, v) &&
-            !o.isDying &&
-            !o.isSleeping &&
-            !o.isInsideBuilding &&
-            !o.isFavorite &&
-            o.hasProfession &&
-            (v.isBloodEnemy(o) || v.hasGrudgeWith(o, _time)))
+        .where(
+          (o) =>
+              !identical(o, v) &&
+              !o.isDying &&
+              !o.isSleeping &&
+              !o.isInsideBuilding &&
+              !o.isFavorite &&
+              o.hasProfession &&
+              (v.isBloodEnemy(o) || v.hasGrudgeWith(o, _time)),
+        )
         .toList();
     if (cands.isEmpty) return null;
     return cands[_rng.nextInt(cands.length)];
@@ -608,14 +649,16 @@ extension _SceneCrime on _VillageSceneState {
   /// hedef olmaz (canına kastedilen suçlarda hep true).
   VillagerEntity? _anyVictim(VillagerEntity v, {bool protectFavorite = true}) {
     final cands = _villagers
-        .where((o) =>
-            !identical(o, v) &&
-            !o.isDying &&
-            !o.isSleeping &&
-            !o.isInsideBuilding &&
-            o.hasProfession &&
-            o.type != VillagerType.guard && // muhafıza pusu kurulmaz
-            (!protectFavorite || !o.isFavorite))
+        .where(
+          (o) =>
+              !identical(o, v) &&
+              !o.isDying &&
+              !o.isSleeping &&
+              !o.isInsideBuilding &&
+              o.hasProfession &&
+              o.type != VillagerType.guard && // muhafıza pusu kurulmaz
+              (!protectFavorite || !o.isFavorite),
+        )
         .toList();
     if (cands.isEmpty) return null;
     return cands[_rng.nextInt(cands.length)];
@@ -658,11 +701,16 @@ extension _SceneCrime on _VillageSceneState {
 
     // Ağır suçta köy hafiften ürperir (sezgi) — hafif suçta sarsıntı yok.
     if (c.def.isGrave) addCameraShake(1.6, dur: 0.3);
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         c.def.hintPool,
-        _voice(null,
-            seed: _stableSeed('ipucu${c.kind.name}${v.name}', _dayCount),
-            extra: {'yer': c.place})));
+        _voice(
+          null,
+          seed: _stableSeed('ipucu${c.kind.name}${v.name}', _dayCount),
+          extra: {'yer': c.place},
+        ),
+      ),
+    );
   }
 
   void _advanceCrime(double dt) {
@@ -814,8 +862,15 @@ extension _SceneCrime on _VillageSceneState {
       c.phaseLeft = 30.0; // sürükleme penceresi (yakalama şansı uzun)
       v.hasteFactor = 0.8; // yüklü: yavaş — bu yüzden yakalanabilir
       v.goTo(ex, ey, 1.0);
-      _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0,
-          moodDelta: -0.03, alarm: 0.30);
+      _reactNearby(
+        v.gridX,
+        v.gridY,
+        6.0,
+        NpcEmotion.fear,
+        3.0,
+        moodDelta: -0.03,
+        alarm: 0.30,
+      );
       addCameraShake(3.0, dur: 0.4);
       return;
     }
@@ -858,8 +913,14 @@ extension _SceneCrime on _VillageSceneState {
     v.idleTimer = c.phaseLeft;
     // Kapının kapanışı — girişi GÖREN olabilir (kapıda bir kıpırtı), ama bu
     // zayıf bir izlenim: suçu değil, "birinin girdiğini" hatırlatır.
-    _reactNearby(v.gridX, v.gridY, 3.5, NpcEmotion.wonder, 2.0,
-        moodDelta: -0.01);
+    _reactNearby(
+      v.gridX,
+      v.gridY,
+      3.5,
+      NpcEmotion.wonder,
+      2.0,
+      moodDelta: -0.01,
+    );
   }
 
   /// Fail çuvalla dışarı çıkar — sahnenin GÖRÜLEN anı.
@@ -889,8 +950,15 @@ extension _SceneCrime on _VillageSceneState {
       subject: v,
       subjectName: v.name,
     );
-    _reactNearby(v.gridX, v.gridY, 5.0, NpcEmotion.wonder, 3.0,
-        moodDelta: -0.02, alarm: 0.20);
+    _reactNearby(
+      v.gridX,
+      v.gridY,
+      5.0,
+      NpcEmotion.wonder,
+      3.0,
+      moodDelta: -0.02,
+      alarm: 0.20,
+    );
   }
 
   /// Zulayı topraga göm — mal dünyada KALIR, yeri değişir.
@@ -910,6 +978,7 @@ extension _SceneCrime on _VillageSceneState {
       amount: amount,
       culprit: v,
       culpritName: v.name,
+      weaponAmount: c.weaponAmount,
     );
     _lootCaches.add(cache);
 
@@ -1024,12 +1093,18 @@ extension _SceneCrime on _VillageSceneState {
         final want = 6 + _rng.nextInt(9);
         final kind = (_stockpile.food >= want && _rng.nextBool())
             ? ResourceKind.food
-            : (_stockpile.wood >= want ? ResourceKind.wood : ResourceKind.stone);
+            : (_stockpile.wood >= want
+                  ? ResourceKind.wood
+                  : ResourceKind.stone);
         // Olmayan malı çalamaz — çuval stokta GERÇEKTEN olan kadarını taşır.
         final amount = want.clamp(0, _stockpile.get(kind));
         if (amount > 0) _stockpile.add(kind, -amount);
         c.lootKind = kind;
         c.lootAmount = amount;
+        if (_stockpile.weapons > 0 && _rng.nextDouble() < 0.18) {
+          c.weaponAmount = 1;
+          _stockpile.weapons--;
+        }
         kProbeTheftTaken += amount; // prova: malın korunumu kanıtı
         v.wealth += amount * 1.5;
 
@@ -1044,6 +1119,9 @@ extension _SceneCrime on _VillageSceneState {
       case CrimeKind.vandalism:
         // Tamir köyün sırtına biner.
         _stockpile.wood = (_stockpile.wood - 8).clamp(0, 1 << 30);
+        if (c.building case final b?) {
+          b.damage = b.damage < 0.28 ? 0.28 : b.damage;
+        }
         _feelVillage(NpcEmotion.anger, 6, -0.04);
 
       case CrimeKind.poaching:
@@ -1068,14 +1146,19 @@ extension _SceneCrime on _VillageSceneState {
       case CrimeKind.arson:
         final b = c.building;
         if (b != null) {
+          b.damage = b.damage < 0.82 ? 0.82 : b.damage;
           _burningBuildings.add(b);
           const dur = 14.0;
-          _activeFx.add(ActiveFx(
+          _activeFx.add(
+            ActiveFx(
               const EventEffect(
-                  fx: EventFx.fireOutbreak,
-                  screenTint: Color(0x18FF6020),
-                  duration: dur),
-              dur));
+                fx: EventFx.fireOutbreak,
+                screenTint: Color(0x18FF6020),
+                duration: dur,
+              ),
+              dur,
+            ),
+          );
         }
         _stockpile.wood = (_stockpile.wood - 14).clamp(0, 1 << 30);
         _feelVillage(NpcEmotion.fear, 10, -0.12);
@@ -1084,8 +1167,15 @@ extension _SceneCrime on _VillageSceneState {
       case CrimeKind.assault:
         if (vic != null) {
           _injureVillager(vic, feud: false, intensity: 1.0);
-          _reactNearby(vic.gridX, vic.gridY, 6.0, NpcEmotion.fear, 3.0,
-              moodDelta: -0.04, alarm: 0.45);
+          _reactNearby(
+            vic.gridX,
+            vic.gridY,
+            6.0,
+            NpcEmotion.fear,
+            3.0,
+            moodDelta: -0.04,
+            alarm: 0.45,
+          );
         }
         _feelVillage(NpcEmotion.fear, 8, -0.08);
         addCameraShake(5.0, dur: 0.5);
@@ -1098,10 +1188,12 @@ extension _SceneCrime on _VillageSceneState {
     }
 
     // Köy zararı fark eder — ama faili GÖRMEZ (isim geçmez).
-    final ctx = _voice(null,
-        other: vic,
-        seed: _stableSeed('suç${c.kind.name}${v.name}', _dayCount),
-        extra: {'yer': c.place});
+    final ctx = _voice(
+      null,
+      other: vic,
+      seed: _stableSeed('suç${c.kind.name}${v.name}', _dayCount),
+      extra: {'yer': c.place},
+    );
     _showNotification(Voice.say(c.def.deedPool, ctx));
   }
 
@@ -1157,13 +1249,18 @@ extension _SceneCrime on _VillageSceneState {
     for (final c in victim.children) {
       c.parents.remove(victim);
     }
+    _markDeathHouse(victim);
     victim.startDying(funeral: true);
     killer.feel(NpcEmotion.fear, 6.0, moodDelta: -0.10);
     _feelVillage(NpcEmotion.grief, 14, -0.20);
     pushPolicyMorale(-0.10, 5.0);
     addCameraShake(8.0, dur: 0.8);
-    _activeFx.add(ActiveFx(
-        const EventEffect(screenTint: Color(0x40AA1414), duration: 1.6), 1.6));
+    _activeFx.add(
+      ActiveFx(
+        const EventEffect(screenTint: Color(0x40AA1414), duration: 1.6),
+        1.6,
+      ),
+    );
   }
 
   /// Suç kaçtı — fail meçhul. Sicile YAZILMAZ (köy failini bilmiyor); yalnız
@@ -1203,12 +1300,14 @@ extension _SceneCrime on _VillageSceneState {
     // köy, sayıldığını bilir.
     if (_policies.sealed.contains('nizam.registry') && !v.isDying) {
       _chronicle(
-          Voice.say(const [
-            '📖 Fail kaçtı ama sicil onu ele verdi: {ad}. Kayıtlı köyde iz kalır.',
-            '📖 Sabaha kalmadan sicile bakıldı; {ad-in} adı çıktı. Meçhul suç yok artık.',
-          ], _voice(v, seed: _stableSeed('sicil${v.name}', _dayCount))),
-          icon: '📖',
-          milestone: c.def.isGrave, kind: ChronicleKind.crisis);
+        Voice.say(const [
+          '📖 Fail kaçtı ama sicil onu ele verdi: {ad}. Kayıtlı köyde iz kalır.',
+          '📖 Sabaha kalmadan sicile bakıldı; {ad-in} adı çıktı. Meçhul suç yok artık.',
+        ], _voice(v, seed: _stableSeed('sicil${v.name}', _dayCount))),
+        icon: '📖',
+        milestone: c.def.isGrave,
+        kind: ChronicleKind.crisis,
+      );
       _openVerdict(v, c, prevented: false, guard: null);
       return;
     }
@@ -1218,22 +1317,37 @@ extension _SceneCrime on _VillageSceneState {
     if (!witnessed) {
       _crimeSuspicion++;
     } else {
-      _showNotification('👁️ Fail kaçtı ama gören oldu — köy adını fısıldıyor.');
+      _showNotification(
+        '👁️ Fail kaçtı ama gören oldu — köy adını fısıldıyor.',
+      );
     }
     _chronicle(
-        Voice.say(
-            c.def.annalPool,
-            _voice(null,
-                seed: _stableSeed('meçhul${c.kind.name}$_dayCount', _dayCount))),
-        icon: c.def.icon,
-        milestone: c.def.isGrave, kind: ChronicleKind.crisis);
-    _showNotification(Voice.say(
-        _kEscapedPool, _voice(null, seed: _stableSeed('kaçtı${v.name}', _dayCount))));
+      Voice.say(
+        c.def.annalPool,
+        _voice(
+          null,
+          seed: _stableSeed('meçhul${c.kind.name}$_dayCount', _dayCount),
+        ),
+      ),
+      icon: c.def.icon,
+      milestone: c.def.isGrave,
+      kind: ChronicleKind.crisis,
+    );
+    _showNotification(
+      Voice.say(
+        _kEscapedPool,
+        _voice(null, seed: _stableSeed('kaçtı${v.name}', _dayCount)),
+      ),
+    );
 
     if (_crimeSuspicion >= _kSuspicionThreshold) {
       _feelVillage(NpcEmotion.fear, 10, -0.05);
-      _showNotification(Voice.say(_kSuspicionPool,
-          _voice(null, seed: _stableSeed('şüphe$_crimeSuspicion', _dayCount))));
+      _showNotification(
+        Voice.say(
+          _kSuspicionPool,
+          _voice(null, seed: _stableSeed('şüphe$_crimeSuspicion', _dayCount)),
+        ),
+      );
       if (_pendingPetition == null) {
         final p = PetitionSystem.byId('crimeWave');
         if (p != null) _presentPetition(p);
@@ -1391,8 +1505,14 @@ extension _SceneCrime on _VillageSceneState {
 
     // Yakalanma köyün gözü önünde olur — gören hatırlar (asayişin görünür
     // yüzü) ve failin sicili köylülerin kanaatine kazınır.
-    _witnessEvent(Notion.arrest,
-        x: v.gridX, y: v.gridY, subject: v, subjectName: v.name, loud: true);
+    _witnessEvent(
+      Notion.arrest,
+      x: v.gridX,
+      y: v.gridY,
+      subject: v,
+      subjectName: v.name,
+      loud: true,
+    );
 
     // ÇUVALLA YAKALANDI — mal doğrudan köye döner. Yakalamanın somut ödülü
     // budur: yalnız fail değil, MAL da elde edilir. (Gömdükten sonra
@@ -1403,8 +1523,9 @@ extension _SceneCrime on _VillageSceneState {
       _stockpile.add(loot, c.lootAmount);
       kProbeLootRecovered += c.lootAmount;
       _showNotification(
-          '🧺 Çuval geri alındı — ${c.lootAmount} ${loot.label.toLowerCase()} '
-          'ambara döndü.');
+        '🧺 Çuval geri alındı — ${c.lootAmount} ${loot.label.toLowerCase()} '
+        'ambara döndü.',
+      );
       c.lootAmount = 0;
     }
 
@@ -1427,25 +1548,42 @@ extension _SceneCrime on _VillageSceneState {
         vic.chatBubbleTime = 0;
       }
       vic.feel(NpcEmotion.content, 4.0, moodDelta: 0.10);
-      _showNotification(Voice.say(
+      _showNotification(
+        Voice.say(
           _kRescuedPool,
-          _voice(v,
-              other: vic, seed: _stableSeed('kurtar${vic.name}', _dayCount))));
+          _voice(
+            v,
+            other: vic,
+            seed: _stableSeed('kurtar${vic.name}', _dayCount),
+          ),
+        ),
+      );
     }
 
     _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.wonder, 3.0);
     addCameraShake(3.0, dur: 0.35);
 
-    final ctx = _voice(v,
-        other: vic,
-        seed: _stableSeed('yakala${v.name}', _dayCount),
-        extra: {'muhafız': guard?.name ?? ''});
-    _showNotification(Voice.say(
-        guard != null ? _kCaughtGuardPool : _kCaughtPlayerPool, ctx));
-    _chronicle(Voice.say(c.def.caughtAnnalPool, ctx),
-        icon: c.def.icon, milestone: c.def.isGrave, kind: ChronicleKind.crisis);
-    _lifeEvent(v, Voice.say(c.def.caughtAnnalPool, ctx),
-        icon: c.def.icon, milestone: true);
+    final ctx = _voice(
+      v,
+      other: vic,
+      seed: _stableSeed('yakala${v.name}', _dayCount),
+      extra: {'muhafız': guard?.name ?? ''},
+    );
+    _showNotification(
+      Voice.say(guard != null ? _kCaughtGuardPool : _kCaughtPlayerPool, ctx),
+    );
+    _chronicle(
+      Voice.say(c.def.caughtAnnalPool, ctx),
+      icon: c.def.icon,
+      milestone: c.def.isGrave,
+      kind: ChronicleKind.crisis,
+    );
+    _lifeEvent(
+      v,
+      Voice.say(c.def.caughtAnnalPool, ctx),
+      icon: c.def.icon,
+      milestone: true,
+    );
 
     // Meclis'e çıkar — hüküm senin.
     _openVerdict(v, c, prevented: prevented, guard: guard);
@@ -1454,51 +1592,61 @@ extension _SceneCrime on _VillageSceneState {
   /// Yakalanan faili yargı dilekçesiyle önüne getirir. Dilekçeyi getiren
   /// (author) KURBAN ya da yakalayan muhafızdır — suçlu değil; "gündeme geldik"
   /// jesti mağdurun hanesine gitsin.
-  void _openVerdict(VillagerEntity culprit, _ActiveCrime c,
-      {required bool prevented, VillagerEntity? guard}) {
+  void _openVerdict(
+    VillagerEntity culprit,
+    _ActiveCrime c, {
+    required bool prevented,
+    VillagerEntity? guard,
+  }) {
     var p = PetitionSystem.byId('crimeVerdict');
     if (p == null) return;
     // KÜREK CEZASI (NİZAM) — yürürlükteyse yargıya beşinci bir hüküm açılır:
     // mahkûm sürülmez ya da idam edilmez, taş ocağına koşulur (köy taş kazanır,
     // bir el eksilmez). Emek ekseninin sert ama üretken hükmü.
     if (_policies.sealed.contains('nizam.labor')) {
-      p = p.withExtraOption(const PetitionOption(
-        label: 'Kürek cezasına yolla',
-        detail: '{suçlu} zindana atılır, taş ocağında çalıştırılır. Köy taş '
-            'kazanır; bir el de eksilmez.',
-        resolutionPool: [
-          '⛓ {suçlu} taş ocağına koşuldu. Kürek sesi meydana kadar geliyor.',
-          '⛓ Hüküm: kürek. {suçlu} borcunu taşla ödeyecek.',
-          '⛓ {suçlu} zindanı boyladı; sabah ilk taş ocağa indi.',
-        ],
-        moraleAmount: 0.02,
-        moraleDays: 3,
-        fx: PetitionFx.crimeLabor,
-        estateMood: [(Estate.laborers, 0.06), (Estate.faithful, -0.08)],
-      ));
+      p = p.withExtraOption(
+        const PetitionOption(
+          label: 'Kürek cezasına yolla',
+          detail:
+              '{suçlu} zindana atılır, taş ocağında çalıştırılır. Köy taş '
+              'kazanır; bir el de eksilmez.',
+          resolutionPool: [
+            '⛓ {suçlu} taş ocağına koşuldu. Kürek sesi meydana kadar geliyor.',
+            '⛓ Hüküm: kürek. {suçlu} borcunu taşla ödeyecek.',
+            '⛓ {suçlu} zindanı boyladı; sabah ilk taş ocağa indi.',
+          ],
+          moraleAmount: 0.02,
+          moraleDays: 3,
+          fx: PetitionFx.crimeLabor,
+          estateMood: [(Estate.laborers, 0.06), (Estate.faithful, -0.08)],
+        ),
+      );
     }
     // TÖVBE MEYDANI (DERGÂH) — kılıcın karşılığı. Fail ne sürülür ne dövülür:
     // günahını meydanda söyler. Affın mekanik bedeli olan bağış sayacını
     // ARTIRMAZ (bkz. [_sentenceToPenance]); caydırıcılığı utançtan gelir.
     if (_policies.sealed.contains('dergah.penance')) {
-      p = p.withExtraOption(const PetitionOption(
-        label: 'Tövbeye çağır',
-        detail: '{suçlu} günahını meydanda, köyün önünde söyler. Ceza kesilmez; '
-            'bedel utançtır. Af gibi düzeni gevşetmez.',
-        resolutionPool: [
-          '🙏 {suçlu} meydana çıkarıldı. Günahını kendi ağzıyla söyleyecek.',
-          '🙏 Hüküm: tövbe. {suçlu} bedelini köyün gözü önünde ödeyecek.',
-          '🙏 {suçlu} tövbeye çağrıldı; meydan sessizce doldu.',
-        ],
-        moraleAmount: 0.03,
-        moraleDays: 3,
-        fx: PetitionFx.crimePenance,
-        estateMood: [
-          (Estate.faithful, 0.10),
-          (Estate.hearth, -0.06),
-          (Estate.artisans, -0.04),
-        ],
-      ));
+      p = p.withExtraOption(
+        const PetitionOption(
+          label: 'Tövbeye çağır',
+          detail:
+              '{suçlu} günahını meydanda, köyün önünde söyler. Ceza kesilmez; '
+              'bedel utançtır. Af gibi düzeni gevşetmez.',
+          resolutionPool: [
+            '🙏 {suçlu} meydana çıkarıldı. Günahını kendi ağzıyla söyleyecek.',
+            '🙏 Hüküm: tövbe. {suçlu} bedelini köyün gözü önünde ödeyecek.',
+            '🙏 {suçlu} tövbeye çağrıldı; meydan sessizce doldu.',
+          ],
+          moraleAmount: 0.03,
+          moraleDays: 3,
+          fx: PetitionFx.crimePenance,
+          estateMood: [
+            (Estate.faithful, 0.10),
+            (Estate.hearth, -0.06),
+            (Estate.artisans, -0.04),
+          ],
+        ),
+      );
     }
     // SÜRGÜN FERMANI (NİZAM) — mühürlü değilse köy kimseyi yola vuramaz.
     // Hane sürgünü zaten bu fermanı şart koşuyordu (bkz. house_action.gateFor);
@@ -1511,12 +1659,16 @@ extension _SceneCrime on _VillageSceneState {
     final author = (c.victim != null && !c.victim!.isDying)
         ? c.victim
         : (guard ?? _nearestWitness(culprit));
-    _presentPetition(p, author: author, extra: {
-      'suçlu': culprit.name,
-      'suç': c.def.label,
-      'hal': prevented ? 'son anda önlendi' : 'iş işten geçmişti',
-      'sabıka': culprit.crimeCount > 1 ? 'Sabıkalı.' : 'İlk kez.',
-    });
+    _presentPetition(
+      p,
+      author: author,
+      extra: {
+        'suçlu': culprit.name,
+        'suç': c.def.label,
+        'hal': prevented ? 'son anda önlendi' : 'iş işten geçmişti',
+        'sabıka': culprit.crimeCount > 1 ? 'Sabıkalı.' : 'İlk kez.',
+      },
+    );
   }
 
   /// Faile en yakın, sahnedeki tanık (dilekçeyi o getirir) — yoksa null.
@@ -1550,7 +1702,11 @@ extension _SceneCrime on _VillageSceneState {
     v.crimeCooldown = _kCrimeCooldown * 2;
     _feelVillage(NpcEmotion.wonder, 6, -0.02);
     final ctx = _voice(v, seed: _stableSeed('af${v.name}', _dayCount));
-    _chronicle(Voice.say(_kPardonAnnalPool, ctx), icon: '🕊️', kind: ChronicleKind.decision);
+    _chronicle(
+      Voice.say(_kPardonAnnalPool, ctx),
+      icon: '🕊️',
+      kind: ChronicleKind.decision,
+    );
     _showNotification(Voice.say(_kPardonPool, ctx));
   }
 
@@ -1569,7 +1725,11 @@ extension _SceneCrime on _VillageSceneState {
     _feelVillage(NpcEmotion.wonder, 8, 0.03); // düzen görüldü
     addCameraShake(4.0, dur: 0.4);
     final ctx = _voice(v, seed: _stableSeed('ceza${v.name}', _dayCount));
-    _chronicle(Voice.say(_kPunishAnnalPool, ctx), icon: '⛓️', kind: ChronicleKind.decision);
+    _chronicle(
+      Voice.say(_kPunishAnnalPool, ctx),
+      icon: '⛓️',
+      kind: ChronicleKind.decision,
+    );
     _showNotification(Voice.say(_kPunishPool, ctx));
   }
 
@@ -1601,26 +1761,35 @@ extension _SceneCrime on _VillageSceneState {
     v.activity = VillagerActivity.none;
     v.act = null;
     v.prop = PropKind.none;
-    _stockpile.stone = (_stockpile.stone + _kLaborUpfrontStone).clamp(0, 1 << 30);
+    _stockpile.stone = (_stockpile.stone + _kLaborUpfrontStone).clamp(
+      0,
+      1 << 30,
+    );
     _captureLaborCount++; // telemetri: kürek cezası kaç kez uygulandı
     v.feel(NpcEmotion.grief, 6.0, moodDelta: -0.20);
     v.crimeCooldown = _kCrimeCooldown * 3;
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.05);
     _feelVillage(NpcEmotion.wonder, 8, 0.02); // düzen görüldü, üretken sertlik
     addCameraShake(3.0, dur: 0.35);
-    final ctx = _voice(v,
-        seed: _stableSeed('kürek${v.name}', _dayCount),
-        extra: {'süre': _kLaborSentenceDays.round().toString()});
+    final ctx = _voice(
+      v,
+      seed: _stableSeed('kürek${v.name}', _dayCount),
+      extra: {'süre': _kLaborSentenceDays.round().toString()},
+    );
     _chronicle(
-        Voice.say(const [
-          '⛓ {ad} taş ocağına koşuldu. Borcunu gün gün taşla ödeyecek.',
-          '⛓ Kürek hükmü: {ad} zindanda, gündüzleri ocakta.',
-        ], ctx),
-        icon: '⛓️', kind: ChronicleKind.decision);
-    _showNotification(Voice.say(const [
-      '⛓ {ad} kürek cezasına çarptırıldı — {süre} gün ocakta.',
-      '⛓ {ad} taş ocağında. Sert ama üretken bir hüküm.',
-    ], ctx));
+      Voice.say(const [
+        '⛓ {ad} taş ocağına koşuldu. Borcunu gün gün taşla ödeyecek.',
+        '⛓ Kürek hükmü: {ad} zindanda, gündüzleri ocakta.',
+      ], ctx),
+      icon: '⛓️',
+      kind: ChronicleKind.decision,
+    );
+    _showNotification(
+      Voice.say(const [
+        '⛓ {ad} kürek cezasına çarptırıldı — {süre} gün ocakta.',
+        '⛓ {ad} taş ocağında. Sert ama üretken bir hüküm.',
+      ], ctx),
+    );
   }
 
   /// TÖVBE (DERGÂH) — kılıç yolunun karşılığı. Fail ne sürülür ne dövülür:
@@ -1648,7 +1817,11 @@ extension _SceneCrime on _VillageSceneState {
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.04);
     _feelVillage(NpcEmotion.wonder, 8, 0.02);
     final ctx = _voice(v, seed: _stableSeed('tövbe${v.name}', _dayCount));
-    _chronicle(Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏', kind: ChronicleKind.decision);
+    _chronicle(
+      Voice.say(_kPenanceAnnalPool, ctx),
+      icon: '🙏',
+      kind: ChronicleKind.decision,
+    );
     _lifeEvent(v, Voice.say(_kPenanceAnnalPool, ctx), icon: '🙏');
     _showNotification(Voice.say(_kPenancePool, ctx));
   }
@@ -1666,10 +1839,12 @@ extension _SceneCrime on _VillageSceneState {
       if (v.laborDays <= 0 || v.isDying) continue;
 
       // Gece/uyku: emek durur (zindanda dinlenir) ama süre yine akar.
-      final resting = v.isSleeping || v.isInsideBuilding || _cycle.dayLight <= 0.35;
+      final resting =
+          v.isSleeping || v.isInsideBuilding || _cycle.dayLight <= 0.35;
       if (!resting) {
         // Ocağa koş (maden yoksa depoya — köyün taş yığını). Yoksa yerinde kır.
-        final quarry = _nearestOf(BuildingType.mineBuilding, v) ??
+        final quarry =
+            _nearestOf(BuildingType.mineBuilding, v) ??
             _nearestOf(BuildingType.warehouse, v);
         if (quarry != null) {
           final (qx, qy) = _centerOf(quarry);
@@ -1695,18 +1870,22 @@ extension _SceneCrime on _VillageSceneState {
       if (v.laborDays <= 0) {
         v.laborDays = 0;
         _setWorkPose(v, null);
-        v.crimeCooldown = _kCrimeCooldown; // taze salıverme, hemen suça dönmesin
+        v.crimeCooldown =
+            _kCrimeCooldown; // taze salıverme, hemen suça dönmesin
         v.feel(NpcEmotion.content, 5.0, moodDelta: 0.10);
         final ctx = _voice(v, seed: _stableSeed('salıver${v.name}', _dayCount));
         _chronicle(
-            Voice.say(const [
-              '🕊 {ad} borcunu ödedi, ocaktan salıverildi.',
-              '🕊 {ad-in} kürek hükmü doldu; köye geri karıştı.',
-            ], ctx),
-            icon: '🕊️');
-        _showNotification(Voice.say(const [
-          '🕊 {ad} kürek cezasını tamamladı — köye döndü.',
-        ], ctx));
+          Voice.say(const [
+            '🕊 {ad} borcunu ödedi, ocaktan salıverildi.',
+            '🕊 {ad-in} kürek hükmü doldu; köye geri karıştı.',
+          ], ctx),
+          icon: '🕊️',
+        );
+        _showNotification(
+          Voice.say(const [
+            '🕊 {ad} kürek cezasını tamamladı — köye döndü.',
+          ], ctx),
+        );
       }
     }
     // Biriken kesirli emeği tam sayı taşa çevir.
@@ -1758,13 +1937,15 @@ extension _SceneCrime on _VillageSceneState {
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: 0.10);
     final ctx = _voice(v, seed: _stableSeed('fidye${v.name}', _dayCount));
     _chronicle(
-        Voice.say(const [
-          '{ad} fidye karşılığı köye döndü.',
-          'Kese boşaldı; {ad} evine kavuştu.',
-          '{ad-in} bedeli ödendi, köye geri geldi.',
-        ], ctx),
-        icon: '🕊️',
-        milestone: true, kind: ChronicleKind.decision);
+      Voice.say(const [
+        '{ad} fidye karşılığı köye döndü.',
+        'Kese boşaldı; {ad} evine kavuştu.',
+        '{ad-in} bedeli ödendi, köye geri geldi.',
+      ], ctx),
+      icon: '🕊️',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
     _showNotification(Voice.say(_kRansomReturnPool, ctx));
   }
 
@@ -1776,8 +1957,12 @@ extension _SceneCrime on _VillageSceneState {
     _feelVillage(NpcEmotion.grief, 14, -0.18);
     pushPolicyMorale(-0.08, 5.0);
     final ctx = _voice(v, seed: _stableSeed('fidyeret${v.name}', _dayCount));
-    _chronicle(Voice.say(_kRansomLostAnnalPool, ctx),
-        icon: '🕯️', milestone: true, kind: ChronicleKind.crisis);
+    _chronicle(
+      Voice.say(_kRansomLostAnnalPool, ctx),
+      icon: '🕯️',
+      milestone: true,
+      kind: ChronicleKind.crisis,
+    );
     _showNotification(Voice.say(_kRansomLostPool, ctx));
   }
 

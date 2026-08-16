@@ -54,6 +54,16 @@ class FoundingChoice {
   /// Kadronun kaç kişi olduğu — kartta "n ağız" olarak görünür.
   int get people => roster.length;
 
+  /// Yeni oyuncuya kararın sonucunu anlatan kısa özet. Açılışta ham stok
+  /// sayıları göstermek, henüz odunun/taşın ne işe yaradığını bilmeyen kişiye
+  /// seçim yaptırmak yerine muhasebe yaptırıyordu.
+  String get choiceSummary => switch (id) {
+    'seed' => 'Bol yiyecek · İlk günler daha rahat',
+    'tools' => 'Bol alet · İnşaat daha hızlı başlar',
+    'people' => 'Daha çok el · Daha kalabalık başlangıç',
+    _ => 'Dengeli yük · Her şeyden biraz',
+  };
+
   /// Sinematikteki üç seçenek. Denge kasıtlı olarak ÜÇ AYRI EKSENDE kurulu:
   /// azık (zaman kazandırır), alet (bina hızlandırır), can (el sayısı artırır).
   /// Hiçbiri "doğru" değil — hepsi ilk iki günün ritmini başka türlü büker.
@@ -65,13 +75,13 @@ class FoundingChoice {
       blurb: 'Tohum, kuru et, bir de değirmen taşı. Kimse aç kalmayacak.',
       cost: 'Alet yerine azık aldık: elimizde doğru dürüst odun yok.',
       roster: [
-        (VillagerType.farmer, true),    // reis
-        (VillagerType.miller, false),   // eşi
+        (VillagerType.farmer, true), // reis
+        (VillagerType.miller, false), // eşi
         (VillagerType.shepherd, true),
-        (VillagerType.farmer, false),   // eşi
-        (VillagerType.priest, true),    // dul yaşlı
+        (VillagerType.farmer, false), // eşi
+        (VillagerType.priest, true), // dul yaşlı
       ],
-      wood: 16,
+      wood: 18,
       stone: 8,
       food: 48,
     ),
@@ -104,7 +114,10 @@ class FoundingChoice {
         (VillagerType.hunter, true),
         (VillagerType.miller, false),
         (VillagerType.priest, true),
-        (VillagerType.hunter, true), // fazladan can — bekâr, eşi dışarıdan gelir
+        (
+          VillagerType.hunter,
+          true,
+        ), // fazladan can — bekâr, eşi dışarıdan gelir
       ],
       wood: 18,
       stone: 10,

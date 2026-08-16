@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../buildings/building_entity.dart';
+import '../buildings/building_function.dart';
 import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
 import '../characters/npc_visual.dart';
@@ -43,9 +44,7 @@ import 'character_renderer.dart';
 import 'decor_renderer.dart';
 import 'flame_renderer.dart';
 import 'grave_renderer.dart';
-import 'ground_weather_renderer.dart';
 import 'mine_renderer.dart';
-import 'mud_renderer.dart';
 import 'nature_renderer.dart';
 import 'ocean_renderer.dart';
 import 'particle_renderer.dart';
@@ -570,32 +569,9 @@ class VillageGamePainter extends CustomPainter {
   // Yağmur sonrası çim üzerinde kalan küçük, dünya-uzaylı çamur izleri.
   // Kar mevsiminde çizilmez; kış zemini kar katmanıyla temiz kalır.
   void _drawMud(Canvas canvas, Size size) {
-    if (zoom < 0.42 || (season != Season.winter && rainIntensity < 0.24)) {
-      return;
-    }
-    final (c0, c1, r0, r1) = _visibleTileBounds(size);
-    var drawn = 0;
-    for (var row = r0; row <= r1 && drawn < 72; row++) {
-      for (var col = c0; col <= c1 && drawn < 72; col++) {
-        if (waterTiles.contains((col, row))) continue;
-        final hash = (col * 92821 + row * 68917) & 0x7fffffff;
-        // Her tile değil; doğal, seyrek ıslak toprak lekeleri.
-        if (hash % 11 > 2) continue;
-        final s = gridToScreen(col + 0.5, row + 0.5, size, camera);
-        final wobble = ((hash % 17) - 8) * 0.35;
-        final p = Offset(s.dx + wobble, s.dy);
-        if (season == Season.winter) {
-          if (hash % 17 < 2) GroundWeatherRenderer.draw(canvas, p, 2, zoom);
-        } else {
-          MudRenderer.draw(canvas, p, hash % 3, zoom);
-          if (rainIntensity > 0.42 && hash % 19 < 2) {
-            GroundWeatherRenderer.draw(canvas, p.translate(5 * zoom, -2 * zoom), 0, zoom);
-          }
-          if (hash % 23 == 0) GroundWeatherRenderer.draw(canvas, p, 1, zoom);
-        }
-        drawn++;
-      }
-    }
+    // Çamur kaplaması zemin/çim ayrımını bozduğu için tamamen kaldırıldı.
+    // Yağmur simülasyonu ve diğer hava efektleri çalışmaya devam eder.
+    return;
   }
 
   void _drawGround(Canvas canvas, Size size) {

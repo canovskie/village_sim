@@ -111,8 +111,11 @@ extension _SceneFirepitGather on _VillageSceneState {
       return aE - bE;
     });
     final storyteller = sitters.first;
-    storyteller.activity       = VillagerActivity.storytelling;
-    storyteller.chatBubbleIcon = '📖';
+    storyteller.activity = VillagerActivity.storytelling;
+    // Baş üstünde 📖 YOK — anlatım elin kendisidir (bkz. CharGesture.tell).
+    // `chatBubbleTime` burada baloncuk değil ANLATIM SAYACI: sıfırlanınca
+    // aktivite warm'a düşer (bkz. scene_tick baloncuk decay döngüsü).
+    storyteller.chatBubbleIcon = '';
     storyteller.chatBubbleTime = _kStoryDuration;
     // Anlatım süresi en az hikaye süresi kadar (kısa sürede kalkmasın).
     if (storyteller.warmthTimer < _kStoryDuration + 2) {

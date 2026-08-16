@@ -12,6 +12,7 @@ import '../systems/villager_act.dart';
 import '../systems/villager_mind.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
+import 'semantic_icon.dart';
 
 /// Köylü kartı — modern koyu app_ui dilinde. Üstte portre + isim + meslek
 /// rozeti + favori/kapat ikon butonları; altta durum rozetleri, animasyonlu
@@ -489,8 +490,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return Wrap(spacing: 6, runSpacing: 6, children: badges);
   }
 
-  /// Durum/aktivite rozetleri — etiketler emoji-veri taşıdığı için
-  /// AppChip'in vektör ikonu yerine emoji + renkli kapsül kullanıyoruz.
+  /// Durum/aktivite rozetleri veri tarafındaki kısa işareti korur, ekranda
+  /// ise ortak vektör ikon diline çevirir.
   Widget _emojiChip(String label, Color color, String emoji) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
@@ -502,7 +503,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(emoji, style: const TextStyle(fontSize: 10, height: 1.0)),
+          SemanticIcon(emoji,
+              size: 10, color: color, fallback: GameIconData.star),
           const SizedBox(width: 5),
           Text(
             label,
@@ -577,7 +579,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       children: [
         Row(
           children: [
-            Text(stage.icon, style: const TextStyle(fontSize: 13)),
+            SemanticIcon(stage.icon,
+                size: 13, color: AppUi.accentSoft, fallback: GameIconData.people),
             const SizedBox(width: 6),
             Text(
               '${stage.label} · $ageStr',
@@ -778,7 +781,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       else ...[
         Row(
           children: [
-            Text(role.icon, style: const TextStyle(fontSize: 13)),
+            SemanticIcon(role.icon,
+                size: 13, color: AppUi.accent, fallback: GameIconData.hammer),
             const SizedBox(width: 7),
             Expanded(
               child: Text(
@@ -1164,7 +1168,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(e.icon, style: const TextStyle(fontSize: 12)),
+          SemanticIcon(e.icon,
+              size: 12, color: AppUi.textLo, fallback: GameIconData.scroll),
           const SizedBox(width: 8),
           SizedBox(
             width: 30,

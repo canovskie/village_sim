@@ -49,6 +49,8 @@ void main() {
     kProbeTriggerEvent = false;
     kProbeVignetteId = '';
     kProbeVignetteCast = 0;
+    kProbeChoiceWaiting = '';
+    kProbeChoiceTimeouts = 0;
     kDevSpeedBoostOverride = 0;
     kCaptureMode = false;
   });
@@ -101,14 +103,26 @@ void main() {
   }
 
   /// Olayı zorla ve sahnelenmesini bekle. Karar gerektiren olayda (veba,
-  /// canavar, yangın) modal açılır ve SİM DURUR — vinyet ancak karar verilince
-  /// oynar; bu yüzden ilk seçenek tıklanır.
+  /// canavar, yangın) KAPIDA KUYRUK işler: modal kendiliğinden AÇILMAZ, olay
+  /// HUD'daki KARAR mührüne iner ve sim akmaya devam eder. Test oyuncu gibi
+  /// davranır: mühre tıklar, İLK şıkkı seçer — vinyet karar anında kurulur.
+  /// (Zaman aşımına bırakılsa pasif şık oynardı; bu testin ölçtüğü koreografi
+  /// aktif şıkkınki.)
   Future<void> fireEvent(WidgetTester tester, EventOutcome e) async {
     kForcedEventId = e.id;
     kProbeTriggerEvent = true;
     if (e.needsChoice) {
+      // 1) Olay omen'i bitirip kuyruğa düşsün (mühür ancak o zaman çizilir).
+      await waitUntil(tester, () => kProbeChoiceWaiting == e.id);
+      await tester.pump();
+      // 2) Mühre tıkla → modal açılır.
+      final seal = find.text('KARAR');
+      if (seal.evaluate().isNotEmpty) {
+        await tester.tap(seal);
+        await tester.pump();
+      }
+      // 3) İlk şıkkı seç.
       final label = e.choices!.first.label;
-      await waitUntil(tester, () => find.text(label).evaluate().isNotEmpty);
       if (find.text(label).evaluate().isNotEmpty) {
         await tester.tap(find.text(label));
         await tester.pump();

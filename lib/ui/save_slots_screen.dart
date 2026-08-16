@@ -273,7 +273,7 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('🌱', style: TextStyle(fontSize: 34)),
+          const GameIcon(GameIconData.reed, size: 34, color: AppUi.sage),
           const SizedBox(height: 12),
           Text(
             'Henüz kurulmuş bir köyün yok.',

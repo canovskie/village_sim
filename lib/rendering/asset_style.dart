@@ -81,6 +81,17 @@ class AssetStyle {
     final picture = recorder.endRecording();
     final result  = await picture.toImage(w, h);
     picture.dispose();
+    // KAYNAĞI BIRAK — yoksa her sprite için İKİ tam boyutlu görüntü yaşar.
+    //
+    // 56 bina sprite'ı × ~1250×1250 × 4 bayt ≈ 350 MB önbellek; kaynaklar da
+    // asılı kalınca ~700 MB. Ölçüldü: kayıt açılırken RSS 372 → 957 MB tırmanıp
+    // süreç ölüyordu (macOS'ta Dart istisnası bile atmadan). ui.Image'in
+    // finalizer'ı var ama yükleme bir PATLAMA hâlinde olur; GC yetişemez.
+    //
+    // SÖZLEŞME: [src] bu çağrıdan sonra KULLANILAMAZ. Üç çağıran da (bina,
+    // kış varyantı, tarla) codec'ten yeni çözülmüş kareyi verip bir daha
+    // dokunmuyor — yeni bir çağıran eklersen aynısını yap.
+    src.dispose();
     return result;
   }
 }

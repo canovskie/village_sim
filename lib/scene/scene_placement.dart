@@ -8,9 +8,12 @@ extension _ScenePlacement on _VillageSceneState {
   /// [ignoreCraft]: yalnız FERMANLA dikilen yapı için. Bir hüküm "kurula"
   /// diyorsa köy onu diker; zanaat bilgisi oyuncu menüsünün kapısıdır, buyruğun
   /// değil. Geometri/arazi kuralları yine de tam işler.
-  bool _isValidPlacement(int col, int row, BuildingType type,
-          {bool ignoreCraft = false}) =>
-      _placementReason(col, row, type, ignoreCraft: ignoreCraft) == null;
+  bool _isValidPlacement(
+    int col,
+    int row,
+    BuildingType type, {
+    bool ignoreCraft = false,
+  }) => _placementReason(col, row, type, ignoreCraft: ignoreCraft) == null;
 
   /// Köy bu binanın zanaatını biliyor mu? Ortak bilgi (craft == null) hep açık;
   /// godMode her şeyi açar (dev/showcase). Menü filtresi + kilit mesajı bunu okur.
@@ -23,9 +26,16 @@ extension _ScenePlacement on _VillageSceneState {
   /// Yerleştirme neden GEÇERSİZ — geçerliyse null, değilse oyuncuya gösterilecek
   /// Türkçe sebep (akıllı yerleştirme ipucu). `_isValidPlacement` bunu kullanır,
   /// böylece doğrulama mantığı ile mesaj asla ayrışmaz.
-  String? _placementReason(int col, int row, BuildingType type,
-      {bool ignoreCraft = false}) {
+  String? _placementReason(
+    int col,
+    int row,
+    BuildingType type, {
+    bool ignoreCraft = false,
+  }) {
     final meta = kBuildingMeta[type]!;
+    if (!_godMode && !_stockpile.canAfford(meta.cost)) {
+      return 'Eksik malzeme: ${_stockpile.formatMissing(meta.cost)}';
+    }
     // Zanaat kilidi (tek doğruluk kaynağı → hem menü hem commit hem ipucu):
     // köy bu yapının zanaatını bilmiyorsa dikilemez.
     if (!ignoreCraft && !_isCraftKnown(type)) {
@@ -40,9 +50,16 @@ extension _ScenePlacement on _VillageSceneState {
         row + meta.rows > kRows) {
       return 'Harita sınırının dışında';
     }
-    bool overlaps(int c1, int r1, int w1, int h1, int c2, int r2, int w2,
-            int h2) =>
-        c1 < c2 + w2 && c1 + w1 > c2 && r1 < r2 + h2 && r1 + h1 > r2;
+    bool overlaps(
+      int c1,
+      int r1,
+      int w1,
+      int h1,
+      int c2,
+      int r2,
+      int w2,
+      int h2,
+    ) => c1 < c2 + w2 && c1 + w1 > c2 && r1 < r2 + h2 && r1 + h1 > r2;
 
     final farmSet = {for (final t in _farmTiles) (t.col, t.row)};
     final mineSet = {
@@ -54,10 +71,7 @@ extension _ScenePlacement on _VillageSceneState {
         if (!t.isFelled) (t.col, t.row),
     };
     final reedSet = <(int, int)>{
-      for (final r in _reeds) ...[
-        (r.col, r.row),
-        (r.col2, r.row2),
-      ],
+      for (final r in _reeds) ...[(r.col, r.row), (r.col2, r.row2)],
     };
 
     // Footprint engel taraması — ilk çakışmanın sebebini döner (null = temiz).
@@ -119,15 +133,31 @@ extension _ScenePlacement on _VillageSceneState {
     }
 
     for (final b in _buildings) {
-      if (overlaps(col, row, meta.cols, meta.rows, b.col, b.row, b.cols,
-          b.rows)) {
+      if (overlaps(
+        col,
+        row,
+        meta.cols,
+        meta.rows,
+        b.col,
+        b.row,
+        b.cols,
+        b.rows,
+      )) {
         return 'Başka bir binanın üzerine gelemez';
       }
     }
     for (final o in _orders) {
       final om = kBuildingMeta[o.type]!;
-      if (overlaps(col, row, meta.cols, meta.rows, o.col, o.row, om.cols,
-          om.rows)) {
+      if (overlaps(
+        col,
+        row,
+        meta.cols,
+        meta.rows,
+        o.col,
+        o.row,
+        om.cols,
+        om.rows,
+      )) {
         return 'Süren bir inşaatın üzerine gelemez';
       }
     }
@@ -224,7 +254,10 @@ extension _ScenePlacement on _VillageSceneState {
         final c = col + dc, r = row + dr;
         if (c < 0 || r < 0 || c >= kCols || r >= kRows) continue;
         // Kendi footprint'i "boşluk" sayılmaz.
-        if (c >= col && c < col + meta.cols && r >= row && r < row + meta.rows) {
+        if (c >= col &&
+            c < col + meta.cols &&
+            r >= row &&
+            r < row + meta.rows) {
           continue;
         }
         if (d2(c, r) > openR2) continue;
@@ -245,8 +278,7 @@ extension _ScenePlacement on _VillageSceneState {
       final bd = d2(b.col + b.cols * 0.5 - 0.5, b.row + b.rows * 0.5 - 0.5);
       final role = b.fn?.role;
       if (bd <= workR2 &&
-          (role == BuildingRole.gathering ||
-              role == BuildingRole.processing)) {
+          (role == BuildingRole.gathering || role == BuildingRole.processing)) {
         work++;
       }
       // Teslim noktası = ambar, yoksa ocak (bkz. anchor_system).
@@ -306,7 +338,7 @@ extension _ScenePlacement on _VillageSceneState {
     final r2 = start.$2 < end.$2 ? end.$2 : start.$2;
     int marked = 0;
     int reedsCut = 0;
-    int reedHay  = 0;
+    int reedHay = 0;
     setStateHere(() {
       for (final t in _trees) {
         if (t.col >= c1 && t.col <= c2 && t.row >= r1 && t.row <= r2) {
@@ -318,8 +350,10 @@ extension _ScenePlacement on _VillageSceneState {
       }
       final newReeds = <ReedClump>[];
       for (final rd in _reeds) {
-        final inA = rd.col  >= c1 && rd.col  <= c2 && rd.row  >= r1 && rd.row  <= r2;
-        final inB = rd.col2 >= c1 && rd.col2 <= c2 && rd.row2 >= r1 && rd.row2 <= r2;
+        final inA =
+            rd.col >= c1 && rd.col <= c2 && rd.row >= r1 && rd.row <= r2;
+        final inB =
+            rd.col2 >= c1 && rd.col2 <= c2 && rd.row2 >= r1 && rd.row2 <= r2;
         if (inA || inB) {
           reedsCut++;
           for (final (rc, rr) in [(rd.col, rd.row), (rd.col2, rd.row2)]) {
@@ -329,7 +363,12 @@ extension _ScenePlacement on _VillageSceneState {
               gridY: rr.toDouble(),
             );
             ResourcePlacement.placeHay(
-                hay, rc.toDouble(), rr.toDouble(), _hayEntities, _time);
+              hay,
+              rc.toDouble(),
+              rr.toDouble(),
+              _hayEntities,
+              _time,
+            );
             _hayEntities.add(hay);
             reedHay++;
           }
@@ -347,11 +386,11 @@ extension _ScenePlacement on _VillageSceneState {
       _lumberEnd = null;
     });
     final msgs = <String>[];
-    if (marked   > 0) msgs.add('$marked ağaç işaretlendi');
+    if (marked > 0) msgs.add('$marked ağaç işaretlendi');
     if (reedsCut > 0) msgs.add('$reedsCut sazlık biçildi (+$reedHay 🌾)');
-    _showNotification(msgs.isEmpty
-        ? 'Seçilen alanda iş yok.'
-        : msgs.join(' · '));
+    _showNotification(
+      msgs.isEmpty ? 'Seçilen alanda iş yok.' : msgs.join(' · '),
+    );
   }
 
   void _commitFarm((int, int) start, (int, int) end) {
@@ -459,8 +498,8 @@ extension _ScenePlacement on _VillageSceneState {
         isFirepit
             ? 'Ateş yakıldı!'
             : (_godMode
-                ? 'Bina anında kuruldu (godmode)'
-                : 'İnşaatçı yola çıkıyor...'),
+                  ? 'Bina anında kuruldu (godmode)'
+                  : 'Şantiye kuruldu. Ustalar gelince inşaat başlayacak.'),
       );
     }
     return true;
@@ -470,7 +509,11 @@ extension _ScenePlacement on _VillageSceneState {
   /// hayvanları temizler, global sistemleri (anchor/arı/pathfinding) yeniden
   /// kurar. [reselect] true ise (Taşı) aynı türü yeniden yerleştirmeye sokar
   /// (tam iade + tekrar koy = bedava taşıma). Ateş yeri köyün kalbi → yıkılamaz.
-  void _demolishBuilding(BuildingEntity b, {double refund = 0.5, bool reselect = false}) {
+  void _demolishBuilding(
+    BuildingEntity b, {
+    double refund = 0.5,
+    bool reselect = false,
+  }) {
     if (b.type == BuildingType.firepit) {
       _showNotification('🔥 Ateş yeri köyün kalbidir. Sökülmez.');
       return;
@@ -518,9 +561,11 @@ extension _ScenePlacement on _VillageSceneState {
         _buildCategory = kBuildingCategory[b.type] ?? _buildCategory;
       }
     });
-    _showNotification(reselect
-        ? '✋ ${meta?.label ?? 'Bina'} taşınıyor — yeni yerini seç (malzeme iade edildi).'
-        : '🔨 ${meta?.label ?? 'Bina'} yıkıldı — malzemenin %${(refund * 100).round()}\'i geri alındı.');
+    _showNotification(
+      reselect
+          ? '✋ ${meta?.label ?? 'Bina'} taşınıyor — yeni yerini seç (malzeme iade edildi).'
+          : '🔨 ${meta?.label ?? 'Bina'} yıkıldı — malzemenin %${(refund * 100).round()}\'i geri alındı.',
+    );
   }
 
   // ── YOL: planla → önizle → döşe ────────────────────────────────────────────
@@ -577,9 +622,11 @@ extension _ScenePlacement on _VillageSceneState {
     }
     if (_isWilderness(c, r)) return false; // vahşi ormana yol döşenmez
     if (!_roadSystem.canPlace(
-      col: c, row: r,
+      col: c,
+      row: r,
       surface: _placingRoad!,
-      maxCol: kCols, maxRow: kRows,
+      maxCol: kCols,
+      maxRow: kRows,
       waterTiles: _waterTiles,
       buildingTiles: bld,
     )) {
@@ -615,7 +662,9 @@ extension _ScenePlacement on _VillageSceneState {
           continue;
         }
         _stockpile.spend(cost);
-        _roadOrders.add(RoadOrder(col: tile.$1, row: tile.$2, surface: surface));
+        _roadOrders.add(
+          RoadOrder(col: tile.$1, row: tile.$2, surface: surface),
+        );
         laid++;
       }
       _clearRoadDrag();

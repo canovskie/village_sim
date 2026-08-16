@@ -9,6 +9,7 @@ import 'app_ui.dart';
 import 'law_compass_view.dart';
 import 'ledger_board.dart';
 import 'mobile_ui.dart';
+import 'semantic_icon.dart';
 
 /// KANUNNAME — ALTIGEN PETEK MİMARİSİ.
 ///
@@ -452,8 +453,10 @@ class _LawBookViewState extends State<LawBookView>
                     ),
                     if (showTheme) ...[
                       const SizedBox(width: 5),
-                      Text(LawBook.themeOf(l).icon,
-                          style: const TextStyle(fontSize: 10)),
+                      SemanticIcon(LawBook.themeOf(l).icon,
+                          size: 10,
+                          color: AppUi.textLo,
+                          fallback: GameIconData.scroll),
                     ],
                     const SizedBox(width: 5),
                     _stateDot(st, color),
@@ -858,7 +861,8 @@ class _LawBookViewState extends State<LawBookView>
           child: Container(
             color: color.withValues(alpha: 0.18),
             alignment: Alignment.center,
-            child: Text(t.icon, style: const TextStyle(fontSize: 20)),
+            child: SemanticIcon(t.icon,
+                size: 20, color: color, fallback: GameIconData.scroll),
           ),
         ),
       );
@@ -961,8 +965,10 @@ class _LawBookViewState extends State<LawBookView>
                     ),
                     if (showTheme) ...[
                       const SizedBox(width: 6),
-                      Text(LawBook.themeOf(l).icon,
-                          style: const TextStyle(fontSize: 10)),
+                      SemanticIcon(LawBook.themeOf(l).icon,
+                          size: 10,
+                          color: AppUi.textLo,
+                          fallback: GameIconData.scroll),
                     ],
                     const SizedBox(width: 6),
                     _stateDot(st, color),
@@ -1362,12 +1368,8 @@ class _Medallion extends StatelessWidget {
                     border: Border.all(color: AppUi.surface0, width: 1.4),
                   ),
                   alignment: Alignment.center,
-                  child: Text('✓',
-                      style: TextStyle(
-                          fontSize: badge * 0.6,
-                          height: 1,
-                          fontWeight: FontWeight.w900,
-                          color: AppUi.ink)),
+                  child: GameIcon(GameIconData.star,
+                      size: badge * 0.52, color: AppUi.ink),
                 ),
               ),
           ],
@@ -1532,7 +1534,8 @@ class _LawSealRitualState extends State<LawSealRitual>
   Widget _kicker() => Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(law.icon, style: const TextStyle(fontSize: 26)),
+          SemanticIcon(law.icon,
+              size: 26, color: accent, fallback: GameIconData.scales),
           const SizedBox(width: 11),
           Expanded(
             child: Column(
@@ -1654,7 +1657,8 @@ class _LawSealRitualState extends State<LawSealRitual>
         children: [
           SizedBox(
             width: 20,
-            child: Text(e.icon, style: const TextStyle(fontSize: 13)),
+            child: SemanticIcon(e.icon,
+                size: 13, color: color, fallback: GameIconData.people),
           ),
           const SizedBox(width: 4),
           Expanded(
@@ -1728,10 +1732,9 @@ class _LawSealRitualState extends State<LawSealRitual>
                     children: [
                       Transform.scale(
                         scale: 1 + t * 0.25,
-                        child: Text('⚖',
-                            style: TextStyle(
-                                fontSize: 15,
-                                color: Color.lerp(accent, AppUi.textHi, t))),
+                        child: GameIcon(GameIconData.scales,
+                            size: 15,
+                            color: Color.lerp(accent, AppUi.textHi, t)!),
                       ),
                       const SizedBox(width: 9),
                       Text(

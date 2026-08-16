@@ -19,6 +19,14 @@ HouseStance _stance(double grievance, {double leverage = 1.0, int houses = 4}) =
 
 void main() {
   group('merdiven: kızgınlık', () {
+    test('her basamağın bedel künyesi dolu', () {
+      for (final s in HouseStance.values) {
+        expect(s.costHint, isNotEmpty);
+      }
+      expect(nextRung(HouseStance.murmuring), HouseStance.withdrawn);
+      expect(nextRung(HouseStance.defiant), isNull);
+      expect(nextRung(HouseStance.loyal), isNull);
+    });
     test('taban ve üstü razı — hane kızgın değildir', () {
       expect(_stance(0.0), HouseStance.content);
       expect(grievanceOf(kSettledMood), 0.0);

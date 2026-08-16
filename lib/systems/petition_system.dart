@@ -494,6 +494,16 @@ abstract final class PetitionSystem {
   static List<Petition> get allForTest =>
       [for (final d in _defs) d.petition];
 
+  /// Test kancası: dilekçenin KAPISI ve ağırlığı. Bütünlük testi yalnız
+  /// dilekçenin kendisine bakamaz — "bu dilekçe hiçbir köyde tetiklenmiyor"
+  /// ve "bu takip halkası hiçbir şıktan çağrılmıyor" hataları ancak kapı
+  /// görünürse yakalanır.
+  static List<({double weight, bool Function(PetitionContext) canFire, Petition petition})>
+      get gatesForTest => [
+            for (final d in _defs)
+              (weight: d.weight, canFire: d.canFire, petition: d.petition),
+          ];
+
   /// Dilekçe KATALOĞU ayrı dosyada (petition_catalog.dart) — motor ile
   /// içerik aynı dosyada durunca ikisi de okunmaz oluyordu.
   static final List<_PetitionDef> _defs = _kPetitionDefs;

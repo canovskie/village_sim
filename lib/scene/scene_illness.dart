@@ -291,6 +291,7 @@ extension _SceneIllness on _VillageSceneState {
             ctx),
         icon: '⚰️',
         milestone: true, kind: ChronicleKind.crisis);
+    _markDeathHouse(v);
     v.startDying(funeral: true);
   }
 }

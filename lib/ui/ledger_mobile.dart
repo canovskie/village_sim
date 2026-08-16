@@ -350,7 +350,8 @@ extension LedgerMobileBoards on VillageLedger {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('👉', style: TextStyle(fontSize: 11)),
+                      const GameIcon(GameIconData.chevron,
+                          size: 11, color: AppUi.accentSoft),
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
@@ -449,7 +450,8 @@ class _MiniMatter extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
       child: Row(
         children: [
-          Text(m.icon, style: const TextStyle(fontSize: 14)),
+          SemanticIcon(m.icon,
+              size: 14, color: c, fallback: GameIconData.scroll),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -566,6 +568,10 @@ class _MiniTension extends StatelessWidget {
               ),
             ),
           ),
+          if (house.stance.audible) ...[
+            const SizedBox(width: 4),
+            Text(house.stance.icon, style: const TextStyle(fontSize: 9)),
+          ],
           const SizedBox(width: 6),
           Expanded(child: BoardBar(house.mood, c)),
           const SizedBox(width: 6),
@@ -615,7 +621,8 @@ class _MiniTier extends StatelessWidget {
         children: [
           Opacity(
             opacity: passed || current ? 1 : 0.45,
-            child: Text(tier.icon, style: const TextStyle(fontSize: 13)),
+            child: SemanticIcon(tier.icon,
+                size: 13, color: c, fallback: GameIconData.crown),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -650,14 +657,11 @@ class _MiniTier extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            passed
-                ? '✓'
-                : current
-                ? 'ŞİMDİ'
-                : '🔒',
-            style: AppUi.label.copyWith(fontSize: 8, color: c),
-          ),
+          if (current)
+            Text('ŞİMDİ', style: AppUi.label.copyWith(fontSize: 8, color: c))
+          else
+            GameIcon(passed ? GameIconData.star : GameIconData.door,
+                size: 10, color: c),
         ],
       ),
     );
@@ -678,7 +682,8 @@ class _MiniQuest extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       child: Row(
         children: [
-          Text(state.quest.icon, style: const TextStyle(fontSize: 12)),
+          GameIcon(questGlyph(state.quest.id),
+              size: 12, color: on ? AppUi.accent : AppUi.textLo),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -721,7 +726,8 @@ class _MiniChronicle extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: Text(e.icon, style: const TextStyle(fontSize: 13)),
+            child: SemanticIcon(e.icon,
+                size: 13, color: AppUi.textLo, fallback: GameIconData.scroll),
           ),
           const SizedBox(width: 7),
           Expanded(

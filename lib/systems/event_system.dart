@@ -200,8 +200,9 @@ class EventOutcome {
   final EventEffect? effect;
 
   /// Karar gerektiren olaylarda oyuncu seçenekleri. Null = otomatik olay
-  /// (mevcut akış, delta'lar direkt uygulanır). Doluysa modal açılır,
-  /// oyun yarıduraklatılır, oyuncu seçene kadar bekler.
+  /// (mevcut akış, delta'lar direkt uygulanır). Doluysa olay KUYRUĞA girer:
+  /// HUD'a karar mührü iner, sim akmaya devam eder, mühlet dolarsa köy
+  /// [timeoutChoice]'u kendi yaşar (kapıda kuyruk — oyun donmaz).
   final List<EventChoice>? choices;
 
   const EventOutcome({
@@ -288,6 +289,16 @@ class EventOutcome {
   static String _fmt(int v) => v > 0 ? '+$v' : '$v';
 
   bool get needsChoice => choices != null && choices!.isNotEmpty;
+
+  /// ZAMAN AŞIMI SÖZLEŞMESİ — karar mühleti dolarsa köy BUNU yaşar.
+  ///
+  /// Kural: pasif seçenek ("kendi haline bırak" kolu: endure/hide/letBurn)
+  /// her karar olayında listenin SONUNDA durur. Oyuncu susarsa dünya kendi
+  /// yoluna girer; müdahale (şifacı/muhafız/kova zinciri) asla kendiliğinden
+  /// yaşanmaz — bedel ödeyen her karar oyuncunun ağzından çıkmak zorundadır.
+  /// Yeni karar olayı eklerken bu sırayı KORU (petition_catalog_test kalıbı
+  /// gibi event_timeout_test bunu bekçiler).
+  EventChoice? get timeoutChoice => needsChoice ? choices!.last : null;
 }
 
 class EventSystem {

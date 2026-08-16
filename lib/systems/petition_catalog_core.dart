@@ -23,12 +23,12 @@ final List<_PetitionDef> _kCorePetitions = [
         icon: '⛓️',
         title: '{suçlu} Suçüstü Yakalandı',
         tone: PetitionTone.ominous,
-        note: '↩ {suç} — {hal}',
+        note: '↩ {suç} · {hal}',
         stakes: 'Merhamet cesaret verir, sertlik korku salar. İkisinin de bedeli var.',
         bodyPool: [
           '“Gözümle gördüm efendim. {suçlu} yaptı, inkâr edecek hâli yok; '
               'kolundan tuttuğumuzda hâlâ eli titriyordu. {sabıka} Şimdi meydanda '
-              'diz çökmüş bekliyor. Ne dersen o olur — ama {köy} de bekliyor, '
+              'diz çökmüş bekliyor. Ne dersen o olur; ama {köy} de bekliyor, '
               'unutma.”',
           '“Suç ortada, fail ortada: {suçlu}. {sabıka} Kimimiz bağışla diyor, '
               'kimimiz bir daha kimse cesaret edemesin diyor. Ben ne diyeceğimi '
@@ -111,7 +111,7 @@ final List<_PetitionDef> _kCorePetitions = [
               'komşu komşuya bakmıyor. Üç kere hesap tutmadı, üç kere de fail '
               'bulunamadı. Böyle giderse burada kimse rahat uyuyamaz.”',
           '“Bir şey oluyor bu köyde ve kimse görmüyor. Ya da görüyor da '
-              'söylemiyor. Bize bir düzen lazım efendim — göz lazım. Yoksa '
+              'söylemiyor. Bize bir düzen lazım efendim; göz lazım. Yoksa '
               'birbirimizden şüphelenmeye başlayacağız, o da bizi bitirir.”',
           '“Malımız gidiyor, sesimiz çıkmıyor. Sen bize bir yol göster: ya bir '
               'göz koy başımıza, ya da rahatımıza bakalım da olan olsun.”',
@@ -177,7 +177,7 @@ final List<_PetitionDef> _kCorePetitions = [
         stakes: 'Ödersen kese boşalır. Ödemezsen o kapı bir daha açılmaz.',
         bodyPool: [
           '“Taşın altına sıkıştırılmış efendim. Okuması kolay: keseyi doldur, '
-              'canını al. Bir gün mühlet vermişler. {köy} bekliyor — ama boş bir '
+              'canını al. Bir gün mühlet vermişler. {köy} bekliyor; ama boş bir '
               'yatak da bekliyor.”',
           '“Haberi getiren yoktu, haber vardı. İstedikleri altın, verecekleri '
               'bir insan. Bu köyde kimse bu hesabı yapmaya alışkın değil efendim.”',

@@ -30,7 +30,7 @@ final List<_PetitionDef> _kMaturePetitions = [
         bodyPool: [
           '“Efendim, adım {ad}. Dün çocuklar bana ilk ateşi kimin yaktığını sordu, '
               'cevap veremedim. Adları aklımda değil. Bu köyü kuranlardan geriye bir '
-              'taş bile yok. Bir anıt istemiyorum illa — bir gün isteriz, adları '
+              'taş bile yok. Bir anıt istemiyorum illa; bir gün isteriz, adları '
               'okunsun, çocuklar duysun.”',
           '“Bu {mevsim} son kurucumuzu da toprağa verdik. Artık burada doğmamış '
               'kimse kalmadı. Yeni gelen soruyor: burayı kim kurdu? Bilen yok. '
@@ -88,7 +88,7 @@ final List<_PetitionDef> _kMaturePetitions = [
         options: [
           PetitionOption(
             label: 'Yola çıkar (12★)',
-            detail: 'Kese açılır. Öğrenmeye giden döner — bilgiyle döner.',
+            detail: 'Kese açılır. Öğrenmeye giden döner; bilgiyle döner.',
             resolutionPool: [
               '🧵 {ad} yola çıktı. Döndüğünde elinde yeni bir alet, aklında eski bir iş vardı.',
               '🧵 Kese açıldı. Köy, unuttuğu işi yeniden öğrenmeye birini yolladı.',
@@ -231,7 +231,7 @@ final List<_PetitionDef> _kMaturePetitions = [
         bodyPool: [
           '“Efendim, adım {ad}. Bunu söylediğim için başıma bir iş gelebilir, '
               'biliyorum. Ama artık kimse yüksek sesle konuşmuyor. Meydanda iki kişi '
-              'yan yana durmuyor. Köy sizden korkuyor — sizi sevmiyor, korkuyor. '
+              'yan yana durmuyor. Köy sizden korkuyor; sizi sevmiyor, korkuyor. '
               'Aradaki farkı bilirsiniz.”',
           '“Bir şey istemeye gelmedim. Söylemeye geldim: bu köy sustu. Susan köy '
               'çalışır ama size bir daha hiçbir şey anlatmaz. Duymak istemezseniz '
@@ -288,7 +288,7 @@ final List<_PetitionDef> _kMaturePetitions = [
         note: '↩ Hür rejim, huzurlu köy',
         stakes: 'Ambar boşalır; karşılığı köyün kendine güveni.',
         bodyPool: [
-          '“Efendim, adım {ad}. Kimse aç değil, kimse küs değil — ve tam da bu '
+          '“Efendim, adım {ad}. Kimse aç değil, kimse küs değil; ve tam da bu '
               'yüzden geldim. Elimiz boş durmasın. Ambardan biraz verin, hep '
               'birlikte bir iş çıkaralım. Ne olduğu bile önemli değil, birlikte '
               'olsun yeter.”',
@@ -339,7 +339,7 @@ final List<_PetitionDef> _kMaturePetitions = [
         bodyPool: [
           '“Efendim, adım {ad}. İki kez geldiler, iki kez verdik. Üçüncüde ne '
               'isteyeceklerini ikimiz de biliyoruz. Bu sefer kapıda hazır bekleyelim '
-              'derim — kese hazır, söz hazır. Şaşırmış görünmek pahalıya patlıyor.”',
+              'derim; kese hazır, söz hazır. Şaşırmış görünmek pahalıya patlıyor.”',
           '“Sancağı gördüğümüzde köyün ne yapacağını kimse bilmiyor. Geçen sefer '
               'çocuklar ağladı, adamlar donakaldı. Bir kararımız olsun.”',
         ],
@@ -387,7 +387,7 @@ final List<_PetitionDef> _kMaturePetitions = [
         bodyPool: [
           '“Efendim, adım {ad}. Ben o gün buradaydım. Ne karar verdiğinizi '
               'hatırlıyorum, kimin ne dediğini de. Yıllar geçti ama bu köy '
-              'unutmadı — iyisiyle kötüsüyle bugün hâlâ onun üstünde yaşıyoruz. '
+              'unutmadı; iyisiyle kötüsüyle bugün hâlâ onun üstünde yaşıyoruz. '
               'Bir kez olsun ağzınızdan duymak isterim: doğru muydu?”',
           '“Çocuklar o hikâyeyi birbirine anlatıyor artık. Anlatırken sizi de '
               'anlatıyorlar. Nasıl anlatılacağına bugün karar verebilirsiniz.”',

@@ -39,6 +39,21 @@ extension _SceneDivan on _VillageSceneState {
           population: _villagers.length,
           food: _stockpile.food,
           gold: _stockpile.gold,
+          karne: (_karneYear >= 2 && _reckoningVerdict == null)
+              ? karneLedger(_reckoningInput())
+              : const [],
+          karneYear: _karneYear,
+          karneVerdict: (_karneYear >= 2 && _reckoningVerdict == null)
+              ? judge(_reckoningInput()).name
+              : '',
+          karneAdviceLine: (_karneYear >= kReckoningHeraldYear &&
+                  _reckoningVerdict == null)
+              ? () {
+                  final a = karneAdvice(_reckoningInput());
+                  return 'Hazırlık: ${a[0].label.toLowerCase()} için '
+                      '${kKarneHints[a[0].label]}.';
+                }()
+              : '',
           // ⚖ DİVAN
           agenda: _divanAgenda(),
           houses: _houses.snapshot(),
@@ -274,6 +289,25 @@ extension _SceneDivan on _VillageSceneState {
         pending: true,
         graceProgress: grace,
         urgent: grace <= _ScenePetitions._kPetitionUrgentFrac,
+      ));
+    }
+
+    if (_karneYear >= 2 && _reckoningVerdict == null) {
+      final input = _reckoningInput();
+      final v = judge(input);
+      final weak = karneAdvice(input).first;
+      out.add(DivanMatter(
+        icon: '📯',
+        title: 'İmparatorluğun gözü',
+        sub: 'bugün tartılsa: ${v.name} · en hafif kefe: '
+            '${weak.label.toLowerCase()}',
+        pressure: input.standing,
+        tone: v == ReckoningVerdict.ilhak
+            ? PetitionTone.ominous
+            : v == ReckoningVerdict.sancak
+                ? PetitionTone.warm
+                : PetitionTone.neutral,
+        pending: false,
       ));
     }
 

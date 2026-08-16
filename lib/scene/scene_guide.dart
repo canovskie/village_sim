@@ -72,17 +72,21 @@ extension _SceneGuide on _VillageSceneState {
         return const GuideCue(
           anchorId: GuideAnchors.gateDefter,
           title: 'Defter\'i aç',
-          body: 'Köyün yazılı işleri burada döner: divan, kanunname, nüfus. '
+          body:
+              'Köyün yazılı işleri burada döner: divan, kanunname, nüfus. '
               'Berat da buradan çıkar.',
         );
       }
-      if (_ledgerSection == LedgerSection.kanun) return null; // raf açık, yol belli
+      if (_ledgerSection == LedgerSection.kanun) {
+        return null; // raf açık, yol belli
+      }
       const railId = GuideAnchors.sectionKanun;
       if (!GuideAnchors.has(railId)) return null; // telefon rayı çapasız
       return const GuideCue(
         anchorId: railId,
         title: 'Kanunname',
-        body: 'Hükümler bu rafta. Birini seç ve mührü bas — geri alınmaz, '
+        body:
+            'Hükümler bu rafta. Birini seç ve mührü bas — geri alınmaz, '
             'köyün huyu o satırdan başlar.',
       );
     }
@@ -91,6 +95,14 @@ extension _SceneGuide on _VillageSceneState {
     // İki halka: kartı seç → yerini göster. (Kart görünmüyorsa önce sekme.)
     final bt = _stepBuildTarget;
     if (bt != null) {
+      // Oduncu kulübesi dikildikten sonra görev, ilk kütüğü bekler. Bu arada
+      // kartı yeniden işaretlemek "bir tane daha kulübe kur" diye okunurdu;
+      // işçi dünyada görünür biçimde çalışırken spot susmalı.
+      if (bt == BuildingType.lumberCamp &&
+          _buildings.any((b) => b.type == BuildingType.lumberCamp) &&
+          _woodHarvested == 0) {
+        return null;
+      }
       final label = kBuildingMeta[bt]?.label ?? 'yapı';
       if (_placing == bt) {
         final heart = _villageHeart();
@@ -100,7 +112,8 @@ extension _SceneGuide on _VillageSceneState {
           spot: at,
           radius: 62,
           title: 'Yerini seç',
-          body: 'Boş bir kareye tıkla, $label oraya kurulsun. Hayalet '
+          body:
+              'Boş bir kareye tıkla, $label oraya kurulsun. Hayalet '
               'kırmızıysa orası uygun değil — biraz yana kay.',
         );
       }
@@ -112,9 +125,9 @@ extension _SceneGuide on _VillageSceneState {
           body: _completedQuests.isEmpty
               // İLK ADIM aynı zamanda tek öğretme fırsatı: haritada gezmeyi de
               // burada söyleriz, ayrı bir "kamera dersi" ekranı açmadan.
-              ? '$label kartına tıkla, sonra haritada bir yer göster. '
-                  'Haritayı sürükleyerek gezebilir, tekerlekle yaklaşabilirsin.'
-              : '$label kartına tıkla; ardından kurulacağı yeri göstereceksin.',
+              ? '$label kartına dokun/tıkla; sonra haritada bir yere dokun. '
+                    'Telefonda sürükle, bilgisayarda fareyle gez; tekerlekle yaklaş.'
+              : '$label kartına dokun/tıkla; ardından kurulacağı yeri göstereceksin.',
         );
       }
       final cat = kBuildingCategory[bt];
@@ -139,8 +152,8 @@ extension _SceneGuide on _VillageSceneState {
   Offset? _guideScreenOf(double gx, double gy) {
     if (_viewSize.width <= 0 || _viewSize.height <= 0) return null;
     final center = Offset(_viewSize.width / 2, _viewSize.height / 2);
-    final p = (gridToScreen(gx, gy, _viewSize, _camera) - center) * _zoom +
-        center;
+    final p =
+        (gridToScreen(gx, gy, _viewSize, _camera) - center) * _zoom + center;
     // Ekran dışındaysa spot açma — karartılmış bir ekranda görünmeyen bir
     // delik, oyuncuya "bir şey oldu ama nerede" dedirtir. Kamera zaten
     // hedefe kayıyor; bir sonraki karede içeri girer.

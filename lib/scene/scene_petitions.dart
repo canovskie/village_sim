@@ -3,12 +3,14 @@ part of '../main.dart';
 /// Dilekçe / Meclis sistemi — köy periyodik olarak senden bir şey ister,
 /// sen karar verirsin. Yönetişimin omurgası: pasif toggle yerine akan karar.
 ///
-/// Mühlet ritmi: dilekçe gelince DOĞRUDAN ekrana gelir (modal hemen açılır) —
-/// köy yüz yüze konuşur, kopuk bir bildirim ikonu değil. Oyun DURMAZ (ambient):
-/// boşluğa dokununca modal kapanır, dilekçe HUD mührüne iner + tükenen mühlet
-/// halkası sakin sakin işler (sonra mühre tıklayıp tekrar açarsın). Mühlet
-/// dolarsa modal ZORLA tam-ekran açılır + sim duraklar — görmezden gelinemez.
-/// Bekletmenin bedeli var (zümre küser + moral dip), ama karar yine oyuncunundur.
+/// Mühlet ritmi — KAPIDA KUYRUK: dilekçe gelince modal AÇILMAZ ve oyun
+/// DURMAZ. Sözcü köy merkezine yürüyüp talebi fiziken getirir, HUD'a mühür
+/// iner, tükenen mühlet halkası sakin sakin işler (mühre tıkla = modal).
+/// Mühlet dolarsa da donma YOK: sözcü kapıda beklemeye geçer, mühür kalıcı
+/// kızarır ve bekletmenin bedeli GÜN BAŞINA yinelenir (hane küser + moral
+/// dip). Otomatik ret YOK — karar yine ve yalnız oyuncunundur; kaybolan tek
+/// şey kesinti. (Eski akış: geliş anında modal + mühlet sonunda zorunlu
+/// huzur donması. İkisi de akışı kestiği için söküldü.)
 ///
 /// Bağımlı sistemler: PetitionSystem (üretim), pushPolicyMorale (geçici moral),
 /// _applyPolicySideChannels + _policies (yasa yürürlüğe), _attachFxTargets (fx).
@@ -32,10 +34,17 @@ extension _ScenePetitions on _VillageSceneState {
     if (!_governanceAwake && _pendingPetition == null) return;
 
     if (_pendingPetition != null) {
-      // Zorunlu huzura geçtiyse mühlet işlemez (modal zaten açık, sim duraklı).
-      if (_petitionForced) return;
+      // Kapıda bekleyen huzur: mühlet çoktan doldu, bedel gün başına işler.
+      if (_petitionOverdue) {
+        _tickOverduePetition(dt);
+        return;
+      }
       _petitionDeadline -= dt;
-      if (_petitionDeadline <= 0) _deadlineReached();
+      if (_petitionDeadline <= 0) {
+        _deadlineReached();
+        return;
+      }
+      _brewQueuedPetition(dt);
       return;
     }
 
@@ -73,6 +82,15 @@ extension _ScenePetitions on _VillageSceneState {
       }
     }
 
+    if (_queuedPetition != null) {
+      _queuedPresentDelay -= dt;
+      if (_queuedPresentDelay > 0) return;
+      final q = _queuedPetition!;
+      _queuedPetition = null;
+      _presentPetition(q);
+      return;
+    }
+
     _petitionTimer -= dt;
     if (_petitionTimer > 0) return;
     _petitionTimer = _petitionInterval();
@@ -87,11 +105,34 @@ extension _ScenePetitions on _VillageSceneState {
     _presentPetition(p);
   }
 
-  /// Bir dilekçeyi sunar — DOĞRUDAN ekrana getirir (modal hemen açılır). Küçük
-  /// bir mühür-bildirimi ikonu değil; köy kapına gelmiştir, yüz yüzedir. Yine de
-  /// oyunu DURDURMAZ (ambient): boşluğa dokununca modal kapanır, dilekçe HUD
-  /// mührüne iner ve mühlet sakin sakin işlemeye devam eder (sonra tekrar açarsın
-  /// ya da mühlet dolunca zorunlu huzur gelir).
+  void _brewQueuedPetition(double dt) {
+    if (_queuedPetition != null) return;
+    _petitionTimer -= dt;
+    if (_petitionTimer > 0) return;
+    _petitionTimer = _petitionInterval();
+    final blocked = <String>{
+      for (final e in _petitionCooldowns.entries)
+        if (e.value > _time) e.key,
+      _pendingPetition!.id,
+    };
+    final p = PetitionSystem.roll(_buildPetitionContext(), _rng, blocked: blocked);
+    if (p == null) return;
+    setStateHere(() {
+      _queuedPetition = p;
+      _queuedPresentDelay = 0.08 * kGameDaySeconds;
+    });
+    _showNotification(Voice.say(const [
+      '📜 Kapıda bir dilekçe daha bekliyor.',
+      '📜 Bir başkası da derdini yazdırmış; kapıda sırada.',
+      '📜 Kapıdaki kuyruk uzadı: ikinci bir dilekçe var.',
+    ], _voice(null, seed: _stableSeed('petitionQueue', _dayCount))));
+  }
+
+  /// Bir dilekçeyi sunar — KAPIDA KUYRUK: modal açılmaz, oyun durmaz. "Köy
+  /// kapına gelmiştir" sözü artık mecaz değil: sözcü köy merkezine YÜRÜR ve
+  /// bir süre orada bekler; HUD'a mühür iner, mühlet sakin sakin işler (mühre
+  /// tıkla = yüz yüze konuş). Mühlet dolarsa sözcü kapıda beklemeye geçer ve
+  /// bedel gün başına yinelenir — donma yok, kaçış da yok.
   /// [author] verilirse sözcü seçimi atlanır ve dilekçeyi O köylü getirir (ör.
   /// suç yargısında mağdur/tanık — fail değil). [extra] metne ek bağlam dokur
   /// (`{suçlu}`, `{suç}` gibi dilekçeye özel yer tutucular).
@@ -117,12 +158,38 @@ extension _ScenePetitions on _VillageSceneState {
       _voice(_petitionAuthor, seed: _petitionSeed(rawPetition), extra: extra),
     );
     setStateHere(() {
-      _pendingPetition   = p;
-      _petitionForced    = false;
-      _petitionDeadline  = _kPetitionGrace;
-      _petitionModalOpen = true; // gelir gelmez ekranda — kopuk bildirim değil
+      _pendingPetition      = p;
+      _petitionOverdue      = false;
+      _petitionOverdueTimer = 0;
+      _petitionDeadline     = _kPetitionGrace;
+      _petitionModalOpen    = false; // mühre iner — akış kesilmez
     });
+    _easeToBaseSpeed();
+    // Sözcü dilekçesini fiziken getirir: merkeze yürür, bir süre bekler.
+    _walkPetitionerToCenter(dwell: 0.10 * kGameDaySeconds);
     _showNotification('📜 ${p.petitioner} bir dilekçe sundu');
+  }
+
+  /// Sözcüyü köy merkezine yürütür — dilekçenin gövdesi. Uyuyan/içerideki/
+  /// yük taşıyan köylü zorlanmaz (dilekçe mühürde zaten bekliyor; yürüyüş
+  /// anlatım, mekanik değil).
+  void _walkPetitionerToCenter({required double dwell}) {
+    final a = _petitionAuthor;
+    if (a == null ||
+        a.isDying ||
+        a.isSleeping ||
+        a.isInsideBuilding ||
+        a.isCarrying) {
+      return;
+    }
+    final (cc, cr) = _villageCenter();
+    final ox = (_rng.nextDouble() - 0.5) * 2.2;
+    final oy = (_rng.nextDouble() - 0.5) * 2.2;
+    a.goTo(
+      (cc + ox).clamp(1.0, kCols - 2.0),
+      (cr + oy).clamp(1.0, kRows - 2.0),
+      dwell,
+    );
   }
 
   /// Bir zümrenin "küskün" (sullen) sayılması için mood eşiği — bunun altında
@@ -143,7 +210,10 @@ extension _ScenePetitions on _VillageSceneState {
   /// "aileleri dengede tut" oyununa zorluyordu: bir hane küsünce üstüne dilekçe
   /// yağardı. Kullanıcı kararı: aileler arası denge ZORUNLU olmasın. Küskün hane
   /// hâlâ dilekçe yazabilir (anlatı), ama seni cezalandıran bir baskı üretmez.
-  double _petitionInterval() => _kPetitionInterval;
+  double _petitionInterval() =>
+      _kPetitionInterval *
+      (0.73 + 0.54 * _rng.nextDouble()) *
+      pressureForDay(_dayCount).petitionTempo;
 
   /// Köyün anlık durumunu dilekçe koşulları için derler.
   PetitionContext _buildPetitionContext() {
@@ -318,9 +388,10 @@ extension _ScenePetitions on _VillageSceneState {
       _pendingPetition =
           PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
       _petitionAuthor = _pickPetitionAuthor(_pendingPetition!);
-      _petitionForced = false;
+      _petitionOverdue = false;
+      _petitionOverdueTimer = 0;
       _petitionDeadline = _kPetitionGrace;
-      _petitionModalOpen = true; // hemen göster
+      _petitionModalOpen = true; // dev kısayolu: hemen göster
     });
   }
 
@@ -338,7 +409,8 @@ extension _ScenePetitions on _VillageSceneState {
         _petitionAuthor = _pickPetitionAuthor(p);
       }
       _pendingPetition = p;
-      _petitionForced = false;
+      _petitionOverdue = false;
+      _petitionOverdueTimer = 0;
       _petitionDeadline = _kPetitionGrace;
       _petitionModalOpen = true;
     });
@@ -346,21 +418,22 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// DEBUG (DevPanel): bir dilekçeyi AMBIENT getir (modal AÇMA) + mühleti ~12s'e
   /// kıs — mühür geri sayımını, sıkışmayı (kızarma/AZ KALDI) ve mühlet dolunca
-  /// zorunlu açılışı tek tıkla, beklemeden izle.
+  /// kapıda beklemeye geçişi tek tıkla, beklemeden izle.
   void _forcePetitionShortFuse() {
     setStateHere(() {
       final ctx = _buildPetitionContext();
       _pendingPetition =
           PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
       _summonSpokesperson(_pendingPetition!); // _petitionAuthor atar
-      _petitionForced = false;
+      _petitionOverdue = false;
+      _petitionOverdueTimer = 0;
       _petitionModalOpen = false; // mühür HUD'da — geri sayımı izle
-      _petitionDeadline = 12.0; // kısa fitil: ~12 gerçek sn sonra zorla açılır
+      _petitionDeadline = 12.0; // kısa fitil: ~12 sn sonra kapıda beklemeye
     });
   }
 
-  /// DEBUG (DevPanel): zorunlu huzuru ANINDA tetikle. Bekleyen dilekçe varsa onu
-  /// zorla aç; yoksa önce bir dilekçe getirip hemen zorunlu huzura geçir.
+  /// DEBUG (DevPanel): kapıda bekleyen huzuru ANINDA tetikle. Bekleyen dilekçe
+  /// varsa onu geçir; yoksa önce bir dilekçe getirip hemen geçir.
   void _forcePetitionAudienceNow() {
     if (_pendingPetition == null) {
       setStateHere(() {
@@ -368,21 +441,22 @@ extension _ScenePetitions on _VillageSceneState {
         _pendingPetition =
             PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
         _summonSpokesperson(_pendingPetition!);
-        _petitionForced = false;
+        _petitionOverdue = false;
+        _petitionOverdueTimer = 0;
         _petitionModalOpen = false;
         _petitionDeadline = _kPetitionGrace;
       });
     }
-    _forceAudience();
+    _escalateOverduePetition();
   }
 
   /// HUD mührüne tıklayınca — modal aç.
   void _openPetition() => setStateHere(() => _petitionModalOpen = true);
 
-  /// Modal'ı kapat ama dilekçeyi bekleyen bırak (ambient — karar zorunlu değil).
-  /// Zorunlu huzurda (mühlet doldu) kapatılamaz — köy yanıt bekliyor.
+  /// Modal'ı kapat ama dilekçeyi bekleyen bırak (ambient — karar zorunlu
+  /// değil). Kapıda bekleyen huzurda da kapatılabilir: bedel zaten işliyor,
+  /// donma ve kilit yok.
   void _dismissPetition() {
-    if (_petitionForced) return;
     setStateHere(() => _petitionModalOpen = false);
   }
 
@@ -402,12 +476,13 @@ extension _ScenePetitions on _VillageSceneState {
       // Hafıza: bu dilekçe bir süre tekrar random çıkmasın.
       _petitionCooldowns[p.id] = _time + _kPetitionRepeatCooldown;
 
-      _pendingPetition   = null;
-      _petitionAuthor    = null;
-      _petitionExtra     = const {};
-      _petitionModalOpen = false;
-      _petitionForced    = false;
-      _petitionTimer     = _petitionInterval();
+      _pendingPetition      = null;
+      _petitionAuthor       = null;
+      _petitionExtra        = const {};
+      _petitionModalOpen    = false;
+      _petitionOverdue      = false;
+      _petitionOverdueTimer = 0;
+      _petitionTimer        = _petitionInterval();
     });
     // Boş resolution → mesaj reaksiyonun kendisinden gelir (ör. kayıp ismi).
     if (o.resolution.isNotEmpty) _showNotification(o.resolution);
@@ -624,7 +699,8 @@ extension _ScenePetitions on _VillageSceneState {
   ///     Köyün istek kanalı kapalıdır; bedeli huzursuzluk olarak birikir.
   ///   • Hür rejim (Ortak Ocak / Açık Pazar): MECLİS kendi kararını verir,
   ///     sen istemesen de uygulanır. "Yavaşsın ama meşrusun" bunun bedeli.
-  ///   • Ilımlı / yüksek yetki: klasik zorunlu huzur — karar yine senin.
+  ///   • Ilımlı / yüksek yetki: KAPIDA BEKLEYEN HUZUR — sözcü kapına gelir,
+  ///     bedel gün başına işler, karar yine ve yalnız senin (donma yok).
   /// Kriz dilekçeleri (regime.*) bu yoldan geçmez: onlar rejimin faturasıdır,
   /// köy senden yüz yüze karar bekler.
   void _deadlineReached() {
@@ -645,25 +721,54 @@ extension _ScenePetitions on _VillageSceneState {
         return;
       }
     }
-    _forceAudience();
+    _escalateOverduePetition();
   }
 
-  /// Mühlet doldu → ZORUNLU HUZUR: modal kendiliğinden tam-ekran açılır, sim
-  /// duraklar. Köy artık yanıt bekliyor; görmezden gelmek imkânsız. Bekletmenin
-  /// bedeli var (ilgili zümre küser + hafif moral dip + getiren köylü sabırsız),
-  /// ama otomatik ret YOK — karar yine oyuncunundur.
-  void _forceAudience() {
+  /// Kapıda bekleyen huzurun gün-başı bedeli — _kPetitionOverdueBeat'te bir:
+  /// hane hâli düşer, moral sızar, sözcü yeniden kapıya gelir. Sayılar ilk
+  /// eskalasyondan küçük (o tek seferlik şok, bu kronik sızıntı) ama BİRİKİR:
+  /// süresiz bekletmenin ucu hane küsmesine, oradan dağılmaya çıkar — rampa
+  /// her gün bildirimle görünür, sessiz kayıp yok.
+  static const double _kPetitionOverdueBeat = 1.0 * kGameDaySeconds;
+
+  void _tickOverduePetition(double dt) {
     final p = _pendingPetition;
     if (p == null) return;
+    _petitionOverdueTimer += dt;
+    if (_petitionOverdueTimer < _kPetitionOverdueBeat) return;
+    _petitionOverdueTimer = 0;
+    final e = p.estate;
+    if (e != null) _nudgeHousesByEstate(e, moodDelta: -0.03);
+    pushPolicyMorale(-0.03, 1.5);
+    final a = _petitionAuthor;
+    if (a != null && !a.isDying) {
+      a.feel(NpcEmotion.anger, 3.0, moodDelta: -0.03);
+    }
+    _walkPetitionerToCenter(dwell: 0.12 * kGameDaySeconds);
+    _showNotification(Voice.say([
+      '📜 ${p.petitioner} hâlâ kapıda. Köy sözünü bekliyor.',
+      '📜 Dilekçe bekledikçe soğuyor. ${p.petitioner} bakışlarını kaçırıyor.',
+      '📜 Kapıdaki bekleyiş dile düştü. Haneler fısıldaşıyor.',
+    ], _voice(a, seed: _stableSeed('petitionOverdue', _dayCount))));
+  }
+
+  /// Mühlet doldu → KAPIDA BEKLEYEN HUZUR: donma ve zorla açılan modal YOK.
+  /// Sözcü köy merkezine gelip beklemeye geçer, mühür kalıcı kızarır, tek
+  /// seferlik şok bedeli iner (hane + moral + sabrı taşan sözcü); sonrası
+  /// _tickOverduePetition'ın gün-başı sızıntısı. Otomatik ret YOK — karar
+  /// yine oyuncunundur, yalnız bekletmek artık bedava değildir.
+  void _escalateOverduePetition() {
+    final p = _pendingPetition;
+    if (p == null) return;
+    kProbePetitionOverdueSeen = true;
     AudioManager.instance.playSfx(Sfx.bellChime);
     setStateHere(() {
-      _petitionForced    = true;
-      _petitionDeadline  = 0;
-      _petitionModalOpen = true;
-      // Bekletmenin bedeli: dilekçenin zümresi köşeye sıkıştırıldığını hisseder.
+      _petitionOverdue      = true;
+      _petitionOverdueTimer = 0;
+      _petitionDeadline     = 0;
+      // Bekletmenin şok bedeli: dilekçenin (zümresine yaslanan) haneleri
+      // köşeye sıkıştırıldığını hisseder — hane hâli düşer.
       final e = p.estate;
-      // Bekletmenin bedeli: dilekçenin (zümresine yaslanan) haneleri köşeye
-      // sıkıştırıldığını hisseder — hane hâli düşer.
       if (e != null) _nudgeHousesByEstate(e, moodDelta: -0.05);
       pushPolicyMorale(-0.04, 2.0);
       // Getiren köylü: sabrı taştı — sahnede sabırsız/buruk gövde dili.
@@ -672,8 +777,10 @@ extension _ScenePetitions on _VillageSceneState {
         a.feel(NpcEmotion.anger, 2.6, moodDelta: -0.04);
       }
     });
+    _walkPetitionerToCenter(dwell: 0.15 * kGameDaySeconds);
     _showNotification(
-        '📜 ${p.petitioner} daha fazla bekleyemez — köy yanıtını istiyor.');
+        '📜 ${p.petitioner} daha fazla bekleyemez. Kapında bekliyor; '
+        'bedeli işliyor.');
   }
 
   /// Karar verilince ilgili köylünün (ve çevresinin) görünür tepkisi.
@@ -792,6 +899,7 @@ extension _ScenePetitions on _VillageSceneState {
     for (final c in v.children) {
       c.parents.remove(v);
     }
+    _markDeathHouse(v);
     v.startDying(funeral: false);
   }
 
@@ -979,9 +1087,12 @@ extension _ScenePetitions on _VillageSceneState {
 
   // ── UI build (main.dart Stack'inden çağrılır) ──────────────────────────────
 
-  /// Bekleyen dilekçe mührü — üst-orta, tükenen mühlet halkalı tomar. _frame'e
-  /// bağlı: kalan mühlet her karede akar, son %30'da "sıkışma" (kızarma+hız).
-  Widget buildPetitionSeal() {
+  /// Bekleyen karar mühürleri — üst-orta, tükenen mühlet halkalı rozetler.
+  /// Kapıda kuyruğun tek vitrini: dilekçe VE olay kararı aynı rafta yan yana
+  /// bekler (_frame'e bağlı: kalan mühlet her karede akar, son ~%30'da
+  /// "sıkışma" kızarması). Mühlet dolan dilekçe halkasız + kalıcı kızarık:
+  /// bekleyiş artık geri sayım değil, işleyen bir bedel.
+  Widget buildDecisionSeals() {
     return Positioned(
       top: 16,
       left: 0,
@@ -990,13 +1101,55 @@ extension _ScenePetitions on _VillageSceneState {
         child: ListenableBuilder(
           listenable: _frame,
           builder: (context, _) {
-            final remain =
-                (_petitionDeadline / _kPetitionGrace).clamp(0.0, 1.0);
-            return PetitionSeal(
-              onTap: _openPetition,
-              progress: remain,
-              urgent: remain <= _kPetitionUrgentFrac,
-              tone: _pendingPetition?.tone ?? PetitionTone.neutral,
+            final seals = <Widget>[];
+            final e = _pendingChoice;
+            if (e != null && !_choiceModalOpen) {
+              final remain = (_choiceDeadline / _choiceGrace).clamp(0.0, 1.0);
+              seals.add(PetitionSeal(
+                onTap: _openChoiceModal,
+                progress: remain,
+                urgent: remain <= _SceneEvents._kChoiceUrgentFrac,
+                tone: e.category == EventCategory.positive
+                    ? PetitionTone.warm
+                    : PetitionTone.ominous,
+                label: 'KARAR',
+                glyph: e.icon,
+                statusIdle: 'köy karar bekliyor',
+                statusUrgent: 'AZ KALDI: iş kendi yoluna girecek',
+              ));
+            }
+            if (_pendingPetition != null && !_petitionModalOpen) {
+              final remain =
+                  (_petitionDeadline / _kPetitionGrace).clamp(0.0, 1.0);
+              seals.add(PetitionSeal(
+                onTap: _openPetition,
+                progress: remain,
+                urgent: _petitionOverdue || remain <= _kPetitionUrgentFrac,
+                tone: _pendingPetition?.tone ?? PetitionTone.neutral,
+                statusUrgent: _petitionOverdue
+                    ? 'kapıda bekliyor; bedeli işliyor'
+                    : 'AZ KALDI: yanıt bekliyor',
+              ));
+            }
+            if (_queuedPetition != null) {
+              seals.add(PetitionSeal(
+                onTap: _pendingPetition != null ? _openPetition : () {},
+                progress: 1.0,
+                tone: PetitionTone.solemn,
+                label: 'SIRADA',
+                statusIdle: 'kapıda bir dilekçe daha',
+                statusUrgent: 'kapıda bir dilekçe daha',
+              ));
+            }
+            if (seals.isEmpty) return const SizedBox.shrink();
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < seals.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  seals[i],
+                ],
+              ],
             );
           },
         ),
@@ -1010,8 +1163,9 @@ extension _ScenePetitions on _VillageSceneState {
       child: PetitionModal(
         petition: _pendingPetition!,
         author: _petitionAuthor,
-        // Mühlet doldu → zorunlu huzur: kapatılamaz, köy yanıt bekliyor.
-        forced: _petitionForced,
+        // Mühlet doldu → kapıda bekleyen huzur: koyu scrim + bedel uyarısı
+        // (kapatma serbest — kilit yok, bedel dünyada işliyor).
+        forced: _petitionOverdue,
         state: (
           morale: _stats.morale,
           population: _villagers.length,

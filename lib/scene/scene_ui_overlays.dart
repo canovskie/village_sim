@@ -6,6 +6,54 @@ part of '../main.dart';
 /// farklı ama hedef aynı ([_VillageSceneState]) — çağıranlar için hiçbir
 /// şey değişmez, metotlar aynen taşındı.
 extension _SceneUiOverlays on _VillageSceneState {
+  Widget buildImperialClashOverlay() => ListenableBuilder(
+    listenable: _frame,
+    builder: (_, _) => Positioned(
+      top: useCompactGameUi(context) ? 54 : 84,
+      left: 0,
+      right: 0,
+      child: IgnorePointer(
+        child: Center(
+          child: AppReveal(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xE6121820),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppUi.accent.withValues(alpha: 0.7)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 14,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/combat/combat_badge.png',
+                    width: 30,
+                    height: 30,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'SAVUNMA KARŞILIK VERİYOR',
+                    style: AppUi.label.copyWith(
+                      color: AppUi.accent,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget buildNotificationToast() {
     // Sabit `top: 70` masaüstü varsayımıydı. iPhone 11'de (414dp yükseklik) o
     // hat tam olarak Köy Defteri'nin SEKME şeridine denk geliyor ve bildirim
@@ -15,11 +63,7 @@ extension _SceneUiOverlays on _VillageSceneState {
     final compact = useCompactGameUi(context);
     final toast = Center(
       child: AppReveal(
-        child: AppChip(
-          label: _notification!,
-          color: AppUi.accent,
-          solid: true,
-        ),
+        child: AppChip(label: _notification!, color: AppUi.accent, solid: true),
       ),
     );
     if (!compact) {

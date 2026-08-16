@@ -870,6 +870,7 @@ extension _SceneConflict on _VillageSceneState {
     for (final c in victim.children) {
       c.parents.remove(victim);
     }
+    _markDeathHouse(victim);
     victim.startDying(funeral: true);
 
     // Katil dehşet içinde — kavga postürü kesilir; kan dökme sicili artar.
@@ -1089,6 +1090,7 @@ extension _SceneConflict on _VillageSceneState {
     for (final c in v.children) {
       c.parents.remove(v);
     }
+    _markDeathHouse(v);
     v.startDying(funeral: true);
 
     // Köyü dehşet sarar — korku gövde dili + güçlü sarsıntı + ağır moral.

@@ -82,6 +82,27 @@ class _HouseActionCard extends StatelessWidget {
                           'nüfuz %${(seat.swayShare * 100).round()}',
                           style:
                               AppUi.label.copyWith(color: AppUi.textLo)),
+                      if (seat.stance != HouseStance.content) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          () {
+                            final next = nextRung(seat.stance);
+                            final head = '${seat.stance.icon} ${seat.stance.label}';
+                            return next == null
+                                ? head
+                                : '$head · bir adım ötede: ${next.costHint}';
+                          }(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.label.copyWith(
+                            color: seat.stance == HouseStance.loyal
+                                ? AppUi.gold
+                                : seat.stance.withholds
+                                    ? AppUi.rust
+                                    : AppUi.gold,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -162,7 +183,8 @@ class _HouseActionCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(e.icon, style: const TextStyle(fontSize: 13)),
+              SemanticIcon(e.icon,
+                  size: 13, color: fg, fallback: GameIconData.handshake),
               const SizedBox(width: 9),
               Expanded(
                 child: Column(
@@ -269,7 +291,8 @@ class _MassSeizureCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(entry.icon, style: TextStyle(fontSize: 15, color: tint)),
+              SemanticIcon(entry.icon,
+                  size: 15, color: tint, fallback: GameIconData.scales),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

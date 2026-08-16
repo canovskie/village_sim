@@ -77,6 +77,18 @@ extension HouseStanceX on HouseStance {
 
   /// Serzeniş ve üstü — köy bunu duyuyor (herald/bildirim kapısı).
   bool get audible => index >= HouseStance.murmuring.index;
+
+  /// Basamağın KISA bedel künyesi — [nextRung] önizlemesiyle birlikte "bir
+  /// adım ötede ne olur" satırını kurar (hane kartı + defter). Cümle değil
+  /// künye: dar satıra sığmalı, rakamsız okunmalı.
+  String get costHint => switch (this) {
+        HouseStance.loyal => 'fazladan verir',
+        HouseStance.content => 'normal karşılık',
+        HouseStance.murmuring => 'söylenir, henüz esirgemez',
+        HouseStance.withdrawn => 'eller işten çekilir',
+        HouseStance.hoarding => 'ürün kendi ambarına gider',
+        HouseStance.defiant => 'masayı ve nikâhı kapatır',
+      };
 }
 
 /// Bir hanenin o an ne kadarını geri çektiği. Tüm oranlar 0..1.

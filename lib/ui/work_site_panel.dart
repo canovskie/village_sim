@@ -5,6 +5,7 @@ import '../entities/villager_job.dart';
 import '../entities/work_site.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
+import 'semantic_icon.dart';
 import 'work_crew.dart';
 
 /// BİNASIZ İŞ YERİ KARTI — tarla, böğürtlenlik, şantiye, yol işi.
@@ -100,7 +101,8 @@ class WorkSitePanel extends StatelessWidget {
             border: Border.all(color: AppUi.line, width: 1),
           ),
           alignment: Alignment.center,
-          child: Text(site.role.icon, style: const TextStyle(fontSize: 18)),
+          child: SemanticIcon(site.role.icon,
+              size: 18, color: AppUi.accent, fallback: GameIconData.hammer),
         ),
         const SizedBox(width: 11),
         Expanded(

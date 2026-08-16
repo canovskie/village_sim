@@ -186,6 +186,50 @@ List<ReckoningLedgerRow> reckoningLedger(ReckoningInput i) => [
       ])),
     ];
 
+/// Yıllık karne: hesaplaşma satırlarının koşu sürerken okunan hâli.
+List<ReckoningLedgerRow> karneLedger(ReckoningInput i) => [
+      ReckoningLedgerRow('Hanelerin rızası', i.unity, _band(i.unity, const [
+        'Haneler yüzünü çeviriyor.',
+        'Bazı haneler seninle, bazıları değil.',
+        'Haneler arkanda duruyor.',
+      ])),
+      ReckoningLedgerRow('Tüzüğün kalınlığı', i.charter, _band(i.charter, const [
+        'Köyün yazılı bir huyu yok.',
+        'Birkaç hüküm var, bir duruş yok.',
+        'Kanunname köyün huyunu belirliyor.',
+      ])),
+      ReckoningLedgerRow('Köyün ağırlığı', i.grit, _band(i.grit, const [
+        'Köy küçük, sesi uzağa gitmiyor.',
+        'Köy kendini döndürüyor, fazlası değil.',
+        'Kalabalık ve tok bir kasaba.',
+      ])),
+      ReckoningLedgerRow('Kararların mirası', i.legacy, _band(i.legacy, const [
+        'Büyük kararlar kötü iz bırakıyor.',
+        'Kararlar gelip geçiyor, iz bırakmıyor.',
+        'Kararların köyün hafızasında iyi duruyor.',
+      ])),
+      ReckoningLedgerRow('İmparatorlukla arası', i.favor, _band(i.favor, const [
+        'Komutanın defterinde adın kırmızı.',
+        'Ne dost ne düşman: ödüyorsun, geçiyor.',
+        'Heyet buraya gelmeyi iş değil usul sayıyor.',
+      ])),
+    ];
+
+List<ReckoningLedgerRow> karneAdvice(ReckoningInput i) {
+  final rows = karneLedger(i)
+      .where((r) => r.label != 'İmparatorlukla arası')
+      .toList()
+    ..sort((a, b) => a.value.compareTo(b.value));
+  return rows.take(2).toList();
+}
+
+const Map<String, String> kKarneHints = {
+  'Hanelerin rızası': 'küskün haneyi barıştır: bağış, nikâh, dilekçesine kulak',
+  'Tüzüğün kalınlığı': 'yeni hüküm mühürle, kimliğe yat',
+  'Köyün ağırlığı': 'nüfusu büyüt, keseyi ve ambarı doldur',
+  'Kararların mirası': 'büyük dilekçelerde iz bırakan şıkları seç',
+};
+
 String _band(double v, List<String> three) =>
     v < 0.34 ? three[0] : (v < 0.67 ? three[1] : three[2]);
 

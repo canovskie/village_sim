@@ -25,9 +25,26 @@ extension _SceneProbe on _VillageSceneState {
     kProbeLootTotal = _lootCaches.fold<int>(0, (a, l) => a + l.amount);
     kProbeStockTotal = _stockpile.food + _stockpile.wood + _stockpile.stone;
 
+    // GÖVDE DİLİ — selam gövdede mi oynuyor, baş üstüne emoji geri sızdı mı.
+    // İkisi de YAPIŞKAN: jest 1,6 saniyelik, örnekleme aralığına denk gelmesi
+    // şansa kalırdı (bkz. CLAUDE.md §4 "ölçüm aralığı" tuzağı).
+    for (final v in _villagers) {
+      if (v.waveTime > 0) kProbeWaveSeen = true;
+      if (const {'👋', '📖', '🌠'}.contains(v.chatBubbleIcon)) {
+        kProbeBannedBubble = v.chatBubbleIcon;
+      }
+    }
+
     if (kProbePlantLoot) {
       kProbePlantLoot = false;
       _devPlantLoot();
+    }
+
+    // Heyeti çağır — buradan sonrası simde değil MODALDE geçer (sim durur),
+    // o yüzden çağrı tek seferlik: sahne bayrağı hemen tüketir.
+    if (kProbeSummonImperial) {
+      kProbeSummonImperial = false;
+      _devSummonImperial();
     }
 
     // KARAR İZİ — güncedeki karar satırları. En sinsi hata "kod var ama hiç
@@ -43,6 +60,34 @@ extension _SceneProbe on _VillageSceneState {
 
     // Harness karar istiyorsa: bekleyen dilekçe varsa İLK şıkkı seç (oyuncu
     // gibi), yoksa kuyruğu hemen aç.
+    // KAYIT GİDİŞ-DÖNÜŞÜ — kaydet ve hemen geri yükle (bkz. kProbeSaveRoundtrip).
+    if (kProbeSaveRoundtrip) {
+      kProbeSaveRoundtrip = false;
+      try {
+        final encoded = jsonEncode(captureWorld());
+        kProbeWorldJson = encoded;
+        restoreWorld(Map<String, dynamic>.from(
+            jsonDecode(encoded) as Map<String, dynamic>));
+        kProbeSaveError = '';
+      } catch (e) {
+        kProbeSaveError = '$e';
+      }
+    }
+
+    // Harness belirli bir kaydı açmak istiyorsa (ör. alanları silinmiş ESKİ
+    // sürüm kaydı) onu yükle.
+    if (kProbeRestoreJson.isNotEmpty) {
+      final raw = kProbeRestoreJson;
+      kProbeRestoreJson = '';
+      try {
+        restoreWorld(Map<String, dynamic>.from(
+            jsonDecode(raw) as Map<String, dynamic>));
+        kProbeSaveError = '';
+      } catch (e) {
+        kProbeSaveError = '$e';
+      }
+    }
+
     kProbePendingPetition = _pendingPetition?.id ?? '';
     if (kProbeDecideNow) {
       final p = _pendingPetition;

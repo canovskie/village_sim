@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../systems/village_lessons.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// ORTA OYUN DERS KARTI — kuruluştan sonra açılan bir sistemin tek açıklaması.
 ///
@@ -60,7 +61,8 @@ class LessonCard extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Text(lesson.icon, style: const TextStyle(fontSize: 17)),
+                    SemanticIcon(lesson.icon,
+                        size: 17, color: AppUi.gold, fallback: GameIconData.scroll),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(

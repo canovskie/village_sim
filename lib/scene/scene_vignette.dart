@@ -52,6 +52,23 @@ extension _SceneVignette on _VillageSceneState {
       case EventIds.bounty:    _vgBounty();
       case EventIds.accord:    _vgAccord();
     }
+    _announceVignette();
+  }
+
+  /// EŞİK — heyet püskürtüldüğünde köyün dizildiği an ([_imperialResist]).
+  ///
+  /// Olay dağarcığından değil imparatorluk kolundan gelir, o yüzden
+  /// [_stageVignette]'in switch'ine girmez; ama kadro/salıverme/telemetri aynı
+  /// makineden geçer — vinyetin tek çıkış kapısı [_releaseVignette]'tir.
+  void _stageThresholdStand() {
+    _releaseVignette();
+    _vgThreshold();
+    _announceVignette();
+  }
+
+  /// Sahne kurulduktan sonraki ortak kuyruk: günlük satırı, prova telemetrisi,
+  /// capture harness'ının otomatik kamerası.
+  void _announceVignette() {
     final vg = _vignette;
     if (vg != null) {
       logDev('Vinyet sahnede: ${vg.title} (${vg.cast.length} rol)',
@@ -144,10 +161,11 @@ extension _SceneVignette on _VillageSceneState {
     NpcEmotion emotion = NpcEmotion.none,
     double emotionDur = 8.0,
     bool Function(VillagerEntity)? prefer,
+    double radius = _kCastRadius,
   }) {
     final vg = _vignette;
     if (vg == null || steps.isEmpty) return null;
-    final v = _castNear(nearX, nearY, prefer: prefer);
+    final v = _castNear(nearX, nearY, prefer: prefer, radius: radius);
     if (v == null) return null;
     _prepForScene(v);
     v.mind.impose(IntentKind.ceremony, reason);
@@ -173,6 +191,7 @@ extension _SceneVignette on _VillageSceneState {
     // bırakırdı). Karşı taraf etkilenmez — onun sayacı ayrı.
     v.chatBubbleTime = 0;
     v.chatBubbleIcon = '';
+    v.waveTime = 0; // yarım kalan selam sahnenin ortasında sallanmasın
     v.clearConvo();
   }
 
@@ -190,13 +209,18 @@ extension _SceneVignette on _VillageSceneState {
   ///
   /// İkinci kademe bile dokunmaz: kavga, suç, kaçış, kovalama, dans/müzik.
   /// Onların kendi sahnesi var ve yarıda kesilirse saçmalar.
+  ///
+  /// [radius] daraltılabilir: zamana karşı oynayan bir sahnede (heyet eşikte
+  /// bekliyor) 26 tile öteden çağrılan adam kadraja YETİŞEMEZ — geç gelen rol
+  /// sahneyi kurmaz, bozar.
   VillagerEntity? _castNear(double nearX, double nearY,
-      {bool Function(VillagerEntity)? prefer}) =>
-      _bestCast(nearX, nearY, prefer, strict: true) ??
-      _bestCast(nearX, nearY, prefer, strict: false);
+      {bool Function(VillagerEntity)? prefer, double radius = _kCastRadius}) =>
+      _bestCast(nearX, nearY, prefer, strict: true, radius: radius) ??
+      _bestCast(nearX, nearY, prefer, strict: false, radius: radius);
 
   VillagerEntity? _bestCast(double nearX, double nearY,
-      bool Function(VillagerEntity)? prefer, {required bool strict}) {
+      bool Function(VillagerEntity)? prefer,
+      {required bool strict, double radius = _kCastRadius}) {
     final vg = _vignette;
     VillagerEntity? best;
     double bestScore = double.infinity;
@@ -204,7 +228,7 @@ extension _SceneVignette on _VillageSceneState {
       if (vg != null && vg.cast.contains(v)) continue;
       if (!(strict ? _vignetteFree(v) : _vignetteInterruptible(v))) continue;
       final d = _wdist(v.gridX, v.gridY, nearX, nearY);
-      if (d > _kCastRadius) continue;
+      if (d > radius) continue;
       // Tercih edilen aday mesafede 12 tile'lık indirim alır: "şifacıyı çağır"
       // dediğimizde biraz uzaktaki şifacı, bitişikteki rastgele köylüye yeğlenir
       // — ama harita ucundakine değil.
@@ -737,6 +761,89 @@ extension _SceneVignette on _VillageSceneState {
       ActStep.face(cx, cy),
       const ActStep.work(11.0, pose: ActPose.stand),
     ], emotion: NpcEmotion.wonder, emotionDur: 11);
+  }
+
+  /// EŞİK — heyet püskürtüldü. Köy heyetle kendi meydanı ARASINA dizilir.
+  ///
+  /// Bu sahnenin bir borcu var: kronik yıllardır "tırpanla, baltayla eşiğe
+  /// dizildi" yazıyordu ama ekranda dizilen kimse yoktu. Direnişin KAYBI
+  /// sahneleniyordu (askerler merkeze dalar, kurbanlar düşer), KAZANCI ise bir
+  /// bildirim satırıyla geçiştiriliyordu — oyunun en gururlu ânı görünmezdi.
+  ///
+  /// Cümlesi: *aramızdan geçemezsiniz*. Bu yüzden koreografi tek şey yapar —
+  /// hat kurulur ve DURUR. Kimse ileri atılmaz: saldırı değil, set.
+  void _vgThreshold() {
+    final (cx, cy) = _villageCenterD();
+    final ax = _impAnchorCol, ay = _impAnchorRow;
+    // Heyetten köye bakan birim vektör + ona dik olan (hattın açıldığı eksen).
+    final dx = cx - ax, dy = cy - ay;
+    final len = sqrt(dx * dx + dy * dy);
+    final (ux, uy) = len < 0.001 ? (0.0, 1.0) : (dx / len, dy / len);
+    final (px, py) = (-uy, ux);
+    // Hattın ortası: heyetin 3 tile önü. Daha yakını askerlerin içine girer,
+    // daha uzağı "kaçmış köy" gibi durur.
+    final lx = ax + ux * 3.0, ly = ay + uy * 3.0;
+
+    _openVignette(kThresholdVignetteId, 'Eşiğe dizildiler', lx, ly);
+
+    // Kadro yarıçapı DAR: heyet eşikte bekliyor, haritanın öbür ucundan koşan
+    // adam hat kurulduktan çok sonra varır (bkz. [_castNear] radius).
+    const r = 15.0;
+
+    // Hat üstünde bir yer — [off] dik eksende sağa/sola, [back] köye doğru geri.
+    (double, double) spot(double off, double back) =>
+        (lx + px * off + ux * back, ly + py * off + uy * back);
+
+    // A — MUHAFIZ, hattın ortası. Elinde nesne yok: silahı zaten kendisi.
+    final (gx, gy) = spot(0, 0);
+    _role('eşikte duruyor', 'buradan öteye geçemezler', gx, gy, [
+      ActStep.goTo(gx, gy),
+      ActStep.face(ax, ay),
+      const ActStep.work(13.0, pose: ActPose.stand),
+    ], emotion: NpcEmotion.anger, emotionDur: 13, radius: r,
+        prefer: (v) => v.type == VillagerType.guard);
+
+    // B — TIRPAN. Aleti önce eline alır, hatta öyle yürür: köyün silahlanması
+    // ayrı bir hazırlık değil, elindekini kaldırmasıdır.
+    final (sx, sy) = spot(1.7, 0.2);
+    _role('tırpanla hatta durdu', 'tarlada da bu vardı elimde', sx, sy, [
+      const ActStep.take(PropKind.scythe),
+      ActStep.goTo(sx, sy),
+      ActStep.face(ax, ay),
+      const ActStep.work(11.0, pose: ActPose.stand),
+      const ActStep.put(), // heyet dönünce tırpan iner
+      const ActStep.work(1.5, pose: ActPose.stand),
+    ], emotion: NpcEmotion.anger, emotionDur: 12, radius: r);
+
+    // C — BALTA, hattın öbür ucu. İki farklı siluet = derme çatma bir kalabalık;
+    // aynı nesneden iki tane koymak "asker" gibi durururdu.
+    final (bx, by) = spot(-1.7, 0.2);
+    _role('baltayla hatta durdu', 'kimse ambarımıza dokunmayacak', bx, by, [
+      const ActStep.take(PropKind.axe),
+      ActStep.goTo(bx, by),
+      ActStep.face(ax, ay),
+      const ActStep.work(11.0, pose: ActPose.stand),
+      const ActStep.put(),
+      const ActStep.work(1.5, pose: ActPose.stand),
+    ], emotion: NpcEmotion.anger, emotionDur: 12, radius: r);
+
+    // D — İKİNCİ SIRA. Hat tek sıra kalırsa "üç kişi" görünür; arkada duran bir
+    // gövde onu KALABALIĞA çevirir.
+    final (rx, ry) = spot(0.9, 1.8);
+    _role('hattın arkasında', 'öndekini yalnız bırakmam', rx, ry, [
+      ActStep.goTo(rx, ry),
+      ActStep.face(ax, ay),
+      const ActStep.work(12.0, pose: ActPose.stand),
+    ], emotion: NpcEmotion.fear, emotionDur: 12, radius: r);
+
+    // E — ÇOCUK, hattın epey gerisinde. Korunan tarafı görünür kılar: hat
+    // birinin ÖNÜNDE duruyorsa hat olur.
+    final (kx, ky) = spot(-0.6, 4.2);
+    _kidRole('hattın gerisinden bakıyor', 'babam orada duruyor', kx, ky, [
+      ActStep.goTo(kx, ky),
+      ActStep.face(ax, ay),
+      const ActStep.work(11.0, pose: ActPose.stand),
+    ], emotion: NpcEmotion.wonder);
   }
 }
 

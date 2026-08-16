@@ -1,8 +1,11 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../characters/npc_visual.dart';
 import '../systems/villager_act.dart';
+import 'asset_style.dart';
 
 /// ELDEKİ NESNELERİN ÇİZİMİ — kova, çuval, ekmek, maşrapa, sepet, odun.
 ///
@@ -15,6 +18,9 @@ import '../systems/villager_act.dart';
 /// Koordinat uzayı: köylü sprite'ının yerel uzayı. (0,0) = ayaklar, y yukarı
 /// negatif. Göğüs ≈ y=-52, bel ≈ y=-40, el (yan) ≈ x=±9.
 abstract final class PropRenderer {
+  static final Map<PropKind, ui.Image> _sprites = {};
+  static final Paint _spritePaint = AssetStyle.paint();
+
   static final Paint _fill = Paint()..isAntiAlias = false;
   static final Paint _stroke = Paint()
     ..isAntiAlias = false
@@ -25,6 +31,65 @@ abstract final class PropRenderer {
 
   static Paint _f(Color c) => _fill..color = c;
   static Paint _s(Color c) => _stroke..color = c;
+
+  /// Imagegen prop'ları. Yükleme başarısız olursa eski prosedürel çizim
+  /// otomatik olarak devreye girer; prop sistemi hiçbir zaman boş el
+  /// bırakmaz.
+  static Future<void> loadAll() async {
+    const paths = <PropKind, String>{
+      PropKind.bucketEmpty: 'assets/tools/prop_bucket_empty.png',
+      PropKind.bucketFull: 'assets/tools/prop_bucket_full.png',
+      PropKind.sack: 'assets/tools/prop_sack.png',
+      PropKind.bread: 'assets/tools/prop_bread.png',
+      PropKind.mug: 'assets/tools/prop_mug.png',
+      PropKind.basket: 'assets/tools/prop_basket.png',
+      PropKind.firewood: 'assets/tools/prop_firewood.png',
+      PropKind.scythe: 'assets/tools/prop_scythe.png',
+      // Balta için projede zaten uyumlu, yönlü alet sprite'ı vardı.
+      PropKind.axe: 'assets/tools/axe.png',
+    };
+    await Future.wait(paths.entries.map((e) => _load(e.key, e.value)));
+  }
+
+  static Future<void> _load(PropKind kind, String path) async {
+    try {
+      final bytes = await rootBundle.load(path);
+      final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      _sprites[kind] = await AssetStyle.softenAtLoad(frame.image);
+    } catch (e) {
+      debugPrint('PropRenderer: $path yüklenemedi — prosedürel fallback: $e');
+    }
+  }
+
+  static ui.Image? _sprite(PropKind kind) => _sprites[kind];
+
+  /// [bottomY], mevcut prosedürel prop koordinatlarıyla aynı yerel uzayda
+  /// zemini/eli sabitler. Yatay aynalama, köylünün yön değişiminde sapın ve
+  /// kulpun doğru tarafa geçmesini sağlar.
+  static void _drawSprite(
+    Canvas c,
+    ui.Image img, {
+    required double x,
+    required double bottomY,
+    required double width,
+    required bool flip,
+    double sway = 0,
+  }) {
+    final height = width * img.height / img.width;
+    c.save();
+    c.translate(x + sway, bottomY);
+    if (flip) c.scale(-1, 1);
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
+    );
+    final dst = Rect.fromLTWH(-width / 2, -height, width, height);
+    c.drawImageRect(img, src, dst, _spritePaint);
+    c.restore();
+  }
 
   /// character_renderer ile aynı gölgeleme dili: üst/sol highlight,
   /// sağ/alt gölge, koyu dış çizgi.
@@ -67,26 +132,145 @@ abstract final class PropRenderer {
       case PropKind.none:
         break;
       case PropKind.bucketEmpty:
-        _bucket(canvas, dir, sway, full: false);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 9,
+            bottomY: -28,
+            width: 15,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _bucket(canvas, dir, sway, full: false);
+        }
       case PropKind.bucketFull:
-        _bucket(canvas, dir, sway, full: true, time: time);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 9,
+            bottomY: -28,
+            width: 15,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _bucket(canvas, dir, sway, full: true, time: time);
+        }
       case PropKind.sack:
-        _sack(canvas, dir, sway);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: -dir * 5,
+            bottomY: -40,
+            width: 15,
+            flip: dir < 0,
+            sway: sway * 0.5,
+          );
+        } else {
+          _sack(canvas, dir, sway);
+        }
       case PropKind.bread:
-        _bread(canvas, dir, sway);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 8,
+            bottomY: -42,
+            width: 14,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _bread(canvas, dir, sway);
+        }
       case PropKind.mug:
-        _mug(canvas, dir, sway);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 8,
+            bottomY: -38,
+            width: 12,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _mug(canvas, dir, sway);
+        }
       case PropKind.basket:
-        _basket(canvas, dir, sway);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 4,
+            bottomY: -29,
+            width: 20,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _basket(canvas, dir, sway);
+        }
       case PropKind.firewood:
-        _firewood(canvas, dir, sway);
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 3,
+            bottomY: -40,
+            width: 22,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _firewood(canvas, dir, sway);
+        }
+      case PropKind.scythe:
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 9,
+            bottomY: -26,
+            width: 16,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _scythe(canvas, dir, sway);
+        }
+      case PropKind.axe:
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(canvas, img, x: dir * 9, bottomY: -26, width: 15,
+              flip: dir < 0, sway: sway);
+        } else {
+          _axe(canvas, dir, sway);
+        }
     }
     canvas.restore();
   }
 
   // ── KOVA — yanda, elden sarkar ────────────────────────────────────────────
-  static void _bucket(Canvas c, double dir, double sway,
-      {required bool full, double time = 0}) {
+  static void _bucket(
+    Canvas c,
+    double dir,
+    double sway, {
+    required bool full,
+    double time = 0,
+  }) {
     const wood = Color(0xFF7A5A3A);
     const band = Color(0xFF4A4A50);
     const water = Color(0xFF3E6E86);
@@ -176,10 +360,63 @@ abstract final class PropRenderer {
     c.translate(dir * 3 + sway, -44);
     c.rotate(dir * 0.08);
     for (var i = 0; i < 3; i++) {
-      _shaded(c, Rect.fromLTWH(-8, -4.0 + i * 3.0, 16, 3), i.isEven
-          ? bark
-          : lighter(bark, 0.10));
+      _shaded(
+        c,
+        Rect.fromLTWH(-8, -4.0 + i * 3.0, 16, 3),
+        i.isEven ? bark : lighter(bark, 0.10),
+      );
     }
+    c.restore();
+  }
+
+  // ── TIRPAN — dikine, gövdeden UZUN ────────────────────────────────────────
+  //
+  // Bu ikisi (tırpan/balta) diğer nesnelerden farklı bir işe bakıyor: elde
+  // görünmek değil, SİLUETTE okunmak. 37 px'lik köylüde göğsündeki ekmek bir
+  // benek kadardır; ama başının ÜSTÜNE taşan bir sap, kalabalığın içinde bile
+  // "bu adam silahlanmış" der. Bu yüzden sap gövdeden uzun (-78) ve ağız
+  // yatayda dışa çıkıyor: dikey çizgi + tepede kanca.
+  static void _scythe(Canvas c, double dir, double sway) {
+    const wood = Color(0xFF7A5A3A);
+    const steel = Color(0xFFB9C2CC);
+    c.save();
+    c.translate(dir * 9 + sway, -34);
+    c.rotate(dir * 0.10); // hafif dışa yatık — dik bir çubuk cansız durur
+    // Sap: elden aşağı biraz sarkar, yukarı baş hizasını aşar.
+    _shaded(c, const Rect.fromLTWH(-1, -44, 2, 52), wood);
+    // Ağız: sapın tepesinden dışa uzanır, ucu incelir (tırpanın kavsi).
+    c.save();
+    c.translate(0, -44);
+    c.drawRect(Rect.fromLTWH(dir > 0 ? 0 : -9, 0, 9, 2), _f(steel));
+    c.drawRect(Rect.fromLTWH(dir > 0 ? 5 : -8, 2, 3, 1), _f(steel));
+    c.drawRect(
+      Rect.fromLTWH(dir > 0 ? 0 : -9, 0, 9, 1),
+      _f(lighter(steel, 0.20)),
+    );
+    // Bilezik: ağzın sapa oturduğu koyu boğum — ikisi tek parça görünmesin.
+    c.drawRect(const Rect.fromLTWH(-1, -1, 2, 4), _f(_outline));
+    c.restore();
+    c.restore();
+  }
+
+  // ── BALTA — omuzda, baş yukarıda ──────────────────────────────────────────
+  static void _axe(Canvas c, double dir, double sway) {
+    const haft = Color(0xFF6B4E32);
+    const steel = Color(0xFFAEB6C0);
+    c.save();
+    c.translate(dir * 9 + sway, -38);
+    c.rotate(dir * 0.26); // omza yaslanmış açı
+    _shaded(c, const Rect.fromLTWH(-1, -26, 2, 32), haft);
+    // Baş: sapın tepesinde, dışa bakan kama.
+    c.save();
+    c.translate(dir * 2, -26);
+    _shaded(c, Rect.fromLTWH(dir > 0 ? -1 : -5, -1, 6, 7), steel);
+    // Ağız — dış kenarda bir tık parlak şerit (kamanın yüzü).
+    c.drawRect(
+      Rect.fromLTWH(dir > 0 ? 4 : -5, 0, 1, 5),
+      _f(lighter(steel, 0.25)),
+    );
+    c.restore();
     c.restore();
   }
 }

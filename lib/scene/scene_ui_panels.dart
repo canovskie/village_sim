@@ -104,6 +104,8 @@ extension _SceneUiPanels on _VillageSceneState {
       child: EventChoiceModal(
         event: _pendingChoice!,
         onChoose: (c) => _applyEventChoice(_pendingChoice!, c),
+        // Boşluğa dokun = mühre geri in (kapıda kuyruk; mühlet akmayı sürdürür).
+        onDismiss: _dismissChoiceModal,
       ),
     );
   }
@@ -151,8 +153,9 @@ extension _SceneUiPanels on _VillageSceneState {
           onTriggerEvent: (e) {
             setStateHere(() {
               if (e.needsChoice) {
-                _pendingChoice = e;
-                _showNotification('${e.icon} ${e.title}. Köy karar bekliyor.');
+                // Gerçek yol neyse dev de onu tetikler: kuyruk + mühür +
+                // mühlet (modalı elle açıp bakmak için mühre tıkla).
+                _queueChoiceEvent(e);
               } else {
                 _applyEventAutomatic(e);
               }

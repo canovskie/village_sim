@@ -14,9 +14,9 @@ part of '../main.dart';
 /// Bağımlı: _firepitBuilding, _reeds (ReedClump), _stockpile, _obstacles/
 /// _waterTiles, _freeSpotNear (scene_npc_routine).
 extension _SceneReed on _VillageSceneState {
-  static const double _kReedScan   = 0.5;
-  static const int    _kMaxReedBeds = 8;
-  static const double _kBedRing     = 2.0; // ateş merkezinden yatak uzaklığı
+  static const double _kReedScan = 0.5;
+  static const int _kMaxReedBeds = 8;
+  static const double _kBedRing = 2.0; // ateş merkezinden yatak uzaklığı
 
   /// Evsiz + yetişkin + henüz yatağı yok mu?
   bool _homelessSeekingBed(VillagerEntity v) =>
@@ -98,7 +98,8 @@ extension _SceneReed on _VillageSceneState {
             if (firstBed) {
               _firstReedBedShown = true;
               _showNotification(
-                  '🛏 İlk saz yatağı kuruldu — evsizler artık ateş başında uyuyor');
+                '🛏 İlk saz yatağı kuruldu — evsizler artık ateş başında uyuyor',
+              );
             }
           } else {
             v.goTo(slot.$1, slot.$2, 1.0);
@@ -146,6 +147,25 @@ extension _SceneReed on _VillageSceneState {
       if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
       if (_obstacles.contains((c, r))) continue;
       if (_waterTiles.contains((c, r))) continue;
+      // Saz yatağı dekoratif zeminin üstüne bindirilmemeli. Yalnız path
+      // engeline bakmak yeterli değildi: dekor, ağaç, cevher, tarla ve yerdeki
+      // üretim yığınları aynı karede kalabiliyordu.
+      if (_decor.any((d) => d.col == c && d.row == r && !d.crushed)) continue;
+      if (_trees.any((t) => t.col == c && t.row == r && !t.isFelled)) continue;
+      if (_mineNodes.any((m) => m.col == c && m.row == r && !m.isDepleted)) {
+        continue;
+      }
+      if (_farmTiles.any((f) => f.col == c && f.row == r)) continue;
+      if (_resourceBoxes.any(
+        (b) => b.gridX.round() == c && b.gridY.round() == r && !b.isDelivered,
+      )) {
+        continue;
+      }
+      if (_hayEntities.any(
+        (h) => h.gridX.round() == c && h.gridY.round() == r && !h.isDelivered,
+      )) {
+        continue;
+      }
       final taken = _reedBeds.any((b) => _dist(b.gridX, b.gridY, sx, sy) < 0.8);
       if (taken) continue;
       return (sx, sy);

@@ -1,5 +1,16 @@
 part of '../main.dart';
 
+extension _SceneDeathMarkers on _VillageSceneState {
+  /// Ölümün evde görünür bir izi: 8 saniyelik yas işareti ve aynı evdeki
+  /// kayıplar için küçük sayaç. Evsiz köylüde işaret üretilemez.
+  void _markDeathHouse(VillagerEntity v) {
+    final home = v.homeBuilding;
+    if (home is! BuildingEntity) return;
+    home.deathMarkerUntil = max(home.deathMarkerUntil, _time + 8.0);
+    home.deathMarkerCount = (home.deathMarkerCount + 1).clamp(1, 9);
+  }
+}
+
 /// Komşuluk/birleşim spatial hash buffer — top-level reused (her poll'da
 /// clear+refill, allocate yok). Bucket key = (gridX~/2, gridY~/2).
 final Map<(int, int), List<int>> _greetBuckets = {};
@@ -49,18 +60,27 @@ extension _SceneTick on _VillageSceneState {
     // modal sonsuza dek dondurmasın; harness'te tıklayacak oyuncu yok.
     if (kCaptureShowcase || kProbeOn) {
       _activeCutscene = null;
-      _pendingChoice = null;
-      _imperialDemand = null;
-      _petitionForced = false;
+      // İSTİSNA: kuyruk provası tam da bekleyişi ve zaman aşımını ölçer (bkz.
+      // kProbeChoiceQueueArmed). Muafiyet kalkmazsa kuyruk her tick silinir ve
+      // test "olay hiç kuyruğa girmedi" der — sistem çalışıyorken.
+      if (!kProbeChoiceQueueArmed) {
+        _pendingChoice = null;
+        _choiceModalOpen = false;
+      }
+      // İSTİSNA: eşik provası tam da bu modalın düğmesine basacaktır (bkz.
+      // kProbeImperialArmed). Muafiyet kaldırılmazsa heyet her tick silinir ve
+      // test "pazarlık hiç açılmadı" der — sistem çalışıyorken.
+      if (!kProbeImperialArmed) _imperialDemand = null;
+      if (!kProbePetitionQueueArmed) _petitionOverdue = false;
     }
-    // MÜHLETİ DOLAN DİLEKÇE HER HARNESS'İ DONDURUR. Yukarıdaki blok yalnız iki
-    // bayrağı kapsıyordu; düz `kCaptureMode` harness'lerinde (kış probu, kare
-    // yakalama) zorlanmış dilekçe sim'i SONSUZA DEK durduruyordu — köy gün
-    // 27'de donup kışı hiç görmedi ve test "çadır mekaniği ölü" diye bağırdı.
-    // Zorlamayı düşürürüz: dilekçe ambient olarak durur, sim akmaya devam eder.
+    // GECİKMİŞ DİLEKÇE HARNESS'LERDE SUSTURULUR. Eski akışta mühleti dolan
+    // dilekçe modalı zorla açıp simi SONSUZA DEK donduruyordu (köy gün 27'de
+    // donup kışı hiç görmedi, test "çadır mekaniği ölü" diye bağırdı). Donma
+    // kalktı; yine de kapıda bekleyen huzurun gün-başı bedeli uzun koşan
+    // telemetri harness'lerinde hane/moral eğrisini kirletir — düşürülür.
     // (Sinematik/olay/imparatorluk bilerek DOKUNULMADAN kalır — görsel
     // harness'ler tam da onları çekiyor.)
-    if (kCaptureMode) _petitionForced = false;
+    if (kCaptureMode && !kProbePetitionQueueArmed) _petitionOverdue = false;
     // CAPTURE: İmparatorluk varış anonsunu bir kez tetikle (harness görsel test).
     if (kCaptureImperialAlert &&
         kCaptureSceneReady &&
@@ -69,16 +89,16 @@ extension _SceneTick on _VillageSceneState {
       _imperialAlertSub = 'Sancak göründü. Vergi kolonu köyün üstüne yürüyor.';
       _imperialAlertLeft = _VillageSceneState._kImperialAlertDur;
     }
-    // Karar bekleyen olay açıkken sim durur (sahne kalır, modal odakta).
+    // SİMİ DURDURAN yalnız üç şey kaldı: dağılma (dünyanın sonu), sinematik
+    // (kamera başka yerde) ve imparatorluk pazarlığı (nadir, meşru kesinti).
+    // Olay kararı ve dilekçe artık DONDURMAZ — kapıda kuyruk: mühür bekler,
+    // mühlet erir, dünya yaşamaya devam eder (bkz. scene_events/_petitions).
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
     // arası DevPanel slider'ından gelir; normal oyunda 1.0.
     final effectiveScale =
         (_collapsed || // köy dağıldı → dünya durur
-            _pendingChoice != null ||
             _activeCutscene != null ||
-            _imperialDemand != null ||
-            // Mühlet dolup zorla açılan dilekçe — köy yanıt bekler, sim durur.
-            (_petitionForced && _petitionModalOpen))
+            _imperialDemand != null)
         ? 0.0
         : _timeScale *
               (kDevSpeedBoostOverride > 0
@@ -94,16 +114,14 @@ extension _SceneTick on _VillageSceneState {
       // tick zinciri (dolayısıyla _tickCollapse) hiç koşmaz. Sayaç orada
       // kalsaydı prova sonsuza dek "dağılmadı" derdi.
       kProbeCollapsed = _collapsed;
+      // Olay/dilekçe bu listeden ÇIKTI: artık dondurmuyorlar (kapıda kuyruk).
+      // Bekleyen karar kProbeChoiceWaiting'te ayrıca okunur.
       kProbePause = _collapsed
           ? 'dağıldı'
-          : _pendingChoice != null
-          ? 'olay:${_pendingChoice!.id}'
           : _activeCutscene != null
           ? 'sinematik'
           : _imperialDemand != null
           ? 'imparatorluk'
-          : (_petitionForced && _petitionModalOpen)
-          ? 'dilekçe'
           : '';
     }
     final dt = (raw * effectiveScale).clamp(0.0, clampMax);
@@ -321,6 +339,9 @@ extension _SceneTick on _VillageSceneState {
       // (dev-tetiklenen olay dahil) her zaman işler — gate metodun içinde.
       _tickEventOmen(dt);
     }
+    // Kuyrukta bekleyen karar — mühlet erir; dolarsa köy pasif seçeneği
+    // kendi yaşar (kapıda kuyruk: sim donmaz, karar da yok olmaz).
+    _tickChoiceDeadline(dt);
   }
 
   // ── Bina sistemleri (üretim/ticaret/stat + aktiflik bayrakları) ───────────
@@ -336,10 +357,15 @@ extension _SceneTick on _VillageSceneState {
     } else if (_wasStarving && starvation < 0.15) {
       _wasStarving = false;
     }
-    // Nadir büyük kriz — derin kıtlık bir kez tam ekran sinematikle gelir.
+    // Derin kıtlık — koşuda bir kez işaretlenir. Eskiden tam ekran sinematik
+    // oynardı; kaldırıldı. Kıtlık zaten dünyada görülüyor (yukarıdaki keder
+    // gövde dili + moral düşüşü) ve haberi güncede duruyor. Tam ekran film
+    // yalnız kuruluş / imparatorluk / hesaplaşma için saklı.
     if (!_famineShown && starvation > 0.85 && _villagers.length >= 6) {
       _famineShown = true;
-      _playCutscene(kFamineCutscene, logEntry: 'Kıtlık baş gösterdi');
+      _feelVillage(NpcEmotion.grief, 12, -0.06); // krize dönük ikinci dalga
+      _chronicle('Kıtlık baş gösterdi', icon: '🍂', milestone: true);
+      _showNotification('🍂 Kıtlık baş gösterdi. Ambar boş, karınlar aç.');
     }
 
     // ── Moral (pasif gösterge) ────────────────────────────────────────────
@@ -481,6 +507,7 @@ extension _SceneTick on _VillageSceneState {
         for (final c in v.children) {
           c.parents.remove(v);
         }
+        _markDeathHouse(v);
         v.startDying(funeral: true);
       }
     }
@@ -833,9 +860,12 @@ extension _SceneTick on _VillageSceneState {
     addCameraShake(4, dur: 0.7); // hafif huşû titreşimi (juice)
     for (final v in _villagers) {
       if (v.isSleeping || v.isInsideBuilding) continue;
-      v.chatBubbleIcon = '🌠';
-      v.chatBubbleTime = 6 + _rng.nextDouble() * 4;
-      v.feel(NpcEmotion.wonder, 8, moodDelta: 0.12);
+      // Baş üstünde 🌠 YOK. Hayranlık zaten GÖVDEDE var: `NpcEmotion.wonder`
+      // köylüyü doğrultup yukarı kaldırıyor (bkz. game_drawables emoLift).
+      // Baloncuk onun üstüne olayın ADINI yazıyordu — süresini duyguya
+      // devrettik, gösteriyi izleyen kalabalık aynı süre boyunca doğrulmuş
+      // durur.
+      v.feel(NpcEmotion.wonder, 6 + _rng.nextDouble() * 4, moodDelta: 0.12);
     }
     _gatherAtFire(dur, max: 8);
     pushPolicyMorale(0.06, 2.0);
@@ -935,6 +965,7 @@ extension _SceneTick on _VillageSceneState {
           v.activity == VillagerActivity.warm ||
           v.activity == VillagerActivity.listening;
       v.tickInnerLife(dt, dl, resting);
+      if (v.waveTime > 0) v.waveTime -= dt; // selam jesti (bkz. CharGesture)
       if (v.chatBubbleTime > 0) {
         v.chatBubbleTime -= dt;
         if (v.chatBubbleTime <= 0) {
@@ -975,6 +1006,7 @@ extension _SceneTick on _VillageSceneState {
     // Rutinden ÖNCE: yatak peşindeki evsizi sahiplenip rutinden korur.
     _tickReed(dt);
     _tickWork(dt); // meslek iş döngüleri (çoban/avcı/değirmenci/hancı/rahip)
+    _tickWeaponCraft(dt);
     // Kanunname kapıları — köyün hâli değiştikçe deftere yeni hüküm düşer.
     _tickLawGates(dt);
     // Rejim — huzursuzluk birikimi + rejime özgü kriz (kimliğin bedeli).
@@ -1441,7 +1473,7 @@ extension _SceneTick on _VillageSceneState {
 
   // ── Komşuluk: NPC'ler birbirine selam verir ──────────────────────────────
   // 1.2s aralıkla poll; her villager için yakındaki bir uygun komşu varsa
-  // %25 ihtimal selam (👋 chat bubble + glance). Per-villager greet cooldown
+  // %25 ihtimal selam (el sallama jesti + glance). Per-villager greet cooldown
   // (8-14s) spam'ı engeller.
   // Spatial hash (2-tile bucket): O(n²) yerine O(n). Search radius 1.6 tile
   // → 3×3 komşu bucket araması yeterli. Bucket map reused across polls.
@@ -1501,20 +1533,11 @@ extension _SceneTick on _VillageSceneState {
       }
       if (near == null) continue;
 
-      // ⚠️ YARIN İLK İŞ: EL SALLAMAYI BURADAN (SOHBET BALONUNDAN) ÇIKAR.
-      // Selam bir 👋 baloncuğu olarak değil, köylünün gövdesinde gerçek bir el
-      // sallama animasyonu olarak oynamalı. chatBubble* alanları selamda hiç
-      // kullanılmayacak; onun yerine villager'a bir "wave" jesti (kol salınımı)
-      // gelecek — referans: main_menu_screen.dart ~2498 (selam veren kol).
-      // Baloncuk kaldırılınca game_drawables.dart:522 ikon listesinden de 👋'yi
-      // düş. Not main.dart başındaki blokla eşleştir, iş bitince ikisini de sil.
-      // Karşılıklı selam — kısa baloncuk + glance, ikisi de cooldown'a girer.
-      const icon = '👋';
-      const dur = 1.6;
-      v.chatBubbleIcon = icon;
-      v.chatBubbleTime = dur;
-      near.chatBubbleIcon = icon;
-      near.chatBubbleTime = dur;
+      // Karşılıklı selam — GÖVDEDE: ikisi de elini kaldırıp sallar, birbirine
+      // bakar, ikisi de cooldown'a girer. Baş üstünde ikon YOK (bkz.
+      // CharGesture.wave); selamı anlatan şey kolun kendisidir.
+      v.waveTime = VillagerEntity.kWaveDuration;
+      near.waveTime = VillagerEntity.kWaveDuration;
       v.greetCooldown = 8.0 + _rng.nextDouble() * 6.0;
       near.greetCooldown = 8.0 + _rng.nextDouble() * 6.0;
       v.glanceAround(duration: 0.7);

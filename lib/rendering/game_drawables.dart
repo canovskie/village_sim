@@ -443,6 +443,16 @@ class _VillagerDrawable extends _Drawable {
       if (swayR != 0) canvas.rotate(swayR);
     }
     final breathY = calm ? e.idleBreathScale(time) : 1.0;
+    // JEST SEÇİMİ — selam kısa ve sayaçlı, anlatım aktivitenin kendisi kadar
+    // sürer. İkisi de tek kolu devralır, o yüzden selam önceliklidir: el
+    // sallayan anlatıcı bir kolla iki iş yapamaz.
+    final (gesture, gestureAmount) = e.waveTime > 0
+        ? (CharGesture.wave, _waveEnvelope(e.waveTime))
+        : e.activity == VillagerActivity.storytelling
+        // Anlatımın sönüşü hikâyenin son saniyesine bağlı; kalkışı oturma
+        // geçişinin içinde erir (anlatıcı zaten yeni oturmuştur).
+        ? (CharGesture.tell, (e.chatBubbleTime / 1.2).clamp(0.0, 1.0))
+        : (CharGesture.none, 0.0);
     // DÖNÜŞ — yön değişimi artık tek karede aynalanmıyor; sprite yatayda
     // daralıp öbür yöne açılıyor ([WorkerEntity.turnScaleX], ~0.22 sn).
     canvas.scale(
@@ -479,6 +489,9 @@ class _VillagerDrawable extends _Drawable {
       provision: e.provision,
       shroud: e.bearingTense,
       primitiveClothing: primitiveClothing,
+      // JEST — selam ve hikâye anlatımı GÖVDEDE oynar, başın üstünde değil.
+      gesture: gesture,
+      gestureAmount: gestureAmount,
     );
     // ELDEKİ NESNE (bkz. villager_act / prop_renderer) — kova, çuval, ekmek,
     // maşrapa, sepet, odun. Karakterle AYNI yerel uzayda çizilir ki ölçek ve
@@ -532,7 +545,10 @@ class _VillagerDrawable extends _Drawable {
         e.chatBubbleIcon.isNotEmpty &&
         e.activity != VillagerActivity.music &&
         e.activity != VillagerActivity.dance) {
-      // Statik baloncuk: hikaye 📖, selam 👋, göktaşı 🌠, oyuncu ❤️/👋.
+      // Statik baloncuk — geriye yalnız NESNE/İŞARET anlatanlar kaldı: kapıya
+      // asılan dal 🌿 (hasta ev), kavgadan çekilen 🕊️. Duygu ve olay anlatan
+      // baloncuklar (selam 👋, hikâye 📖, göktaşı 🌠) gövdeye taşındı —
+      // sırasıyla CharGesture.wave, CharGesture.tell, NpcEmotion.wonder.
       _drawChatBubble(canvas, bubbleBase, e.chatBubbleIcon, e.chatBubbleTime);
     }
     // Müzik aktivitesinde sazın etrafında uçuşan notalar.
@@ -586,6 +602,19 @@ class _VillagerDrawable extends _Drawable {
       )..layout();
       tp.paint(canvas, Offset(base.dx + 8 + sway, base.dy - 20 - rise));
     }
+  }
+
+  /// Selamın zarfı: kol kalkar, sallanır, iner. [left] kalan süre (sn).
+  ///
+  /// Zarf olmadan kol tek karede yukarı sıçrar ve jest "seğirme" gibi okunur —
+  /// baloncuğun yerine bunu koymanın bütün anlamı hareketin KENDİSİ olduğu
+  /// için, giriş ve çıkış rampası jestin parçası.
+  double _waveEnvelope(double left) {
+    const rise = 0.28, fall = 0.38;
+    final elapsed = VillagerEntity.kWaveDuration - left;
+    if (elapsed < rise) return (elapsed / rise).clamp(0.0, 1.0);
+    if (left < fall) return (left / fall).clamp(0.0, 1.0);
+    return 1.0;
   }
 
   void _drawChatBubble(
@@ -1240,6 +1269,19 @@ class _BuildingDrawable extends _Drawable {
       );
     }
 
+    if (b.damage > 0.02) {
+      _drawDamageOverlay(
+        canvas,
+        corners.$1,
+        corners.$2,
+        corners.$3,
+        corners.$4,
+        b.damage,
+      );
+    }
+
+    // Alev ve duman is katmanının üstünde kalmalı: yangın sürerken okunur,
+    // söndüğünde altta kalan kalıcı hasar tek başına görünür.
     if (burning) {
       _drawBurningOverlay(
         canvas,
@@ -1260,12 +1302,136 @@ class _BuildingDrawable extends _Drawable {
         ParticleRenderer.drawGoldSparkle(canvas, cx, cy, saleAge);
       }
     }
+
+    // Yas işareti — bu evden biri öldüğünde çatının üstünde kısa süre görünür.
+    // Dünya işareti metin bildirimini tamamlar: oyuncu hangi ocağın sustuğunu
+    // kamerayı çevirmeden de seçebilir.
+    if (b.deathMarkerUntil > time && b.fn?.role == BuildingRole.housing) {
+      final left = b.deathMarkerUntil - time;
+      final fade = left < 1.5 ? (left / 1.5).clamp(0.0, 1.0) : 1.0;
+      final pulse = 0.5 + 0.5 * sin(time * 4.0 + b.col * 0.7);
+      final alpha = (fade * (0.78 + pulse * 0.16) * 255).round().clamp(0, 255);
+      final cx = (corners.$1.dx + corners.$4.dx) * 0.5;
+      final cy = corners.$1.dy - 34 - pulse * 2.0;
+      final markerPaint = Paint()..color = Color.fromARGB(alpha, 35, 24, 28);
+      final clothPaint = Paint()..color = Color.fromARGB(alpha, 139, 31, 43);
+      canvas.drawLine(
+        Offset(cx, cy + 16),
+        Offset(cx, cy - 13),
+        markerPaint..strokeWidth = 2.0,
+      );
+      final flag = Path()
+        ..moveTo(cx + 1, cy - 12)
+        ..lineTo(cx + 17, cy - 8)
+        ..lineTo(cx + 1, cy - 2)
+        ..close();
+      canvas.drawPath(flag, clothPaint);
+      canvas.drawCircle(Offset(cx, cy + 18), 3.5, markerPaint);
+      final glyph = TextPainter(
+        text: TextSpan(
+          text: '✝',
+          style: TextStyle(
+            color: Color.fromARGB(alpha, 245, 226, 193),
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      glyph.paint(canvas, Offset(cx - glyph.width / 2, cy - 10));
+      if (b.deathMarkerCount > 1) {
+        final count = TextPainter(
+          text: TextSpan(
+            text: '${b.deathMarkerCount}',
+            style: TextStyle(
+              color: Color.fromARGB(alpha, 255, 245, 220),
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        count.paint(canvas, Offset(cx + 10, cy - 3));
+      }
+    }
   }
 
   // Yanan bina overlay'i — sprite çatısı/orta seviyesinde 2-3 alev + yukarı
   // kalkan koyu duman partikülleri + sıcak halo. Footprint köşelerinden
   // ortalanmış pozisyon hesabı.
   static final Paint _pBurnGlow = Paint()..isAntiAlias = true;
+  static final Paint _pDamage = Paint()
+    ..isAntiAlias = true
+    ..strokeCap = StrokeCap.round;
+
+  /// Kalıcı hasar izi: çatıya sinen is, iki kırık hat ve ağır hasarda kapıya
+  /// çakılmış destek tahtaları. Geometri footprint'ten türediği için aynı
+  /// katman kulübe, taş konut ve konakta da sprite'a özgü koordinat istemeden
+  /// doğru yere oturur.
+  void _drawDamageOverlay(
+    Canvas canvas,
+    Offset back,
+    Offset left,
+    Offset right,
+    Offset front,
+    double damage,
+  ) {
+    final d = damage.clamp(0.0, 1.0);
+    final cx = (back.dx + front.dx) * 0.5;
+    final roofY = (back.dy + left.dy) * 0.5 - 6;
+    final width = (right.dx - left.dx).abs();
+    final alpha = (45 + 105 * d).round().clamp(0, 160);
+    _pDamage
+      ..style = PaintingStyle.fill
+      ..color = Color.fromARGB(alpha, 31, 24, 22);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(cx, roofY),
+        width: width * (0.42 + d * 0.22),
+        height: 7 + d * 5,
+      ),
+      _pDamage,
+    );
+
+    _pDamage
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2 + d * 1.1
+      ..color = Color.fromARGB(
+        (80 + 115 * d).round().clamp(0, 195),
+        58,
+        38,
+        30,
+      );
+    canvas.drawLine(
+      Offset(cx - width * 0.16, roofY - 2),
+      Offset(cx - width * 0.03, roofY + 4),
+      _pDamage,
+    );
+    if (d > 0.35) {
+      canvas.drawLine(
+        Offset(cx + width * 0.10, roofY - 3),
+        Offset(cx + width * 0.22, roofY + 3),
+        _pDamage,
+      );
+    }
+    if (d > 0.62) {
+      _pDamage
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.4
+        ..color = const Color(0xFF765038);
+      final boardY = front.dy - 8;
+      canvas.drawLine(
+        Offset(cx - width * 0.11, boardY - 3),
+        Offset(cx + width * 0.08, boardY + 2),
+        _pDamage,
+      );
+      canvas.drawLine(
+        Offset(cx - width * 0.08, boardY + 3),
+        Offset(cx + width * 0.11, boardY - 2),
+        _pDamage,
+      );
+    }
+  }
 
   void _drawBurningOverlay(
     Canvas canvas,

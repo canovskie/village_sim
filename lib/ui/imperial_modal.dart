@@ -15,6 +15,7 @@ class ImperialModal extends StatefulWidget {
   final bool canAcceptFull; // tam ödeme karşılanabiliyor mu
   final bool canRansom; // fidye karşılanabiliyor mu
   final double resistChance; // heyeti kovma başarı şansı (0 = denenemez)
+  final ImperialDefensePreview defensePreview;
 
   // ── REJİM (bkz. systems/regime.dart) ────────────────────────────────────────
   /// Pazarlık eşiğinden düşülen — tüccar köy daha ucuza anlaşır (görüntü sahne
@@ -43,6 +44,13 @@ class ImperialModal extends StatefulWidget {
     required this.canAcceptFull,
     required this.canRansom,
     required this.resistChance,
+    this.defensePreview = const ImperialDefensePreview(
+      guards: 0,
+      weapons: 0,
+      tools: 0,
+      chance: 0,
+      note: 'Savunma bilgisi hazır değil.',
+    ),
     this.haggleEase = 0,
     this.postureNote = '',
     this.councilVerdict,
@@ -137,7 +145,7 @@ class _ImperialModalState extends State<ImperialModal> {
   List<Widget> _narrative() => [
     Row(
       children: [
-        const Text('⚔️', style: TextStyle(fontSize: 22)),
+        const GameIcon(GameIconData.bow, size: 22, color: AppUi.rust),
         const SizedBox(width: 10),
         Flexible(
           child: Text(
@@ -373,15 +381,16 @@ class _ImperialModalState extends State<ImperialModal> {
       const SizedBox(height: 8),
       // Direniş — yalnız köy yeterince güçlüyse (muhafız/kalabalık). Başarı
       // şansı AÇIKÇA gösterilir (#7 saydamlık): körlemesine kumar değil.
-      if (widget.resistChance > 0)
+      if (widget.resistChance > 0) ...[
+        _defensePanel(),
         _opt(
-          'Diren ve kov  ·  %${(widget.resistChance * 100).round()} başarı',
-          'Muhafızlar eşiğe dizilir. Tutarsa kimse ölmez, köy başını dik tutar; '
-              'tutmazsa ilk düşenler onlar olur.',
+          'Savunmayı seç  ·  %${(widget.resistChance * 100).round()} başarı',
+          'Sonuç otomatik hesaplanır; çatışmayı sen yönetmezsin.',
           AppUi.accent,
           widget.onResist,
           defies: _defies(ImperialVerdict.resist),
         ),
+      ],
       _opt(
         'Reddet',
         'Hiçbir şey verme. Bedeli komutan kendi eliyle toplar.',
@@ -390,6 +399,81 @@ class _ImperialModalState extends State<ImperialModal> {
         defies: _refuseDefies,
       ),
     ];
+  }
+
+  Widget _defensePanel() {
+    final p = widget.defensePreview;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 9),
+      decoration: BoxDecoration(
+        color: AppUi.accent.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.asset(
+            'assets/combat/combat_badge.png',
+            width: 46,
+            height: 46,
+            fit: BoxFit.contain,
+          ),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'SAVUNMA DEĞERLENDİRMESİ',
+                  style: AppUi.label.copyWith(color: AppUi.accent),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Image.asset(
+                      'assets/combat/defense_shield.png',
+                      width: 22,
+                      height: 22,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${p.guards}',
+                      style: AppUi.bodyHi.copyWith(fontSize: 11),
+                    ),
+                    const SizedBox(width: 10),
+                    Image.asset(
+                      'assets/combat/imperial_sword.png',
+                      width: 22,
+                      height: 22,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${p.weapons}',
+                      style: AppUi.bodyHi.copyWith(fontSize: 11),
+                    ),
+                    const SizedBox(width: 10),
+                    const GameIcon(GameIconData.axe,
+                        size: 16, color: AppUi.accentSoft),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${p.tools}',
+                      style: AppUi.bodyHi.copyWith(fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  p.note,
+                  style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   List<Widget> _haggleOptions(ImperialDemand d) {

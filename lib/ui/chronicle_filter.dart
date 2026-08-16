@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../systems/chronicle.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// KRONİK SÜZGECİ — güncenin "ne arıyorum" şeridi.
 ///
@@ -71,7 +72,7 @@ class _ChronicleFilterState extends State<ChronicleFilter> {
         children: [
           _chip(null, 'TÜMÜ', widget.entries.length, AppUi.accent),
           for (final k in ChronicleKind.values)
-            _chip(k, '${k.icon} ${k.label}', counts[k] ?? 0, _colorOf(k)),
+            _chip(k, k.label, counts[k] ?? 0, _colorOf(k), icon: k.icon),
         ],
       ),
     );
@@ -79,7 +80,13 @@ class _ChronicleFilterState extends State<ChronicleFilter> {
     return widget.builder(context, filtered, chips);
   }
 
-  Widget _chip(ChronicleKind? k, String label, int count, Color color) {
+  Widget _chip(
+    ChronicleKind? k,
+    String label,
+    int count,
+    Color color, {
+    String? icon,
+  }) {
     final on = _kind == k;
     final empty = count == 0;
     final c = empty ? AppUi.textLo : color;
@@ -95,13 +102,25 @@ class _ChronicleFilterState extends State<ChronicleFilter> {
           border: Border.all(
               color: c.withValues(alpha: on ? 0.75 : (empty ? 0.18 : 0.32))),
         ),
-        child: Text(
-          empty ? label : '$label · $count',
-          style: AppUi.label.copyWith(
-            fontSize: widget.compact ? 7.5 : 8.5,
-            letterSpacing: 0.6,
-            color: on ? AppUi.textHi : (empty ? AppUi.textLo : AppUi.textMid),
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              SemanticIcon(icon,
+                  size: widget.compact ? 9 : 10,
+                  color: on ? AppUi.textHi : (empty ? AppUi.textLo : c),
+                  fallback: GameIconData.scroll),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              empty ? label : '$label · $count',
+              style: AppUi.label.copyWith(
+                fontSize: widget.compact ? 7.5 : 8.5,
+                letterSpacing: 0.6,
+                color: on ? AppUi.textHi : (empty ? AppUi.textLo : AppUi.textMid),
+              ),
+            ),
+          ],
         ),
       ),
     );

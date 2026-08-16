@@ -18,6 +18,9 @@ class LootCache {
   final ResourceKind kind;
   final int amount;
 
+  /// ResourceKind dışında tutulan özel ganimet (eski kayıtlarla uyumlu).
+  final int weaponAmount;
+
   /// Gömen köylü — yakalanınca zula onu ele verir. Köylü sahneden çıkarsa
   /// (ölüm/sürgün) referans koparılır, zula toprakta kalır: mal geri alınabilir
   /// ama artık kimseyi suçlamaz.
@@ -43,6 +46,7 @@ class LootCache {
     required this.kind,
     required this.amount,
     required this.culpritName,
+    this.weaponAmount = 0,
     this.culprit,
   });
 
@@ -70,6 +74,9 @@ const double kWitnessedTraceFloor = 0.55;
 ///
 /// Taze izde geniş, kapanmış izde neredeyse sıfır — ama hiç sıfır değil:
 /// üstüne basan bulur. Muhafızın görüşü ([alert]) izi büyütür.
-double lootFindRadius(double trace,
-        {double maxRadius = 3.6, double minRadius = 0.8, double alert = 1.0}) =>
-    (minRadius + (maxRadius - minRadius) * trace) * alert;
+double lootFindRadius(
+  double trace, {
+  double maxRadius = 3.6,
+  double minRadius = 0.8,
+  double alert = 1.0,
+}) => (minRadius + (maxRadius - minRadius) * trace) * alert;

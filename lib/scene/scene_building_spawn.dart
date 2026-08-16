@@ -32,10 +32,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     '👶 {ad} ile {öteki-in} çocuğu oldu. Adını {bebek} koydular.',
     '👶 Evde bir ses daha var: {bebek}. {öteki} ocağa fazladan odun attı.',
   ];
-  static const _kBirthLifePool = [
-    'Çocuğu oldu: {bebek}',
-    '{bebek} doğdu',
-  ];
+  static const _kBirthLifePool = ['Çocuğu oldu: {bebek}', '{bebek} doğdu'];
   static const _kMigrantPool = [
     '🚶 {ad} yolun tozuyla geldi, boş yatağa yerleşti. Köyün ona alışması sürer.',
     '🚶 {ad} kapıyı çaldı ve kaldı. Yabancıya ısınmak zaman ister.',
@@ -49,11 +46,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   void _buyAnimal(BuildingEntity b, AnimalKind kind) {
     final cap = kAnimalBarnCap[kind] ?? 5;
     final living = _cows
-        .where((c) =>
-            !c.isDying &&
-            c.kind == kind &&
-            c.barnCol == b.col &&
-            c.barnRow == b.row)
+        .where(
+          (c) =>
+              !c.isDying &&
+              c.kind == kind &&
+              c.barnCol == b.col &&
+              c.barnRow == b.row,
+        )
         .toList();
     if (living.length >= cap) {
       _showNotification('${animalKindLabel(kind)} için yer yok (dolu)');
@@ -65,21 +64,25 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       return;
     }
     final male = !living.any((c) => c.isMale); // erkek yoksa erkek getir
-    final (sx, sy) =
-        _nearestLand(b.col + b.cols / 2.0, b.row + b.rows.toDouble());
+    final (sx, sy) = _nearestLand(
+      b.col + b.cols / 2.0,
+      b.row + b.rows.toDouble(),
+    );
     setStateHere(() {
       _stockpile.gold -= cost;
-      _cows.add(AnimalEntity(
-        kind: kind,
-        barnCol: b.col,
-        barnRow: b.row,
-        startCol: sx + (_rng.nextDouble() - 0.5) * 0.6,
-        startRow: sy + (_rng.nextDouble() - 0.5) * 0.6,
-        isMale: male,
-        ageDays: AnimalEntity.kAnimalAdultDay + _rng.nextDouble() * 2.0,
-        lifespanDays:
-            AnimalEntity.kAnimalElderDay + 8.0 + _rng.nextDouble() * 12.0,
-      ));
+      _cows.add(
+        AnimalEntity(
+          kind: kind,
+          barnCol: b.col,
+          barnRow: b.row,
+          startCol: sx + (_rng.nextDouble() - 0.5) * 0.6,
+          startRow: sy + (_rng.nextDouble() - 0.5) * 0.6,
+          isMale: male,
+          ageDays: AnimalEntity.kAnimalAdultDay + _rng.nextDouble() * 2.0,
+          lifespanDays:
+              AnimalEntity.kAnimalElderDay + 8.0 + _rng.nextDouble() * 12.0,
+        ),
+      );
     });
     if (kind == AnimalKind.cow) {
       AudioManager.instance.playSfx(Sfx.cowMoo);
@@ -130,7 +133,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final lo = count.values.reduce(min);
     final hi = count.values.reduce(max);
     if (lo == hi) return null; // denge var — yönlendirilecek belirgin eksik yok
-    final scarce = [for (final e in count.entries) if (e.value == lo) e.key];
+    final scarce = [
+      for (final e in count.entries)
+        if (e.value == lo) e.key,
+    ];
     return scarce[_rng.nextInt(scarce.length)];
   }
 
@@ -176,11 +182,11 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   /// çiftler yan yana dizildiği için ilk iki kapasiteli ev onları eş olarak
   /// içine alır. Sırayı bozmak çiftleri ayrı evlere düşürür ve doğumu susturur.
   static const List<(VillagerType, bool)> _kFounderRoster = [
-    (VillagerType.farmer, true),    // reis — köyün ekmeği
+    (VillagerType.farmer, true), // reis — köyün ekmeği
     (VillagerType.shepherd, false), // eşi
-    (VillagerType.hunter, true),    // genç adam
-    (VillagerType.miller, false),   // eşi
-    (VillagerType.priest, true),    // dul yaşlı — ateşin başındaki ses
+    (VillagerType.hunter, true), // genç adam
+    (VillagerType.miller, false), // eşi
+    (VillagerType.priest, true), // dul yaşlı — ateşin başındaki ses
   ];
 
   /// KÖYÜN KURULUŞU — kafile yürüyerek gelir.
@@ -251,8 +257,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       final age = elder
           ? kElderStartDay + _rng.nextDouble() * 6
           : spare
-              ? kAdultStartDay + _rng.nextDouble() * 3
-              : kAdultStartDay + (i < 2 ? 12 : 2) + _rng.nextDouble() * 5;
+          ? kAdultStartDay + _rng.nextDouble() * 3
+          : kAdultStartDay + (i < 2 ? 12 : 2) + _rng.nextDouble() * 5;
       // Kafile TEK SIRA yürür: arkadakiler öndekinin izinde, hafif yalpayla.
       final back = i * 1.15;
       final v = VillagerEntity(
@@ -275,13 +281,15 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       founders.add(v);
       _villagers.add(v);
       _lifeEvent(
-          v,
-          elder
-              ? 'Kafileyle bu topraklara geldi'
-              : spare
-                  ? 'Kafile onu geride bırakmadı'
-                  : 'Köyü kurmaya geldi',
-          icon: '🧭', milestone: true);
+        v,
+        elder
+            ? 'Kafileyle bu topraklara geldi'
+            : spare
+            ? 'Kafile onu geride bırakmadı'
+            : 'Köyü kurmaya geldi',
+        icon: '🧭',
+        milestone: true,
+      );
     }
 
     // Hepsi merkeze doğru yürüsün — varışta oyalanırlar (dwell), oyuncu ateş
@@ -358,10 +366,17 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       final v = _villagers[i];
       final angle = i * (2 * pi / _villagers.length);
       final dist = 1.6 + _rng.nextDouble() * 0.8;
-      final (tx, ty) = _nearestLand(cx + cos(angle) * dist, cy + sin(angle) * dist);
+      final (tx, ty) = _nearestLand(
+        cx + cos(angle) * dist,
+        cy + sin(angle) * dist,
+      );
       v.goTo(tx, ty, 8.0);
-      _lifeEvent(v, 'Köyün ocağı yakıldığında oradaydı', icon: '🔥',
-          milestone: true);
+      _lifeEvent(
+        v,
+        'Köyün ocağı yakıldığında oradaydı',
+        icon: '🔥',
+        milestone: true,
+      );
     }
   }
 
@@ -437,11 +452,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     );
     if (house != null) {
       v.homeBuilding = house;
-      final adults = _villagers
-          .where((p) =>
-              p.homeBuilding == house && p.lifeStage.hasProfession)
-          .toList()
-        ..shuffle(_rng);
+      final adults =
+          _villagers
+              .where(
+                (p) => p.homeBuilding == house && p.lifeStage.hasProfession,
+              )
+              .toList()
+            ..shuffle(_rng);
       for (final p in adults.take(2)) {
         v.parents.add(p);
         p.children.add(v);
@@ -455,11 +472,16 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _villagers.add(v);
 
     final kin = v.parents.map((p) => p.name).join(' & ');
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         v.parents.isEmpty ? _kJoinPool : _kJoinFamilyPool,
-        _voice(v,
-            seed: _stableSeed('katıl${v.name}', _dayCount + _villagers.length),
-            extra: {'aile': kin})));
+        _voice(
+          v,
+          seed: _stableSeed('katıl${v.name}', _dayCount + _villagers.length),
+          extra: {'aile': kin},
+        ),
+      ),
+    );
     _lifeEvent(v, 'Köye katıldı', icon: '🚶');
     v.lastStageSeen = v.lifeStage;
   }
@@ -529,10 +551,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _reactNearby(sx, sy, 5.0, NpcEmotion.joy, 4.0, moodDelta: 0.05);
     nudgeMorale(0.05); // görünür mutlu olay → moral göstergesini hafif iter
 
-    final ctx = _voice(mother,
-        other: father,
-        seed: _stableSeed('doğum${baby.name}', _dayCount),
-        extra: {'bebek': baby.name});
+    final ctx = _voice(
+      mother,
+      other: father,
+      seed: _stableSeed('doğum${baby.name}', _dayCount),
+      extra: {'bebek': baby.name},
+    );
     _showNotification(Voice.say(_kBirthPool, ctx));
     AudioManager.instance.playSfx(Sfx.birthJoy);
     _award('first_birth', 'Köyün ilk bebeği dünyaya geldi', '👶');
@@ -601,10 +625,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _villagers.add(migrant);
     // Uyum süreci bedeli — köy 2 gün boyunca −%3 moral.
     pushPolicyMorale(-0.03, 2.0);
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         _kMigrantPool,
-        _voice(migrant,
-            seed: _stableSeed('göç${migrant.name}', _dayCount))));
+        _voice(migrant, seed: _stableSeed('göç${migrant.name}', _dayCount)),
+      ),
+    );
     // Dışarıdan kanalı — gelen kişi köyün bilmediği bir zanaat taşıyorsa, onu
     // köye kazandırır (keşif bildirimi göç bildiriminin üstüne yazar).
     _discoverCallingCraft(migrant, _CraftSource.migrant);
@@ -639,12 +665,14 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       if (f == null) continue;
       final mates = adultsByHome[h] ?? const <VillagerEntity>[];
       // Evinde uygun (karşı cins + kan bağı yok) bir eş var mı?
-      final paired = mates.any((c) =>
-          !identical(c, v) &&
-          c.isMale != v.isMale &&
-          !v.parents.contains(c) &&
-          !v.children.contains(c) &&
-          !c.parents.any(v.parents.toSet().contains));
+      final paired = mates.any(
+        (c) =>
+            !identical(c, v) &&
+            c.isMale != v.isMale &&
+            !v.parents.contains(c) &&
+            !v.children.contains(c) &&
+            !c.parents.any(v.parents.toSet().contains),
+      );
       if (paired) continue;
       if (mates.length >= f.housingCapacity) continue; // gelinin yatağı yok
       lonely = v;
@@ -654,7 +682,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     if (lonely == null || home == null) return false;
 
     final (lx, ly) = _nearestLand(
-        home.col + home.cols / 2.0, home.row + home.rows / 2.0);
+      home.col + home.cols / 2.0,
+      home.row + home.rows / 2.0,
+    );
     final pseed = _rng.nextInt(0x7FFFFFFF);
     final male = !lonely.isMale; // eş karşı cinsten gelir
     final spouse = VillagerEntity(
@@ -676,19 +706,25 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     pushPolicyMorale(0.04, 3.0);
     lonely.feel(NpcEmotion.joy, 6.0, moodDelta: 0.16);
     spouse.feel(NpcEmotion.content, 5.0, moodDelta: 0.10);
-    final ctx = _voice(spouse,
-        other: lonely, seed: _stableSeed('nikâh${spouse.name}', _dayCount));
-    _showNotification(Voice.say(const [
-      '👰 {ad} dışarıdan geldi; {öteki-in} ocağına gelin/damat oldu.',
-      '👰 {öteki} artık yalnız değil — {ad} kendi adıyla köye yerleşti.',
-    ], ctx));
+    final ctx = _voice(
+      spouse,
+      other: lonely,
+      seed: _stableSeed('nikâh${spouse.name}', _dayCount),
+    );
+    _showNotification(
+      Voice.say(const [
+        '👰 {ad} dışarıdan geldi; {öteki-in} ocağına gelin/damat oldu.',
+        '👰 {öteki} artık yalnız değil — {ad} kendi adıyla köye yerleşti.',
+      ], ctx),
+    );
     _chronicle(
-        Voice.say(const [
-          '{ad} dışarıdan gelip {öteki} ile yuva kurdu; köye yeni bir ad girdi.',
-          '{öteki-in} ocağına dışarıdan bir eş geldi: {ad}.',
-        ], ctx),
-        icon: '👰',
-        milestone: true);
+      Voice.say(const [
+        '{ad} dışarıdan gelip {öteki} ile yuva kurdu; köye yeni bir ad girdi.',
+        '{öteki-in} ocağına dışarıdan bir eş geldi: {ad}.',
+      ], ctx),
+      icon: '👰',
+      milestone: true,
+    );
     _discoverCallingCraft(spouse, _CraftSource.migrant);
     return true;
   }
@@ -708,9 +744,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       if (_obstacles.contains((c, r))) continue;
       if (treeSet.contains((c, r))) continue;
       if (_forbiddenForTrees.contains((c, r))) continue;
-      _trees.add(TreeEntity(
-        col: c, row: r, type: TreeType.pine, isGrowing: true,
-      ));
+      _trees.add(
+        TreeEntity(col: c, row: r, type: TreeType.pine, isGrowing: true),
+      );
       return;
     }
   }
@@ -759,18 +795,38 @@ extension _SceneBuildingSpawn on _VillageSceneState {
 
     // Yeni bina dikildi — civardaki köylüler hayranlıkla dönüp bakar (gövde
     // dili; baş üstü emoji yok). Yerel canlılık dalgası.
-    _reactNearby(o.col + 1.0, o.row + 1.0, 6.0, NpcEmotion.wonder, 3.5,
-        moodDelta: 0.04);
+    _reactNearby(
+      o.col + 1.0,
+      o.row + 1.0,
+      6.0,
+      NpcEmotion.wonder,
+      3.5,
+      moodDelta: 0.04,
+    );
 
     switch (o.type) {
       case BuildingType.firepit:
         _hasFire = true;
         _firepitBuilding = building;
         _spawnStartingNPCs(building);
-        // Açılış akışı: ateş yeri seçildi → kısa "ateş yakma" sinematiği.
+        // Açılış akışı: ateş yeri seçildi → ilk ateş. Eskiden burada tam ekran
+        // sinematik vardı; kaldırıldı. Tam ekran film artık yalnız TONU
+        // DEĞİŞTİREN üç ana ana saklı (kuruluş / imparatorluk / hesaplaşma).
+        // İlk ateş zaten dünyada anlatılabilir bir an: kadro ateşin başına
+        // toplanır, köy hayranlıkla bakar, sarsıntı ocağı işaret eder.
         if (_firstFirePending) {
           _firstFirePending = false;
-          _playCutscene(kFireLightingCutscene);
+          addCameraShake(3.0, dur: 0.5);
+          _feelVillage(NpcEmotion.wonder, 6.0, 0.08);
+          _gatherAtFire(kGameDaySeconds * 0.25, max: 6);
+          _chronicle(
+            'İlk ateş yakıldı. Köyün ocağı tütmeye başladı.',
+            icon: '🔥',
+            milestone: true,
+          );
+          _showNotification(
+            '🔥 İlk ateş yandı. Yakıtı odunla beslenir; stokta biraz odun bırak.',
+          );
         } else {
           _showNotification('Ateş yakıldı! Köy kurulmaya başlıyor...');
         }
@@ -795,6 +851,14 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           final where = o.type == BuildingType.tent ? 'çadıra' : 'eve';
           _showNotification('$assigned köylü $where yerleşti.');
         }
+        // Ateş bir başlangıç noktasıdır; köy, ilk barınak tamamlanınca gerçek
+        // bir yerleşime dönüşür. İsim istemini ateş anından buraya taşıyoruz.
+        if (o.type == BuildingType.tent &&
+            _charterTier == 0 &&
+            _villageName == 'Köy' &&
+            !_villageNamePromptOpen) {
+          setStateHere(() => _villageNamePromptOpen = true);
+        }
 
       case BuildingType.lumberCamp:
         // (Oduncu artık atanmış köylü — _syncJobWorkforce kampa en yakın boş
@@ -811,8 +875,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
             n.isMarkedForMining = true;
           }
         }
-        // (Madenci artık ayrı avatar değil — _syncJobWorkforce boş bir köylüyü
-        // madenci olarak atar; bkz. scene_jobs _runMiner.)
+      // (Madenci artık ayrı avatar değil — _syncJobWorkforce boş bir köylüyü
+      // madenci olarak atar; bkz. scene_jobs _runMiner.)
 
       case BuildingType.fisherCabin:
         // (Balıkçı artık atanmış köylü — _runFisher.)
@@ -826,7 +890,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
 
       case BuildingType.floristCottage:
         _spawnFlowerGardenDecor(o);
-        // (Çiçekçi artık atanmış köylü — _runFlorist bahçeyi sular.)
+      // (Çiçekçi artık atanmış köylü — _runFlorist bahçeyi sular.)
 
       case BuildingType.chickenCoop:
         // Kümes BOŞ kurulur — tavuklar bina ile gelmez; oyuncu panelden satın
@@ -861,8 +925,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         final c = b.col + dc;
         final r = b.row + dr;
         if (c < 0 || c >= kCols || r < 0 || r >= kRows) continue;
-        if (c >= b.col && c < b.col + b.cols &&
-            r >= b.row && r < b.row + b.rows) {
+        if (c >= b.col &&
+            c < b.col + b.cols &&
+            r >= b.row &&
+            r < b.row + b.rows) {
           continue;
         }
         if (_waterTiles.contains((c, r))) continue;
@@ -877,15 +943,17 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final pick = 2 + _rng.nextInt(3); // 2-4
     for (int i = 0; i < pick && i < candidates.length; i++) {
       final (c, r) = candidates[i];
-      _decor.add(DecorEntity(
-        col: c,
-        row: r,
-        kind: kinds[_rng.nextInt(kinds.length)],
-        variant: _rng.nextInt(3),
-        jitterX: (_rng.nextDouble() - 0.5) * 0.5,
-        jitterY: (_rng.nextDouble() - 0.5) * 0.5,
-        swaySeed: _rng.nextInt(1000),
-      ));
+      _decor.add(
+        DecorEntity(
+          col: c,
+          row: r,
+          kind: kinds[_rng.nextInt(kinds.length)],
+          variant: _rng.nextInt(3),
+          jitterX: (_rng.nextDouble() - 0.5) * 0.5,
+          jitterY: (_rng.nextDouble() - 0.5) * 0.5,
+          swaySeed: _rng.nextInt(1000),
+        ),
+      );
     }
   }
 
@@ -938,15 +1006,17 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final pick = (candidates.length * 0.35).round().clamp(3, 7);
     for (int i = 0; i < pick && i < candidates.length; i++) {
       final (c, r) = candidates[i];
-      _decor.add(DecorEntity(
-        col: c,
-        row: r,
-        kind: kinds[_rng.nextInt(kinds.length)],
-        variant: _rng.nextInt(3),
-        jitterX: (_rng.nextDouble() - 0.5) * 0.5,
-        jitterY: (_rng.nextDouble() - 0.5) * 0.5,
-        swaySeed: _rng.nextInt(1000),
-      ));
+      _decor.add(
+        DecorEntity(
+          col: c,
+          row: r,
+          kind: kinds[_rng.nextInt(kinds.length)],
+          variant: _rng.nextInt(3),
+          jitterX: (_rng.nextDouble() - 0.5) * 0.5,
+          jitterY: (_rng.nextDouble() - 0.5) * 0.5,
+          swaySeed: _rng.nextInt(1000),
+        ),
+      );
     }
   }
 
@@ -955,8 +1025,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     for (final b in _buildings) {
       final m = kBuildingMeta[b.type];
       if (m == null) continue;
-      if (col >= b.col && col < b.col + m.cols &&
-          row >= b.row && row < b.row + m.rows) {
+      if (col >= b.col &&
+          col < b.col + m.cols &&
+          row >= b.row &&
+          row < b.row + m.rows) {
         return true;
       }
     }
@@ -971,7 +1043,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     }
 
     for (final v in _villagers) {
-      fix(v.gridX, v.gridY, (x, y) { v.gridX = x; v.gridY = y; });
+      fix(v.gridX, v.gridY, (x, y) {
+        v.gridX = x;
+        v.gridY = y;
+      });
     }
   }
 
@@ -982,26 +1057,26 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     setStateHere(() {
       _generateWorld();
       _knownCrafts.addAll(Craft.all); // test köyü tüm zanaatları bilir
-      _stockpile.wood  = 200;
+      _stockpile.wood = 200;
       _stockpile.stone = 150;
-      _stockpile.iron  = 50;
-      _stockpile.coal  = 30;
-      _stockpile.food  = 100;
-      _stockpile.gold  = 80;
+      _stockpile.iron = 50;
+      _stockpile.coal = 30;
+      _stockpile.food = 100;
+      _stockpile.gold = 80;
 
       // Layout — safe area (col 0..20, row 0..16) içinde. (type, col, row).
       const layout = <(BuildingType, int, int)>[
-        (BuildingType.firepit,     10, 8),
-        (BuildingType.townhall,    12, 4),
-        (BuildingType.woodenHouse,  4, 4),
-        (BuildingType.woodenHouse,  4, 7),
-        (BuildingType.woodenHouse,  4, 10),
-        (BuildingType.woodenHouse,  7, 10),
-        (BuildingType.tavern,       7, 4),
-        (BuildingType.well,         9, 7),
-        (BuildingType.warehouse,   16, 9),
-        (BuildingType.lamppost,    10, 6),
-        (BuildingType.lamppost,    10, 10),
+        (BuildingType.firepit, 10, 8),
+        (BuildingType.townhall, 12, 4),
+        (BuildingType.woodenHouse, 4, 4),
+        (BuildingType.woodenHouse, 4, 7),
+        (BuildingType.woodenHouse, 4, 10),
+        (BuildingType.woodenHouse, 7, 10),
+        (BuildingType.tavern, 7, 4),
+        (BuildingType.well, 9, 7),
+        (BuildingType.warehouse, 16, 9),
+        (BuildingType.lamppost, 10, 6),
+        (BuildingType.lamppost, 10, 10),
       ];
       for (final (type, col, row) in layout) {
         if (!_isValidPlacement(col, row, type)) continue;
@@ -1023,9 +1098,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           if (_waterTiles.contains((c, r))) continue;
           bool overlap = false;
           for (final b in _buildings) {
-            if (c >= b.col && c < b.col + b.cols &&
-                r >= b.row && r < b.row + b.rows) {
-              overlap = true; break;
+            if (c >= b.col &&
+                c < b.col + b.cols &&
+                r >= b.row &&
+                r < b.row + b.rows) {
+              overlap = true;
+              break;
             }
           }
           if (!overlap) _farmTiles.add(_devSownTile(c, r));
@@ -1047,12 +1125,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     setStateHere(() {
       _generateWorld();
       _knownCrafts.addAll(Craft.all); // showcase tüm zanaatları bilir
-      _stockpile.wood  = 9999;
+      _stockpile.wood = 9999;
       _stockpile.stone = 9999;
-      _stockpile.iron  = 999;
-      _stockpile.coal  = 999;
-      _stockpile.food  = 9999;
-      _stockpile.gold  = 999;
+      _stockpile.iron = 999;
+      _stockpile.coal = 999;
+      _stockpile.food = 9999;
+      _stockpile.gold = 999;
 
       // Grid layout — tüm bina tipleri, çakışmasız. Dünya 128×128 olduğu için
       // showcase'u (1..22) köşeye değil, kameranın baktığı merkez açıklığa
@@ -1065,45 +1143,48 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       // yerleşim kutusunu temizle; kutunun dışındaki orman/nehir atmosferi
       // korunur.
       bool inShowcaseClear(int c, int r) =>
-          c >= showOx - 2 && c <= showOx + 22 &&
-          r >= showOy - 2 && r <= showOy + 17;
+          c >= showOx - 2 &&
+          c <= showOx + 22 &&
+          r >= showOy - 2 &&
+          r <= showOy + 17;
       _trees.removeWhere((t) => inShowcaseClear(t.col, t.row));
-      _reeds.removeWhere((r) =>
-          inShowcaseClear(r.col, r.row) || inShowcaseClear(r.col2, r.row2));
+      _reeds.removeWhere(
+        (r) => inShowcaseClear(r.col, r.row) || inShowcaseClear(r.col2, r.row2),
+      );
       const layout = <(BuildingType, int, int)>[
         // Sıra 1: ateş yeri + temel
-        (BuildingType.firepit,         10, 2),
-        (BuildingType.well,             9, 4),
-        (BuildingType.lamppost,        12, 2),
-        (BuildingType.lamppost,         8, 2),
+        (BuildingType.firepit, 10, 2),
+        (BuildingType.well, 9, 4),
+        (BuildingType.lamppost, 12, 2),
+        (BuildingType.lamppost, 8, 2),
         // Sıra 2: evler — solda ev kümesi
-        (BuildingType.woodenHouse,      2, 4),
-        (BuildingType.woodenHouse,      2, 7),
-        (BuildingType.woodenHouse,      2, 10),
-        (BuildingType.woodenHouse,      2, 13),
+        (BuildingType.woodenHouse, 2, 4),
+        (BuildingType.woodenHouse, 2, 7),
+        (BuildingType.woodenHouse, 2, 10),
+        (BuildingType.woodenHouse, 2, 13),
         // Üretim — orta sütun
-        (BuildingType.lumberCamp,       5, 4),
-        (BuildingType.fisherCabin,      5, 7),
-        (BuildingType.mineBuilding,     5, 10),
-        (BuildingType.chickenCoop,      5, 13),
+        (BuildingType.lumberCamp, 5, 4),
+        (BuildingType.fisherCabin, 5, 7),
+        (BuildingType.mineBuilding, 5, 10),
+        (BuildingType.chickenCoop, 5, 13),
         // Civic — sağ sütun
-        (BuildingType.townhall,        11, 6),
-        (BuildingType.tavern,          11, 10),
-        (BuildingType.market,          15, 4),
-        (BuildingType.warehouse,       15, 8),
+        (BuildingType.townhall, 11, 6),
+        (BuildingType.tavern, 11, 10),
+        (BuildingType.market, 15, 4),
+        (BuildingType.warehouse, 15, 8),
         // Ahır + Ağıl — alt sıra
-        (BuildingType.stable,          15, 12),
-        (BuildingType.barn,            19, 4),
+        (BuildingType.stable, 15, 12),
+        (BuildingType.barn, 19, 4),
         // Diğer
-        (BuildingType.mill,            19, 8),
-        (BuildingType.floristCottage,  19, 12),
+        (BuildingType.mill, 19, 8),
+        (BuildingType.floristCottage, 19, 12),
         // Kilise — rahibin işyeri (iş döngüsü testi için şart)
-        (BuildingType.church,          11, 14),
+        (BuildingType.church, 11, 14),
         // Arı kovanı çiçekçinin yanına — bal sinerjisi (etki alanı çiçekleri).
-        (BuildingType.beehive,         17, 13),
+        (BuildingType.beehive, 17, 13),
         // Ekstra fenerler
-        (BuildingType.lamppost,         8, 8),
-        (BuildingType.lamppost,        14, 8),
+        (BuildingType.lamppost, 8, 8),
+        (BuildingType.lamppost, 14, 8),
       ];
       // Arazi (ağaç/su) bazı slotları geçersiz kılabilir → o bina SESSİZCE
       // atlanıyordu ve showcase "her tip hazır" sözünü tutmuyordu (değirmen/
@@ -1137,9 +1218,12 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           if (_waterTiles.contains((c, r))) continue;
           bool overlap = false;
           for (final b in _buildings) {
-            if (c >= b.col && c < b.col + b.cols &&
-                r >= b.row && r < b.row + b.rows) {
-              overlap = true; break;
+            if (c >= b.col &&
+                c < b.col + b.cols &&
+                r >= b.row &&
+                r < b.row + b.rows) {
+              overlap = true;
+              break;
             }
           }
           if (!overlap) _farmTiles.add(_devSownTile(c, r));
@@ -1173,7 +1257,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         VillagerType.miller,
         VillagerType.innkeeper,
         VillagerType.priest,
-        VillagerType.guard, // devriye + suçüstü yakalama (scene_crime) test yatağı
+        VillagerType
+            .guard, // devriye + suçüstü yakalama (scene_crime) test yatağı
       ];
       // Yetişkin köylü sayısı yetmezse ek doğur — 5 mesleğin HEPSİ temsil edilsin
       // (aksi halde showcase rastgele biçimde bazı meslekleri hiç göstermez).
@@ -1181,7 +1266,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           showcaseTrades.length) {
         final before = _villagers.length;
         _spawnGrownVillager(townhall);
-        if (_villagers.length == before) break; // doğuramıyor → sonsuz döngü olmasın
+        if (_villagers.length == before) {
+          break; // doğuramıyor → sonsuz döngü olmasın
+        }
       }
       final grown = _villagers
           .where((v) => v.hasProfession && !v.isDying)
@@ -1191,28 +1278,36 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       }
 
       // Ağıla sürü koy — çobanın bakacak hayvanı olsun (ağıl normalde BOŞ kurulur).
-      final barn = _buildings.where((b) => b.type == BuildingType.barn).firstOrNull;
+      final barn = _buildings
+          .where((b) => b.type == BuildingType.barn)
+          .firstOrNull;
       if (barn != null) {
         for (int i = 0; i < 5; i++) {
           final (sx, sy) = _nearestLand(
-              barn.col + barn.cols / 2.0, barn.row + barn.rows.toDouble());
-          _cows.add(AnimalEntity(
-            kind: i < 2 ? AnimalKind.cow : AnimalKind.sheep,
-            barnCol: barn.col,
-            barnRow: barn.row,
-            startCol: sx + (_rng.nextDouble() - 0.5) * 1.6,
-            startRow: sy + (_rng.nextDouble() - 0.5) * 1.6,
-            isMale: i.isEven,
-            ageDays: AnimalEntity.kAnimalAdultDay + _rng.nextDouble() * 2.0,
-            lifespanDays: AnimalEntity.kAnimalElderDay + 8.0 +
-                _rng.nextDouble() * 12.0,
-          ));
+            barn.col + barn.cols / 2.0,
+            barn.row + barn.rows.toDouble(),
+          );
+          _cows.add(
+            AnimalEntity(
+              kind: i < 2 ? AnimalKind.cow : AnimalKind.sheep,
+              barnCol: barn.col,
+              barnRow: barn.row,
+              startCol: sx + (_rng.nextDouble() - 0.5) * 1.6,
+              startRow: sy + (_rng.nextDouble() - 0.5) * 1.6,
+              isMale: i.isEven,
+              ageDays: AnimalEntity.kAnimalAdultDay + _rng.nextDouble() * 2.0,
+              lifespanDays:
+                  AnimalEntity.kAnimalElderDay + 8.0 + _rng.nextDouble() * 12.0,
+            ),
+          );
         }
       }
     });
-    _showNotification(_showcaseSkipped.isEmpty
-        ? '🎭 Showcase köyü kuruldu — her tip görsel test için hazır'
-        : '🎭 Showcase kuruldu — ARAZİ YÜZÜNDEN KURULAMADI: '
-            '${_showcaseSkipped.join(", ")}');
+    _showNotification(
+      _showcaseSkipped.isEmpty
+          ? '🎭 Showcase köyü kuruldu — her tip görsel test için hazır'
+          : '🎭 Showcase kuruldu — ARAZİ YÜZÜNDEN KURULAMADI: '
+                '${_showcaseSkipped.join(", ")}',
+    );
   }
 }

@@ -9,6 +9,7 @@ class NatureRenderer {
   static ui.Image? _lotus0;
   static ui.Image? _lotus1;
   static ui.Image? _reeds;
+  static final List<ui.Image?> _berryBushes = [null, null, null];
 
   static final Paint _pSprite = AssetStyle.paint();
   // Biçilmiş sazın anızı — kısa, soluk kesik saplar.
@@ -19,9 +20,20 @@ class NatureRenderer {
     ..isAntiAlias = true;
 
   static Future<void> loadAll() async {
-    _lotus0 = await _load('assets/nature/lotus_0.png');
-    _lotus1 = await _load('assets/nature/lotus_1.png');
-    _reeds  = await _load('assets/nature/reeds.png');
+    final loaded = await Future.wait([
+      _load('assets/nature/lotus_0.png'),
+      _load('assets/nature/lotus_1.png'),
+      _load('assets/nature/reeds.png'),
+      _load('assets/nature/berry_bush_0.png'),
+      _load('assets/nature/berry_bush_1.png'),
+      _load('assets/nature/berry_bush_2.png'),
+    ]);
+    _lotus0 = loaded[0];
+    _lotus1 = loaded[1];
+    _reeds = loaded[2];
+    for (var i = 0; i < _berryBushes.length; i++) {
+      _berryBushes[i] = loaded[i + 3];
+    }
   }
 
   static Future<ui.Image?> _load(String path) async {
@@ -60,7 +72,12 @@ class NatureRenderer {
       width: drawW,
       height: drawH,
     );
-    final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
+    );
 
     canvas.drawImageRect(img, src, dst, _pSprite);
   }
@@ -87,10 +104,13 @@ class NatureRenderer {
       final n = 4 + rnd.nextInt(3);
       for (int i = 0; i < n; i++) {
         final dx = (rnd.nextDouble() - 0.5) * 26;
-        final h  = 4.0 + rnd.nextDouble() * 4.0;
+        final h = 4.0 + rnd.nextDouble() * 4.0;
         final lean = (rnd.nextDouble() - 0.5) * 3;
         canvas.drawLine(
-          Offset(cx + dx, cy), Offset(cx + dx + lean, cy - h), _pStubble);
+          Offset(cx + dx, cy),
+          Offset(cx + dx + lean, cy - h),
+          _pStubble,
+        );
       }
       return;
     }
@@ -100,7 +120,12 @@ class NatureRenderer {
     final drawW = drawH * img.width / img.height;
 
     final dst = Rect.fromLTWH(cx - drawW / 2, cy - drawH, drawW, drawH);
-    final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
+    );
 
     // Rüzgar sallantısı — ortak rüzgâr alanı (ağaçlarla aynı dalga). Saz ince,
     // genliği biraz büyük; tabanı sabit, tepe sallanır.
@@ -118,6 +143,9 @@ class NatureRenderer {
   // ── Böğürtlen çalısı ────────────────────────────────────────────────────────
 
   static final Paint _pBerryFill = Paint()..isAntiAlias = true;
+  static final Paint _pBerryShadow = Paint()
+    ..color = const Color(0x33000000)
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.8);
 
   /// Çalı gövdesi — olgunlukla koyulaşan yeşil yapraklar + kırmızı meyveler.
   ///
@@ -141,6 +169,47 @@ class NatureRenderer {
   }) {
     final rnd = Random(seed);
     final r = ripeness.clamp(0.0, 1.0);
+    // Üç görsel evre: toplanmış (yalın), dolmakta (az meyve), olgun (bol
+    // meyve). Eski daire çalının tersine silüet gerçek bir çalı gibi okunur;
+    // ripeness yine oyun state'inden geldiği için save/load davranışı değişmez.
+    final spriteIndex = r < 0.18
+        ? 0
+        : r < 0.70
+        ? 1
+        : 2;
+    final sprite = _berryBushes[spriteIndex];
+    if (sprite != null) {
+      final src = switch (spriteIndex) {
+        0 => const Rect.fromLTWH(120, 270, 1015, 680),
+        1 => const Rect.fromLTWH(180, 340, 900, 600),
+        _ => const Rect.fromLTWH(105, 215, 1050, 760),
+      };
+      final width = 29.0 + variant * 1.8;
+      final height = width * src.height / src.width;
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, cy - 1),
+          width: width * 1.08,
+          height: 5.5,
+        ),
+        _pBerryShadow,
+      );
+      final sway = Wind.swayAt(col, row, time, amp: 0.022, jitter: seed * 1.3);
+      canvas.save();
+      canvas.translate(cx, cy);
+      canvas.skew(sway, 0);
+      canvas.translate(-cx, -cy);
+      canvas.drawImageRect(
+        sprite,
+        src,
+        Rect.fromLTWH(cx - width / 2, cy - height, width, height),
+        _pSprite,
+      );
+      canvas.restore();
+      return;
+    }
+
+    // Asset yüklenemezse açılış/arayüzü bozmayan prosedürel geri dönüş.
     // Rüzgâr — ağaç/sazla aynı alan, genlik küçük (çalı alçak ve sıkı).
     final sway = Wind.swayAt(col, row, time, amp: 0.022, jitter: seed * 1.3);
 
@@ -156,9 +225,15 @@ class NatureRenderer {
     final baseW = 20.0 + variant * 1.8;
     // Meyveliyken yapraklar daha koyu/dolgun; toplanınca soluklaşır.
     final leaf = Color.lerp(
-        const Color(0xFF5C7A46), const Color(0xFF3F6234), r)!;
+      const Color(0xFF5C7A46),
+      const Color(0xFF3F6234),
+      r,
+    )!;
     final leafHi = Color.lerp(
-        const Color(0xFF74915B), const Color(0xFF547B45), r)!;
+      const Color(0xFF74915B),
+      const Color(0xFF547B45),
+      r,
+    )!;
     final lumps = <(double, double, double)>[
       (-baseW * 0.32, -4.0, baseW * 0.46),
       (baseW * 0.30, -3.0, baseW * 0.42),
@@ -167,17 +242,23 @@ class NatureRenderer {
     // Taban gölgesi — çalıyı zemine oturtur (elips, karakter gölgesi diliyle).
     _pBerryFill.color = const Color(0x33000000);
     canvas.drawOval(
-        Rect.fromCenter(
-            center: Offset(cx, cy), width: baseW * 1.25, height: baseW * 0.42),
-        _pBerryFill);
+      Rect.fromCenter(
+        center: Offset(cx, cy),
+        width: baseW * 1.25,
+        height: baseW * 0.42,
+      ),
+      _pBerryFill,
+    );
     for (final (dx, dy, rad) in lumps) {
       _pBerryFill.color = leaf;
       canvas.drawCircle(Offset(cx + dx, cy + dy), rad, _pBerryFill);
       // Üst-sol highlight — shaded dil (ışık yukarıdan).
       _pBerryFill.color = leafHi;
       canvas.drawCircle(
-          Offset(cx + dx - rad * 0.28, cy + dy - rad * 0.30), rad * 0.42,
-          _pBerryFill);
+        Offset(cx + dx - rad * 0.28, cy + dy - rad * 0.30),
+        rad * 0.42,
+        _pBerryFill,
+      );
     }
 
     // MEYVE — yalnız olgunlaşırken belirir; sayısı ripeness ile artar, böylece

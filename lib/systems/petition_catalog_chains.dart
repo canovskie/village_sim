@@ -159,7 +159,7 @@ final List<_PetitionDef> _kChainPetitions = [
             ],
             moraleAmount: -0.04,
             moraleDays: 4,
-            fx: PetitionFx.vigil, // ayrılış — mum töreni havası
+            fx: PetitionFx.vigil, // ayrılış; mum töreni havası
             estateMood: [(Estate.faithful, -0.06)],
           ),
           PetitionOption(

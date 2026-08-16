@@ -17,32 +17,61 @@ part of '../main.dart';
 /// çevresi iyi hisseder).
 extension _SceneWork on _VillageSceneState {
   static const double _kWorkScan = 0.6;
+  static const double _kWeaponCraftTime = kGameDaySeconds * 0.35;
+
+  /// Demirci üretimi otomatik ve sakin bir arka plan işidir; oyuncu savaş
+  /// mikro-yönetmez. Demir + kömür varsa bir silah hazırlanır.
+  void _tickWeaponCraft(double dt) {
+    _weaponCraftTimer -= dt;
+    if (_weaponCraftTimer > 0) return;
+    final smiths = _villagers
+        .where((v) => !v.isDying && v.type == VillagerType.blacksmith)
+        .length;
+    if (smiths == 0) return;
+    if (_stockpile.iron < 2 || _stockpile.coal < 1) {
+      _weaponCraftTimer = 6.0;
+      return;
+    }
+    _stockpile.iron -= 2;
+    _stockpile.coal -= 1;
+    _stockpile.weapons += 1;
+    _weaponCraftTimer = _kWeaponCraftTime / smiths.clamp(1, 3);
+    _showNotification('🔨 Demirci bir savunma silahı hazırladı.');
+  }
 
   /// Çoban bu açlığın üstündeki hayvana koşar. DÜŞÜK tutuldu: hayvanlar kendi
   /// otladığı için açlık nadiren yükselir; eşik yüksek olursa çoban hiç iş
   /// yapmaz (ilk denemede 0.35'te tam olarak bu oldu — telemetri gösterdi).
   static const double _kTendHunger = 0.15;
+
   /// Bir bakımın hayvandan düşürdüğü açlık.
   static const double _kTendRelief = 0.45;
+
   /// Çobanın iki bakım arası nefesi (sn).
   static const double _kTendCooldown = 6.0;
 
   /// Av "ormanı": ateşten bu kadar uzaktaki ağaçlar (yakın ağaç oduncunun işi).
   static const double _kHuntMinDist = 7.0;
+
   /// Bir avın getirdiği yiyecek.
   static const int _kHuntFood = 5;
+
   /// İki av arası (sn) — ~yarım oyun günü, av bol kaynak olmasın.
   static const double _kHuntCooldown = kGameDaySeconds * 0.5;
+
   /// Avcının pusuda bekleme süresi (sn).
   static const double _kHuntStalk = 4.0;
 
   /// "İşinin başında" sayılmak için STAND SPOT'a azami uzaklık (bina merkezine
   /// değil — merkez engeldir, oraya yürünemez).
   static const double _kAtPost = 1.2;
+
   /// Hancı/rahibin çevresine "iyi geldiği" yarıçap.
   static const double _kAuraRadius = 3.2;
+
   /// Aura iki dokunuş arası (sn).
   static const double _kAuraCooldown = 12.0;
+
   /// Çobanın sürüye azami uzaklığı — bundan uzaklaşırsa geri döner.
   static const double _kFlockRange = 3.0;
 
@@ -200,8 +229,12 @@ extension _SceneWork on _VillageSceneState {
   void _reportWork() {
     final sb = StringBuffer();
     final mills = _buildings.where((b) => b.type == BuildingType.mill).length;
-    final taverns = _buildings.where((b) => b.type == BuildingType.tavern).length;
-    final churches = _buildings.where((b) => b.type == BuildingType.church).length;
+    final taverns = _buildings
+        .where((b) => b.type == BuildingType.tavern)
+        .length;
+    final churches = _buildings
+        .where((b) => b.type == BuildingType.church)
+        .length;
     sb.write('b[mill=$mills tavern=$taverns church=$churches] ');
     // Soy dökümü — "tek aile ile başla" doğrulaması (hane sayısı + kimler).
     final fam = <String, int>{};
@@ -210,7 +243,9 @@ extension _SceneWork on _VillageSceneState {
       fam[v.surname.isEmpty ? '(yok)' : v.surname] =
           (fam[v.surname.isEmpty ? '(yok)' : v.surname] ?? 0) + 1;
     }
-    sb.write('aile=${fam.length} ${fam.entries.map((e) => '${e.key}:${e.value}').join(',')} ');
+    sb.write(
+      'aile=${fam.length} ${fam.entries.map((e) => '${e.key}:${e.value}').join(',')} ',
+    );
     sb.write('food=${_stockpile.food}');
     if (_cows.isNotEmpty) {
       final avg = _cows.fold<double>(0, (s, a) => s + a.hunger) / _cows.length;
@@ -228,12 +263,15 @@ extension _SceneWork on _VillageSceneState {
       if (b != null) {
         final (bx, by) = _centerOf(b);
         final spot = _standSpotFor(b, v);
-        where = ' d=${_wdist(v.gridX, v.gridY, bx, by).toStringAsFixed(1)}'
+        where =
+            ' d=${_wdist(v.gridX, v.gridY, bx, by).toStringAsFixed(1)}'
             ' spot=${spot == null ? 'NULL' : '${spot.$1.toInt()},${spot.$2.toInt()}'}';
       }
-      sb.write(' | ${v.type.name}$where st=${v.state.name}'
-          ' act=${v.activity.name} err=${v.needsErrand ? 1 : 0}'
-          ' cd=${v.workCooldown.toStringAsFixed(0)}');
+      sb.write(
+        ' | ${v.type.name}$where st=${v.state.name}'
+        ' act=${v.activity.name} err=${v.needsErrand ? 1 : 0}'
+        ' cd=${v.workCooldown.toStringAsFixed(0)}',
+      );
     }
     kCaptureWorkReport = sb.toString();
   }
@@ -311,7 +349,9 @@ extension _SceneWork on _VillageSceneState {
     if (t == null) return;
 
     final spot = _ringSpot(t.col, t.row, 1, 1, v);
-    if (spot == null) return; // yanına varılamıyor → başka ağaç (sonraki tarama)
+    if (spot == null) {
+      return; // yanına varılamıyor → başka ağaç (sonraki tarama)
+    }
     if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten ava yürüyor
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       // Pusu → av. Kaynak yaratır (et), ağaca DOKUNMAZ (o oduncunun işi).
@@ -358,7 +398,10 @@ extension _SceneWork on _VillageSceneState {
     if (_enRouteTo(v, spot.$1, spot.$2)) return; // zaten yolda
     if (_wdist(v.gridX, v.gridY, spot.$1, spot.$2) <= _kAtPost) {
       // İşinin başında — oyalanır (bonus _millerYieldMul'dan okunur).
-      _setWorkPose(v, ActPose.labor); // taş çevirir / harman döver: sürekli işlik
+      _setWorkPose(
+        v,
+        ActPose.labor,
+      ); // taş çevirir / harman döver: sürekli işlik
       if (v.workCooldown <= 0) {
         v.feel(NpcEmotion.content, 2.5, moodDelta: 0.02);
         v.workCooldown = _kAuraCooldown;
@@ -495,13 +538,17 @@ extension _SceneWork on _VillageSceneState {
   /// [col,row] köşeli, [cols]×[rows] bir footprint'in çevresindeki en yakın
   /// yürünebilir tile. Ağaç gibi 1×1 hedefler için de kullanılır.
   (double, double)? _ringSpot(
-      int col, int row, int cols, int rows, VillagerEntity v) {
+    int col,
+    int row,
+    int cols,
+    int rows,
+    VillagerEntity v,
+  ) {
     (double, double)? best;
     double bestD = 1e9;
     for (int c = col - 1; c <= col + cols; c++) {
       for (int r = row - 1; r <= row + rows; r++) {
-        final inside =
-            c >= col && c < col + cols && r >= row && r < row + rows;
+        final inside = c >= col && c < col + cols && r >= row && r < row + rows;
         if (inside) continue; // footprint'in kendisi değil, çevresi
         if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
         if (_obstacles.contains((c, r))) continue;

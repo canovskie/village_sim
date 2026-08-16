@@ -2,18 +2,25 @@ import 'package:flutter/material.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
+import 'semantic_icon.dart';
 
 /// Karar gerektiren olaylar için tam-ekran modal. Arka planı karartır,
 /// ortada koyu rafine kart: ikon + başlık + olay mesajı + seçenek kartları.
 /// Her seçim kartı: label + detay + etki chip'leri.
+///
+/// [onDismiss] verilirse boşluğa dokunmak modalı kapatır — karar HUD'daki
+/// mühre geri iner (kapıda kuyruk; mühlet akmaya devam eder). Verilmezse
+/// eski davranış: yalnız seçimle kapanır.
 class EventChoiceModal extends StatelessWidget {
   final EventOutcome event;
   final void Function(EventChoice) onChoose;
+  final VoidCallback? onDismiss;
 
   const EventChoiceModal({
     super.key,
     required this.event,
     required this.onChoose,
+    this.onDismiss,
   });
 
   Color get _accent => switch (event.category) {
@@ -30,12 +37,22 @@ class EventChoiceModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ColoredBox(
-      // Tüm arkayı karart — oyuncu odağı modal'a.
-      color: AppUi.scrim,
-      child: useCompactGameUi(context) ? _compactBody(context) : _wideBody(),
+    // Scrim'e dokun = mühre geri in; kartın kendisi dokunuşu yutar (_swallow,
+    // panel hizasında). Dilekçe modalının kapanma diliyle aynı.
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onDismiss,
+      child: ColoredBox(
+        // Tüm arkayı karart — oyuncu odağı modal'a.
+        color: AppUi.scrim,
+        child: useCompactGameUi(context) ? _compactBody(context) : _wideBody(),
+      ),
     );
   }
+
+  /// Panelin üstüne gelen dokunuş scrim'e sızmasın — panel içi boşluğa
+  /// dokunmak modalı KAPATMAZ (yanlışlıkla kapama en çok telefonda can yakar).
+  Widget _swallow(Widget child) => GestureDetector(onTap: () {}, child: child);
 
   List<Widget> _choiceCards() => [
     for (final c in event.choices!) ...[
@@ -53,7 +70,7 @@ class EventChoiceModal extends StatelessWidget {
       child: SizedBox(
         width: window.width,
         height: window.height,
-        child: AppReveal(
+        child: _swallow(AppReveal(
           child: AppPanel(
             accent: _accent,
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -93,7 +110,7 @@ class EventChoiceModal extends StatelessWidget {
               ],
             ),
           ),
-        ),
+        )),
       ),
     );
   }
@@ -104,7 +121,7 @@ class EventChoiceModal extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: AppReveal(
+          child: _swallow(AppReveal(
             child: AppPanel(
               accent: _accent,
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
@@ -123,7 +140,7 @@ class EventChoiceModal extends StatelessWidget {
                 ],
               ),
             ),
-          ),
+          )),
         ),
       ),
     );
@@ -148,7 +165,13 @@ class EventChoiceModal extends StatelessWidget {
               BoxShadow(color: _accent.withValues(alpha: 0.28), blurRadius: 14),
             ],
           ),
-          child: Text(event.icon, style: const TextStyle(fontSize: 34)),
+          child: SemanticIcon(
+            event.icon,
+            size: 32,
+            color: _accent,
+            fallback: GameIconData.dice,
+            label: event.title,
+          ),
         ),
         const SizedBox(width: 14),
         Expanded(

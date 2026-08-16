@@ -6,7 +6,7 @@ yönetir ve altı yıl sonra imparatorluğa hesap verir. Türkçe.
 ```bash
 flutter pub get
 flutter run              # oyun
-flutter test             # 659 test
+flutter test             # 677 test, ~4 dk
 flutter analyze
 ```
 

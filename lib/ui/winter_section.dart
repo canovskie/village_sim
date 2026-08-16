@@ -53,7 +53,7 @@ class WinterSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('❄', style: TextStyle(fontSize: 12, color: _ice)),
+            const GameIcon(GameIconData.snow, size: 12, color: _ice),
             const SizedBox(width: 7),
             Text(
               isWinter ? 'KIŞ SÜRÜYOR' : 'KIŞA HAZIRLIK',

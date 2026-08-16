@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'app_ui.dart';
 import 'guide_spotlight.dart';
@@ -766,53 +768,66 @@ class QuestTracker extends StatelessWidget {
       // Sağ ray'ın devamı: aynı cam, aynı yarıçap, RAY'IN GENİŞLİĞİ (dışarıdan
       // Positioned width'i ile gelir). Kendi maxWidth'ini dayatmıyor — ayrı
       // genişlikte bir kutu olduğu an sağ kenar yine tırtıklanıyordu.
+      // Kuruluşta ipucu açılırsa kart aşağı doğru büyüyüp alt komuta çubuğunun
+      // üstüne binmemeli. Alt kroma için ayrılan alanı burada tavan yapıyoruz;
+      // nadir uzun görevlerde kartın içi kayar, dünya ve komutlar kapanmaz.
+      final screen = MediaQuery.sizeOf(context);
+      final top = MobileUi.top(context) + MobileUi.barH + MobileUi.gap;
+      final bottom = MobileUi.bottom(context) +
+          MobileUi.actionH + MobileUi.gap * 2;
+      final maxH = math.max(MobileUi.tap, screen.height - top - bottom);
       return MobileSurface(
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onToggleExpand ?? onOpen,
-              child: SizedBox(
-                height: MobileUi.tap,
-                child: Row(
-                  children: [
-                    GameIcon(icon, size: 16, color: AppUi.accent),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        activeLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.bodyHi.copyWith(fontSize: 11.5),
-                      ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onToggleExpand ?? onOpen,
+                  child: SizedBox(
+                    height: MobileUi.tap,
+                    child: Row(
+                      children: [
+                        GameIcon(icon, size: 16, color: AppUi.accent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            activeLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppUi.bodyHi.copyWith(fontSize: 11.5),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$done/$total',
+                          style: AppUi.number.copyWith(
+                              fontSize: 11, color: AppUi.sage),
+                        ),
+                        if (hint != null) ...[
+                          const SizedBox(width: 6),
+                          Transform.rotate(
+                            angle: open ? -1.5708 : 1.5708,
+                            child: const GameIcon(GameIconData.chevron,
+                                size: 13, color: AppUi.textLo),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$done/$total',
-                      style:
-                          AppUi.number.copyWith(fontSize: 11, color: AppUi.sage),
-                    ),
-                    if (hint != null) ...[
-                      const SizedBox(width: 6),
-                      Transform.rotate(
-                        angle: open ? -1.5708 : 1.5708,
-                        child: const GameIcon(GameIconData.chevron,
-                            size: 13, color: AppUi.textLo),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
+                if (open) ...[
+                  const SizedBox(height: 2),
+                  _hintBlock(compact: true),
+                  const SizedBox(height: 10),
+                ],
+              ],
             ),
-            if (open) ...[
-              const SizedBox(height: 2),
-              _hintBlock(compact: true),
-              const SizedBox(height: 10),
-            ],
-          ],
+          ),
         ),
       );
     }

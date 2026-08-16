@@ -71,6 +71,12 @@ extension _SceneReckoning on _VillageSceneState {
       return; // ilan ve hesaplaşma aynı taramada konuşmasın
     }
 
+    if (year >= 2 && year < kReckoningYear && year > _karneYear) {
+      _karneYear = year;
+      _deliverKarne();
+      return;
+    }
+
     // ── 2) HESAPLAŞMA — hesaplaşma yılına girildiğinde ────────────────────
     if (year >= kReckoningYear) {
       // İlan atlanmışsa (kayıt eski bir sürümden geldi, gün ileri sarıldı)
@@ -91,6 +97,29 @@ extension _SceneReckoning on _VillageSceneState {
     _chronicle(Voice.pick(_kHeraldAnnal, seed), icon: '📜', milestone: true);
     logDev('BERAT İLANI: yıl ${yearOf(_dayCount)}, '
         'hesaplaşmaya ${daysUntilReckoning(_dayCount)} gün');
+    final advice = karneAdvice(_reckoningInput());
+    _chronicle(
+        'Hazırlık yılı: en hafif kefeler ${advice[0].label.toLowerCase()} ve '
+        '${advice[1].label.toLowerCase()}. İlki için: '
+        '${kKarneHints[advice[0].label]}.',
+        icon: '📯', kind: ChronicleKind.life);
+  }
+
+  void _deliverKarne() {
+    final input = _reckoningInput();
+    final v = judge(input);
+    final weak = karneAdvice(input).first;
+    final seed = _stableSeed('karne', _dayCount);
+    _showNotification('📯 ${Voice.pick(const [
+      'Komutandan pusula geldi.',
+      'Heyetin katibi yıllık pusulayı bıraktı.',
+      'İmparatorluğun defterinden bir satır düştü.',
+    ], seed)} Bugün tartılsa: ${v.name}. En hafif kefe: '
+        '${weak.label.toLowerCase()}.');
+    _chronicle(
+        'Komutanın pusulası: bugün tartılsa ${v.name}. En hafif kefe '
+        '${weak.label.toLowerCase()}.',
+        icon: '📯', kind: ChronicleKind.life);
   }
 
   /// Köyün beş yılını 0..1 aralığına çevirir. Ham birimler (kile, nüfuz,

@@ -31,6 +31,13 @@ enum PropKind {
 
   /// Odun demeti — ateşe yakıt.
   firewood,
+
+  /// Tırpan — tarlanın aleti. Eşiğe dizilen köyün elinde SİLAH olur: köyün
+  /// silahı ayrı bir nesne değil, gündelik aletin başka tutuluşudur.
+  scythe,
+
+  /// Balta — oduncunun aleti; tırpanın yanında ikinci siluet.
+  axe,
 }
 
 /// Nesnenin oyuncu-yüzü adı (panel/ipucu).
@@ -43,6 +50,8 @@ String propLabel(PropKind p) => switch (p) {
       PropKind.mug => 'maşrapa',
       PropKind.basket => 'sepet',
       PropKind.firewood => 'odun',
+      PropKind.scythe => 'tırpan',
+      PropKind.axe => 'balta',
     };
 
 /// Nesnenin yürüyüş hızına etkisi. Dolu kova ve çuval AĞIRDIR — yüklü köylünün
@@ -53,6 +62,9 @@ double propSpeedFactor(PropKind p) => switch (p) {
       PropKind.sack => 0.72,
       PropKind.firewood => 0.85,
       PropKind.basket => 0.92,
+      // Tırpan ağır değil ama UZUN: sapı yere sürtmeden taşımak adımı kısaltır.
+      // Balta tek elde savrulur, hızı bozmaz.
+      PropKind.scythe => 0.90,
       _ => 1.0,
     };
 

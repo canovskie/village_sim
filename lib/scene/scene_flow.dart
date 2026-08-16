@@ -8,29 +8,30 @@ extension _SceneFlow on _VillageSceneState {
 
   /// QuestContext'i mevcut state'ten kurar.
   QuestContext _questContext() => QuestContext(
-        buildings: _buildings,
-        farmTiles: _farmTiles,
-        population: _villagers.length,
-        stock: _stockpile,
-        policies: _policies,
-        decorCount: _decor.length,
-        charterTier: _charterTier,
-        // GEÇ OYUN — köyün ne kurduğu kadar ne BİLDİĞİ ve ne kadar YERLEŞTİĞİ.
-        craftCount: _knownCrafts.length,
-        roadCount: _roadSystem.all.length,
-        // Kimlik seçilmez, mühürlerin toplamından doğar (bkz. scene_regime);
-        // "ılımlı" = henüz bir duruş yok demek.
-        regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
-        dayCount: _dayCount,
-        // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
-        loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
-        withheldHouses: _houseCountWhere((s) => s.withholds),
-        houseCount: _livingHouseCount,
-        // Kapanış ölçüsünün ta kendisi (bkz. scene_reckoning) — "berat
-        // gününe hazır ol" adımı ile hesaplaşma AYNI sayıya bakar.
-        standing: _reckoningInput().standing,
-        speakerNames: _founderNames(),
-      );
+    buildings: _buildings,
+    farmTiles: _farmTiles,
+    population: _villagers.length,
+    stock: _stockpile,
+    policies: _policies,
+    decorCount: _decor.length,
+    charterTier: _charterTier,
+    // GEÇ OYUN — köyün ne kurduğu kadar ne BİLDİĞİ ve ne kadar YERLEŞTİĞİ.
+    craftCount: _knownCrafts.length,
+    woodHarvested: _woodHarvested,
+    roadCount: _roadSystem.all.length,
+    // Kimlik seçilmez, mühürlerin toplamından doğar (bkz. scene_regime);
+    // "ılımlı" = henüz bir duruş yok demek.
+    regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
+    dayCount: _dayCount,
+    // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
+    loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
+    withheldHouses: _houseCountWhere((s) => s.withholds),
+    houseCount: _livingHouseCount,
+    // Kapanış ölçüsünün ta kendisi (bkz. scene_reckoning) — "berat
+    // gününe hazır ol" adımı ile hesaplaşma AYNI sayıya bakar.
+    standing: _reckoningInput().standing,
+    speakerNames: _founderNames(),
+  );
 
   /// Üyesi olan hanelerden duruşu koşulu sağlayanların sayısı.
   int _houseCountWhere(bool Function(HouseStance) test) {
@@ -78,7 +79,10 @@ extension _SceneFlow on _VillageSceneState {
 
   /// Yönetişim uyandı mı — dilekçe ve rastgele olayların ortak kapısı.
   bool get _governanceAwake =>
-      _charterTier >= 1 || _dayCount >= _kAwakenDayFallback;
+      kCaptureMode ||
+      _charterTier >= 1 ||
+      (_dayCount >= _kAwakenDayFallback &&
+          !(_guideActive || _guideWanted || _guideOpen));
 
   void _tickFlow(double dt) {
     _flowScan += dt;
@@ -92,23 +96,28 @@ extension _SceneFlow on _VillageSceneState {
     // Teşhis YALNIZ harness'ta: bu satır her taramada string kurar ve köyün
     // kalbini yeniden hesaplar — gerçek oyunda bedava değil.
     if (kCaptureMode) {
-      kFlowDebug = 'tarama=$_flowScans adım=${_stepCache?.quest.id ?? "YOK"} '
-        'açık=${QuestBook.activeQuests(ctx, _completedQuests).length} '
-        'kademe=$_charterTier nüfus=${_villagers.length} '
-        'gün=$_dayCount mevsim=${_season.label} '
-        'kış=%${(_winterReadiness.overall * 100).round()} '
-        'yün=${_stockpile.wool} giysi=${_villagers.where((v) => v.hasCoat).length}/${_villagers.length} '
-        'soğukEv=${_coldHouses.length} '
-        'dokumacı=${_villagers.where((v) => v.job?.role == JobRole.weaver).length} '
-        // KÖY KENDİ AÇLIĞINA BAKIYOR MU — mikro kontrol kalkınca tek soru bu.
-        'toplayıcı=${_jobCount(JobRole.forager)}/${_foragerTarget()} '
-        'aşçı=${_jobCount(JobRole.cook)}/${_cookTarget()} '
-        'yiyecek=${_stockpile.food} yemek=$_cookedMeals '
-        'bekleyenGiysi=$_coatsMade '
-        'işaret=${_stepBeacon == null ? "yok" : "var"} '
-        'öğretici=${_guideOpen ? "AÇIK" : _guideWanted ? "bekliyor(${_guideDelay.toStringAsFixed(1)})" : "kapalı"} '
-        'hedef=${_resolveGuideCue()?.title ?? "YOK"} '
-        'kalp=${_villageHeart()} kamera=$_camera kilit=$_cameraCentered '
+      kFlowDebug =
+          'tarama=$_flowScans adım=${_stepCache?.quest.id ?? "YOK"} '
+          'açık=${QuestBook.activeQuests(ctx, _completedQuests).length} '
+          'kademe=$_charterTier nüfus=${_villagers.length} '
+          'gün=$_dayCount mevsim=${_season.label} '
+          'kış=%${(_winterReadiness.overall * 100).round()} '
+          'yün=${_stockpile.wool} giysi=${_villagers.where((v) => v.hasCoat).length}/${_villagers.length} '
+          'soğukEv=${_coldHouses.length} '
+          'dokumacı=${_villagers.where((v) => v.job?.role == JobRole.weaver).length} '
+          // KÖY KENDİ AÇLIĞINA BAKIYOR MU — mikro kontrol kalkınca tek soru bu.
+          'toplayıcı=${_jobCount(JobRole.forager)}/${_foragerTarget()} '
+          'aşçı=${_jobCount(JobRole.cook)}/${_cookTarget()} '
+          'yiyecek=${_stockpile.food} yemek=$_cookedMeals '
+          'bekleyenGiysi=$_coatsMade '
+          'işaret=${_stepBeacon == null ? "yok" : "var"} '
+          'öğretici=${_guideOpen
+              ? "AÇIK"
+              : _guideWanted
+              ? "bekliyor(${_guideDelay.toStringAsFixed(1)})"
+              : "kapalı"} '
+          'hedef=${_resolveGuideCue()?.title ?? "YOK"} '
+          'kalp=${_villageHeart()} kamera=$_camera kilit=$_cameraCentered '
           'görünüm=$_viewSize';
     }
 
@@ -139,8 +148,10 @@ extension _SceneFlow on _VillageSceneState {
     }
 
     // Kademe atlama — politika-odaklı Tüzük ilerlemesi (büyük kutlama).
-    final newTier =
-        QuestBook.charterTier(_completedQuests.length, _policies.enactedCount);
+    final newTier = QuestBook.charterTier(
+      _completedQuests.length,
+      _policies.enactedCount,
+    );
     if (newTier > _charterTier) {
       _charterTier = newTier;
       final tier = QuestBook.tierOf(newTier);
@@ -149,13 +160,17 @@ extension _SceneFlow on _VillageSceneState {
       // Kademe TÖRENSEL an: köy artık dışarıda başka bir adla anılıyor —
       // cümle "köyünüz" değil, köyün KENDİ adıyla kurulur.
       _showNotification(
-          '${tier.icon} $_villageName artık "${tier.name}" diye anılıyor!');
-      // Nadir tam ekran sinematik — kademe filmi (bir kez).
-      final cs = cutsceneForTier(newTier);
-      if (cs != null && !_tierCutscenesShown.contains(newTier)) {
-        _tierCutscenesShown.add(newTier);
-        _playCutscene(cs, logEntry: '$_villageName "${tier.name}" oldu');
-      }
+        '${tier.icon} $_villageName artık "${tier.name}" diye anılıyor!',
+      );
+      // Eskiden burada kademe filmi oynardı. Merdiven altı basamak olduğu için
+      // tam ekran film koşuda ALTI kez araya giriyordu — o sıklıkta bir film
+      // artık tören değil kesinti. Kademe anı dünyada zaten tam kadro
+      // anlatılıyor: landmark ödülü + ateş başı şenlik + köyün yeni adı.
+      _chronicle(
+        '$_villageName "${tier.name}" oldu',
+        icon: tier.icon,
+        milestone: true,
+      );
     }
   }
 
@@ -192,6 +207,15 @@ extension _SceneFlow on _VillageSceneState {
   void _refreshStepBeacon() {
     final q = _stepCache?.quest;
     if (q == null) {
+      _stepBeacon = null;
+      return;
+    }
+    // İlk ateş için ortada dolaşan halka işaretçisi yerine kamera biraz açılır
+    // ve oyuncuya dünya üzerinde kendi seçimini yaptırır. Bu adımda hedef bir
+    // nokta göstermek, oyuncunun "ateş tam buraya mı" diye imleci kovalamaya
+    // zorlanmasına yol açıyordu.
+    if (q.buildTarget == BuildingType.firepit &&
+        _placing == BuildingType.firepit) {
       _stepBeacon = null;
       return;
     }
@@ -305,8 +329,9 @@ extension _SceneFlow on _VillageSceneState {
       case VisualReward.sparkle:
         _feelVillage(NpcEmotion.joy, 3, 0.04);
         if (early) {
-          _activeFx.add(ActiveFx(
-              const EventEffect(fx: EventFx.festival, duration: 4), 4));
+          _activeFx.add(
+            ActiveFx(const EventEffect(fx: EventFx.festival, duration: 4), 4),
+          );
           _scatterRewardDecor(cc, cr, 2, 8);
         } else {
           _scatterRewardDecor(cc, cr, 3, 2);
@@ -314,20 +339,23 @@ extension _SceneFlow on _VillageSceneState {
       case VisualReward.bloom:
         _feelVillage(NpcEmotion.joy, 4, 0.06);
         if (early) {
-          _activeFx.add(ActiveFx(
-              const EventEffect(fx: EventFx.festival, duration: 6), 6));
+          _activeFx.add(
+            ActiveFx(const EventEffect(fx: EventFx.festival, duration: 6), 6),
+          );
           _scatterRewardDecor(cc, cr, 3, 12);
         } else {
           _scatterRewardDecor(cc, cr, 4, 4);
         }
       case VisualReward.festival:
-        _activeFx.add(ActiveFx(
-            const EventEffect(fx: EventFx.festival, duration: 14), 14));
+        _activeFx.add(
+          ActiveFx(const EventEffect(fx: EventFx.festival, duration: 14), 14),
+        );
         _feelVillage(NpcEmotion.joy, 8, 0.10);
         _scatterRewardDecor(cc, cr, 5, 6);
       case VisualReward.landmark:
-        _activeFx.add(ActiveFx(
-            const EventEffect(fx: EventFx.festival, duration: 20), 20));
+        _activeFx.add(
+          ActiveFx(const EventEffect(fx: EventFx.festival, duration: 20), 20),
+        );
         _feelVillage(NpcEmotion.joy, 12, 0.14);
         _scatterRewardDecor(cc, cr, 7, 12);
     }
@@ -344,11 +372,20 @@ extension _SceneFlow on _VillageSceneState {
 
   /// Merkez çevresine kalıcı çiçek/çalı serpme — su/bina/ağaç/dekor çakışmasız
   /// (`_sprinkleGreenAround` deseni).
-  void _scatterRewardDecor(int cc, int cr, int radius, int count,
-      {List<DecorKind>? kinds}) {
+  void _scatterRewardDecor(
+    int cc,
+    int cr,
+    int radius,
+    int count, {
+    List<DecorKind>? kinds,
+  }) {
     kinds ??= const [
-      DecorKind.daisy, DecorKind.poppy, DecorKind.lavender,
-      DecorKind.buttercup, DecorKind.clover, DecorKind.bushSmall,
+      DecorKind.daisy,
+      DecorKind.poppy,
+      DecorKind.lavender,
+      DecorKind.buttercup,
+      DecorKind.clover,
+      DecorKind.bushSmall,
     ];
     final cands = <(int, int)>[];
     for (int dr = -radius; dr <= radius; dr++) {
@@ -366,14 +403,17 @@ extension _SceneFlow on _VillageSceneState {
     cands.shuffle(_rng);
     for (int i = 0; i < count && i < cands.length; i++) {
       final (c, r) = cands[i];
-      _decor.add(DecorEntity(
-        col: c, row: r,
-        kind: kinds[_rng.nextInt(kinds.length)],
-        variant: _rng.nextInt(3),
-        jitterX: (_rng.nextDouble() - 0.5) * 0.5,
-        jitterY: (_rng.nextDouble() - 0.5) * 0.5,
-        swaySeed: _rng.nextInt(1000),
-      ));
+      _decor.add(
+        DecorEntity(
+          col: c,
+          row: r,
+          kind: kinds[_rng.nextInt(kinds.length)],
+          variant: _rng.nextInt(3),
+          jitterX: (_rng.nextDouble() - 0.5) * 0.5,
+          jitterY: (_rng.nextDouble() - 0.5) * 0.5,
+          swaySeed: _rng.nextInt(1000),
+        ),
+      );
     }
   }
 }

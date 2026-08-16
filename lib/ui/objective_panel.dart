@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../systems/quest_book.dart';
 import 'app_ui.dart';
+import 'semantic_icon.dart';
 
 /// Köy Defteri — köyün kimlik kademesi (başlık) + akan görev listesi.
 /// Koyu panel: başlıkta kademe adı + ✓ tamamlanan sayısı; aktif görev
@@ -86,7 +87,12 @@ class ObjectivePanel extends StatelessWidget {
               cursor: SystemMouseCursors.click,
               child: Row(
                 children: [
-                  Text(tierIcon, style: const TextStyle(fontSize: 14)),
+                  SemanticIcon(
+                    tierIcon,
+                    size: 14,
+                    color: AppUi.accentSoft,
+                    fallback: GameIconData.crown,
+                  ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(tierName.toUpperCase(),
@@ -189,16 +195,25 @@ class ObjectivePanel extends StatelessWidget {
     );
   }
 
-  Widget _nextTierBar(CharterTier n) {
-    return Text(
-      '→ Sonraki: ${n.icon} ${n.name}  (${n.minPolicies} berat · ${n.minQuests} görev)',
-      style: AppUi.body.copyWith(
-        fontSize: 9.5,
-        color: AppUi.textLo,
-        height: 1.3,
-      ),
-    );
-  }
+  Widget _nextTierBar(CharterTier n) => Row(
+        children: [
+          const GameIcon(GameIconData.chevron, size: 10, color: AppUi.textLo),
+          const SizedBox(width: 4),
+          SemanticIcon(n.icon,
+              size: 11, color: AppUi.textLo, fallback: GameIconData.crown),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              'Sonraki: ${n.name}  (${n.minPolicies} berat · ${n.minQuests} görev)',
+              style: AppUi.body.copyWith(
+                fontSize: 9.5,
+                color: AppUi.textLo,
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      );
 
   Widget _allClear() {
     return Padding(

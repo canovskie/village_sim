@@ -43,6 +43,13 @@ class BuildingEntity {
   /// kendi doğru değerine oturur.
   double windowGlow = 1.0;
 
+  /// Yapının görünen hasar seviyesi (0 = sağlam, 1 = ağır yanık/hasar).
+  ///
+  /// Yangın ve vandalizm bunu yükseltir; ekonomik ceza yerine dünyada kalan
+  /// okunaklı izdir. Kaydedilir: oyuncu yangından sonra aynı tertemiz evi
+  /// görerek ne olduğunu unutmasın.
+  double damage = 0.0;
+
   /// [occupants]'ın UYANIK olanı — [windowGlow]'un hedefi buradan çıkar.
   /// Doluluk sayımıyla aynı geçişte tazelenir (bkz. _tickPopulationAndHunger).
   int awakeOccupants = 0;
@@ -60,6 +67,11 @@ class BuildingEntity {
   /// Son satış anındaki sahne zamanı (yalnız market). 0 = hiç satış yok.
   /// _BuildingDrawable bunu okuyup 1 sn'lik altın parıltısı animasyonu çizer.
   double lastSaleTime = 0;
+
+  /// Geçici yas işareti — bu evden biri öldüğünde çatının üstünde belirir.
+  /// Kayıt edilmez; yalnızca ölümün dünya üzerindeki kısa görsel yankısıdır.
+  double deathMarkerUntil = 0;
+  int deathMarkerCount = 0;
 
   /// Tavuk kümesi yumurta zamanlayıcısı (saniye). Her tick artar; eşiği
   /// aşınca +1 food üretir, sıfırlanır. main.dart update loop yönetir.

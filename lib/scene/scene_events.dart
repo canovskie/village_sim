@@ -38,7 +38,8 @@ extension _SceneEvents on _VillageSceneState {
       // olaylı olur, daha cezalı değil. Ceza tarafını vergi zaten büyütüyor;
       // ikisini birden sertleştirmek geç oyunu cozy çizginin dışına atardı.
       final tempo = pressureForDay(_dayCount).eventTempo; // 1.0 → 0.65
-      _eventTimer = (kEventMinInterval +
+      _eventTimer =
+          (kEventMinInterval +
               _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval)) *
           tempo;
     }
@@ -52,8 +53,8 @@ extension _SceneEvents on _VillageSceneState {
     if (_omenEvent != null || _pendingChoice != null) return;
     final ctx = EventContext(
       population: _villagers.length,
-      stockpile:  _stockpile,
-      buildings:  _buildings,
+      stockpile: _stockpile,
+      buildings: _buildings,
     );
     // Zorlanmış olay (dev konsol / test) — çekilişi atlar. Tüketilir: bir kez
     // sahnelenir, sonrası yine rastgeledir.
@@ -68,7 +69,11 @@ extension _SceneEvents on _VillageSceneState {
       kForcedEventId = '';
     }
     final e = forced ?? EventSystem.roll(_rng, ctx);
-    logDev('Rastgele olay mayalanıyor: ${e.title}', tag: '🎲', color: AppUi.info);
+    logDev(
+      'Rastgele olay mayalanıyor: ${e.title}',
+      tag: '🎲',
+      color: AppUi.info,
+    );
     _omenEvent = e;
     _omenLeft = _kOmenMin + _rng.nextDouble() * (_kOmenMax - _kOmenMin);
     _playOmen(e);
@@ -84,7 +89,9 @@ extension _SceneEvents on _VillageSceneState {
     if (!positive) {
       final fx = e.effect?.fx ?? EventFx.none;
       if (fx != EventFx.none) {
-        _activeFx.add(ActiveFx(EventEffect(fx: fx, duration: _omenLeft), _omenLeft));
+        _activeFx.add(
+          ActiveFx(EventEffect(fx: fx, duration: _omenLeft), _omenLeft),
+        );
         if (fx == EventFx.fireOutbreak && e.effect != null) {
           _attachFxTargets(e.effect!);
         }
@@ -179,17 +186,90 @@ extension _SceneEvents on _VillageSceneState {
     } else if (e.category == EventCategory.positive) {
       _award('first_blessing', 'Talih ilk kez bu kapıya uğradı.', '✨');
     }
-    // PROVA: karar isteyen olay simi DONDURUR (bkz. kProbePause). Harness'lar
-    // bunu ölçemez ve yanlış yerden düşer; prova köyünde olaylar susturulabilir.
+    // PROVA: harness'ların çoğu olay istemez (kadro/telemetri kirlenir);
+    // prova köyünde olaylar susturulabilir.
     if (kProbeNoEvents) return;
     if (e.needsChoice) {
-      // Modal ile bildirim aynı cümleyi konuşsun: varyant burada materyalize.
-      _pendingChoice = e.withMessage(e.messageFor(_eventSeed(e)));
-      _showNotification('${e.icon} ${e.title}. Köy karar bekliyor.');
+      _queueChoiceEvent(e);
       return;
     }
     _applyEventAutomatic(e);
   }
+
+  /// Mühletin son bu oranı = uyarı rampası — mühür kızarır + BİR KEZ
+  /// hatırlatma düşer. Dilekçe mührünün %30'uyla aynı ailede.
+  static const double _kChoiceUrgentFrac = 0.34;
+
+  /// Karar olayını KUYRUĞA koyar — KAPIDA KUYRUK modeli: modal açılmaz, sim
+  /// akmaya devam eder. HUD'a karar mührü iner, mühlet şiddete göre erir:
+  ///   major (yangın/salgın) → günün %20'si   (~48 sn 1× hızda)
+  ///   minor (kurt vb.)      → günün %30'u    (~72 sn 1× hızda)
+  /// Sayılar "acele ettirmesin ama dünya nefesini tutmasın" dengesi: modal
+  /// dönemde süre sonsuzdu, sıfıra da inemez — kayıp her zaman haber verilir.
+  void _queueChoiceEvent(EventOutcome e) {
+    final grace =
+        kGameDaySeconds * (e.severity == EventSeverity.major ? 0.20 : 0.30);
+    // Modal/mühür/bildirim aynı cümleyi konuşsun: varyant burada materyalize.
+    final shown = e.withMessage(e.messageFor(_eventSeed(e)));
+    setStateHere(() {
+      _pendingChoice = shown;
+      _choiceGrace = grace;
+      _choiceDeadline = grace;
+      _choiceModalOpen = false;
+      _choiceUrgentWarned = false;
+    });
+    kProbeChoiceWaiting = e.id;
+    _easeToBaseSpeed();
+    // Tehdit karar penceresi boyunca GÖRÜNÜR kalsın: olayın cezasız görsel
+    // fx'i (omen'deki ön-titreşimin devamı) pencere süresince yenilenir.
+    // Yalnız görsel taşınır (tint) — mul/ceza kolları karara kadar işlemez.
+    final fx = e.effect;
+    if (e.category == EventCategory.negative &&
+        fx != null &&
+        fx.fx != EventFx.none) {
+      _activeFx.add(
+        ActiveFx(
+          EventEffect(fx: fx.fx, screenTint: fx.screenTint, duration: grace),
+          grace,
+        ),
+      );
+      // Yangın hedefi omen'de seçilmişti; ara tick'te temizlendiyse yeniden.
+      if (fx.fx == EventFx.fireOutbreak && _burningBuildings.isEmpty) {
+        _attachFxTargets(fx);
+      }
+    }
+    _reactToEvent(shown); // köy gövde diliyle tepki verir — iş değil, bekleyiş
+    _showNotification('${e.icon} ${e.title}. Köy karar bekliyor.');
+  }
+
+  /// Kuyruktaki kararın mühleti — scene_tick her tick çağırır. Sim donuksa
+  /// dt gelmez, mühlet de erimez: bekleyiş ancak YAŞAYAN köyde işler.
+  void _tickChoiceDeadline(double dt) {
+    final e = _pendingChoice;
+    if (e == null || !e.needsChoice) return;
+    _choiceDeadline -= dt;
+    if (!_choiceUrgentWarned &&
+        _choiceDeadline / _choiceGrace <= _kChoiceUrgentFrac) {
+      _choiceUrgentWarned = true;
+      _showNotification('${e.icon} ${e.title}: köy hâlâ senden söz bekliyor.');
+    }
+    if (_choiceDeadline <= 0) {
+      final c = e.timeoutChoice;
+      if (c == null) {
+        setStateHere(() => _pendingChoice = null);
+        return;
+      }
+      kProbeChoiceTimeouts++;
+      _applyEventChoice(e, c, timedOut: true);
+    }
+  }
+
+  /// Karar mührüne tıklanınca — modal açılır (sim yine durmaz; mühlet de
+  /// akmaya devam eder, okurken dolarsa sonuç bildirimle düşer).
+  void _openChoiceModal() => setStateHere(() => _choiceModalOpen = true);
+
+  /// Boşluğa dokununca modal mühre geri iner — karar kuyruğu bozulmaz.
+  void _dismissChoiceModal() => setStateHere(() => _choiceModalOpen = false);
 
   /// Karar gerektirmeyen olayın etkilerini ve banner'ı uygular.
   void _applyEventAutomatic(EventOutcome e) {
@@ -213,13 +293,13 @@ extension _SceneEvents on _VillageSceneState {
     }
 
     if (e.isTemporary) {
-      _eventMorale     = e.moraleModifier;
+      _eventMorale = e.moraleModifier;
       _eventMoraleLeft = e.duration;
-      _eventLabel      = '${e.icon} ${e.title}';
+      _eventLabel = '${e.icon} ${e.title}';
     }
     // Havuzdan varyantı SABİT tohumla seç ve olaya işle — banner ile bildirim
     // aynı cümleyi göstersin (ikisi de `.message` okur).
-    final seed  = _eventSeed(e);
+    final seed = _eventSeed(e);
     final shown = e.withMessage(e.messageFor(seed));
     _activeEvent = shown;
     _activeEventLeft = kEventBannerDuration;
@@ -232,8 +312,10 @@ extension _SceneEvents on _VillageSceneState {
     _reactToEvent(e); // köy gövde diliyle tepki verir (emoji yok, postür)
     _stageEventResponse(e, choiceId: null); // köylüler amaçlı koşuşur (sahne)
     // Vakanüvis: kuru, kısa yıllık satırı (havuzdan; olay başlığı değil).
-    _chronicle(Voice.weave(e.annalFor(seed), _voice(null, seed: seed)),
-        icon: e.icon);
+    _chronicle(
+      Voice.weave(e.annalFor(seed), _voice(null, seed: seed)),
+      icon: e.icon,
+    );
     _showNotification(shown.message);
   }
 
@@ -241,19 +323,38 @@ extension _SceneEvents on _VillageSceneState {
   /// seçer. Sahne renderı bu hedeflere göre özelleştirilmiş animasyon çizer.
   void _attachFxTargets(EventEffect ef) {
     if (ef.fx == EventFx.fireOutbreak) {
-      final candidates = _buildings.where((b) =>
-          b.type != BuildingType.firepit &&
-          b.type != BuildingType.lamppost &&
-          b.type != BuildingType.well).toList();
-      if (candidates.isNotEmpty) {
-        _burningBuildings.add(candidates[_rng.nextInt(candidates.length)]);
+      // Yangın önce konuta düşer: olayın görsel sonucu (isli çatı, kırık cam)
+      // bir haneye ait olmalı. Konut yoksa eski geniş aday kümesine geri dön.
+      final candidates = _buildings
+          .where((b) => b.fn?.role == BuildingRole.housing)
+          .toList();
+      final pool = candidates.isNotEmpty
+          ? candidates
+          : _buildings
+                .where(
+                  (b) =>
+                      b.type != BuildingType.firepit &&
+                      b.type != BuildingType.lamppost &&
+                      b.type != BuildingType.well,
+                )
+                .toList();
+      if (pool.isNotEmpty) {
+        final target = pool[_rng.nextInt(pool.length)];
+        target.damage = target.damage < 0.72 ? 0.72 : target.damage;
+        _burningBuildings.add(target);
       }
     }
   }
 
-  /// Karar bekleyen olayda oyuncu seçim yaptığında: choice deltalarını uygula,
-  /// modal kapat, banner ile sonuç gösterimi yap.
-  void _applyEventChoice(EventOutcome base, EventChoice c) {
+  /// Karar bekleyen olayda seçim uygulanınca: choice deltalarını uygula,
+  /// kuyruğu boşalt, banner ile sonuç gösterimi yap. [timedOut] = seçim
+  /// oyuncudan değil mühletin dolmasından geldi (köy pasif seçeneği yaşadı);
+  /// günce satırı bunu açıkça söyler — sessiz kayıp yok.
+  void _applyEventChoice(
+    EventOutcome base,
+    EventChoice c, {
+    bool timedOut = false,
+  }) {
     if (c.foodDelta != 0) {
       _stockpile.food = (_stockpile.food + c.foodDelta).clamp(0, 1 << 30);
     }
@@ -273,9 +374,9 @@ extension _SceneEvents on _VillageSceneState {
       _stockpile.gold = (_stockpile.gold + c.goldDelta).clamp(0, 1 << 30);
     }
     if (c.moraleModifier != 0 && c.duration > 0) {
-      _eventMorale     = c.moraleModifier;
+      _eventMorale = c.moraleModifier;
       _eventMoraleLeft = c.duration;
-      _eventLabel      = '${base.icon} ${base.title}';
+      _eventLabel = '${base.icon} ${base.title}';
     }
     final fx = c.effect ?? base.effect;
     if (fx != null && fx.duration > 0) {
@@ -287,29 +388,40 @@ extension _SceneEvents on _VillageSceneState {
     // Kimliğe bakar, buton metnine DEĞİL (metin serbestçe yeniden yazılabilsin).
     _stageEventResponse(base, choiceId: c.id);
     // Vakanüvis: kararın kuru izi ("Kova zinciri kuruldu. Ev kurtarıldı.").
-    _chronicle(c.annal.isEmpty ? '${base.title}: ${c.label}' : c.annal,
-        icon: base.icon, kind: ChronicleKind.decision);
+    // Zaman aşımında iz "söz gelmedi" diye başlar — suskunluk da bir karardır
+    // ve güncede öyle okunur.
+    final annal = c.annal.isEmpty ? '${base.title}: ${c.label}' : c.annal;
+    _chronicle(
+      timedOut ? 'Söz gelmedi. $annal' : annal,
+      icon: base.icon,
+      kind: ChronicleKind.decision,
+    );
     _activeEvent = EventOutcome(
-      id:       base.id,
-      title:    base.title,
-      icon:     base.icon,
-      message:  c.resolutionMessage,
+      id: base.id,
+      title: base.title,
+      icon: base.icon,
+      message: c.resolutionMessage,
       category: base.category,
       severity: base.severity,
-      foodDelta:  c.foodDelta,
-      goldDelta:  c.goldDelta,
-      woodDelta:  c.woodDelta,
+      foodDelta: c.foodDelta,
+      goldDelta: c.goldDelta,
+      woodDelta: c.woodDelta,
       stoneDelta: c.stoneDelta,
-      ironDelta:  c.ironDelta,
-      coalDelta:  c.coalDelta,
+      ironDelta: c.ironDelta,
+      coalDelta: c.coalDelta,
       moraleModifier: c.moraleModifier,
-      duration:       c.duration,
-      effect:         fx,
+      duration: c.duration,
+      effect: fx,
     );
     _activeEventLeft = kEventBannerDuration;
     _reactToEvent(_activeEvent!); // çözüm sonrası köy gövde diliyle tepki verir
     _showNotification(c.resolutionMessage);
-    setStateHere(() => _pendingChoice = null);
+    kProbeChoiceWaiting = '';
+    setStateHere(() {
+      _pendingChoice = null;
+      _choiceModalOpen = false;
+      _choiceDeadline = 0;
+    });
   }
 
   /// Bir olayı köy çapı gövde-dili tepkisine çevirir (baş üstü emoji YOK).
@@ -319,22 +431,32 @@ extension _SceneEvents on _VillageSceneState {
     double dur, mood;
     switch (e.effect?.fx) {
       case EventFx.beastEyes:
-        emotion = NpcEmotion.fear; dur = 7; mood = -0.03;
+        emotion = NpcEmotion.fear;
+        dur = 7;
+        mood = -0.03;
       case EventFx.meteorShower:
-        emotion = NpcEmotion.wonder; dur = 8; mood = 0.03;
+        emotion = NpcEmotion.wonder;
+        dur = 8;
+        mood = 0.03;
       case EventFx.harvestBounty:
-        emotion = NpcEmotion.joy; dur = 8; mood = 0.05;
+        emotion = NpcEmotion.joy;
+        dur = 8;
+        mood = 0.05;
       default:
         switch (e.category) {
           case EventCategory.positive:
-            emotion = NpcEmotion.joy; dur = 6; mood = 0.04;
+            emotion = NpcEmotion.joy;
+            dur = 6;
+            mood = 0.04;
           case EventCategory.negative:
             final major = e.severity == EventSeverity.major;
             emotion = NpcEmotion.fear;
             dur = major ? 8 : 5;
             mood = major ? -0.05 : -0.03;
           case EventCategory.neutral:
-            emotion = NpcEmotion.wonder; dur = 6; mood = 0.0;
+            emotion = NpcEmotion.wonder;
+            dur = 6;
+            mood = 0.0;
         }
     }
     _feelVillage(emotion, dur, mood);
@@ -342,12 +464,13 @@ extension _SceneEvents on _VillageSceneState {
     // Juice: sarsıcı olaylarda kamera titreşimi (ayar kapalıysa no-op).
     final shake = switch (e.effect?.fx) {
       EventFx.fireOutbreak => 12.0,
-      EventFx.storm        => 9.0,
-      EventFx.beastEyes    => 8.0,
+      EventFx.storm => 9.0,
+      EventFx.beastEyes => 8.0,
       EventFx.meteorShower => 5.0,
-      _ => e.category == EventCategory.negative
-          ? (e.severity == EventSeverity.major ? 10.0 : 5.0)
-          : 0.0,
+      _ =>
+        e.category == EventCategory.negative
+            ? (e.severity == EventSeverity.major ? 10.0 : 5.0)
+            : 0.0,
     };
     if (shake > 0) addCameraShake(shake, dur: 0.55);
   }
@@ -383,35 +506,68 @@ extension _SceneEvents on _VillageSceneState {
         if (choiceId == 'guards') {
           _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.anger, dwell: 5);
         } else {
-          _rallyToward(center.$1, center.$2,
-              count: 5, emotion: NpcEmotion.fear, dwell: 5); // ateşe sığın
+          _rallyToward(
+            center.$1,
+            center.$2,
+            count: 5,
+            emotion: NpcEmotion.fear,
+            dwell: 5,
+          ); // ateşe sığın
         }
       case EventIds.houseFire:
         if (choiceId == 'extinguish') {
           _rallyToward(tx, ty, count: 5, emotion: NpcEmotion.fear, dwell: 6);
         } else {
-          _rallyToward(center.$1, center.$2,
-              count: 4, emotion: NpcEmotion.grief, dwell: 5); // geri çekil
+          _rallyToward(
+            center.$1,
+            center.$2,
+            count: 4,
+            emotion: NpcEmotion.grief,
+            dwell: 5,
+          ); // geri çekil
         }
       case EventIds.plague:
         // DİKKAT: bu fonksiyon olay BAŞINDA (choiceId=null) ve KARAR sonrası
         // (choiceId!=null) iki kez çağrılır. Ölümcül tol YALNIZ karar anında —
         // başta köy henüz tedirgin, kimse ölmez.
         if (choiceId == null) {
-          _rallyToward(center.$1, center.$2,
-              count: 3, emotion: NpcEmotion.fear, dwell: 5); // tedirgin toplanma
+          _rallyToward(
+            center.$1,
+            center.$2,
+            count: 3,
+            emotion: NpcEmotion.fear,
+            dwell: 5,
+          ); // tedirgin toplanma
         } else if (choiceId == 'healer') {
-          _rallyToward(center.$1, center.$2,
-              count: 3, emotion: NpcEmotion.fear, dwell: 6); // tedavi etrafı
-          _plagueToll(healer: true); // erken kırıldı — ölüm yok, birkaç hafif hasta
+          _rallyToward(
+            center.$1,
+            center.$2,
+            count: 3,
+            emotion: NpcEmotion.fear,
+            dwell: 6,
+          ); // tedavi etrafı
+          _plagueToll(
+            healer: true,
+          ); // erken kırıldı — ölüm yok, birkaç hafif hasta
         } else {
           _plagueToll(healer: false); // şifacı yok → salgın en zayıfları alır
         }
       case EventIds.drought:
-        _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.fear, dwell: 5); // kuyu
+        _rallyToward(
+          tx,
+          ty,
+          count: 4,
+          emotion: NpcEmotion.fear,
+          dwell: 5,
+        ); // kuyu
       case EventIds.storm:
-        _rallyToward(center.$1, center.$2,
-            count: 5, emotion: NpcEmotion.fear, dwell: 5); // barınağa koş
+        _rallyToward(
+          center.$1,
+          center.$2,
+          count: 5,
+          emotion: NpcEmotion.fear,
+          dwell: 5,
+        ); // barınağa koş
     }
   }
 
@@ -443,23 +599,28 @@ extension _SceneEvents on _VillageSceneState {
 
   /// Birkaç boştaki köylüyü bir noktaya doğru koşturur (tehdide en yakınlar
   /// önce → "koşuşturma" hissi) + uygun gövde dili. `goTo` ile güvenilir hareket.
-  void _rallyToward(double x, double y,
-      {int count = 4,
-      NpcEmotion emotion = NpcEmotion.fear,
-      double dwell = 4.0}) {
+  void _rallyToward(
+    double x,
+    double y, {
+    int count = 4,
+    NpcEmotion emotion = NpcEmotion.fear,
+    double dwell = 4.0,
+  }) {
     final cands = _villagers
-        .where((v) =>
-            !v.isInsideBuilding &&
-            !v.isSleeping &&
-            v.hasProfession &&
-            !v.isCarrying &&
-            !v.isDying &&
-            !v.sitClaimed &&
-            // Vinyetin baş rolü koroya karışmaz: ceremony niyeti `activity`yi
-            // none bırakır, bu yüzden filtre onu YAKALAMAZ ve koşturarak
-            // koreografiyi bozardı (kova doldurmaya giden adam meydana kaçar).
-            v.mind.intent.priority < IntentPriority.ceremony &&
-            v.activity == VillagerActivity.none)
+        .where(
+          (v) =>
+              !v.isInsideBuilding &&
+              !v.isSleeping &&
+              v.hasProfession &&
+              !v.isCarrying &&
+              !v.isDying &&
+              !v.sitClaimed &&
+              // Vinyetin baş rolü koroya karışmaz: ceremony niyeti `activity`yi
+              // none bırakır, bu yüzden filtre onu YAKALAMAZ ve koşturarak
+              // koreografiyi bozardı (kova doldurmaya giden adam meydana kaçar).
+              v.mind.intent.priority < IntentPriority.ceremony &&
+              v.activity == VillagerActivity.none,
+        )
         .toList();
     cands.sort((a, b) {
       final da = (a.gridX - x) * (a.gridX - x) + (a.gridY - y) * (a.gridY - y);
@@ -471,8 +632,11 @@ extension _SceneEvents on _VillageSceneState {
       if (n >= count) break;
       final ox = (_rng.nextDouble() - 0.5) * 1.6;
       final oy = (_rng.nextDouble() - 0.5) * 1.6;
-      v.goTo((x + ox).clamp(1.0, kCols - 2.0), (y + oy).clamp(1.0, kRows - 2.0),
-          dwell);
+      v.goTo(
+        (x + ox).clamp(1.0, kCols - 2.0),
+        (y + oy).clamp(1.0, kRows - 2.0),
+        dwell,
+      );
       v.feel(emotion, dwell + 2.0);
       n++;
     }
@@ -495,8 +659,13 @@ extension _SceneEvents on _VillageSceneState {
     if (atMarket) {
       final m = _firstBuildingOf(BuildingType.market);
       if (m != null) {
-        _rallyToward(m.col + m.cols / 2.0, m.row + m.rows / 2.0,
-            count: gather, emotion: NpcEmotion.joy, dwell: 6);
+        _rallyToward(
+          m.col + m.cols / 2.0,
+          m.row + m.rows / 2.0,
+          count: gather,
+          emotion: NpcEmotion.joy,
+          dwell: 6,
+        );
       } else {
         _gatherAtFire(dur, max: gather);
       }
@@ -508,20 +677,27 @@ extension _SceneEvents on _VillageSceneState {
 
   /// Bir aktiviteyi (müzik/dans) en fazla [count] uygun boş köylüde başlatır.
   void _startActivityForSome(
-      bool Function(VillagerEntity) start, int count, double dur) {
-    final idle = _villagers
-        .where((v) =>
-            !v.isInsideBuilding &&
-            !v.isSleeping &&
-            v.hasProfession &&
-            !v.isCarrying &&
-            !v.isDying &&
-            !v.sitClaimed &&
-            v.mind.intent.priority < IntentPriority.ceremony && // baş rol hariç
-            v.activity == VillagerActivity.none &&
-            v.socialCooldown <= 0)
-        .toList()
-      ..shuffle(_rng);
+    bool Function(VillagerEntity) start,
+    int count,
+    double dur,
+  ) {
+    final idle =
+        _villagers
+            .where(
+              (v) =>
+                  !v.isInsideBuilding &&
+                  !v.isSleeping &&
+                  v.hasProfession &&
+                  !v.isCarrying &&
+                  !v.isDying &&
+                  !v.sitClaimed &&
+                  v.mind.intent.priority <
+                      IntentPriority.ceremony && // baş rol hariç
+                  v.activity == VillagerActivity.none &&
+                  v.socialCooldown <= 0,
+            )
+            .toList()
+          ..shuffle(_rng);
     int n = 0;
     for (final v in idle) {
       if (n >= count) break;
@@ -579,11 +755,11 @@ extension _SceneEvents on _VillageSceneState {
           _fxFarmMul != 1.0 ||
           _fxBuilderMul != 1.0 ||
           _fxActiveIds.isNotEmpty) {
-        _fxTint        = const Color(0x00000000);
-        _fxRainBoost   = 0.0;
+        _fxTint = const Color(0x00000000);
+        _fxRainBoost = 0.0;
         _fxNpcSpeedMul = 1.0;
-        _fxFarmMul     = 1.0;
-        _fxBuilderMul  = 1.0;
+        _fxFarmMul = 1.0;
+        _fxBuilderMul = 1.0;
         _fxActiveIds.clear();
       }
       return;
@@ -610,8 +786,8 @@ extension _SceneEvents on _VillageSceneState {
         totalTintA += a;
       }
       if (ef.rainBoost > rain) rain = ef.rainBoost;
-      npc     *= ef.npcSpeedMul;
-      farm    *= ef.farmGrowthMul;
+      npc *= ef.npcSpeedMul;
+      farm *= ef.farmGrowthMul;
       builder *= ef.builderMul;
     }
     if (totalTintA > 0) {
@@ -624,12 +800,12 @@ extension _SceneEvents on _VillageSceneState {
     } else {
       _fxTint = const Color(0x00000000);
     }
-    _fxRainBoost   = rain;
+    _fxRainBoost = rain;
     _fxNpcSpeedMul = npc;
     // Kimlik bonusu (Bereketli Köy +%15) × rejim çürümesi (Demir Sofra
     // huzursuzken tezgâh soğur, bkz. scene_regime._regimeWorkMul).
-    _fxFarmMul     = farm * _identityFarmMul * _regimeWorkMul;
-    _fxBuilderMul  = builder;
+    _fxFarmMul = farm * _identityFarmMul * _regimeWorkMul;
+    _fxBuilderMul = builder;
     if (!_fxActiveIds.contains(EventFx.fireOutbreak) &&
         _burningBuildings.isNotEmpty) {
       _burningBuildings.clear();

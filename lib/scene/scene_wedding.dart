@@ -210,7 +210,8 @@ extension _SceneWedding on _VillageSceneState {
       _petitionAuthor = null;
       _petitionExtra = const {};
       _petitionModalOpen = false;
-      _petitionForced = false;
+      _petitionOverdue = false;
+      _petitionOverdueTimer = 0;
       _petitionTimer = _petitionInterval();
     });
     _showNotification('💔 Düğün dağıldı. Masadaki dilekçenin artık sahibi yok.');
@@ -259,7 +260,8 @@ extension _SceneWedding on _VillageSceneState {
     if (p == null) return;
     _weddingCouple = (bride, groom);
     _pendingPetition = p;
-    _petitionForced = false;
+    _petitionOverdue = false;
+    _petitionOverdueTimer = 0;
     _petitionDeadline = _ScenePetitions._kPetitionGrace;
     _petitionAuthor = bride;
     // Herald — çift köy merkezine (ateşe) döner, içleri sevgiyle dolar.
@@ -314,13 +316,13 @@ extension _SceneWedding on _VillageSceneState {
           icon: '💍', milestone: true);
     }
 
-    // Coşkulu → gerçek çifte benzeyen tam ekran 2B sinematik (sim duraklar).
-    // Sahneleme aşağıda HEMEN kurulur → sinematik bitince köy zaten kutlamada.
-    if (grand && bride != null && groom != null && !kCaptureMode) {
-      _activeCutscene = weddingCutscene(
-        brideType: bride.type, brideVisual: bride.visual, brideName: bride.name,
-        groomType: groom.type, groomVisual: groom.visual, groomName: groom.name,
-      );
+    // Eskiden coşkulu düğün tam ekran 2B sinematikle açılırdı. Kaldırıldı:
+    // düğün koşu boyunca TEKRARLAYAN bir olay, dolayısıyla aynı kompozisyon
+    // her seferinde "Atla" tuşuna dönüşüyordu. Kutlama artık yalnız dünyada
+    // yaşanır — alay aşağıda kurulur; coşkuluysa üstüne şenlik FX'i biner.
+    if (grand && bride != null && groom != null) {
+      _reactFestival();
+      addCameraShake(2.0, dur: 0.4);
     }
 
     _stageWeddingProcession(bride, groom, dur, grand: grand);

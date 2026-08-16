@@ -57,6 +57,7 @@ void main() {
       expect(p.imperialAppetite, 1.0);
       expect(p.imperialTempo, 1.0);
       expect(p.eventTempo, 1.0);
+      expect(p.petitionTempo, 1.0);
       expect(p.winterBite, 1.0);
       // Kese payı 1.0 olamaz (bir oran) — ilk yılda da ısırır ama azdır.
       expect(p.treasuryShare, closeTo(0.20, 0.001));
@@ -86,9 +87,15 @@ void main() {
         expect(b.imperialAppetite, greaterThan(a.imperialAppetite));
         expect(b.imperialTempo, lessThan(a.imperialTempo));
         expect(b.eventTempo, lessThan(a.eventTempo));
+        expect(b.petitionTempo, lessThan(a.petitionTempo));
         expect(b.winterBite, greaterThan(a.winterBite));
         expect(b.treasuryShare, greaterThan(a.treasuryShare));
       }
+    });
+
+    test('dilekçe temposu altıncı yılda 0.70, sonrasında tavanda kal', () {
+      expect(pressureForYear(kReckoningYear).petitionTempo, closeTo(0.70, 0.001));
+      expect(pressureForYear(kReckoningYear + 20).petitionTempo, 0.70);
     });
 
     test('hesaplaşma yılında vergi iştahı iki katına çıkar', () {

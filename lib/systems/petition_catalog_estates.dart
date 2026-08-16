@@ -73,7 +73,7 @@ final List<_PetitionDef> _kEstatePetitions = [
     // kalmaz). Üçüncüsü savsaklamaktır ve savsaklamanın da bir faturası vardır.
     _PetitionDef(
       (c) => c.withholdingHouse != null,
-      2.2, // gündemin en ağır maddelerinden — köyün eli boş kalıyor
+      2.2, // gündemin en ağır maddelerinden; köyün eli boş kalıyor
       const Petition(
         id: 'houseWithholding',
         petitioner: '{ad}, {hane} Hanesi\'nin reisi',
@@ -91,7 +91,7 @@ final List<_PetitionDef> _kEstatePetitions = [
               'ambarımız bize yeter.”',
           '“Kızma. Kimse isyan etmiyor, kimse silah kuşanmıyor. Sadece '
               'ellerimizi cebimize koyduk. {köy} bizsiz de döner mi, onu '
-              'birlikte göreceğiz. Ben adamıma ‘çık’ demem — sen bana bir '
+              'birlikte göreceğiz. Ben adamıma ‘çık’ demem; sen bana bir '
               'sebep verirsen, o başka.”',
           '“Babam bu köyün ilk taşını taşıdı. Bugün aynı köyde bizim sözümüz '
               'en son soruluyor. Ne altın istiyorum ne toprak; hakkımızın '
@@ -430,13 +430,25 @@ final List<_PetitionDef> _kEstatePetitions = [
     ),
 
     // ════════════════════════════════════════════════════════════════════════
-    // KİMLİK ÖDÜL DİLEKÇELERİ — köy bir kimliğe kaydığında (identity.<ad>
-    // bayrağı) o kimliğe ÖZEL şenlik/hikâye açılır.
+    // KİMLİK ÖDÜL DİLEKÇELERİ — köy bir kimliğe kaydığında o kimliğe ÖZEL
+    // şenlik/hikâye açılır.
+    //
+    // KAPI DÜZELTİLDİ (petition_catalog_test): bu dördü yalnız
+    // `identity.<zümre>` bayrağını okuyordu ve o bayrak KODUN HİÇBİR YERİNDE
+    // YAZILMIYORDU (rejim sistemi `oath.<rejim>` yazar, kimlik bayrağı diye bir
+    // şey hiç var olmadı). Yani dördü de yazılmış, çizilmiş, bespoke efekt
+    // bağlanmış hâlde oyunda SIFIR kez tetiklenebiliyordu.
+    //
+    // Doğru kapı simde gerçekten dolan alandır: `ascendant` (baskın zümre,
+    // scene_petitions `_houses.ascendant`'tan besler). Bayrak yolu yine de
+    // duruyor — ileride kalıcı bir kimlik mührü yazılırsa kapı zaten açık.
     // ════════════════════════════════════════════════════════════════════════
 
     // 🌾 Bereketli Köy → Bereket Bayramı (tarlalar altın ışıltıyla parlar).
     _PetitionDef(
-      (c) => c.remembers('identity.laborers') && c.food >= 20,
+      (c) => (c.ascendant == Estate.laborers ||
+              c.remembers('identity.laborers')) &&
+          c.food >= 20,
       0.7,
       const Petition(
         id: 'identityHarvestFeast',
@@ -488,7 +500,9 @@ final List<_PetitionDef> _kEstatePetitions = [
 
     // 🔨 Zanaat Kasabası → Zanaat Panayırı (çevreden alıcı gelir, kazanç).
     _PetitionDef(
-      (c) => c.remembers('identity.artisans') && c.population >= 6,
+      (c) => (c.ascendant == Estate.artisans ||
+              c.remembers('identity.artisans')) &&
+          c.population >= 6,
       0.7,
       const Petition(
         id: 'identityCraftFair',
@@ -541,7 +555,9 @@ final List<_PetitionDef> _kEstatePetitions = [
 
     // 🕯️ Kutsal Köy → Büyük Ayin (köy çapında şükran töreni).
     _PetitionDef(
-      (c) => c.remembers('identity.faithful') && c.population >= 5,
+      (c) => (c.ascendant == Estate.faithful ||
+              c.remembers('identity.faithful')) &&
+          c.population >= 5,
       0.7,
       const Petition(
         id: 'identityGreatRite',
@@ -592,7 +608,9 @@ final List<_PetitionDef> _kEstatePetitions = [
 
     // 🏡 Köklü Yuva → Yuva Şöleni (herkesin katıldığı sıcak şölen).
     _PetitionDef(
-      (c) => c.remembers('identity.hearth') && c.food >= 18,
+      (c) => (c.ascendant == Estate.hearth ||
+              c.remembers('identity.hearth')) &&
+          c.food >= 18,
       0.7,
       const Petition(
         id: 'identityHomecoming',

@@ -11,6 +11,7 @@ import 'app_ui.dart';
 import 'mobile_ui.dart';
 import 'option_scene_card.dart';
 import 'petition_scene_card.dart';
+import 'semantic_icon.dart';
 
 /// Köyden gelen bir ricanın oyuncu-yüzlü karşılığı — Meclis önüne gelen
 /// dilekçe. Modern koyu panel diline (AppUi) oturur: rafine yüzey, tek sıcak
@@ -26,8 +27,9 @@ class PetitionModal extends StatelessWidget {
   final void Function(PetitionOption) onChoose;
   final VoidCallback onDismiss;
 
-  /// Mühlet doldu → zorunlu huzur: boşluğa dokunarak kapatılamaz, köy yanıt
-  /// bekliyor (sim duraklı). Backdrop dismiss kapalı + ipucu yerine uyarı.
+  /// Mühlet doldu → kapıda bekleyen huzur: bedel gün başına işliyor. Scrim
+  /// koyulaşır + ipucu yerine uyarı yazılır; kapatma yine SERBEST (donma ve
+  /// kilit yok — bekletmenin bedeli zaten dünyada işler).
   final bool forced;
 
   /// Dilekçeyi getiren gerçek köylü — portre + ad + meslek gösterilir. null ise
@@ -116,11 +118,11 @@ class PetitionModal extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // Arkayı karart. Ambient'te boşluğa dokun = kapat; zorunlu huzurda
-        // (mühlet doldu) dokunuş kapatmaz — köy yanıt bekliyor, koyu scrim.
+        // Arkayı karart. Boşluğa dokun = kapat (mühlet dolmuşsa da: kilit
+        // yok, bedel dünyada işliyor); dolan mühlette scrim koyulaşır.
         Positioned.fill(
           child: GestureDetector(
-            onTap: forced ? null : onDismiss,
+            onTap: onDismiss,
             child: ColoredBox(
               color: forced ? const Color(0xF20E0A06) : AppUi.scrim,
             ),
@@ -228,7 +230,7 @@ class PetitionModal extends StatelessWidget {
                             const SizedBox(height: 7),
                             forced
                                 ? Text(
-                                    'mühlet doldu — köy yanıtını bekliyor',
+                                    'mühlet doldu; bekletmenin bedeli işliyor',
                                     textAlign: TextAlign.center,
                                     style: AppUi.label.copyWith(
                                       color: AppUi.rust,
@@ -330,11 +332,11 @@ class PetitionModal extends StatelessWidget {
                             _vetoRow(),
                           ],
                           const SizedBox(height: 12),
-                          // Ambient'te ertelenebilir; zorunlu huzurda köy
-                          // yanıt bekler (kapatılamaz) — ipucu yerine uyarı.
+                          // Ambient'te sakin ipucu; mühlet dolduysa
+                          // ipucu yerine bedel uyarısı (kapatma yine serbest).
                           forced
                               ? Text(
-                                  'mühlet doldu — köy yanıtını bekliyor',
+                                  'mühlet doldu; bekletmenin bedeli işliyor',
                                   textAlign: TextAlign.center,
                                   style: AppUi.label.copyWith(
                                     color: AppUi.rust,
@@ -702,7 +704,8 @@ class _VillageStateStrip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (emoji != null)
-              Text(emoji, style: const TextStyle(fontSize: 12))
+              SemanticIcon(emoji,
+                  size: 12, color: color, fallback: GameIconData.heart)
             else if (icon != null)
               GameIcon(icon, size: 12, color: color),
             const SizedBox(width: 4),
@@ -1100,21 +1103,33 @@ class _OptionCardState extends State<_OptionCard> {
   }
 }
 
-/// HUD'da bekleyen dilekçeyi gösteren rozet — koyu kompakt panel + glif +
+/// HUD'da bekleyen KARARI gösteren rozet — koyu kompakt panel + glif +
 /// tükenen MÜHLET halkası. [progress] (1→0) kalan mühleti gösterir; halka
-/// boşaldıkça akar. [urgent] (son %30) → ton kızarır, nabız hızlanır, "AZ KALDI"
-/// uyarısı belirir. [tone] dilekçenin duygusal rengini halka/glow'a taşır.
+/// boşaldıkça akar. [urgent] (son %30) → ton kızarır, nabız hızlanır, uyarı
+/// metni değişir. [tone] duygusal rengi halka/glow'a taşır.
+///
+/// Varsayılanlar dilekçe kılığıdır; olay kuyruğu aynı rozeti [label]/[glyph]/
+/// durum metinleriyle 'KARAR' kılığında giyer — köyün tüm bekleyen kararları
+/// tek görsel dili konuşsun (kapıda kuyruk).
 class PetitionSeal extends StatefulWidget {
   final VoidCallback onTap;
   final double progress; // 1.0 = tam mühlet, 0.0 = doldu
   final bool urgent;
   final PetitionTone tone;
+  final String label; // rozet başlığı ('DİLEKÇE' / 'KARAR')
+  final String glyph; // madalyon glifi ('📜' / olay ikonu)
+  final String statusIdle; // sakin durum satırı
+  final String statusUrgent; // sıkışma durum satırı
   const PetitionSeal({
     super.key,
     required this.onTap,
     this.progress = 1.0,
     this.urgent = false,
     this.tone = PetitionTone.neutral,
+    this.label = 'DİLEKÇE',
+    this.glyph = '📜',
+    this.statusIdle = 'köy söz bekliyor',
+    this.statusUrgent = 'AZ KALDI: yanıt bekliyor',
   });
   @override
   State<PetitionSeal> createState() => _PetitionSealState();
@@ -1213,7 +1228,7 @@ class _PetitionSealState extends State<PetitionSeal>
                               accent: accent,
                             ),
                           ),
-                          _SealMedallion(accent: accent),
+                          _SealMedallion(accent: accent, glyph: widget.glyph),
                         ],
                       ),
                     ),
@@ -1223,7 +1238,7 @@ class _PetitionSealState extends State<PetitionSeal>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'DİLEKÇE',
+                          widget.label,
                           style: AppUi.title.copyWith(
                             fontSize: 14,
                             letterSpacing: 1.6,
@@ -1253,8 +1268,8 @@ class _PetitionSealState extends State<PetitionSeal>
                             const SizedBox(width: 6),
                             Text(
                               widget.urgent
-                                  ? 'AZ KALDI — yanıt bekliyor'
-                                  : 'köy söz bekliyor',
+                                  ? widget.statusUrgent
+                                  : widget.statusIdle,
                               style: AppUi.label.copyWith(
                                 color: widget.urgent
                                     ? AppUi.rust
@@ -1279,10 +1294,12 @@ class _PetitionSealState extends State<PetitionSeal>
 }
 
 /// Rozetin mühür madalyonu — dairesel koyu disk, ince altın halka + ton-aksanlı
-/// iç glow, ortada balmumu-mührü glifi. Modal hero madalyonunun küçük kardeşi.
+/// iç glow, ortada glif (balmumu mührü ya da olay ikonu). Modal hero
+/// madalyonunun küçük kardeşi.
 class _SealMedallion extends StatelessWidget {
   final Color accent;
-  const _SealMedallion({required this.accent});
+  final String glyph;
+  const _SealMedallion({required this.accent, this.glyph = '📜'});
 
   @override
   Widget build(BuildContext context) {
@@ -1306,7 +1323,7 @@ class _SealMedallion extends StatelessWidget {
           BoxShadow(color: accent.withValues(alpha: 0.35), blurRadius: 6),
         ],
       ),
-      child: const Text('📜', style: TextStyle(fontSize: 14)),
+      child: Text(glyph, style: const TextStyle(fontSize: 14)),
     );
   }
 }
