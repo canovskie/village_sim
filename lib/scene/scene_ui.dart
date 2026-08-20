@@ -973,6 +973,14 @@ extension _SceneUi on _VillageSceneState {
                 stats: _stats,
                 population: _villagers.length,
                 populationCap: _populationCap(),
+                guardCount: _villagers
+                    .where(
+                      (v) =>
+                          v.type == VillagerType.guard &&
+                          v.hasProfession &&
+                          !v.isDying,
+                    )
+                    .length,
                 // Çadırın ocaktan aldığı sıcaklık — panelde görünen sayı,
                 // moralin ve üşüme dürtüsünün okuduğu sayının ta kendisi.
                 hearthWarmth: selected.type == BuildingType.tent

@@ -126,6 +126,7 @@ import 'save/save_manager.dart';
 import 'scene/scene_data.dart';
 import 'systems/anchor_system.dart';
 import 'systems/audio_manager.dart';
+import 'systems/building_specialization.dart';
 import 'systems/building_system.dart';
 import 'systems/carrier_system.dart';
 import 'systems/chronicle.dart';

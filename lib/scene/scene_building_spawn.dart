@@ -897,6 +897,31 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         // alır ([_buyAnimal]). Yumurta görünür entity + çatlama (scene_tick).
         break;
 
+      case BuildingType.monument:
+        building.inscription = monumentInscription(
+          regimeTitle: _regimeIdentity.title,
+          houseIdentity: _houses.identityName,
+          day: _dayCount,
+        );
+        _chronicle(
+          'Anıta kazındı: ${building.inscription}.',
+          icon: '🏛',
+          milestone: true,
+        );
+
+      case BuildingType.caravanserai:
+        // Devam eden ziyaret yoksa Hanın sıklaştırıcı etkisi mevcut bekleme
+        // süresine de hemen yansısın; ilk sonucu bir tam döngü gecikmesin.
+        final firstHan =
+            _buildings.where((b) => b.type == BuildingType.caravanserai).length ==
+                1;
+        if (firstHan && _merchants.isEmpty && _merchantTimer > 0) {
+          _merchantTimer = merchantVisitGap(
+            _merchantTimer,
+            hasCaravanserai: true,
+          );
+        }
+
       default:
         break;
     }
