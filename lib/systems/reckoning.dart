@@ -32,6 +32,22 @@ import '../cutscene/cutscene.dart';
 import '../text/voice.dart';
 import 'law_compass.dart';
 
+/// Görevlerin ve hesaplaşma karnesinin paylaştığı dört iç sütun.
+///
+/// Bu sınıflandırma yalnız arayüz etiketi değildir: görev akışı oyuncuya
+/// kapanışta tartılacağı dili koşu sürerken öğretir. İmparatorluk itibarı ayrı
+/// bir kurtuluş yoludur; köyün kendi ayakları üstünde durma ölçüsüne girmez.
+enum ReckoningAxis { unity, charter, grit, legacy }
+
+extension ReckoningAxisX on ReckoningAxis {
+  String get label => switch (this) {
+    ReckoningAxis.unity => 'Hane rızası',
+    ReckoningAxis.charter => 'Tüzük',
+    ReckoningAxis.grit => 'Köy ağırlığı',
+    ReckoningAxis.legacy => 'Karar mirası',
+  };
+}
+
 /// İmparatorluğun kararı.
 enum ReckoningVerdict {
   /// 🏴 SANCAK — köy kendi bayrağını diker. İmparatorluk tabiyet değil
@@ -51,26 +67,26 @@ enum ReckoningVerdict {
 extension ReckoningVerdictX on ReckoningVerdict {
   /// Kapanış ekranının başlığı.
   String get title => switch (this) {
-        ReckoningVerdict.sancak => 'SANCAK DİKİLDİ',
-        ReckoningVerdict.berat => 'BERAT VERİLDİ',
-        ReckoningVerdict.ilhak => 'KÖY İLHAK EDİLDİ',
-      };
+    ReckoningVerdict.sancak => 'SANCAK DİKİLDİ',
+    ReckoningVerdict.berat => 'BERAT VERİLDİ',
+    ReckoningVerdict.ilhak => 'KÖY İLHAK EDİLDİ',
+  };
 
   String get icon => switch (this) {
-        ReckoningVerdict.sancak => '🏴',
-        ReckoningVerdict.berat => '📜',
-        ReckoningVerdict.ilhak => '⛓',
-      };
+    ReckoningVerdict.sancak => '🏴',
+    ReckoningVerdict.berat => '📜',
+    ReckoningVerdict.ilhak => '⛓',
+  };
 
   /// Koşu iyi bitti mi — ekranın rengi ve kroniğin tonu bunu okur.
   bool get favorable => this != ReckoningVerdict.ilhak;
 
   /// Kayıt mührüne yazılan kısa gerekçe (menüde kapanmış defterin altında).
   String get sealReason => switch (this) {
-        ReckoningVerdict.sancak => 'Sancağını dikti',
-        ReckoningVerdict.berat => 'Beratını aldı',
-        ReckoningVerdict.ilhak => 'İmparatorluğa katıldı',
-      };
+    ReckoningVerdict.sancak => 'Sancağını dikti',
+    ReckoningVerdict.berat => 'Beratını aldı',
+    ReckoningVerdict.ilhak => 'İmparatorluğa katıldı',
+  };
 }
 
 /// Hesaplaşmanın girdileri. Hepsi 0..1'e NORMALİZE gelir; ham sayıyı sahne
@@ -107,11 +123,11 @@ class ReckoningInput {
 
   /// Köyün KENDİ ayakları üstünde durma gücü (0..1). İmparatorluk sevgisi
   /// bilerek DIŞARIDA: bu, "sensiz de yaşarım" diyebilme ölçüsüdür.
-  double get standing => (unity * 0.34 +
-          charter * 0.30 +
-          grit * 0.22 +
-          legacy * 0.14)
-      .clamp(0.0, 1.0);
+  double get standing =>
+      (unity * 0.34 + charter * 0.30 + grit * 0.22 + legacy * 0.14).clamp(
+        0.0,
+        1.0,
+      );
 }
 
 /// Sancak eşiği — kendi başına ayakta durmanın bedeli yüksektir.
@@ -159,67 +175,106 @@ class ReckoningLedgerRow {
 }
 
 List<ReckoningLedgerRow> reckoningLedger(ReckoningInput i) => [
-      ReckoningLedgerRow('Hanelerin rızası', i.unity, _band(i.unity, const [
-        'Haneler yüzünü çevirmişti.',
-        'Bazı haneler seninleydi, bazıları değil.',
-        'Haneler arkanda durdu.',
-      ])),
-      ReckoningLedgerRow('Tüzüğün kalınlığı', i.charter, _band(i.charter, const [
-        'Köyün yazılı bir huyu yoktu.',
-        'Birkaç hüküm vardı, bir duruş yoktu.',
-        'Kanunname köyün huyunu belirliyordu.',
-      ])),
-      ReckoningLedgerRow('Köyün ağırlığı', i.grit, _band(i.grit, const [
-        'Köy küçük kaldı, sesi uzağa gitmedi.',
-        'Köy kendini döndürüyordu, fazlası değil.',
-        'Kalabalık ve tok bir kasabaydı.',
-      ])),
-      ReckoningLedgerRow('Kararların mirası', i.legacy, _band(i.legacy, const [
-        'Büyük kararlar köyde kötü iz bıraktı.',
-        'Kararlar gelip geçti, iz bırakmadı.',
-        'Verdiğin kararlar köyün hafızasında iyi durdu.',
-      ])),
-      ReckoningLedgerRow('İmparatorlukla arası', i.favor, _band(i.favor, const [
-        'Komutanın defterinde adın kırmızıydı.',
-        'Ne dost ne düşman: ödedin, geçti.',
-        'Heyet buraya gelmeyi iş değil usul sayıyordu.',
-      ])),
-    ];
+  ReckoningLedgerRow(
+    'Hanelerin rızası',
+    i.unity,
+    _band(i.unity, const [
+      'Haneler yüzünü çevirmişti.',
+      'Bazı haneler seninleydi, bazıları değil.',
+      'Haneler arkanda durdu.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'Tüzüğün kalınlığı',
+    i.charter,
+    _band(i.charter, const [
+      'Köyün yazılı bir huyu yoktu.',
+      'Birkaç hüküm vardı, bir duruş yoktu.',
+      'Kanunname köyün huyunu belirliyordu.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'Köyün ağırlığı',
+    i.grit,
+    _band(i.grit, const [
+      'Köy küçük kaldı, sesi uzağa gitmedi.',
+      'Köy kendini döndürüyordu, fazlası değil.',
+      'Kalabalık ve tok bir kasabaydı.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'Kararların mirası',
+    i.legacy,
+    _band(i.legacy, const [
+      'Büyük kararlar köyde kötü iz bıraktı.',
+      'Kararlar gelip geçti, iz bırakmadı.',
+      'Verdiğin kararlar köyün hafızasında iyi durdu.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'İmparatorlukla arası',
+    i.favor,
+    _band(i.favor, const [
+      'Komutanın defterinde adın kırmızıydı.',
+      'Ne dost ne düşman: ödedin, geçti.',
+      'Heyet buraya gelmeyi iş değil usul sayıyordu.',
+    ]),
+  ),
+];
 
 /// Yıllık karne: hesaplaşma satırlarının koşu sürerken okunan hâli.
 List<ReckoningLedgerRow> karneLedger(ReckoningInput i) => [
-      ReckoningLedgerRow('Hanelerin rızası', i.unity, _band(i.unity, const [
-        'Haneler yüzünü çeviriyor.',
-        'Bazı haneler seninle, bazıları değil.',
-        'Haneler arkanda duruyor.',
-      ])),
-      ReckoningLedgerRow('Tüzüğün kalınlığı', i.charter, _band(i.charter, const [
-        'Köyün yazılı bir huyu yok.',
-        'Birkaç hüküm var, bir duruş yok.',
-        'Kanunname köyün huyunu belirliyor.',
-      ])),
-      ReckoningLedgerRow('Köyün ağırlığı', i.grit, _band(i.grit, const [
-        'Köy küçük, sesi uzağa gitmiyor.',
-        'Köy kendini döndürüyor, fazlası değil.',
-        'Kalabalık ve tok bir kasaba.',
-      ])),
-      ReckoningLedgerRow('Kararların mirası', i.legacy, _band(i.legacy, const [
-        'Büyük kararlar kötü iz bırakıyor.',
-        'Kararlar gelip geçiyor, iz bırakmıyor.',
-        'Kararların köyün hafızasında iyi duruyor.',
-      ])),
-      ReckoningLedgerRow('İmparatorlukla arası', i.favor, _band(i.favor, const [
-        'Komutanın defterinde adın kırmızı.',
-        'Ne dost ne düşman: ödüyorsun, geçiyor.',
-        'Heyet buraya gelmeyi iş değil usul sayıyor.',
-      ])),
-    ];
+  ReckoningLedgerRow(
+    'Hanelerin rızası',
+    i.unity,
+    _band(i.unity, const [
+      'Haneler yüzünü çeviriyor.',
+      'Bazı haneler seninle, bazıları değil.',
+      'Haneler arkanda duruyor.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'Tüzüğün kalınlığı',
+    i.charter,
+    _band(i.charter, const [
+      'Köyün yazılı bir huyu yok.',
+      'Birkaç hüküm var, bir duruş yok.',
+      'Kanunname köyün huyunu belirliyor.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'Köyün ağırlığı',
+    i.grit,
+    _band(i.grit, const [
+      'Köy küçük, sesi uzağa gitmiyor.',
+      'Köy kendini döndürüyor, fazlası değil.',
+      'Kalabalık ve tok bir kasaba.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'Kararların mirası',
+    i.legacy,
+    _band(i.legacy, const [
+      'Büyük kararlar kötü iz bırakıyor.',
+      'Kararlar gelip geçiyor, iz bırakmıyor.',
+      'Kararların köyün hafızasında iyi duruyor.',
+    ]),
+  ),
+  ReckoningLedgerRow(
+    'İmparatorlukla arası',
+    i.favor,
+    _band(i.favor, const [
+      'Komutanın defterinde adın kırmızı.',
+      'Ne dost ne düşman: ödüyorsun, geçiyor.',
+      'Heyet buraya gelmeyi iş değil usul sayıyor.',
+    ]),
+  ),
+];
 
 List<ReckoningLedgerRow> karneAdvice(ReckoningInput i) {
-  final rows = karneLedger(i)
-      .where((r) => r.label != 'İmparatorlukla arası')
-      .toList()
-    ..sort((a, b) => a.value.compareTo(b.value));
+  final rows =
+      karneLedger(i).where((r) => r.label != 'İmparatorlukla arası').toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
   return rows.take(2).toList();
 }
 
@@ -254,60 +309,72 @@ Cutscene reckoningCutscene(
   // Defterin açılışı: itibar tonu burada da okunur. Karar zaten verilmiştir;
   // ton yalnız kaç yıldır nasıl geçindiğinizi söyler.
   final opening = Voice.pick(
-      favor < 0.35
-          ? [
-              'Heyet bu sefer kalabalık geldi ve kimse selam vermedi.',
-              'Defteri taşıyan katip önde yürüdü. Komutan arkasında, sessiz.',
-            ]
-          : favor >= 0.7
-              ? [
-                  'Tanıdık sancak, tanıdık yüz. Ama bu sefer at üstünde değil, '
-                      'yaya geldiler.',
-                  'Komutan kapıda durdu ve şapkasını çıkardı. Bu bir usul '
-                      'ziyareti değildi.',
-                ]
-              : [
-                  'Yolun ucunda toz göründü. Bu sefer kimse tarlaya dönmedi.',
-                  'Heyet meydanda durdu. Kalabalık kendiliğinden bir halka oldu.',
-                ],
-      seed);
+    favor < 0.35
+        ? [
+            'Heyet bu sefer kalabalık geldi ve kimse selam vermedi.',
+            'Defteri taşıyan katip önde yürüdü. Komutan arkasında, sessiz.',
+          ]
+        : favor >= 0.7
+        ? [
+            'Tanıdık sancak, tanıdık yüz. Ama bu sefer at üstünde değil, '
+                'yaya geldiler.',
+            'Komutan kapıda durdu ve şapkasını çıkardı. Bu bir usul '
+                'ziyareti değildi.',
+          ]
+        : [
+            'Yolun ucunda toz göründü. Bu sefer kimse tarlaya dönmedi.',
+            'Heyet meydanda durdu. Kalabalık kendiliğinden bir halka oldu.',
+          ],
+    seed,
+  );
 
   final ruling = switch (v) {
     ReckoningVerdict.sancak => [
-        CutsceneLine(
-            '$vName. Altı yıl önce burada bir ocak vardı, bir de sizin '
-            'inadınız.',
-            speaker: 'Komutan'),
-        const CutsceneLine(
-            'Bu defterde sizin sayfanız artık tutmuyor. Kendi defterinizi '
-            'kendiniz tutacaksınız.',
-            speaker: 'Komutan'),
-        const CutsceneLine(
-            'Sancağınızı dikin. İmparatorluk komşunuzdur; efendiniz değil.',
-            speaker: 'Komutan'),
-      ],
+      CutsceneLine(
+        '$vName. Altı yıl önce burada bir ocak vardı, bir de sizin '
+        'inadınız.',
+        speaker: 'Komutan',
+      ),
+      const CutsceneLine(
+        'Bu defterde sizin sayfanız artık tutmuyor. Kendi defterinizi '
+        'kendiniz tutacaksınız.',
+        speaker: 'Komutan',
+      ),
+      const CutsceneLine(
+        'Sancağınızı dikin. İmparatorluk komşunuzdur; efendiniz değil.',
+        speaker: 'Komutan',
+      ),
+    ],
     ReckoningVerdict.berat => [
-        CutsceneLine('$vName. Sayfanız dolmuş. Rakamlar tutuyor.',
-            speaker: 'Komutan'),
-        const CutsceneLine(
-            'Beratınız burada. Adınız kalıcı yazıldı, kimse bir daha '
-            'silemez.',
-            speaker: 'Komutan'),
-        const CutsceneLine(
-            'Vergi devam eder. Ama bir daha kapınıza silahla gelmem.',
-            speaker: 'Komutan'),
-      ],
+      CutsceneLine(
+        '$vName. Sayfanız dolmuş. Rakamlar tutuyor.',
+        speaker: 'Komutan',
+      ),
+      const CutsceneLine(
+        'Beratınız burada. Adınız kalıcı yazıldı, kimse bir daha '
+        'silemez.',
+        speaker: 'Komutan',
+      ),
+      const CutsceneLine(
+        'Vergi devam eder. Ama bir daha kapınıza silahla gelmem.',
+        speaker: 'Komutan',
+      ),
+    ],
     ReckoningVerdict.ilhak => [
-        CutsceneLine('$vName. Altı yıl. Sayfada yazacak bir şey birikmemiş.',
-            speaker: 'Komutan'),
-        const CutsceneLine(
-            'Kendini döndüremeyen yeri imparatorluk döndürür. Usul budur.',
-            speaker: 'Komutan'),
-        const CutsceneLine(
-            'Kimse gitmeyecek, kimse ölmeyecek. Yalnız buranın kararını '
-            'artık siz vermeyeceksiniz.',
-            speaker: 'Komutan'),
-      ],
+      CutsceneLine(
+        '$vName. Altı yıl. Sayfada yazacak bir şey birikmemiş.',
+        speaker: 'Komutan',
+      ),
+      const CutsceneLine(
+        'Kendini döndüremeyen yeri imparatorluk döndürür. Usul budur.',
+        speaker: 'Komutan',
+      ),
+      const CutsceneLine(
+        'Kimse gitmeyecek, kimse ölmeyecek. Yalnız buranın kararını '
+        'artık siz vermeyeceksiniz.',
+        speaker: 'Komutan',
+      ),
+    ],
   };
 
   return Cutscene([
@@ -318,13 +385,32 @@ Cutscene reckoningCutscene(
       zoomFrom: 1.02,
       zoomTo: 1.08,
       actors: const [
-        CutsceneActor(type: VillagerType.guard, seed: 31, fromX: 1.2, toX: 0.62, y: 0.84, scale: 1.2, flip: true, walk: true),
-        CutsceneActor(type: VillagerType.guard, seed: 44, fromX: 1.45, toX: 0.44, y: 0.80, scale: 1.1, flip: true, walk: true),
+        CutsceneActor(
+          type: VillagerType.guard,
+          seed: 31,
+          fromX: 1.2,
+          toX: 0.62,
+          y: 0.84,
+          scale: 1.2,
+          flip: true,
+          walk: true,
+        ),
+        CutsceneActor(
+          type: VillagerType.guard,
+          seed: 44,
+          fromX: 1.45,
+          toX: 0.44,
+          y: 0.80,
+          scale: 1.1,
+          flip: true,
+          walk: true,
+        ),
       ],
       lines: [
         CutsceneLine(opening),
         const CutsceneLine(
-            'Katip defteri açtı. Altı yılın hesabı iki sayfaya sığmıştı.'),
+          'Katip defteri açtı. Altı yılın hesabı iki sayfaya sığmıştı.',
+        ),
       ],
     ),
     CutsceneShot(
@@ -333,7 +419,15 @@ Cutscene reckoningCutscene(
       zoomFrom: 1.1,
       zoomTo: 1.0,
       actors: const [
-        CutsceneActor(type: VillagerType.guard, name: 'Komutan', seed: 31, fromX: 0.5, y: 0.80, scale: 1.6, flip: true),
+        CutsceneActor(
+          type: VillagerType.guard,
+          name: 'Komutan',
+          seed: 31,
+          fromX: 0.5,
+          y: 0.80,
+          scale: 1.6,
+          flip: true,
+        ),
       ],
       lines: ruling,
     ),
@@ -367,57 +461,56 @@ Cutscene reckoningCutscene(
 /// Kararın köyün KİMLİĞİNE göre okunuşu — aynı berat, Mühürlü El'de başka,
 /// Ortak Ocak'ta başka bir şey demektir. Kapanışın "bu benim köyümdü" hissi
 /// buradan gelir; rejim yalnız oyun ortasında değil, son cümlede de görünür.
-String verdictEpilogue(ReckoningVerdict v, VillageRegime regime) =>
-    switch (v) {
-      ReckoningVerdict.sancak => switch (regime) {
-          VillageRegime.commune =>
-            'Sancağı bir kişi dikmedi. Direği tutan altı el vardı ve hiçbiri '
-                'diğerinden uzun değildi.',
-          VillageRegime.market =>
-            'Sancak pazarın ortasına dikildi. O gün alışveriş durmadı; '
-                'bağımsızlık da bir mal gibi hesaplandı, ödendi, alındı.',
-          VillageRegime.ironTable =>
-            'Sancak dikildiğinde herkes aynı sofradaydı. Kimse ötekinden fazla '
-                'yemedi, kimse ötekinden az. Direği o eşitlik ayakta tuttu.',
-          VillageRegime.sealedHand =>
-            'Sancağı tek bir el dikti ve köy sustu. Korkuyla mı gururla mı, '
-                'onu torunlar tartışacak.',
-          VillageRegime.moderate =>
-            'Sancak dikildi ama üstünde bir arma yoktu. Bu köy hiçbir şeye tam '
-                'karar vermemişti; yine de kimseye boyun eğmemişti.',
-        },
-      ReckoningVerdict.berat => switch (regime) {
-          VillageRegime.commune =>
-            'Beratı meclis okudu, tek bir ağız değil. Tabi olmak da ortak '
-                'alınmış bir karardı.',
-          VillageRegime.market =>
-            'Berat bir sözleşmeydi ve iyi pazarlık edilmişti. Vergi ödenir, '
-                'kese açık kalır.',
-          VillageRegime.ironTable =>
-            'Berat geldi, sofra bozulmadı. Dışarıya tabi, içeride eşit: '
-                'köy bu ikisini birlikte taşımayı öğrendi.',
-          VillageRegime.sealedHand =>
-            'Berat mühürlendi. Komutan gitti, korku kaldı; köyü ayakta tutan '
-                'şeyin hangisi olduğu belli değil.',
-          VillageRegime.moderate =>
-            'Berat verildi. Köy ne bir şey oldu ne de kayboldu; deftere '
-                'temiz bir satır olarak geçti.',
-        },
-      ReckoningVerdict.ilhak => switch (regime) {
-          VillageRegime.commune =>
-            'Meclis son kez toplandı ve dağılma kararını da ortak aldı. '
-                'Konuşarak geçen yıllar, konuşacak vakit bırakmamıştı.',
-          VillageRegime.market =>
-            'Köy satıldı demediler, "devredildi" dediler. Defterde iki rakam '
-                'vardı ve ikisi de imparatorluğundu.',
-          VillageRegime.ironTable =>
-            'Sofra söküldü, tahtaları arabaya yüklendi. Eşitlik kaldı: '
-                'artık herkes eşit derecede tebaaydı.',
-          VillageRegime.sealedHand =>
-            'Mühür istendi ve verildi. Tek elin kurduğu düzen, tek bir imzayla '
-                'el değiştirdi.',
-          VillageRegime.moderate =>
-            'Kimse direnmedi, kimse sevinmedi. Köy bir sabah kalktı ve '
-                'başkasının oldu.',
-        },
-    };
+String verdictEpilogue(ReckoningVerdict v, VillageRegime regime) => switch (v) {
+  ReckoningVerdict.sancak => switch (regime) {
+    VillageRegime.commune =>
+      'Sancağı bir kişi dikmedi. Direği tutan altı el vardı ve hiçbiri '
+          'diğerinden uzun değildi.',
+    VillageRegime.market =>
+      'Sancak pazarın ortasına dikildi. O gün alışveriş durmadı; '
+          'bağımsızlık da bir mal gibi hesaplandı, ödendi, alındı.',
+    VillageRegime.ironTable =>
+      'Sancak dikildiğinde herkes aynı sofradaydı. Kimse ötekinden fazla '
+          'yemedi, kimse ötekinden az. Direği o eşitlik ayakta tuttu.',
+    VillageRegime.sealedHand =>
+      'Sancağı tek bir el dikti ve köy sustu. Korkuyla mı gururla mı, '
+          'onu torunlar tartışacak.',
+    VillageRegime.moderate =>
+      'Sancak dikildi ama üstünde bir arma yoktu. Bu köy hiçbir şeye tam '
+          'karar vermemişti; yine de kimseye boyun eğmemişti.',
+  },
+  ReckoningVerdict.berat => switch (regime) {
+    VillageRegime.commune =>
+      'Beratı meclis okudu, tek bir ağız değil. Tabi olmak da ortak '
+          'alınmış bir karardı.',
+    VillageRegime.market =>
+      'Berat bir sözleşmeydi ve iyi pazarlık edilmişti. Vergi ödenir, '
+          'kese açık kalır.',
+    VillageRegime.ironTable =>
+      'Berat geldi, sofra bozulmadı. Dışarıya tabi, içeride eşit: '
+          'köy bu ikisini birlikte taşımayı öğrendi.',
+    VillageRegime.sealedHand =>
+      'Berat mühürlendi. Komutan gitti, korku kaldı; köyü ayakta tutan '
+          'şeyin hangisi olduğu belli değil.',
+    VillageRegime.moderate =>
+      'Berat verildi. Köy ne bir şey oldu ne de kayboldu; deftere '
+          'temiz bir satır olarak geçti.',
+  },
+  ReckoningVerdict.ilhak => switch (regime) {
+    VillageRegime.commune =>
+      'Meclis son kez toplandı ve dağılma kararını da ortak aldı. '
+          'Konuşarak geçen yıllar, konuşacak vakit bırakmamıştı.',
+    VillageRegime.market =>
+      'Köy satıldı demediler, "devredildi" dediler. Defterde iki rakam '
+          'vardı ve ikisi de imparatorluğundu.',
+    VillageRegime.ironTable =>
+      'Sofra söküldü, tahtaları arabaya yüklendi. Eşitlik kaldı: '
+          'artık herkes eşit derecede tebaaydı.',
+    VillageRegime.sealedHand =>
+      'Mühür istendi ve verildi. Tek elin kurduğu düzen, tek bir imzayla '
+          'el değiştirdi.',
+    VillageRegime.moderate =>
+      'Kimse direnmedi, kimse sevinmedi. Köy bir sabah kalktı ve '
+          'başkasının oldu.',
+  },
+};

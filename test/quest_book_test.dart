@@ -19,23 +19,48 @@ import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/resources.dart';
 import 'package:village_sim/scene/scene_data.dart';
 import 'package:village_sim/systems/quest_book.dart';
+import 'package:village_sim/systems/reckoning.dart';
+import 'package:village_sim/systems/village_year.dart';
 
 QuestContext _ctx({
   int charterTier = 0,
   int dayCount = 1,
   int woodHarvested = 0,
+  int roadCount = 0,
+  int connectedProductionSites = 0,
+  int population = 0,
+  int houseCount = 0,
+  int withheldHouses = 0,
+  int pressuresWeathered = 0,
+  double unity = 0,
+  double charter = 0,
+  double grit = 0,
+  double legacy = 0,
+  double standing = 0,
+  bool regimeNamed = false,
   List<BuildingEntity> buildings = const [],
   Map<VillagerType, String> names = const {},
 }) => QuestContext(
   buildings: buildings,
   farmTiles: const [],
-  population: 0,
+  population: population,
   stock: ResourceBundle(),
   policies: VillagePolicies(),
   decorCount: 0,
   charterTier: charterTier,
   dayCount: dayCount,
   woodHarvested: woodHarvested,
+  roadCount: roadCount,
+  connectedProductionSites: connectedProductionSites,
+  houseCount: houseCount,
+  withheldHouses: withheldHouses,
+  pressuresWeathered: pressuresWeathered,
+  unity: unity,
+  charter: charter,
+  grit: grit,
+  legacy: legacy,
+  standing: standing,
+  regimeNamed: regimeNamed,
   speakerNames: names,
 );
 
@@ -71,6 +96,24 @@ void main() {
               '"${QuestBook.tiers[i].name}" eşiği çok dar: '
               '$reachable görevin ${QuestBook.tiers[i].minQuests} tanesi '
               'zorunlu. İsteğe bağlı bir görevi atlayan oyuncu tavana çarpar.',
+        );
+      }
+    });
+
+    test('yıla bağlı ana meseleler atlanınca da her kademe erişilebilir', () {
+      // Ana mesele stratejik fazı kurar; merdivenin tek anahtarı değildir.
+      // Oyuncu o yıl hedefi kaçırsın ya da farklı bir köy kursun: diğer
+      // görevler bir sonraki kademeye çıkmaya yetmeli.
+      for (var i = 1; i < QuestBook.tiers.length; i++) {
+        final reachableWithoutCapstones = QuestBook.all
+            .where((q) => q.tier <= i - 1 && !q.capstone)
+            .length;
+        expect(
+          QuestBook.tiers[i].minQuests,
+          lessThanOrEqualTo(reachableWithoutCapstones),
+          reason:
+              '${QuestBook.tiers[i].name} bir ana meseleyi fiilen zorunlu '
+              'tutuyor; merdiven alternatif yol bırakmıyor',
         );
       }
     });
@@ -122,6 +165,117 @@ void main() {
           'tekrar eden id: tamamlanma seti tek girdi tutar, '
           'ikinci görev sessizce ölü kalır',
     );
+  });
+
+  group('görevler hesaplaşmanın dilini öğretir', () {
+    test('son iki kademenin her biri dört iç kefeyi de gösterir', () {
+      final expected = ReckoningAxis.values.toSet();
+      for (final tier in [4, 5]) {
+        final taught = QuestBook.all
+            .where((q) => q.tier == tier)
+            .map((q) => q.axis)
+            .toSet();
+        expect(
+          taught,
+          containsAll(expected),
+          reason: '$tier. kademede hesaplaşma kefelerinden biri öğretilmiyor',
+        );
+      }
+    });
+
+    test('60 yol ve 40/50 nüfus kapıları geri gelmez', () {
+      final ids = QuestBook.all.map((q) => q.id).toSet();
+      expect(ids, isNot(contains('pop40')));
+      expect(ids, isNot(contains('pop50')));
+
+      final roads = QuestBook.all.firstWhere((q) => q.id == 'roads');
+      const year3 = (3 - 1) * kDaysPerYear + 1;
+      expect(
+        roads.check(_ctx(charterTier: 3, dayCount: year3, roadCount: 60)),
+        isFalse,
+        reason: 'boşa döşenen altmış kare yol görevi bitirmemeli',
+      );
+      expect(
+        roads.check(
+          _ctx(charterTier: 3, dayCount: year3, connectedProductionSites: 3),
+        ),
+        isTrue,
+        reason: 'aynı ağa bağlı üç üretim noktası gerçek hedef olmalı',
+      );
+
+      final sites = [
+        BuildingEntity(type: BuildingType.lumberCamp, col: 2, row: 5),
+        BuildingEntity(type: BuildingType.mill, col: 10, row: 5),
+        BuildingEntity(type: BuildingType.market, col: 18, row: 5),
+      ];
+      expect(
+        connectedProductionSiteCount(
+          buildings: sites,
+          roadTiles: const [(2, 4), (10, 4), (18, 4)],
+        ),
+        1,
+        reason: 'üç ayrı patika tek bir üretim ağı sayılmamalı',
+      );
+      expect(
+        connectedProductionSiteCount(
+          buildings: sites,
+          roadTiles: [for (var col = 2; col <= 18; col++) (col, 4)],
+        ),
+        3,
+        reason: 'kesintisiz yol üç üretim kapısını gerçekten bağlamalı',
+      );
+    });
+
+    test('3–5. yılların birer ana meselesi var ve yıl beklemek yetmez', () {
+      final capstones = QuestBook.all.where((q) => q.capstone).toList();
+      expect(capstones.map((q) => q.minYear).toSet(), {3, 4, 5});
+
+      for (final q in capstones) {
+        final firstDay = (q.minYear - 1) * kDaysPerYear + 1;
+        expect(
+          q.check(_ctx(charterTier: QuestBook.maxTier, dayCount: firstDay)),
+          isFalse,
+          reason: '${q.id}: yılın gelmesi görevi pasifçe bitirdi',
+        );
+        expect(
+          q.isAvailable(_ctx(charterTier: q.tier, dayCount: firstDay - 1)),
+          isFalse,
+        );
+        expect(
+          q.isAvailable(_ctx(charterTier: q.tier, dayCount: firstDay)),
+          isTrue,
+        );
+      }
+    });
+
+    test('ana meseleler iki veya daha çok canlı sonucu birlikte arar', () {
+      final road = QuestBook.all.firstWhere((q) => q.id == 'roads');
+      expect(road.check(_ctx(connectedProductionSites: 3)), isTrue);
+
+      final recovery = QuestBook.all.firstWhere(
+        (q) => q.id == 'recoverPressure',
+      );
+      expect(
+        recovery.check(_ctx(pressuresWeathered: 1, unity: 0.55, grit: 0.45)),
+        isTrue,
+      );
+      expect(
+        recovery.check(_ctx(pressuresWeathered: 1, unity: 0.54, grit: 0.45)),
+        isFalse,
+      );
+
+      final yearFive = QuestBook.all.firstWhere(
+        (q) => q.id == 'yearFiveMatter',
+      );
+      expect(
+        yearFive.check(_ctx(regimeNamed: true, charter: 0.67, legacy: 0.67)),
+        isTrue,
+      );
+      expect(
+        yearFive.check(_ctx(regimeNamed: true, charter: 0.67, legacy: 0.66)),
+        isFalse,
+      );
+    });
   });
 
   group('kademe hesabı', () {

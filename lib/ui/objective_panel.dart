@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../systems/quest_book.dart';
+import '../systems/reckoning.dart';
 import 'app_ui.dart';
 import 'semantic_icon.dart';
 
@@ -15,6 +16,7 @@ class ObjectivePanel extends StatelessWidget {
   final String tierIcon;
   final int completedCount;
   final int totalCount;
+
   /// Bir sonraki kademe (varsa) — ilerleme ipucu.
   final CharterTier? next;
   final bool collapsed;
@@ -95,19 +97,29 @@ class ObjectivePanel extends StatelessWidget {
                   ),
                   const SizedBox(width: 7),
                   Expanded(
-                    child: Text(tierName.toUpperCase(),
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.title.copyWith(
-                          fontSize: 12,
-                          color: AppUi.accentSoft,
-                          letterSpacing: 1.2,
-                        )),
+                    child: Text(
+                      tierName.toUpperCase(),
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.title.copyWith(
+                        fontSize: 12,
+                        color: AppUi.accentSoft,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                   ),
-                  const GameIcon(GameIconData.star, size: 11, color: AppUi.sage),
+                  const GameIcon(
+                    GameIconData.star,
+                    size: 11,
+                    color: AppUi.sage,
+                  ),
                   const SizedBox(width: 3),
-                  Text('$completedCount',
-                      style: AppUi.number
-                          .copyWith(fontSize: 11, color: AppUi.sage)),
+                  Text(
+                    '$completedCount',
+                    style: AppUi.number.copyWith(
+                      fontSize: 11,
+                      color: AppUi.sage,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -122,8 +134,11 @@ class ObjectivePanel extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
             child: Transform.rotate(
               angle: collapsed ? 1.5708 : -1.5708,
-              child: const GameIcon(GameIconData.chevron,
-                  size: 13, color: AppUi.textLo),
+              child: const GameIcon(
+                GameIconData.chevron,
+                size: 13,
+                color: AppUi.textLo,
+              ),
             ),
           ),
         ),
@@ -142,18 +157,23 @@ class ObjectivePanel extends StatelessWidget {
             width: 16,
             // Emoji DEĞİL — HUD'la aynı temalı Phosphor glyph (renkli oyuncak
             // emoji tema/göz yorgunluğunun bir parçasıydı).
-            child: GameIcon(questGlyph(s.quest.id),
-                size: 12, color: active ? AppUi.accent : AppUi.textLo),
+            child: GameIcon(
+              questGlyph(s.quest.id),
+              size: 12,
+              color: active ? AppUi.accent : AppUi.textLo,
+            ),
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: Text(s.quest.label,
-                style: active
-                    ? AppUi.bodyHi.copyWith(fontSize: 11)
-                    : AppUi.body.copyWith(
-                        fontSize: 11,
-                        color: AppUi.textMid.withValues(alpha: 0.7),
-                      )),
+            child: Text(
+              s.quest.label,
+              style: active
+                  ? AppUi.bodyHi.copyWith(fontSize: 11)
+                  : AppUi.body.copyWith(
+                      fontSize: 11,
+                      color: AppUi.textMid.withValues(alpha: 0.7),
+                    ),
+            ),
           ),
         ],
       ),
@@ -166,64 +186,88 @@ class ObjectivePanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppUi.accent.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
-        border: Border.all(color: AppUi.accent.withValues(alpha: 0.4), width: 1),
+        border: Border.all(
+          color: AppUi.accent.withValues(alpha: 0.4),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Text(
+            active.quest.capstone
+                ? 'ANA MESELE · ${active.quest.axis.label}'
+                : 'HESAPLAŞMA · ${active.quest.axis.label}',
+            style: AppUi.label.copyWith(
+              fontSize: 8.5,
+              color: active.quest.capstone ? AppUi.gold : AppUi.accentSoft,
+              letterSpacing: 0.55,
+            ),
+          ),
+          const SizedBox(height: 4),
           // GÖREVİ KİM İSTİYOR — kuruluş görevlerinin çoğu bir kurucunun
           // ağzından çıkar. İsim üstte durur ki ipucu bir sistem mesajı değil
           // birinin ricası gibi okunsun; kurucu ölmüşse satır hiç çizilmez.
           if (active.speakerName case final who?) ...[
-            Text('$who istiyor',
-                style: AppUi.label.copyWith(
-                  fontSize: 9,
-                  color: AppUi.accentSoft,
-                  letterSpacing: 0.5,
-                )),
+            Text(
+              '$who istiyor',
+              style: AppUi.label.copyWith(
+                fontSize: 9,
+                color: AppUi.accentSoft,
+                letterSpacing: 0.5,
+              ),
+            ),
             const SizedBox(height: 3),
           ],
-          Text(active.quest.hint,
-              style: AppUi.body.copyWith(
-                fontSize: 10,
-                color: AppUi.textHi,
-                height: 1.4,
-              )),
+          Text(
+            active.quest.hint,
+            style: AppUi.body.copyWith(
+              fontSize: 10,
+              color: AppUi.textHi,
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );
   }
 
   Widget _nextTierBar(CharterTier n) => Row(
-        children: [
-          const GameIcon(GameIconData.chevron, size: 10, color: AppUi.textLo),
-          const SizedBox(width: 4),
-          SemanticIcon(n.icon,
-              size: 11, color: AppUi.textLo, fallback: GameIconData.crown),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              'Sonraki: ${n.name}  (${n.minPolicies} berat · ${n.minQuests} görev)',
-              style: AppUi.body.copyWith(
-                fontSize: 9.5,
-                color: AppUi.textLo,
-                height: 1.3,
-              ),
-            ),
+    children: [
+      const GameIcon(GameIconData.chevron, size: 10, color: AppUi.textLo),
+      const SizedBox(width: 4),
+      SemanticIcon(
+        n.icon,
+        size: 11,
+        color: AppUi.textLo,
+        fallback: GameIconData.crown,
+      ),
+      const SizedBox(width: 4),
+      Expanded(
+        child: Text(
+          'Sonraki: ${n.name}  (${n.minPolicies} berat · ${n.minQuests} görev)',
+          style: AppUi.body.copyWith(
+            fontSize: 9.5,
+            color: AppUi.textLo,
+            height: 1.3,
           ),
-        ],
-      );
+        ),
+      ),
+    ],
+  );
 
   Widget _allClear() {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Text('Bu kademe tamam — yeni berat çıkar, köy ilerlesin.',
-          style: AppUi.body.copyWith(
-            color: AppUi.sage,
-            fontSize: 10,
-            height: 1.4,
-          )),
+      child: Text(
+        'Bu kademe tamam — yeni berat çıkar, köy ilerlesin.',
+        style: AppUi.body.copyWith(
+          color: AppUi.sage,
+          fontSize: 10,
+          height: 1.4,
+        ),
+      ),
     );
   }
 }
@@ -232,29 +276,42 @@ class ObjectivePanel extends StatelessWidget {
 /// QuestTracker paylaşır. Bilinmeyen id star'a düşer — yeni görev eklenince
 /// buraya bir satır ekle.
 GameIconData questGlyph(String id) => switch (id) {
-      'firepit' => GameIconData.flame,
-      'lumber' => GameIconData.axe,
-      'house' => GameIconData.home,
-      'farm' => GameIconData.wheat,
-      'well' => GameIconData.drop,
-      // ── Kuruluş mikro adımları ──────────────────────────────────────────
-      'tent' => GameIconData.home,
-      'firstNight' => GameIconData.moon,
-      'townhall' => GameIconData.bank,
-      'firstPolicy' => GameIconData.scroll,
-      'tavern' => GameIconData.tankard,
-      'pop10' => GameIconData.people,
-      'church' => GameIconData.church,
-      'market' => GameIconData.market,
-      'beehive' => GameIconData.honey,
-      'florist' => GameIconData.flower,
-      'threePolicies' => GameIconData.scales,
-      'neighborly' => GameIconData.handshake,
-      'pop20' => GameIconData.people,
-      'bloomVillage' => GameIconData.flower,
-      'fivePolicies' => GameIconData.crown,
-      'hospitality' => GameIconData.door,
-      'warehouse' => GameIconData.warehouse,
-      'pop30' => GameIconData.star,
-      _ => GameIconData.star,
-    };
+  'firepit' => GameIconData.flame,
+  'lumber' => GameIconData.axe,
+  'house' => GameIconData.home,
+  'farm' => GameIconData.wheat,
+  'well' => GameIconData.drop,
+  // ── Kuruluş mikro adımları ──────────────────────────────────────────
+  'tent' => GameIconData.home,
+  'firstNight' => GameIconData.moon,
+  'townhall' => GameIconData.bank,
+  'firstPolicy' => GameIconData.scroll,
+  'tavern' => GameIconData.tankard,
+  'pop10' => GameIconData.people,
+  'church' => GameIconData.church,
+  'market' => GameIconData.market,
+  'beehive' => GameIconData.honey,
+  'florist' => GameIconData.flower,
+  'threePolicies' => GameIconData.scales,
+  'neighborly' => GameIconData.handshake,
+  'pop20' => GameIconData.people,
+  'bloomVillage' => GameIconData.flower,
+  'fivePolicies' => GameIconData.crown,
+  'hospitality' => GameIconData.door,
+  'warehouse' => GameIconData.warehouse,
+  'pop30' => GameIconData.star,
+  'roads' => GameIconData.map,
+  'recoverPressure' => GameIconData.reed,
+  'libraryLegacy' => GameIconData.scroll,
+  'housesUnited' => GameIconData.home,
+  'crafts' => GameIconData.hammer,
+  'townWeight' => GameIconData.wheat,
+  'politicalIdentity' => GameIconData.scales,
+  'lastingMemory' => GameIconData.star,
+  'openRoutes' => GameIconData.door,
+  'charterVoice' => GameIconData.scroll,
+  'trustedCouncil' => GameIconData.handshake,
+  'yearFiveMatter' => GameIconData.scales,
+  'beratReady' => GameIconData.crown,
+  _ => GameIconData.star,
+};
