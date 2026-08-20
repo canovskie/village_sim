@@ -70,16 +70,16 @@ class EraPressure {
   /// İmparatorluk her yıl defterdeki rakamı büyütür.
   final double imperialAppetite;
 
-  /// Heyetin geliş aralığı çarpanı. KÜÇÜLDÜKÇE SIK gelirler (0.55 = neredeyse
-  /// iki katı sıklık). Sertleşen tek şey rakam değil, nefes alma payı.
+  /// Heyetin ham geliş aralığı çarpanı. KÜÇÜLDÜKÇE SIK aday üretir; oyuncuya
+  /// açılan ağır yüzeylerin gerçek alt sınırı DecisionPacing'dedir.
   final double imperialTempo;
 
-  /// Rastgele olay aralığı çarpanı. Aynı mantık: köy büyüdükçe başına daha
-  /// çok iş gelir. Yalnız kötü olay değil — olay tablosunun tamamı sıklaşır,
-  /// yani geç oyun daha OLAYLI olur, daha cezalı değil.
+  /// Rastgele olay aday aralığı çarpanı. Seçimsiz hafif olaylar aynen akar;
+  /// seçimli ağır olaylar ortak ritim kuyruğundan geçer.
   final double eventTempo;
 
-  /// Dilekçe geliş aralığı çarpanı; köy yaşlandıkça kapı sıklaşır.
+  /// Dilekçe aday aralığı çarpanı; köy yaşlandıkça kapı sıklaşır ama ağır karar
+  /// sunum sıklığı merkezi ritim otoritesince sınırlanır.
   final double petitionTempo;
 
   /// Kışın sertlik çarpanı — yakacak ihtiyacına biner (bkz. `winterReadiness`).

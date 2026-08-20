@@ -132,6 +132,9 @@ extension _SceneTick on _VillageSceneState {
     // setState yerine sim mutate + _frame.value++ → outer ağaç rebuild olmaz,
     // sadece ListenableBuilder bağlı bölgeler repaint olur.
     _advanceWorldClock(dt);
+    // Bütün ağır kararların ortak saati. Dünya saati ilerledikten hemen sonra
+    // sessizlik kapısını açar; bekleyen payload'lar simi durdurmadan sırada kalır.
+    _tickDecisionPacing();
     _applyGodModeRefill();
     final starvation = _tickPopulationAndHunger(dt);
     _tickEventsAndFx(dt);
