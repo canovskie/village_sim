@@ -22,6 +22,14 @@ class BuildingEntity {
   /// Pazar pasif gelir zamanlayıcısı (saniye).
   double incomeTimer = 0.0;
 
+  /// Hamam külhanının kalan sıcaklığı (saniye). Menzilde hasta/yaralı
+  /// yokken azalmaz; bakım gerektiğinde 1 odunla bir oyun günü dolar.
+  double serviceTimer = 0.0;
+
+  /// Anıtın dikildiği anda kazınan rejim + hane kimliği. Sonraki rejim
+  /// kaymaları bunu değiştirmez; kronikteki tarihsel satırla aynıdır.
+  String inscription = '';
+
   /// Konut su deposu 0..1 (yalnızca housing). Sakinler tüketir, kuyu doldurur.
   /// Boşalınca köy morali düşer. Yeni ev dolu başlar.
   double waterLevel = 1.0;

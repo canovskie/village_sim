@@ -501,6 +501,8 @@ extension _SceneSave on _VillageSceneState {
     'isActive': b.isActive,
     'userPaused': b.userPaused,
     'incomeTimer': b.incomeTimer,
+    'serviceTimer': b.serviceTimer,
+    if (b.inscription.isNotEmpty) 'inscription': b.inscription,
     'waterLevel': b.waterLevel,
     'occupants': b.occupants,
     'damage': b.damage,
@@ -1378,6 +1380,8 @@ extension _SceneSave on _VillageSceneState {
     b.isActive = _b(j['isActive']);
     b.userPaused = _b(j['userPaused']);
     b.incomeTimer = _d(j['incomeTimer']);
+    b.serviceTimer = _d(j['serviceTimer']);
+    b.inscription = (j['inscription'] as String?) ?? '';
     b.waterLevel = _d(j['waterLevel'], 1.0);
     b.occupants = _i(j['occupants']);
     b.damage = _d(j['damage']).clamp(0.0, 1.0).toDouble();

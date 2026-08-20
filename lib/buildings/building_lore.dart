@@ -269,14 +269,18 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
       // İlk bina genelde budur; köyde ölçülecek başka bir şey yokken "uzak"
       // yazan bir ipucu yeni oyuncuyu boşuna telaşlandırırdı. Konum tavsiyesi
       // bilgi olarak durur, ölçülen tek şey çevresindeki boşluktur.
-      SiteTip(SiteTipKind.anywhere,
-          'Köyün ORTASINA kur: evler ve çadırlar bunun etrafına dizilir. '
-          'Ateşi kenara koyarsan mahalleyi de kenara kurmuş olursun.',
-          short: 'Köyün ortasına kur'),
-      SiteTip(SiteTipKind.openGround,
-          'Çevresi açık olsun — akşam ateş başına oturulur, yer kalmazsa '
-          'sohbet de kurulmaz.',
-          short: 'Çevresi açık olsun'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Köyün ORTASINA kur: evler ve çadırlar bunun etrafına dizilir. '
+        'Ateşi kenara koyarsan mahalleyi de kenara kurmuş olursun.',
+        short: 'Köyün ortasına kur',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Çevresi açık olsun — akşam ateş başına oturulur, yer kalmazsa '
+        'sohbet de kurulmaz.',
+        short: 'Çevresi açık olsun',
+      ),
     ],
     notes: [
       'İlk kıvılcımı kim çaktıysa adı unutulur, ateşi unutulmaz.',
@@ -288,13 +292,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
   // ── Konut ────────────────────────────────────────────────────────────────
   BuildingType.tent: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.hearth,
-          'OCAĞIN YANINA KUR. Çadırın kendi ocağı yoktur: uzağa kurulan çadır '
-          'kış boyu moral kaybeder, içindeki gece titreyerek uyanır.',
-          short: 'Ocağın yanına kur'),
-      SiteTip(SiteTipKind.homesNear,
-          'Diğer damların yanına sokul — dağılan çadır köyü değil kampı andırır.',
-          short: 'Damların yanına sokul'),
+      SiteTip(
+        SiteTipKind.hearth,
+        'OCAĞIN YANINA KUR. Çadırın kendi ocağı yoktur: uzağa kurulan çadır '
+        'kış boyu moral kaybeder, içindeki gece titreyerek uyanır.',
+        short: 'Ocağın yanına kur',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Diğer damların yanına sokul — dağılan çadır köyü değil kampı andırır.',
+        short: 'Damların yanına sokul',
+      ),
     ],
     notes: [
       'Rüzgâr bezi gece boyu döver; içerideki alışır, misafir alışamaz.',
@@ -305,13 +313,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.woodenHouse: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Evler birbirini görsün: komşusu olan hane akşam kapı çalar.',
-          short: 'Komşularının yanına'),
-      SiteTip(SiteTipKind.anywhere,
-          'Duvarı ve kendi ocağı var — çadırın aksine ateşe yakınlık aramaz, '
-          'kışı her yerde atlatır.',
-          short: 'Ateşe yakınlık aramaz'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Evler birbirini görsün: komşusu olan hane akşam kapı çalar.',
+        short: 'Komşularının yanına',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Duvarı ve kendi ocağı var — çadırın aksine ateşe yakınlık aramaz, '
+        'kışı her yerde atlatır.',
+        short: 'Ateşe yakınlık aramaz',
+      ),
     ],
     notes: [
       'Bacadan ilk duman çıktığı akşam, bütün köy o damın önünden geçer.',
@@ -322,9 +334,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.stoneHouseBlue: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Mahallenin içinde dursun — taş konut komşusuna da itibar katar.',
-          short: 'Mahallenin içinde'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Mahallenin içinde dursun — taş konut komşusuna da itibar katar.',
+        short: 'Mahallenin içinde',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'MAVİ ve YEŞİL çatı yalnız kozmetik varyanttır; maliyet, '
+        'kapasite ve konforları birebir aynıdır.',
+        short: 'Yeşil ile işlevi aynı',
+      ),
     ],
     notes: [
       'Duvarı kalın: kışın soğuğu, yazın gürültüyü dışarıda bırakır.',
@@ -335,9 +355,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.stoneHouseGreen: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Mahallenin içinde dursun — taş konut komşusuna da itibar katar.',
-          short: 'Mahallenin içinde'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Mahallenin içinde dursun — taş konut komşusuna da itibar katar.',
+        short: 'Mahallenin içinde',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'YEŞİL ve MAVİ çatı yalnız kozmetik varyanttır; maliyet, '
+        'kapasite ve konforları birebir aynıdır.',
+        short: 'Mavi ile işlevi aynı',
+      ),
     ],
     notes: [
       'Yeşil çatı yaz ortasında ağaçlara karışır, kışın tek başına kalır.',
@@ -348,12 +376,16 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.manor: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Köye sırtını dönmesin: konak, görülmek için dikilir.',
-          short: 'Köyün göreceği yerde'),
-      SiteTip(SiteTipKind.openGround,
-          'Önünde boşluk bırak — kapısına varan yol darsa görkemi kaybolur.',
-          short: 'Önünde boşluk bırak'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Köye sırtını dönmesin: konak, görülmek için dikilir.',
+        short: 'Köyün göreceği yerde',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Önünde boşluk bırak — kapısına varan yol darsa görkemi kaybolur.',
+        short: 'Önünde boşluk bırak',
+      ),
     ],
     notes: [
       'Kapısı ağır açılır; bu, kapının değil kapıyı yaptıranın tercihidir.',
@@ -365,13 +397,18 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
   // ── Üretim ───────────────────────────────────────────────────────────────
   BuildingType.lumberCamp: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.forest,
-          'ORMANIN İÇİNE KUR — çevresindeki ağaçları keser, yerine fidan diker. '
-          'Menzilinde ağaç yoksa hiç kurulamaz.',
-          short: 'Ormanın içine kur', rule: true),
-      SiteTip(SiteTipKind.storeNear,
-          'Ambara yakın dursun: taşıyıcı kütüğü EN YAKIN ambara götürür.',
-          short: 'Ambara yakın dursun'),
+      SiteTip(
+        SiteTipKind.forest,
+        'ORMANIN İÇİNE KUR — çevresindeki ağaçları keser, yerine fidan diker. '
+        'Menzilinde ağaç yoksa hiç kurulamaz.',
+        short: 'Ormanın içine kur',
+        rule: true,
+      ),
+      SiteTip(
+        SiteTipKind.storeNear,
+        'Ambara yakın dursun: taşıyıcı kütüğü EN YAKIN ambara götürür.',
+        short: 'Ambara yakın dursun',
+      ),
     ],
     notes: [
       'Balta sesi köyün saatidir: durunca herkes başını kaldırır.',
@@ -382,13 +419,18 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.mineBuilding: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.oreVein,
-          'DAMARIN ÜSTÜNE kurulur — footprint bir maden damarına oturmadan '
-          'ocak açılmaz.',
-          short: 'Damarın üstüne kur', rule: true),
-      SiteTip(SiteTipKind.storeNear,
-          'Ambar yakınsa taş, demir ve kömür kısa yoldan içeri girer.',
-          short: 'Ambara yakın olsun'),
+      SiteTip(
+        SiteTipKind.oreVein,
+        'DAMARIN ÜSTÜNE kurulur — footprint bir maden damarına oturmadan '
+        'ocak açılmaz.',
+        short: 'Damarın üstüne kur',
+        rule: true,
+      ),
+      SiteTip(
+        SiteTipKind.storeNear,
+        'Ambar yakınsa taş, demir ve kömür kısa yoldan içeri girer.',
+        short: 'Ambara yakın olsun',
+      ),
     ],
     notes: [
       'İçeride kimse yüksek sesle konuşmaz; taş kendi sesini geri verir.',
@@ -399,13 +441,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.fisherCabin: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.shore,
-          'SUYUN KIYISINA kur. Balıkçı her seferinde en yakın kıyıya yürür; '
-          'sudan uzak kulübede sepet geç dolar.',
-          short: 'Suyun kıyısına kur'),
-      SiteTip(SiteTipKind.storeNear,
-          'Ambar yakınsa balık bozulmadan içeri girer.',
-          short: 'Ambara yakın olsun'),
+      SiteTip(
+        SiteTipKind.shore,
+        'SUYUN KIYISINA kur. Balıkçı her seferinde en yakın kıyıya yürür; '
+        'sudan uzak kulübede sepet geç dolar.',
+        short: 'Suyun kıyısına kur',
+      ),
+      SiteTip(
+        SiteTipKind.storeNear,
+        'Ambar yakınsa balık bozulmadan içeri girer.',
+        short: 'Ambara yakın olsun',
+      ),
     ],
     notes: [
       'Ağ her akşam kapının yanına asılır; sabah çiy tutmuş olur.',
@@ -416,14 +462,18 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.mill: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Değirmenin menzili yoktur: balya nereden gelirse gelsin aynı un olur. '
-          'Yeri estetik bir tercihtir.',
-          short: 'Menzili yok — yeri sana kalmış'),
-      SiteTip(SiteTipKind.homesNear,
-          'Değirmenci her sabah evinden buraya yürür; köye yakın değirmen boş '
-          'kalmaz.',
-          short: 'Köye yakın dursun'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Değirmenin menzili yoktur: balya nereden gelirse gelsin aynı un olur. '
+        'Yeri estetik bir tercihtir.',
+        short: 'Menzili yok — yeri sana kalmış',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Değirmenci her sabah evinden buraya yürür; köye yakın değirmen boş '
+        'kalmaz.',
+        short: 'Köye yakın dursun',
+      ),
     ],
     notes: [
       'Kanatlar dönerken içerisi un kokar; duran değirmen ise sadece tozludur.',
@@ -434,13 +484,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.barn: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.openGround,
-          'ÇEVRESİ AÇIK OLSUN — sürü ağılın etrafında otlar, sıkışık yerde '
-          'döner durur.',
-          short: 'Çevresi açık olsun'),
-      SiteTip(SiteTipKind.homesNear,
-          'Çoban sabah sağıma yürür; köye yakın ağıl erken sağılır.',
-          short: 'Köye yakın dursun'),
+      SiteTip(
+        SiteTipKind.openGround,
+        'ÇEVRESİ AÇIK OLSUN — sürü ağılın etrafında otlar, sıkışık yerde '
+        'döner durur.',
+        short: 'Çevresi açık olsun',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Çoban sabah sağıma yürür; köye yakın ağıl erken sağılır.',
+        short: 'Köye yakın dursun',
+      ),
     ],
     notes: [
       'Saman kokusu duvara siner, yağmurda daha da belli eder kendini.',
@@ -451,12 +505,16 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.chickenCoop: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.openGround,
-          'Tavuklar kümesin çevresinde eşinir — biraz açık avlu bırak.',
-          short: 'Açık avlu bırak'),
-      SiteTip(SiteTipKind.homesNear,
-          'Evlerin arasında dursun: yumurtayı toplayan çocuk uzağa gitmesin.',
-          short: 'Evlerin arasında'),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Tavuklar kümesin çevresinde eşinir — biraz açık avlu bırak.',
+        short: 'Açık avlu bırak',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Evlerin arasında dursun: yumurtayı toplayan çocuk uzağa gitmesin.',
+        short: 'Evlerin arasında',
+      ),
     ],
     notes: [
       'Horoz sabahı köyden önce ilan eder, kimse teşekkür etmez.',
@@ -467,10 +525,12 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.beehive: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.flowers,
-          'ÇİÇEĞİN ARASINA KOY. Menzildeki her çiçek balı hızlandırır; '
-          'çiçekçinin yanındaki kovan iki-üç katı çalışır.',
-          short: 'Çiçeğin arasına koy'),
+      SiteTip(
+        SiteTipKind.flowers,
+        'ÇİÇEĞİN ARASINA KOY. Menzildeki her çiçek balı hızlandırır; '
+        'çiçekçinin yanındaki kovan iki-üç katı çalışır.',
+        short: 'Çiçeğin arasına koy',
+      ),
     ],
     notes: [
       'Vızıltı yazın köyün arka sesidir; kışın sustuğunda kulak onu arar.',
@@ -481,13 +541,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.floristCottage: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.openGround,
-          'BOŞ ÇİMİN ORTASINA KUR — çevresine çiçek serpilir; taş ve bina dolu '
-          'yerde serpilecek yer kalmaz.',
-          short: 'Boş çimin ortasına'),
-      SiteTip(SiteTipKind.homesNear,
-          'Evlerin göreceği yerde dursun: güzel köy morali ayakta tutar.',
-          short: 'Evlerin göreceği yerde'),
+      SiteTip(
+        SiteTipKind.openGround,
+        'BOŞ ÇİMİN ORTASINA KUR — çevresine çiçek serpilir; taş ve bina dolu '
+        'yerde serpilecek yer kalmaz.',
+        short: 'Boş çimin ortasına',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Evlerin göreceği yerde dursun: güzel köy morali ayakta tutar.',
+        short: 'Evlerin göreceği yerde',
+      ),
     ],
     notes: [
       'Çiçekçi sabah ilk, akşam son çıkan kişidir; kimse nedenini sormaz.',
@@ -498,13 +562,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.tailor: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Mahallenin içinde olsun: köylü ölçü verip geri dönebilmeli.',
-          short: 'Mahallenin içinde'),
-      SiteTip(SiteTipKind.anywhere,
-          'Terzinin menzili yoktur — atölye bitince köyün giysileri nerede '
-          'olursa olsun dikilir.',
-          short: 'Menzili yok'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Mahallenin içinde olsun: köylü ölçü verip geri dönebilmeli.',
+        short: 'Mahallenin içinde',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Terzinin menzili yoktur — atölye bitince köyün giysileri nerede '
+        'olursa olsun dikilir.',
+        short: 'Menzili yok',
+      ),
     ],
     notes: [
       'İğne deliğine iplik geçirmek, terzinin günde kırk kez yendiği savaştır.',
@@ -516,13 +584,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
   // ── Ticaret / lojistik ───────────────────────────────────────────────────
   BuildingType.warehouse: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.workNear,
-          'ÜRETİMİN ORTASINA KUR. Taşıyıcı yükünü EN YAKIN ambara götürür — '
-          'işliklerin ortasındaki ambar köyün yolunu kısaltır.',
-          short: 'Üretimin ortasına kur'),
-      SiteTip(SiteTipKind.homesNear,
-          'Ocağa ve evlere yakın ambar, yakacak taşıyanı da yormaz.',
-          short: 'Ocağa/eve yakın olsun'),
+      SiteTip(
+        SiteTipKind.workNear,
+        'ÜRETİMİN ORTASINA KUR. Taşıyıcı yükünü EN YAKIN ambara götürür — '
+        'işliklerin ortasındaki ambar köyün yolunu kısaltır.',
+        short: 'Üretimin ortasına kur',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Ocağa ve evlere yakın ambar, yakacak taşıyanı da yormaz.',
+        short: 'Ocağa/eve yakın olsun',
+      ),
     ],
     notes: [
       'İçerisi serin ve karanlıktır; yazın en çok orada oyalanan olur.',
@@ -533,13 +605,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.market: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Meydana, evlerin arasına kur — pazarın kalabalığı köyden gelir.',
-          short: 'Meydana kur'),
-      SiteTip(SiteTipKind.anywhere,
-          'Gelirin menzili yoktur: tezgâh köyün ambar FAZLASINDAN döner, '
-          'komşusundan değil.',
-          short: 'Gelir fazladan gelir'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Meydana, evlerin arasına kur — pazarın kalabalığı köyden gelir.',
+        short: 'Meydana kur',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Gelirin menzili yoktur: tezgâh köyün ambar FAZLASINDAN döner, '
+        'komşusundan değil.',
+        short: 'Gelir fazladan gelir',
+      ),
     ],
     notes: [
       'Terazi hep bir parça eğridir; hangi yöne olduğu tartışılır.',
@@ -550,13 +626,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.stable: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Ahırın etkisi KÖY ÇAPINDADIR: bütün taşıyıcılar hızlanır, mesafeye '
-          'bakılmaz.',
-          short: 'Etkisi köy çapında'),
-      SiteTip(SiteTipKind.openGround,
-          'Yine de önünde dönecek yer bırak — yük hayvanı dar avluda huysuzlanır.',
-          short: 'Önünde yer bırak'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Ahırın etkisi KÖY ÇAPINDADIR: bütün taşıyıcılar hızlanır, mesafeye '
+        'bakılmaz.',
+        short: 'Etkisi köy çapında',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Yine de önünde dönecek yer bırak — yük hayvanı dar avluda huysuzlanır.',
+        short: 'Önünde yer bırak',
+      ),
     ],
     notes: [
       'Saman ve at kokusu; köyün en sıcak duvarı burasıdır.',
@@ -567,12 +647,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.caravanserai: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Hanın taşıyıcı katkısı KÖY ÇAPINDADIR — menzil aranmaz.',
-          short: 'Etkisi köy çapında'),
-      SiteTip(SiteTipKind.openGround,
-          'Avlusu geniş dursun: kervan sığmazsa han han olmaz.',
-          short: 'Avlusu geniş dursun'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Han, gezgin tüccarın yeni durağıdır: ziyaretler %35 daha sık, '
+        'konaklama %55 daha uzun olur; daha çok fazla mal satılabilir.',
+        short: 'Tüccar daha sık, uzun kalır',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Avlusu geniş dursun: kervan sığmazsa han han olmaz.',
+        short: 'Avlusu geniş dursun',
+      ),
     ],
     notes: [
       'Avlu geceyi yabancı dillerle geçirir; sabah hepsi yola çıkar.',
@@ -584,13 +669,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
   // ── Civic ────────────────────────────────────────────────────────────────
   BuildingType.well: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Kuyunun menzili yoktur: bir kuyu köyün BÜTÜN evlerinin küpünü '
-          'doldurur. İkincisi daha hızlı doldurur, daha uzağa değil.',
-          short: 'Menzili yok — hepsine yeter'),
-      SiteTip(SiteTipKind.homesNear,
-          'Yine de evlerin ortasında dursun — kova taşıyanın yolu kısalsın.',
-          short: 'Evlerin ortasında'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Kuyunun menzili yoktur: bir kuyu köyün BÜTÜN evlerinin küpünü '
+        'doldurur. İkincisi daha hızlı doldurur, daha uzağa değil.',
+        short: 'Menzili yok — hepsine yeter',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Yine de evlerin ortasında dursun — kova taşıyanın yolu kısalsın.',
+        short: 'Evlerin ortasında',
+      ),
     ],
     notes: [
       'Kuyu başı köyün ilk dedikodu meydanıdır; ikincisi tavernadır.',
@@ -601,13 +690,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.fountain: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'MEYDANA kur — şadırvanın işi gündüz toplanmaktır; evlerden uzakta '
-          'kimse başına gelmez.',
-          short: 'Meydana kur'),
-      SiteTip(SiteTipKind.openGround,
-          'Çevresi açık olsun: dört yanı duvarla çevrili çeşme sadece bir taştır.',
-          short: 'Çevresi açık olsun'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'MEYDANA kur — şadırvanın işi gündüz toplanmaktır; evlerden uzakta '
+        'kimse başına gelmez.',
+        short: 'Meydana kur',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Çevresi açık olsun: dört yanı duvarla çevrili çeşme sadece bir taştır.',
+        short: 'Çevresi açık olsun',
+      ),
     ],
     notes: [
       'Suyun şıpırtısı meydanın gündüz sesidir.',
@@ -618,13 +711,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.tavern: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Tavernanın morali KÖY ÇAPINDADIR — uzakta kurulsa da kadeh aynı '
-          'kaldırılır.',
-          short: 'Morali köy çapında'),
-      SiteTip(SiteTipKind.homesNear,
-          'Yine de evlerin arasında iyi durur: akşam işten çıkan buradan geçsin.',
-          short: 'Evlerin arasında'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Tavernanın morali KÖY ÇAPINDADIR — uzakta kurulsa da kadeh aynı '
+        'kaldırılır.',
+        short: 'Morali köy çapında',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Yine de evlerin arasında iyi durur: akşam işten çıkan buradan geçsin.',
+        short: 'Evlerin arasında',
+      ),
     ],
     notes: [
       'Kahkaha, dedikodu, bir kadeh; köyün morali en çok buradan beslenir.',
@@ -635,12 +732,16 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.church: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.openGround,
-          'YANINA YER BIRAK — kilisenin yanında mezarlık sessizce büyür.',
-          short: 'Yanına yer bırak'),
-      SiteTip(SiteTipKind.homesNear,
-          'Köyün görebileceği yerde dursun: çan da uğurlama da oradan duyulur.',
-          short: 'Köyün göreceği yerde'),
+      SiteTip(
+        SiteTipKind.openGround,
+        'YANINA YER BIRAK — kilisenin yanında mezarlık sessizce büyür.',
+        short: 'Yanına yer bırak',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Köyün görebileceği yerde dursun: çan da uğurlama da oradan duyulur.',
+        short: 'Köyün göreceği yerde',
+      ),
     ],
     notes: [
       'Serin taş, mum kokusu, alçak sesler.',
@@ -651,13 +752,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.library: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Kütüphanenin katkısı KÖY ÇAPINDADIR: yazıya geçen zanaat usta göçse '
-          'de kaybolmaz.',
-          short: 'Katkısı köy çapında'),
-      SiteTip(SiteTipKind.homesNear,
-          'Meydana yakın olsun — uğraması kolay olan raf okunur.',
-          short: 'Meydana yakın olsun'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Kütüphanenin katkısı KÖY ÇAPINDADIR: yazıya geçen zanaat usta göçse '
+        'de kaybolmaz.',
+        short: 'Katkısı köy çapında',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Meydana yakın olsun — uğraması kolay olan raf okunur.',
+        short: 'Meydana yakın olsun',
+      ),
     ],
     notes: [
       'Rafta ne varsa okuyan bulunur; okumayan da geldiğini söyler.',
@@ -668,13 +773,18 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.bathhouse: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Hamamın morali KÖY ÇAPINDADIR — nereye kurulursa kurulsun köy '
-          'temizlenir.',
-          short: 'Morali köy çapında'),
-      SiteTip(SiteTipKind.homesNear,
-          'Evlere yakınsa kimse "üşenirim" diyemez.',
-          short: 'Evlere yakın olsun'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'HASTA VE YARALIYA YAKIN KUR. Yalnız 5 tile içindeki köylü '
+        'külhanın sıcak suyundan yararlanır.',
+        short: 'Bakım menzili 5 tile',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Külhan, menzilde bakım gereken biri varken günde 1 odun yakar; '
+        'hasta yokken yakacak harcamaz.',
+        short: 'Yalnız hastayken odun yakar',
+      ),
     ],
     notes: [
       'Buhar, mermer, uzun sohbetler.',
@@ -685,12 +795,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.monument: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.openGround,
-          'AÇIK BİR YERE DİK — iki damın arasına sıkışan taş anıt olmaz.',
-          short: 'Açık bir yere dik'),
-      SiteTip(SiteTipKind.homesNear,
-          'Yolu köyden geçsin: bakılmayan anıt yalnızca ağır bir taştır.',
-          short: 'Yolu köyden geçsin'),
+      SiteTip(
+        SiteTipKind.openGround,
+        'AÇIK BİR YERE DİK — iki damın arasına sıkışan taş anıt olmaz.',
+        short: 'Açık bir yere dik',
+      ),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Dikildiği anki REJİM ve baskın HANE taşa, aynı satır da '
+        'Vakanüvis kroniğine kazınır; sonradan değişmez.',
+        short: 'Bugünün kimliğini kazır',
+      ),
     ],
     notes: [
       'Taşa kazınmış bir hatıra; hatırlayanlar gidince taş kalır.',
@@ -701,13 +816,17 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.shrine: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.anywhere,
-          'Türbenin tesellisi KÖY ÇAPINDADIR — uzağa kurulsa da derdi olan '
-          'yolunu bulur.',
-          short: 'Tesellisi köy çapında'),
-      SiteTip(SiteTipKind.openGround,
-          'Etrafı sakin olsun; gürültünün ortasındaki ziyaretgâha kimse oturmaz.',
-          short: 'Etrafı sakin olsun'),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Türbenin tesellisi KÖY ÇAPINDADIR — uzağa kurulsa da derdi olan '
+        'yolunu bulur.',
+        short: 'Tesellisi köy çapında',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Etrafı sakin olsun; gürültünün ortasındaki ziyaretgâha kimse oturmaz.',
+        short: 'Etrafı sakin olsun',
+      ),
     ],
     notes: [
       'Bez bağlanmış bir dal; her bezin ardında bir dilek var.',
@@ -718,12 +837,18 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.belltower: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Köyün ortasına dik — duyulmayan çan susmuş sayılır.',
-          short: 'Köyün ortasına dik'),
-      SiteTip(SiteTipKind.openGround,
-          'Yüksek ve açık dursun: dört yanı bina olan kule yalnızca merdivendir.',
-          short: 'Açık bir yere dik'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'KÖYÜN ORTASINA DİK. Yalnız 12 tile içinde tamamlanan suçta '
+        'alarm çalar ve muhafızın duyma menzili %60 genişler.',
+        short: 'Alarm menzili 12 tile',
+      ),
+      SiteTip(
+        SiteTipKind.openGround,
+        'Muhafızsız çan yalnız haber verir; faili yakalayacak uyanık bir '
+        'devriye yine gerekir.',
+        short: 'Muhafızla birlikte çalışır',
+      ),
     ],
     notes: [
       'Çan vakti söyler: iş başını, töreni, tehlikeyi.',
@@ -734,12 +859,16 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.townhall: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'MEYDANA kur — divanın toplandığı kapı köyün ortasında durmalı.',
-          short: 'Meydana kur'),
-      SiteTip(SiteTipKind.anywhere,
-          'Yönetişimin menzili yoktur: mühür nerede dursun bütün köyü bağlar.',
-          short: 'Menzili yok'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'MEYDANA kur — divanın toplandığı kapı köyün ortasında durmalı.',
+        short: 'Meydana kur',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Yönetişimin menzili yoktur: mühür nerede dursun bütün köyü bağlar.',
+        short: 'Menzili yok',
+      ),
     ],
     notes: [
       'Mühür burada durur, defter burada tutulur.',
@@ -750,9 +879,11 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
 
   BuildingType.lamppost: BuildingLore(
     tips: [
-      SiteTip(SiteTipKind.homesNear,
-          'Yol kenarına, evlerin arasına diz — feneri olan sokakta gece yürünür.',
-          short: 'Yol kenarına diz'),
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Yol kenarına, evlerin arasına diz — feneri olan sokakta gece yürünür.',
+        short: 'Yol kenarına diz',
+      ),
     ],
     notes: [
       'Akşam olunca kendiliğinden yanar; kimse kibrit taşımaz.',
@@ -761,7 +892,6 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
     ],
   ),
 };
-
 
 /// Bir binanın künyesi — tanımsızsa null (künye satırı gösterilmez).
 BuildingLore? loreOf(BuildingType type) => kBuildingLore[type];

@@ -983,6 +983,9 @@ extension _SceneTick on _VillageSceneState {
       if (v.socialCooldown > 0) v.socialCooldown -= dt;
       if (v.conflictCooldown > 0) v.conflictCooldown -= dt;
     }
+    // Hamam külhanları — bakım gereken biri varsa yakacak harcar; çatışma
+    // ve hastalıktan ÖNCE ki ikisi de aynı aktiflik durumunu okusun.
+    _tickBathhouseCare(dt);
     // Çekişme/kavga taraması — nadir, gerçekçi faktörlere bağlı.
     _tickConflicts(dt);
     // Suç — sinsi yaklaşma / eylem / kaçış + muhafız müdahalesi (aynı anda tek).

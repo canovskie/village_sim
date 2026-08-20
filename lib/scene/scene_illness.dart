@@ -17,15 +17,62 @@ part of '../main.dart';
 extension _SceneIllness on _VillageSceneState {
   /// Hastalık başlangıç taraması (sim-sn) — nadir, sakin.
   static const double _kIllnessScan = 5.0;
+
   /// Köy geneli GÜNLÜK hastalanma olayı tabanı (çarpanlar altında ölçeklenir).
   static const double _kOnsetDailyBase = 0.06;
+
   /// Aynı anda en çok bu kadar hasta (üstündeyse yeni onset yok — salgın plague'in işi).
   static const int _kMaxConcurrentSick = 2;
+
   /// Bir hastalık atağının süresi (oyun günü) — bu sürede iyileşir ya da (nadir) yenilir.
   static const double _kSickDaysMin = 1.5;
   static const double _kSickDaysMax = 3.0;
+
   /// Yaşlı + kötü koşulda GÜNLÜK ölüm riski tabanı (kırılganlık çarpanıyla ölçeklenir).
   static const double _kSickDeathPerDay = 0.06;
+
+  /// Hamamın otomatik bakım döngüsü. Oyuncuya yeni bir aç/kapa işi çıkarmaz:
+  /// menzilde hasta/yaralı varsa külhan bir günlük 1 odun alır; yoksa kalan
+  /// sıcaklık korunur. [isActive] hem iyileşme sisteminin hem panelin gerçeği.
+  void _tickBathhouseCare(double dt) {
+    for (final b in _buildings) {
+      if (b.type != BuildingType.bathhouse) continue;
+      final hasPatient = _villagers.any(
+        (v) =>
+            !v.isDying &&
+            (v.sickDays > 0 || v.injuryDays > 0) &&
+            withinBuildingEffect(
+              type: b.type,
+              col: b.col,
+              row: b.row,
+              targetX: v.gridX,
+              targetY: v.gridY,
+            ),
+      );
+      final step = stepBathhouseFuel(
+        secondsLeft: b.serviceTimer,
+        dt: dt,
+        woodAvailable: _stockpile.wood,
+        hasPatient: hasPatient,
+      );
+      b.serviceTimer = step.secondsLeft;
+      b.isActive = step.active;
+      if (step.woodUsed > 0) _stockpile.wood -= step.woodUsed;
+    }
+  }
+
+  bool _coveredByActiveBathhouse(VillagerEntity v) => _buildings.any(
+    (b) =>
+        b.type == BuildingType.bathhouse &&
+        b.isActive &&
+        withinBuildingEffect(
+          type: b.type,
+          col: b.col,
+          row: b.row,
+          targetX: v.gridX,
+          targetY: v.gridY,
+        ),
+  );
 
   void _tickIllness(double dt) {
     if (_villagers.isEmpty) return;
@@ -47,6 +94,7 @@ extension _SceneIllness on _VillageSceneState {
       // ── İyileşme — tok köy + mabet hızlandırır ──────────────────────────────
       double rate = 1.0;
       if (!foodShort) rate += 0.6; // karnı tok köylü toparlanır
+      rate += bathhouseRecoveryRate(_coveredByActiveBathhouse(v)) - 1.0;
       if (church != null) {
         final dx = v.gridX - cx, dy = v.gridY - cy;
         if (dx * dx + dy * dy <= 5.0 * 5.0) rate += 1.2; // mabet yanında bakım
@@ -65,7 +113,8 @@ extension _SceneIllness on _VillageSceneState {
       // Ölüm zarı yalnız HÂLÂ hastayken — iyileşme anını (sickDays≤0) ölüm
       // kapmasın (iyileşen köylü son karede ölmesin).
       if (ageF > 0 && v.sickDays > 0) {
-        final frail = ageF *
+        final frail =
+            ageF *
             (1.15 - v.morale.clamp(0.0, 1.0)) *
             (foodShort ? 1.8 : 1.0) *
             (winter ? 1.6 : 1.0);
@@ -83,11 +132,12 @@ extension _SceneIllness on _VillageSceneState {
         v.feel(NpcEmotion.content, 3.0, moodDelta: 0.06);
         final ctx = _voice(v, seed: _stableSeed('iyileş${v.name}', _dayCount));
         _chronicle(
-            Voice.say(const [
-              '{ad} hastalığı atlattı, ayağa kalktı.',
-              '{ad} iyileşti; köy rahat bir nefes aldı.',
-            ], ctx),
-            icon: '🌿');
+          Voice.say(const [
+            '{ad} hastalığı atlattı, ayağa kalktı.',
+            '{ad} iyileşti; köy rahat bir nefes aldı.',
+          ], ctx),
+          icon: '🌿',
+        );
       }
     }
 
@@ -132,19 +182,10 @@ extension _SceneIllness on _VillageSceneState {
     }
     if (sickCount >= _kMaxConcurrentSick) return;
 
-    // TECRİT FERMANI — hasta kendi damına kapandığında bulaşma yarıya iner.
-    // Bedeli fermanın kendisinde değil, dünyada: tecritteki el tarlada eksilir
-    // (aşağıda köylü doğrudan evine yollanıyor) ve ocak tarafı küser.
-    final pOnset = _kOnsetDailyBase *
-        (winter ? 2.0 : 1.0) *
-        (foodShort ? 1.6 : 1.0) *
-        (_policies.quarantine ? 0.5 : 1.0) *
-        (_kIllnessScan / kGameDaySeconds);
-    if (_rng.nextDouble() >= pOnset) return;
-
     // Aday havuzu + kırılganlık ağırlığı (yaşlı/düşük moralli daha olası).
     final cands = <VillagerEntity>[];
     final weights = <double>[];
+    var bathRiskSum = 0.0;
     for (final v in _villagers) {
       if (v.isDying ||
           v.sickDays > 0 ||
@@ -166,9 +207,30 @@ extension _SceneIllness on _VillageSceneState {
       // kurasında öne çıkar. İki ihmale kadar çarpan 1.0'dır: kışın bir gece
       // ocağın sönmesi kimseyi hasta etmez.
       final neglectW = neglectIllnessMultiplier(_coldNeglectOf(v));
-      weights.add(ageW * (1.4 - v.morale.clamp(0.0, 1.0)) * neglectW);
+      final bathRisk =
+          bathhouseIllnessRisk(_coveredByActiveBathhouse(v));
+      bathRiskSum += bathRisk;
+      weights.add(
+        ageW *
+            (1.4 - v.morale.clamp(0.0, 1.0)) *
+            neglectW *
+            bathRisk,
+      );
     }
     if (cands.isEmpty) return;
+
+    // TECRİT köy çapında, Hamam ise yalnız kapsadığı insanlar kadar
+    // hastalık başlangıcını azaltır. Herkes korunuyorsa çarpan 0.45;
+    // kimse korunmuyorsa 1.0. Sonraki aday ağırlığı da korunmayanı öne alır.
+    final bathRiskMean = bathRiskSum / cands.length;
+    final pOnset =
+        _kOnsetDailyBase *
+        (winter ? 2.0 : 1.0) *
+        (foodShort ? 1.6 : 1.0) *
+        (_policies.quarantine ? 0.5 : 1.0) *
+        bathRiskMean *
+        (_kIllnessScan / kGameDaySeconds);
+    if (_rng.nextDouble() >= pOnset) return;
 
     var total = 0.0;
     for (final w in weights) {
@@ -195,8 +257,12 @@ extension _SceneIllness on _VillageSceneState {
     // damına yürür. Fermanın GÖRÜNÜR yüzü budur: sokakta öksüren kimse yok,
     // bir kapı kapanıyor. (Tecritsiz köyde hasta olduğu yerde dinlenir.)
     if (_policies.quarantine) _sendHome(chosen);
-    final ctx = _voice(chosen, seed: _stableSeed('hasta${chosen.name}', _dayCount));
-    _showNotification(Voice.say(
+    final ctx = _voice(
+      chosen,
+      seed: _stableSeed('hasta${chosen.name}', _dayCount),
+    );
+    _showNotification(
+      Voice.say(
         _policies.quarantine
             ? const [
                 '🌿 {ad} ateşlendi; kapısına dal asıldı. Kimse girmiyor.',
@@ -206,13 +272,17 @@ extension _SceneIllness on _VillageSceneState {
                 '🤒 {ad} hastalandı, yatağa düştü. Köy başında.',
                 '🤒 {ad} ateşlendi — birkaç gün dinlenmesi gerek.',
               ],
-        ctx));
+        ctx,
+      ),
+    );
     _chronicle(
-        Voice.say(const [
-          '{ad} hastalandı.',
-          '{ad} yatağa düştü; köy iyileşmesini bekliyor.',
-        ], ctx),
-        icon: '🤒', kind: ChronicleKind.crisis);
+      Voice.say(const [
+        '{ad} hastalandı.',
+        '{ad} yatağa düştü; köy iyileşmesini bekliyor.',
+      ], ctx),
+      icon: '🤒',
+      kind: ChronicleKind.crisis,
+    );
   }
 
   /// VEBA TOLÜ — toplu salgının bedeli (scene_events plague kararı çağırır).
@@ -221,10 +291,11 @@ extension _SceneIllness on _VillageSceneState {
   /// EN KIRILGANLARINI (yaşlı + düşük moralli) alır + birkaçını ağır hasta eder
   /// (bazıları atlatır, bazıları atlatamaz — hastalık döngüsü karar verir).
   void _plagueToll({required bool healer}) {
-    final pool = _villagers
-        .where((v) => !v.isDying && v.lifeStage != LifeStage.child)
-        .toList()
-      ..sort((a, b) => _plagueFrailty(b).compareTo(_plagueFrailty(a)));
+    final pool =
+        _villagers
+            .where((v) => !v.isDying && v.lifeStage != LifeStage.child)
+            .toList()
+          ..sort((a, b) => _plagueFrailty(b).compareTo(_plagueFrailty(a)));
     if (pool.isEmpty) return;
 
     if (healer) {
@@ -278,19 +349,22 @@ extension _SceneIllness on _VillageSceneState {
     }
     final ctx = _voice(v, seed: _stableSeed('vefat${v.name}', _dayCount));
     _chronicle(
-        Voice.say(
-            winter
-                ? const [
-                    '{ad} sert kışa dayanamadı, hastalığa yenildi.',
-                    '{ad} kışın ortasında göçtü; ocağı erken söndü.',
-                  ]
-                : const [
-                    '{ad} hastalıktan kalkamadı, aramızdan ayrıldı.',
-                    '{ad} hastalığa yenildi; köy yasa büründü.',
-                  ],
-            ctx),
-        icon: '⚰️',
-        milestone: true, kind: ChronicleKind.crisis);
+      Voice.say(
+        winter
+            ? const [
+                '{ad} sert kışa dayanamadı, hastalığa yenildi.',
+                '{ad} kışın ortasında göçtü; ocağı erken söndü.',
+              ]
+            : const [
+                '{ad} hastalıktan kalkamadı, aramızdan ayrıldı.',
+                '{ad} hastalığa yenildi; köy yasa büründü.',
+              ],
+        ctx,
+      ),
+      icon: '⚰️',
+      milestone: true,
+      kind: ChronicleKind.crisis,
+    );
     _markDeathHouse(v);
     v.startDying(funeral: true);
   }

@@ -130,6 +130,23 @@ void main() {
     });
   });
 
+  group('geç dönem künyeleri', () {
+    String joined(BuildingType type) =>
+        loreOf(type)!.tips.map((t) => t.text).join(' ');
+
+    test('seçilen binalar gerçek yeni işlevlerini söyler', () {
+      expect(joined(BuildingType.bathhouse), contains('günde 1 odun'));
+      expect(joined(BuildingType.monument), contains('Vakanüvis kroniğine'));
+      expect(joined(BuildingType.belltower), contains('12 tile'));
+      expect(joined(BuildingType.caravanserai), contains('%35 daha sık'));
+    });
+
+    test('taş konutlar kozmetik eş olduklarını açıkça söyler', () {
+      expect(joined(BuildingType.stoneHouseBlue), contains('kozmetik varyant'));
+      expect(joined(BuildingType.stoneHouseGreen), contains('kozmetik varyant'));
+    });
+  });
+
   group('bal hızı — tek kaynak', () {
     test('çiçeksiz kovan 1.0, her çiçek arttırır, tavan var', () {
       expect(honeySpeedFromFlowers(0), 1.0);

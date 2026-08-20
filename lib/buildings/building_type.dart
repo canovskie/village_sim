@@ -13,7 +13,6 @@ class BuildingLight {
   const BuildingLight(this.nx, this.ny, this.kind);
 }
 
-
 /// Her bina türü için ışık noktaları listesi.
 /// Sadece pencere / fener içeren binalar dahil (market, well hariç).
 const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
@@ -260,12 +259,12 @@ enum BuildingType {
   // ─── Köy Meydanı & Kültür Mahallesi ──────────────────────────────────────────
   fountain, // 2x2 — fountain.png. Şadırvan: su kaynağı (kuyu gibi) + gündüz toplanma + dekoratif.
   library, // 2x2 — library.png. Kütüphane: kültür ameniteleri morali + kronik evi.
-  bathhouse, // 2x2 — bathhouse.png. Hamam: kültür morali + buhar bacası.
-  monument, // 1x1 — monument.png. Anıt: prestij/kültür morali + landmark (ileride kronik).
+  bathhouse, // 2x2 — bathhouse.png. Hamam: odun yakan yerel hastalık/yaralanma bakımı.
+  monument, // 1x1 — monument.png. Anıt: dikildiği günün rejim+hane kimliğini saklar.
   // ─── Liman & Ziyaret Mahallesi ───────────────────────────────────────────────
-  caravanserai, // 3x3 — caravanserai.png. Han: taşıyıcı hızı + tüccar (civic/carrierSpeed).
+  caravanserai, // 3x3 — caravanserai.png. Han: tüccar ziyaretini sıklaştırır ve uzatır.
   shrine, // 2x2 — shrine.png. Türbe: kültür-amenite morali + ziyaret landmark.
-  belltower, // 1x1 — belltower.png. Çan Kulesi: kültür morali + çan sesi + dikey landmark.
+  belltower, // 1x1 — belltower.png. Çan Kulesi: yerel suç alarmı + muhafız menzili.
   tailor, // 2x2 — tailor.png. Terzi: köylülerin ilkel kıyafetlerini dikilmiş giysilere yükseltir.
 }
 
@@ -508,6 +507,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     // bathhouse.png (1055×1112) trimlenmiş; anchor bina tabanında (ölçüldü).
     groundY: 1.009,
     groundXCenter: 0.5032,
+    effectRadius: 5.0, // yakacakla çalışan yerel hastalık/yaralanma bakımı
   ),
   BuildingType.monument: BuildingMeta(
     spriteScale: 0.9907,
@@ -549,6 +549,7 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     cost: ResourceCost(wood: 4, stone: 18, iron: 2),
     groundY: 0.9665,
     groundXCenter: 0.5,
+    effectRadius: 12.0, // suç alarmının duyulduğu yerleşim alanı
   ),
   BuildingType.tent: BuildingMeta(
     cols: 1,
