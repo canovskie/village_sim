@@ -304,13 +304,14 @@ extension _SceneImperial on _VillageSceneState {
   /// (merkeze dalış + darbe) — buraya yalnız zafer düşer.
   static const double _kClashTotal = 6.5;
   static const double _kClashLungeFrom = 4.4; // hamlenin başladığı kalan süre
-  static const double _kClashLungeTo = 2.8;   // hamlenin bittiği kalan süre
+  static const double _kClashLungeTo = 2.8; // hamlenin bittiği kalan süre
 
   void _tickImperialClash(double dt) {
     final prev = _imperialClashTimer;
     _imperialClashTimer -= dt;
     for (final s in _soldiers) {
-      s.imperialAttacking = _imperialClashTimer < _kClashLungeFrom &&
+      s.imperialAttacking =
+          _imperialClashTimer < _kClashLungeFrom &&
           _imperialClashTimer > _kClashLungeTo;
     }
     // Sarsıntı ve tint HAMLE ânına bağlı, evrenin başına değil: bekleyiş
@@ -480,6 +481,13 @@ extension _SceneImperial on _VillageSceneState {
       return;
     }
     _imperialPhase = ImperialVisitPhase.parley;
+    _requestPacedImperial(demand);
+  }
+
+  /// Merkezi ritim kapısı heyete sıra verdiğinde pazarlık yüzeyini açar.
+  /// Kuyrukta beklerken askerler eşikte durur, simülasyon akmaya devam eder.
+  void _activateImperialParley(ImperialDemand demand) {
+    _imperialPhase = ImperialVisitPhase.parley;
     AudioManager.instance.playSfx(Sfx.thunderClap); // gümbürtülü giriş
     addCameraShake(6.0, dur: 0.6);
     setStateHere(() => _imperialDemand = demand);
@@ -502,8 +510,7 @@ extension _SceneImperial on _VillageSceneState {
     // ilişkinin bozulduğu zaten heyetin duruşunda ve komutanın sözünde okunuyor,
     // ayrı bir film istemiyor.
     final firstEver = _imperialVisits == 0;
-    final conscriptFilm =
-        demand.isConscript && _impFilmsShown.add('conscript');
+    final conscriptFilm = demand.isConscript && _impFilmsShown.add('conscript');
     final grudgeFilm = _impGrudge && _impFilmsShown.add('grudge');
     final cinematic = firstEver || conscriptFilm || grudgeFilm;
     _imperialVisits++;

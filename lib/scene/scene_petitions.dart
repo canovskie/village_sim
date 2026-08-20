@@ -48,6 +48,10 @@ extension _ScenePetitions on _VillageSceneState {
       return;
     }
 
+    // Başka bir ağır karar yüzünden merkezi kuyrukta bekleyen dilekçe varken
+    // yeni random dilekçe üretme. Eldeki karar kaybolmaz; timer bu sırada donar.
+    if (_pacedPetitions.isNotEmpty) return;
+
     // TEK SÖZ FERMANI (NİZAM son basamağı) — köy artık senden bir şey İSTEMEZ.
     // Dilekçe yazan divan lağvedildi; köyün İSTEK kanalı (random roll + zincir)
     // kapanır. Suç yargısı ve fidye gibi OLAY-güdümlü çağrılar (_presentPetition
@@ -137,6 +141,12 @@ extension _ScenePetitions on _VillageSceneState {
   /// suç yargısında mağdur/tanık — fail değil). [extra] metne ek bağlam dokur
   /// (`{suçlu}`, `{suç}` gibi dilekçeye özel yer tutucular).
   void _presentPetition(Petition rawPetition,
+      {VillagerEntity? author, Map<String, String> extra = const {}}) {
+    _requestPacedPetition(rawPetition, author: author, extra: extra);
+  }
+
+  /// Merkezi ritim kapısı bu dilekçeye sıra verdiğinde görünür yüzeyi kurar.
+  void _activatePetition(Petition rawPetition,
       {VillagerEntity? author, Map<String, String> extra = const {}}) {
     // Dilekçenin sesi ÇAN DEĞİL, boğaz temizleme: köy kapına gelmiştir, biri
     // öne çıkıp söze başlar. Çan buradan alındı çünkü aynı çan görevi de,
