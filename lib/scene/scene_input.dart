@@ -27,6 +27,7 @@ extension _SceneInput on _VillageSceneState {
     final focal = event.localPosition - center;
     _camera = _camera + focal * (1 / newZoom - 1 / _zoom);
     _zoom = newZoom;
+    _cameraGuideSeen = true;
     _clampCamera(_viewSize);
     _clearHover(); // zoom altında hedef kayar — künye takılı kalmasın
     _frame.value = _frame.value + 1;
@@ -60,17 +61,14 @@ extension _SceneInput on _VillageSceneState {
   /// Kamerayı, verilen (u,v) ekran-ekseni noktası ekran merkezine gelecek şekilde
   /// ayarlar (zoom merkez sabit noktası → zoom'dan bağımsız).
   void _centerCameraOnUV(double u, double v, Size size) {
-    _camera = Offset(
-      -u * kTileW / 2,
-      size.height * 0.22 - v * kTileH / 2,
-    );
+    _camera = Offset(-u * kTileW / 2, size.height * 0.22 - v * kTileH / 2);
   }
 
   /// Kameranın şu anki ekran-merkezi (u,v) noktası (yukarıdakinin tersi).
   (double, double) _cameraUV(Size size) => (
-        -2 * _camera.dx / kTileW,
-        2 * (size.height * 0.22 - _camera.dy) / kTileH,
-      );
+    -2 * _camera.dx / kTileW,
+    2 * (size.height * 0.22 - _camera.dy) / kTileH,
+  );
 
   /// Reach span'ini viewport en-boy oranına göre (hu, hv)'ye böler.
   /// hu/hv = w/(2h) → reach dikdörtgeni ekranla aynı orana sahip olur, yani tam
@@ -127,12 +125,14 @@ extension _SceneInput on _VillageSceneState {
     // yalnız merkezi sıkıştırıyordu → kenarda viewport reach'i taşıp void'i
     // gösterebiliyordu; bu onu da düzeltir).
     final (hu, hv) = _reachHalfExtents(size);
-    final halfU = size.width / (_zoom * kTileW);   // viewport yarı-uzanımı (u)
-    final halfV = size.height / (_zoom * kTileH);  // viewport yarı-uzanımı (v)
+    final halfU = size.width / (_zoom * kTileW); // viewport yarı-uzanımı (u)
+    final halfV = size.height / (_zoom * kTileH); // viewport yarı-uzanımı (v)
     var (u, v) = _cameraUV(size);
     final uLo = uc - hu + halfU, uHi = uc + hu - halfU;
     final vLo = vc - hv + halfV, vHi = vc + hv - halfV;
-    u = uLo <= uHi ? u.clamp(uLo, uHi) : uc; // viewport reach'ten genişse ortala
+    u = uLo <= uHi
+        ? u.clamp(uLo, uHi)
+        : uc; // viewport reach'ten genişse ortala
     v = vLo <= vHi ? v.clamp(vLo, vHi) : vc;
     _centerCameraOnUV(u, v, size);
   }
@@ -143,6 +143,11 @@ extension _SceneInput on _VillageSceneState {
     _scaleStart = _zoom;
     _panAnchor = d.localFocalPoint;
     _cameraAnchor = _camera;
+    _touchToolGestureMoved = false;
+    // Bazı Flutter platformlarında aynı kısa dokunuş scale akışını da tap
+    // akışını da haber verebilir. Yeni gesture başında sigortayı sıfırla;
+    // scale-end dokunuşu sahiplenirse tap-up'ı tek seferlik yutacağız.
+    _ignoreNextToolTapUp = false;
     // Kamera oynayınca hedef imlecin altından kayar; künye üstünde takılı
     // kalmasın (bina/mezar hareket etmez, kayan kameradır).
     _clearHover();
@@ -161,14 +166,24 @@ extension _SceneInput on _VillageSceneState {
       _frame.value = _frame.value + 1;
     } else if (_farmMode) {
       final tile = _toTile(d.localFocalPoint);
-      _farmStart = tile;
+      // Telefonda ilk köşe daha önce dokunarak sabitlendiyse ikinci parmak
+      // hareketi o köşeden devam eder; yeni drag başlangıcı anchor'ı ezmez.
+      _farmStart =
+          useTouchUi(context) && _farmTapAnchor != null && _farmStart != null
+          ? _farmTapAnchor
+          : tile;
       _farmEnd = tile;
       _frame.value = _frame.value + 1;
     } else if (_roadMode) {
       // Yol: sürükleme ÖNİZLEME başlatır — burada hiçbir şey harcanmaz.
       // Commit sürükleme bırakılınca (_onCanvasScaleEnd).
       final tile = _toTile(d.localFocalPoint);
-      _roadDragStart = tile;
+      _roadDragStart =
+          useTouchUi(context) &&
+              _roadTapAnchor != null &&
+              _roadDragStart != null
+          ? _roadTapAnchor
+          : tile;
       _roadDragEnd = tile;
       _rebuildRoadPreview();
       _frame.value = _frame.value + 1;
@@ -189,6 +204,14 @@ extension _SceneInput on _VillageSceneState {
   }
 
   void _onCanvasScaleUpdate(ScaleUpdateDetails d) {
+    if (useTouchUi(context) &&
+        (_roadMode || _farmMode) &&
+        _panAnchor != null &&
+        (d.localFocalPoint - _panAnchor!).distanceSquared > 144) {
+      // 12dp slop: parmak titremesi "drag" sayılmaz; gerçek sürükleme
+      // akışıysa bırakınca doğrudan commit edilir.
+      _touchToolGestureMoved = true;
+    }
     if (_mineMode || _lumberMode || _farmMode) {
       // Seçim modlarında sürükleme; zoom yok
       final tile = _toTile(d.localFocalPoint);
@@ -246,6 +269,10 @@ extension _SceneInput on _VillageSceneState {
         _followedVillager = null;
       }
       final newZoom = (_scaleStart * d.scale).clamp(0.20, 4.0);
+      if ((d.localFocalPoint - _panAnchor!).distanceSquared > 9 ||
+          (d.scale - 1.0).abs() > 0.01) {
+        _cameraGuideSeen = true;
+      }
       final center = Offset(_viewSize.width / 2, _viewSize.height / 2);
       final focal = _panAnchor! - center;
       _zoom = newZoom;
@@ -280,8 +307,12 @@ extension _SceneInput on _VillageSceneState {
         v.chatBubbleTime = 1.5;
         v.feel(NpcEmotion.content, 2.0, moodDelta: 0.04);
         v.conflictCooldown = 90.0 + _rng.nextDouble() * 60.0;
-        _showNotification(Voice.say(_kPulledFromFightPool,
-            _voice(v, seed: _stableSeed('çek${v.name}', _dayCount))));
+        _showNotification(
+          Voice.say(
+            _kPulledFromFightPool,
+            _voice(v, seed: _stableSeed('çek${v.name}', _dayCount)),
+          ),
+        );
       }
       _draggedVillager = null;
       _dragMovedVillager = false;
@@ -289,6 +320,14 @@ extension _SceneInput on _VillageSceneState {
       return;
     }
     if (_roadMode) {
+      if (useTouchUi(context) && !_touchToolGestureMoved) {
+        final tile = _roadDragEnd;
+        if (tile != null) {
+          _ignoreNextToolTapUp = true;
+          _handleRoadTap(tile);
+        }
+        return;
+      }
       // Önizlenen güzergâh burada gerçek olur — kaynak İLK KEZ şimdi harcanır.
       _commitRoadPreview();
       return;
@@ -298,6 +337,11 @@ extension _SceneInput on _VillageSceneState {
     } else if (_lumberMode && _lumberStart != null && _lumberEnd != null) {
       _commitLumber(_lumberStart!, _lumberEnd!);
     } else if (_farmMode && _farmStart != null && _farmEnd != null) {
+      if (useTouchUi(context) && !_touchToolGestureMoved) {
+        _ignoreNextToolTapUp = true;
+        _handleFarmTap(_farmEnd!);
+        return;
+      }
       _commitFarm(_farmStart!, _farmEnd!);
       setStateHere(() {
         _farmStart = null;
@@ -352,10 +396,46 @@ extension _SceneInput on _VillageSceneState {
 
   // ── Tap / hover ────────────────────────────────────────────────────────────
 
+  void _onCanvasDoubleTapDown(TapDownDetails d) {
+    _doubleTapLocalPosition = d.localPosition;
+  }
+
+  /// Çift tık yalnız NPC kimlik kartının kısa yoludur. Yerleştirme/alan/yol
+  /// araçları aktifken onların iki dokunuşunu çalmaz.
+  void _onCanvasDoubleTap() {
+    final at = _doubleTapLocalPosition;
+    _doubleTapLocalPosition = null;
+    if (at == null ||
+        _roadMode ||
+        _mineMode ||
+        _lumberMode ||
+        _farmMode ||
+        _placing != null) {
+      return;
+    }
+    final v = _villagerAtScreen(at);
+    if (v == null) return;
+    setStateHere(() {
+      _selectedVillager = v;
+      _selectedBuilding = null;
+      _selectedSiteId = null;
+      _detailExpanded = true;
+    });
+  }
+
   void _onCanvasTapUp(TapUpDetails d) {
-    // Yol modunda dokunuşu scale akışı sahiplenir (start→önizle, end→döşe).
-    // Buraya düşerse altındaki binayı seçerdi — yol döşerken bina paneli açılırdı.
-    if (_roadMode) return;
+    // Telefonda yol/tarla için sürükleme MECBURİ DEĞİL: birinci dokunuş ilk
+    // noktayı sabitler, ikinci dokunuş bitişi seçip uygular. Drag hâlâ çalışır;
+    // bu yol yalnız küçük izometrik karelerde parmak hassasiyetine alternatiftir.
+    if (_roadMode) {
+      if (_ignoreNextToolTapUp) {
+        _ignoreNextToolTapUp = false;
+        return;
+      }
+      final tile = _toTile(d.localPosition);
+      if (tile != null && useTouchUi(context)) _handleRoadTap(tile);
+      return;
+    }
     if (_mineMode) {
       final tile = _toTile(d.localPosition);
       if (tile != null) _commitMine(tile, tile);
@@ -363,12 +443,22 @@ extension _SceneInput on _VillageSceneState {
       final tile = _toTile(d.localPosition);
       if (tile != null) _commitLumber(tile, tile);
     } else if (_farmMode) {
+      if (_ignoreNextToolTapUp) {
+        _ignoreNextToolTapUp = false;
+        return;
+      }
       final tile = _toTile(d.localPosition);
-      if (tile != null) _commitFarm(tile, tile);
-      setStateHere(() {
-        _farmStart = null;
-        _farmEnd = null;
-      });
+      if (tile != null) {
+        if (useTouchUi(context)) {
+          _handleFarmTap(tile);
+        } else {
+          _commitFarm(tile, tile);
+          setStateHere(() {
+            _farmStart = null;
+            _farmEnd = null;
+          });
+        }
+      }
     } else if (_placing != null) {
       _tryPlace(d.localPosition);
     } else {
@@ -377,15 +467,18 @@ extension _SceneInput on _VillageSceneState {
       final v = _villagerAtScreen(d.localPosition);
       final tile = _toTile(d.localPosition);
       if (v != null) {
+        final spoken = villagerSpokenStatus(v);
         // SUÇÜSTÜ: suç işlemekte olan faile dokunmak onu yakalar (seçmez).
         // Sinsi yaklaşma/eylem/kaçış boyunca geçerli — pencere kaçarsa fail
         // meçhul kalır (bkz. scene_crime).
         if (_isCriminalInAct(v)) {
+          _npcSpeak(v, spoken);
           _catchCriminal(v);
         } else if (v.activity == VillagerActivity.brawling ||
             v.activity == VillagerActivity.arguing) {
           // Doğrudan müdahale: dövüşen köylüye tıklayınca seçmek yerine kavgayı
           // ayır (kavgalar anlık/geçici → tıklama o an müdahaleye ayrılır).
+          _npcSpeak(v, spoken);
           _interveneConflict(v);
         } else {
           setStateHere(() {
@@ -394,6 +487,7 @@ extension _SceneInput on _VillageSceneState {
             _selectedSiteId = null;
             _detailExpanded = false; // önce komuta çubuğunda kompakt görün
           });
+          _npcSpeak(v, spoken);
         }
       } else if (tile != null) {
         final b = _buildingAt(tile.$1, tile.$2);
@@ -411,7 +505,10 @@ extension _SceneInput on _VillageSceneState {
             _selectedBuilding = b;
             _selectedVillager = null;
             _selectedSiteId = null;
-            _detailExpanded = false; // önce komuta çubuğunda kompakt görün
+            // Bina dekor değil, dünya üstündeki yönetim kapısıdır. Özellikle
+            // telefonda ikinci bir "Detay" dokunuşu etkileşimi saklıyordu;
+            // binaya dokunmak artık doğrudan kendi masasını açar.
+            _detailExpanded = true;
           });
         } else if (siteId != null) {
           setStateHere(() {
@@ -421,11 +518,16 @@ extension _SceneInput on _VillageSceneState {
             _detailExpanded = false;
           });
         } else if (g != null) {
-          _showNotification(Voice.say(
+          _showNotification(
+            Voice.say(
               _kGravePool,
-              _voice(null,
-                  seed: _stableSeed('mezar${g.name}', _dayCount),
-                  extra: {'merhum': g.name})));
+              _voice(
+                null,
+                seed: _stableSeed('mezar${g.name}', _dayCount),
+                extra: {'merhum': g.name},
+              ),
+            ),
+          );
         } else {
           setStateHere(() {
             _selectedVillager = null;
@@ -441,6 +543,38 @@ extension _SceneInput on _VillageSceneState {
         });
       }
     }
+  }
+
+  /// Mobil yol aracı: ilk dokunuş başlangıç, ikinci dokunuş bitiş. İlk tile
+  /// anında önizlenir ama kaynak ancak ikinci noktada harcanır.
+  void _handleRoadTap((int, int) tile) {
+    if (_roadTapAnchor == null || _roadDragStart == null) {
+      _roadTapAnchor = tile;
+      _roadDragStart = tile;
+      _roadDragEnd = tile;
+      _rebuildRoadPreview();
+      _frame.value = _frame.value + 1;
+      return;
+    }
+    _roadDragStart = _roadTapAnchor;
+    _roadDragEnd = tile;
+    _rebuildRoadPreview();
+    _commitRoadPreview();
+  }
+
+  /// Mobil tarla aracı: dikdörtgenin iki köşesi ayrı ayrı dokunulabilir.
+  /// Sürükleyebilen oyuncu aynı aracı eski biçimde tek harekette de kullanır.
+  void _handleFarmTap((int, int) tile) {
+    if (_farmTapAnchor == null || _farmStart == null) {
+      _farmTapAnchor = tile;
+      _farmStart = tile;
+      _farmEnd = tile;
+      _frame.value = _frame.value + 1;
+      return;
+    }
+    _farmStart = _farmTapAnchor;
+    _farmEnd = tile;
+    _commitFarm(_farmStart!, _farmEnd!);
   }
 
   void _onCanvasHover(PointerHoverEvent e) {
@@ -459,48 +593,67 @@ extension _SceneInput on _VillageSceneState {
       _clearHover();
       return;
     }
-    // Boş elde: NPC/bina üstüne gelince dünya-uzayı künye. NPC önce — tıklama
-    // önceliğiyle tutarlı (sprite bina önünde görünür).
+    // Boş elde: NPC/bina/iş yeri/mezar üstüne gelince dünya-uzayı künye. NPC
+    // önce — tıklama önceliğiyle tutarlı (sprite bina önünde görünür).
     //
     // PERF: imleç 3px'ten az oynadıysa hit-test'i hiç çalıştırma (trackpad
     // saniyede 100+ olay üretir; künye imleci takip etmediği için minik
     // titremelerin sonucu zaten değişmez).
     final probe = _hoverProbe;
-    if (probe != null && (e.localPosition - probe).distanceSquared < 9.0) return;
+    if (probe != null && (e.localPosition - probe).distanceSquared < 9.0) {
+      return;
+    }
     _hoverProbe = e.localPosition;
 
     final VillagerEntity? v = _villagerAtScreen(e.localPosition);
     BuildingEntity? b;
+    String? siteId;
     Grave? g;
     if (v == null) {
       final tile = _toTile(e.localPosition);
       if (tile != null) {
         b = _buildingAt(tile.$1, tile.$2);
-        if (b == null) g = _graveAt(tile.$1, tile.$2);
+        if (b == null) siteId = _siteIdAt(tile.$1, tile.$2);
+        if (b == null && siteId == null) g = _graveAt(tile.$1, tile.$2);
       }
     }
     // PERF: hedef değişmediyse hiçbir şey yazma — hover başına sıfır iş.
     if (identical(v, _hoverVillager) &&
         identical(b, _hoverBuilding) &&
+        siteId == _hoverSiteId &&
         identical(g, _hoverGrave)) {
       return;
     }
     final wasEmpty =
-        _hoverVillager == null && _hoverBuilding == null && _hoverGrave == null;
+        _hoverVillager == null &&
+        _hoverBuilding == null &&
+        _hoverSiteId == null &&
+        _hoverGrave == null;
     _hoverVillager = v;
     _hoverBuilding = b;
+    _hoverSiteId = siteId;
     _hoverGrave = g;
     // Hedeften hedefe geçerken künye yeniden doğmaz (fade tekrarı göz yorar);
     // yalnız boşluktan gelirken belirir.
     if (wasEmpty) _hoverSince = _time;
-    // NOT: bilerek _frame bumplanmıyor — künye zaten her karede yeniden konumlanır.
+    // Target changes are sparse (not every pointer move), so repaint directly.
+    // This also keeps hover feedback alive while the simulation is paused and
+    // the game loop intentionally stops issuing identical canvas frames.
+    _frame.value = _frame.value + 1;
   }
 
   void _clearHover() {
+    final hadHover =
+        _hoverVillager != null ||
+        _hoverBuilding != null ||
+        _hoverSiteId != null ||
+        _hoverGrave != null;
     _hoverVillager = null;
     _hoverBuilding = null;
+    _hoverSiteId = null;
     _hoverGrave = null;
     _hoverProbe = null;
+    if (hadHover) _frame.value = _frame.value + 1;
   }
 
   /// Verilen tile'daki mezar (varsa) — anma etkileşimi için. Mezarlar tek tile

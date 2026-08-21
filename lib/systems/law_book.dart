@@ -1007,10 +1007,10 @@ const List<LawDef> kLawBook = [
     icon: '👰',
     title: 'Dışarıya Nikâh Fermanı',
     decree:
-        '"Buyuruldu ki: yolu düşen yabancıyla nikâh kıyıla, kurulan ocak '
+        '"Buyuruldu ki: kervanla gelen yolcuyla nikâh kıyıla, kurulan ocak '
         'köyden sayıla. Kendi içine kapanan soy, kendi içinde tükenir."',
     murmur:
-        'Bir gelin dışarıdan geldi; kendi adını da getirdi. Yaşlılar '
+        'Bir gelin kervanla geldi; kendi adını da getirdi. Yaşlılar '
         'düğüne gitti ama sofrada az konuştular.',
     branch: LawBranch.gecim,
     deliberationDays: 1.0,
@@ -1019,7 +1019,7 @@ const List<LawDef> kLawBook = [
       label: 'Mührü bas',
       detail: '',
       resolutionPool: [
-        '👰 Dışarıya Nikâh Fermanı deftere girdi. Yalnız kalana dışarıdan eş aranır.',
+        '👰 Dışarıya Nikâh Fermanı deftere girdi. Yalnız kalana kervan yolcularından eş aranır.',
       ],
       moraleAmount: 0.03,
       moraleDays: 3,
@@ -1423,15 +1423,18 @@ const List<LawDef> kLawBook = [
   LawDef(
     id: 'rejim.meclisDaimi',
     gate: _oathCommune,
-    gateReason: 'Meclis-i Daimi, ancak sözünü meydana bırakacağına yemin etmiş '
+    gateReason:
+        'Meclis-i Daimi, ancak sözünü meydana bırakacağına yemin etmiş '
         'bir köyde kurulur.',
     binding: true,
     grave: true,
     icon: '🏛',
     title: 'Meclis-i Daimi Fermanı',
-    decree: '"Buyuruldu ki: meclis dağılmaya, daim toplu ola. Köyün derdi '
+    decree:
+        '"Buyuruldu ki: meclis dağılmaya, daim toplu ola. Köyün derdi '
         'kapıda beklemeye — meydanda çözüle."',
-    murmur: 'Divan artık hiç boşalmıyor. Kararlar sensiz de çıkıyor; bazıları '
+    murmur:
+        'Divan artık hiç boşalmıyor. Kararlar sensiz de çıkıyor; bazıları '
         'senin vereceğinden iyi, bazıları değil.',
     branch: LawBranch.gecim,
     deliberationDays: 2.5,
@@ -1440,7 +1443,7 @@ const List<LawDef> kLawBook = [
       label: 'Mührü bas — sözü meydana bırak',
       detail: '',
       resolutionPool: [
-        '🏛 Meclis-i Daimi kuruldu. Köy kendi derdini kendi çözüyor.'
+        '🏛 Meclis-i Daimi kuruldu. Köy kendi derdini kendi çözüyor.',
       ],
       moraleAmount: 0.05,
       moraleDays: 6,
@@ -1457,15 +1460,18 @@ const List<LawDef> kLawBook = [
   LawDef(
     id: 'rejim.mulkTapusu',
     gate: _oathMarket,
-    gateReason: 'Tapu defteri, kapısını pazara açacağına yemin etmiş köyde '
+    gateReason:
+        'Tapu defteri, kapısını pazara açacağına yemin etmiş köyde '
         'açılır.',
     binding: true,
     grave: true,
     icon: '📜',
     title: 'Mülk Tapusu Fermanı',
-    decree: '"Buyuruldu ki: her dam, her tarla bir adla yazıla. Yazılan mülk '
+    decree:
+        '"Buyuruldu ki: her dam, her tarla bir adla yazıla. Yazılan mülk '
         'sahibinindir; alınır, satılır, miras kalır."',
-    murmur: 'Tapu defteri açıldı. Bir hane iki dam birden yazdırdı; öbürü '
+    murmur:
+        'Tapu defteri açıldı. Bir hane iki dam birden yazdırdı; öbürü '
         'yazdıracak bir şey bulamadı.',
     branch: LawBranch.gecim,
     deliberationDays: 2.5,
@@ -1475,7 +1481,7 @@ const List<LawDef> kLawBook = [
       label: 'Mührü bas — mülkü yaz',
       detail: '',
       resolutionPool: [
-        '📜 Mülk Tapusu deftere girdi. Artık her damın bir sahibi var.'
+        '📜 Mülk Tapusu deftere girdi. Artık her damın bir sahibi var.',
       ],
       setsFlags: ['rejim.mulkTapusu'],
       estateMood: [
@@ -1493,9 +1499,11 @@ const List<LawDef> kLawBook = [
     grave: true,
     icon: '🥣',
     title: 'Ortak Ambar Fermanı',
-    decree: '"Buyuruldu ki: harman tek ambara gire, sofraya eşit paylarla '
+    decree:
+        '"Buyuruldu ki: harman tek ambara gire, sofraya eşit paylarla '
         'çıka. Az yiyen de bir pay alır, çok çalışan da."',
-    murmur: 'Kimse aç kalmadı. Kimse fazladan bir kova da taşımadı — pay '
+    murmur:
+        'Kimse aç kalmadı. Kimse fazladan bir kova da taşımadı — pay '
         'nasılsa eşit.',
     branch: LawBranch.gecim,
     deliberationDays: 2.5,
@@ -1504,7 +1512,7 @@ const List<LawDef> kLawBook = [
       label: 'Mührü bas — payı eşitle',
       detail: '',
       resolutionPool: [
-        '🥣 Ortak Ambar kuruldu. Sofrada pay eşit, tezgâhta hevesi tartışılır.'
+        '🥣 Ortak Ambar kuruldu. Sofrada pay eşit, tezgâhta hevesi tartışılır.',
       ],
       moraleAmount: 0.06,
       moraleDays: 8,
@@ -1521,15 +1529,18 @@ const List<LawDef> kLawBook = [
   LawDef(
     id: 'rejim.muhassil',
     gate: _oathSealedHand,
-    gateReason: 'Muhassıl, tek sözün kendisine ait olduğuna yemin etmiş köyde '
+    gateReason:
+        'Muhassıl, tek sözün kendisine ait olduğuna yemin etmiş köyde '
         'kapı çalar.',
     binding: true,
     grave: true,
     icon: '👑',
     title: 'Muhassıl Fermanı',
-    decree: '"Buyuruldu ki: hane hane gezile, pay toplana. Vermeyenin adı '
+    decree:
+        '"Buyuruldu ki: hane hane gezile, pay toplana. Vermeyenin adı '
         'deftere ayrı yazıla."',
-    murmur: 'Muhassıl geçtiği sokakta kapılar kapanıyor. Kese doluyor — '
+    murmur:
+        'Muhassıl geçtiği sokakta kapılar kapanıyor. Kese doluyor — '
         'akşamları meydan boşalıyor.',
     branch: LawBranch.nizam,
     deliberationDays: 2.5,
@@ -1539,7 +1550,7 @@ const List<LawDef> kLawBook = [
       label: 'Mührü bas — payı topla',
       detail: '',
       resolutionPool: [
-        '👑 Muhassıl Fermanı deftere girdi. Kese doluyor, sokak susuyor.'
+        '👑 Muhassıl Fermanı deftere girdi. Kese doluyor, sokak susuyor.',
       ],
       moraleAmount: -0.05,
       moraleDays: 8,
@@ -1565,8 +1576,7 @@ const Map<String, String> kLawSummary = {
       'Tarlalar elbirliğiyle kaldırılır; kimse hasatta geride kalmaz.',
   'irrigation': 'Kuyudan tarlaya su taşınır; ekin susuz kalmaz, verim artar.',
   'farmLabor': 'Hasatta boşta gezen herkes tarlaya koşar; ürün hızlı kalkar.',
-  'hospitality':
-      'Kapı yabancıya açılır; dışarıdan yeni haneler köye gelebilir.',
+  'hospitality': 'Kapı kervan yolcusuna açılır; yeni haneler köye gelebilir.',
   'familyReunion': 'Gençler yuva kurar; yeni aileler doğar.',
   'herdGrowth': 'Sürüye iyi bakılır; hayvanlar daha hızlı çoğalır.',
   'cropRotation': 'Tarlalar dönüşümlü ekilir; toprak yorulmaz, verim korunur.',
@@ -1588,7 +1598,7 @@ const Map<String, String> kLawSummary = {
   'hearthWatch':
       'Meydan ateşi vaktinden önce beslenir; sönmez, ama odun daha hızlı tükenir.',
   'outsideMarriage':
-      'Yalnız kalana dışarıdan eş çağrılır; gelen kendi adıyla yeni bir hane kurar.',
+      'Yalnız kalana kervanla eş gelir; gelen kendi adıyla yeni bir hane kurar.',
   'nizam.bloodPrice':
       'Ölümcül kavgada kanın bedeli keseden ödenir; kan davası doğmaz (kese boşsa hüküm tutmaz).',
   'nizam.watch':
@@ -1622,6 +1632,12 @@ const Map<String, String> kLawSummary = {
 
 /// Defter sorguları — UI ve sahne aynı kurallardan okusun diye tek yerde.
 abstract final class LawBook {
+  /// Kanunname bir kamp eylemi değildir: yazılı hüküm çıkarabilmek için köyün
+  /// önce kalıcı bir yönetim makamı kurması gerekir. Nüfus tek başına yetmez;
+  /// Belediye bu ilerleme eşiğinin dünyadaki görünür karşılığıdır.
+  static bool governanceReady(LawContext ctx) =>
+      ctx.buildings.contains(BuildingType.townhall);
+
   /// Yasanın sade "ne işe yarar" açıklaması (yoksa boş).
   static String summary(String id) => kLawSummary[id] ?? '';
 

@@ -65,45 +65,52 @@ List<PetitionContext> sweep() {
     bool craftLost = false,
     int imperialVisits = 1,
     double governanceLegacy = 0,
-  }) =>
-      PetitionContext(
-        population: population,
-        adults: adults,
-        food: food,
-        gold: gold,
-        morale: morale,
-        hasChurch: hasChurch,
-        memory: memory,
-        aggrievedEstate: aggrieved,
-        ascendant: ascendant,
-        herdSize: herdSize,
-        herdHungry: herdHungry,
-        season: season,
-        hasCrops: hasCrops,
-        hasResentful: hasResentful,
-        hasFeud: hasFeud,
-        withholdingHouse: withholdingHouse,
-        crimeSuspicion: crimeSuspicion,
-        cropRotation: cropRotation,
-        hospitality: hospitality,
-        hasHousing: hasHousing,
-        dayCount: dayCount,
-        foundersAlive: foundersAlive,
-        houseCount: houseCount,
-        dominantSway: dominantSway,
-        sealedLaws: sealedLaws,
-        regime: regime,
-        unrest: unrest,
-        craftLost: craftLost,
-        imperialVisits: imperialVisits,
-        governanceLegacy: governanceLegacy,
-      );
+  }) => PetitionContext(
+    population: population,
+    adults: adults,
+    food: food,
+    gold: gold,
+    morale: morale,
+    hasChurch: hasChurch,
+    memory: memory,
+    aggrievedEstate: aggrieved,
+    ascendant: ascendant,
+    herdSize: herdSize,
+    herdHungry: herdHungry,
+    season: season,
+    hasCrops: hasCrops,
+    hasResentful: hasResentful,
+    hasFeud: hasFeud,
+    withholdingHouse: withholdingHouse,
+    crimeSuspicion: crimeSuspicion,
+    cropRotation: cropRotation,
+    hospitality: hospitality,
+    hasHousing: hasHousing,
+    dayCount: dayCount,
+    foundersAlive: foundersAlive,
+    houseCount: houseCount,
+    dominantSway: dominantSway,
+    sealedLaws: sealedLaws,
+    regime: regime,
+    unrest: unrest,
+    craftLost: craftLost,
+    imperialVisits: imperialVisits,
+    governanceLegacy: governanceLegacy,
+  );
 
   out.add(base());
 
   // Köyün ölçeği — küçük kurucu köyünden kalabalığa.
-  out.add(base(population: 3, adults: 2, dayCount: 2, sealedLaws: 0,
-      houseCount: 1, imperialVisits: 0));
+  out.add(
+    base(
+      population: 3,
+      adults: 2,
+      dayCount: 2,
+      sealedLaws: 0,
+      houseCount: 1,
+      imperialVisits: 0,
+    ),
+  );
   out.add(base(population: 6, adults: 4, dayCount: 6, sealedLaws: 0));
   out.add(base(population: 40, adults: 26, dayCount: 200, sealedLaws: 12));
 
@@ -196,6 +203,12 @@ Set<String> reachableIds(List<PetitionContext> contexts) {
 }
 
 void main() {
+  test('kuruluş odun krizi yalnız oyuncu hükmü ister', () {
+    expect(petitionRequiresPlayerVerdict('woodLow', 0), isTrue);
+    expect(petitionRequiresPlayerVerdict('woodLow', 1), isFalse);
+    expect(petitionRequiresPlayerVerdict('fireDied', 0), isFalse);
+  });
+
   final all = PetitionSystem.allForTest;
   final gates = PetitionSystem.gatesForTest;
 
@@ -213,8 +226,11 @@ void main() {
 
     test('her dilekçenin en az iki şıkkı var — tek şık karar değildir', () {
       for (final p in all) {
-        expect(p.options.length, greaterThanOrEqualTo(2),
-            reason: '${p.id} tek şıklı: oyuncuya seçim sunmuyor');
+        expect(
+          p.options.length,
+          greaterThanOrEqualTo(2),
+          reason: '${p.id} tek şıklı: oyuncuya seçim sunmuyor',
+        );
       }
     });
 
@@ -223,10 +239,16 @@ void main() {
         expect(p.bodyPool, isNotEmpty, reason: '${p.id} gövdesiz');
         expect(p.title.trim(), isNotEmpty, reason: '${p.id} başlıksız');
         for (final o in p.options) {
-          expect(o.label.trim(), isNotEmpty,
-              reason: '${p.id}: etiketsiz şık — düğmede boşluk görünür');
-          expect(o.resolutionPool, isNotEmpty,
-              reason: '${p.id}/${o.label}: çözüm metni yok');
+          expect(
+            o.label.trim(),
+            isNotEmpty,
+            reason: '${p.id}: etiketsiz şık — düğmede boşluk görünür',
+          );
+          expect(
+            o.resolutionPool,
+            isNotEmpty,
+            reason: '${p.id}/${o.label}: çözüm metni yok',
+          );
         }
       }
     });
@@ -235,16 +257,24 @@ void main() {
       // CLAUDE.md kuralı. Katalog en büyük metin yığını, kaçak buraya sızar.
       for (final p in all) {
         final texts = <String>[
-          p.title, p.petitioner, ...p.bodyPool,
+          p.title,
+          p.petitioner,
+          ...p.bodyPool,
           if (p.note != null) p.note!,
           if (p.stakes != null) p.stakes!,
           for (final o in p.options) ...[
-            o.label, o.detail, ...o.resolutionPool, ...o.annalPool,
+            o.label,
+            o.detail,
+            ...o.resolutionPool,
+            ...o.annalPool,
           ],
         ];
         for (final t in texts) {
-          expect(t.contains('—'), isFalse,
-              reason: '${p.id}: em-dash geçiyor → "$t"');
+          expect(
+            t.contains('—'),
+            isFalse,
+            reason: '${p.id}: em-dash geçiyor → "$t"',
+          );
         }
       }
     });
@@ -257,9 +287,13 @@ void main() {
         for (final o in p.options) {
           final f = o.followUpId;
           if (f == null) continue;
-          expect(ids.contains(f), isTrue,
-              reason: '${p.id}/${o.label} → "$f" diye bir dilekçe yok: '
-                  'oyuncu kararı verir, vaat edilen devam hiç gelmez');
+          expect(
+            ids.contains(f),
+            isTrue,
+            reason:
+                '${p.id}/${o.label} → "$f" diye bir dilekçe yok: '
+                'oyuncu kararı verir, vaat edilen devam hiç gelmez',
+          );
         }
       }
     });
@@ -272,18 +306,26 @@ void main() {
       };
       final rollable = reachableIds(sweep());
       final summoned = sceneSummonedIds();
-      expect(summoned, isNotEmpty,
-          reason: 'kaynak taraması hiçbir byId çağrısı bulamadı — '
-              'tarama bozulmuş, öksüz avı sessizce kapanmış olur');
+      expect(
+        summoned,
+        isNotEmpty,
+        reason:
+            'kaynak taraması hiçbir byId çağrısı bulamadı — '
+            'tarama bozulmuş, öksüz avı sessizce kapanmış olur',
+      );
       for (final g in gates) {
         final id = g.petition.id;
         // Bir dilekçenin oyunda görünmesinin ÜÇ yolu var: rastgele havuz,
         // bir şıkkın zinciri, ya da sahnenin doğrudan çağrısı. Üçü de yoksa
         // o metin yazılmış ama oynanmaz.
         if (rollable.contains(id) || summoned.contains(id)) continue;
-        expect(called.contains(id), isTrue,
-            reason: '$id ne rastgele çıkıyor, ne bir şıktan çağrılıyor, ne de '
-                'sahneden: yazılmış ama oyunda hiç görünmeyen metin');
+        expect(
+          called.contains(id),
+          isTrue,
+          reason:
+              '$id ne rastgele çıkıyor, ne bir şıktan çağrılıyor, ne de '
+              'sahneden: yazılmış ama oyunda hiç görünmeyen metin',
+        );
       }
     });
 
@@ -291,8 +333,11 @@ void main() {
       for (final p in all) {
         for (final o in p.options) {
           if (o.followUpId == null) continue;
-          expect(o.followUpDelayDays, greaterThan(0),
-              reason: '${p.id}/${o.label}: takip gecikmesi sıfır');
+          expect(
+            o.followUpDelayDays,
+            greaterThan(0),
+            reason: '${p.id}/${o.label}: takip gecikmesi sıfır',
+          );
         }
       }
     });
@@ -306,21 +351,30 @@ void main() {
         if (g.weight <= 0) continue;
         if (!contexts.any(g.canFire)) unreachable.add(g.petition.id);
       }
-      expect(unreachable, isEmpty,
-          reason: 'kapısı hiçbir köyde açılmayan dilekçe: $unreachable');
+      expect(
+        unreachable,
+        isEmpty,
+        reason: 'kapısı hiçbir köyde açılmayan dilekçe: $unreachable',
+      );
     });
 
-    test('taban köy susmaz — sıradan bir köyde her zaman soracak bir şey var',
-        () {
-      // Dilekçe sistemi köyün gündemidir; ortalama bir köyde havuz boşsa
-      // yönetişim omurgası sessizleşir.
-      final rng = Random(7);
-      for (final c in sweep()) {
-        expect(PetitionSystem.roll(c, rng), isNotNull,
-            reason: 'bu köyde hiçbir dilekçe uygun değil (nüfus ${c.population}, '
-                'yıl ${c.years}, rejim ${c.regime})');
-      }
-    });
+    test(
+      'taban köy susmaz — sıradan bir köyde her zaman soracak bir şey var',
+      () {
+        // Dilekçe sistemi köyün gündemidir; ortalama bir köyde havuz boşsa
+        // yönetişim omurgası sessizleşir.
+        final rng = Random(7);
+        for (final c in sweep()) {
+          expect(
+            PetitionSystem.roll(c, rng),
+            isNotNull,
+            reason:
+                'bu köyde hiçbir dilekçe uygun değil (nüfus ${c.population}, '
+                'yıl ${c.years}, rejim ${c.regime})',
+          );
+        }
+      },
+    );
   });
 
   group('roll sözleşmesi', () {
@@ -333,8 +387,11 @@ void main() {
       for (var i = 0; i < 400; i++) {
         final p = PetitionSystem.roll(ctx, Random(i), blocked: blocked);
         if (p == null) continue;
-        expect(blocked.contains(p.id), isFalse,
-            reason: '${p.id} bloklu olmasına rağmen çıktı');
+        expect(
+          blocked.contains(p.id),
+          isFalse,
+          reason: '${p.id} bloklu olmasına rağmen çıktı',
+        );
       }
     });
 
@@ -350,13 +407,28 @@ void main() {
       double shareOf(Estate e, {required bool aggrieved}) {
         final c = aggrieved
             ? PetitionContext(
-                population: 20, adults: 12, food: 200, gold: 90,
-                morale: 0.55, hasChurch: true, dayCount: 60,
-                sealedLaws: 4, houseCount: 3, aggrievedEstate: e)
+                population: 20,
+                adults: 12,
+                food: 200,
+                gold: 90,
+                morale: 0.55,
+                hasChurch: true,
+                dayCount: 60,
+                sealedLaws: 4,
+                houseCount: 3,
+                aggrievedEstate: e,
+              )
             : const PetitionContext(
-                population: 20, adults: 12, food: 200, gold: 90,
-                morale: 0.55, hasChurch: true, dayCount: 60,
-                sealedLaws: 4, houseCount: 3);
+                population: 20,
+                adults: 12,
+                food: 200,
+                gold: 90,
+                morale: 0.55,
+                hasChurch: true,
+                dayCount: 60,
+                sealedLaws: 4,
+                houseCount: 3,
+              );
         var hits = 0;
         const n = 3000;
         for (var i = 0; i < n; i++) {
@@ -368,11 +440,17 @@ void main() {
 
       for (final e in Estate.values) {
         final calm = shareOf(e, aggrieved: false);
-        if (calm == 0) continue; // o zümrenin hiç dilekçesi yoksa ölçüm anlamsız
+        if (calm == 0) {
+          continue; // o zümrenin hiç dilekçesi yoksa ölçüm anlamsız
+        }
         final angry = shareOf(e, aggrieved: true);
-        expect(angry, greaterThan(calm),
-            reason: '$e küskünken gündeme daha çok girmeli '
-                '(sakin ${calm.toStringAsFixed(3)} → küskün ${angry.toStringAsFixed(3)})');
+        expect(
+          angry,
+          greaterThan(calm),
+          reason:
+              '$e küskünken gündeme daha çok girmeli '
+              '(sakin ${calm.toStringAsFixed(3)} → küskün ${angry.toStringAsFixed(3)})',
+        );
       }
     });
   });
@@ -382,20 +460,32 @@ void main() {
       // Aynı bedeli, aynı efekti, aynı bayrağı taşıyan iki şık oyuncuya
       // seçim sunmaz: iki düğme, tek karar.
       String fingerprint(PetitionOption o) => [
-            o.foodDelta, o.woodDelta, o.stoneDelta, o.ironDelta, o.goldDelta,
-            o.moraleAmount, o.moraleDays, o.fx, o.followUpId,
-            o.setsFlags.join(','), o.clearsFlags.join(','),
-            [for (final (e, d) in o.estateMood) '$e:$d'].join(','),
-          ].join('|');
+        o.foodDelta,
+        o.woodDelta,
+        o.stoneDelta,
+        o.ironDelta,
+        o.goldDelta,
+        o.moraleAmount,
+        o.moraleDays,
+        o.fx,
+        o.followUpId,
+        o.setsFlags.join(','),
+        o.clearsFlags.join(','),
+        [for (final (e, d) in o.estateMood) '$e:$d'].join(','),
+      ].join('|');
 
       for (final p in all) {
         final seen = <String, String>{};
         for (final o in p.options) {
           final fp = fingerprint(o);
           final twin = seen[fp];
-          expect(twin, isNull,
-              reason: '${p.id}: "$twin" ile "${o.label}" tıpatıp aynı sonucu '
-                  'veriyor — iki düğme, tek karar');
+          expect(
+            twin,
+            isNull,
+            reason:
+                '${p.id}: "$twin" ile "${o.label}" tıpatıp aynı sonucu '
+                'veriyor — iki düğme, tek karar',
+          );
           seen[fp] = o.label;
         }
       }

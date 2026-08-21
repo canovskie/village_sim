@@ -627,6 +627,20 @@ Future<String?> _tapCategory(Phone d, BuildCategory cat) async {
   return _tapText(label);
 }
 
+/// Arazi/Yol son seçili kategoriyse paleti yalnız açmak yeterlidir. Tekrar
+/// kategori kaydırmak dar cihazda gereksiz ve sentetik parmağı alt raya
+/// düşürebilir; görünmüyorsa genel kategori bulucusuna geri dön.
+Future<String?> _openLandTools(Phone d) async {
+  if (_textCenter('TARLA') != null) return null;
+  if (_textCenter('İNŞA') != null) {
+    final open = await _tapText('İNŞA');
+    if (open != null) return open;
+    await _pump(12);
+    if (_textCenter('TARLA') != null) return null;
+  }
+  return _tapCategory(d, BuildCategory.araziYol);
+}
+
 Future<String?> _tapText(
   String label, {
   bool exact = true,
@@ -667,6 +681,26 @@ List<Step> _script() => <Step>[
 
   Step('07_build_arazi', 'Arazi/Yol araçları', (d) async {
     return _tapCategory(d, BuildCategory.araziYol);
+  }),
+
+  Step('07b_farm_two_tap', 'Tarla — iki köşeye dokunarak seçim', (d) async {
+    final skip = await _openLandTools(d);
+    if (skip != null) return skip;
+    final tool = await _tapText('TARLA');
+    if (tool != null) return tool;
+    await _tap(_local(Offset(d.w * 0.40, d.h * 0.38)));
+    await _tap(_local(Offset(d.w * 0.54, d.h * 0.50)));
+    return null;
+  }),
+
+  Step('07c_road_two_tap', 'Yol — iki uca dokunarak güzergâh', (d) async {
+    final skip = await _openLandTools(d);
+    if (skip != null) return skip;
+    final tool = await _tapText('Toprak Yol');
+    if (tool != null) return tool;
+    await _tap(_local(Offset(d.w * 0.38, d.h * 0.40)));
+    await _tap(_local(Offset(d.w * 0.58, d.h * 0.48)));
+    return null;
   }),
 
   Step('08_place_mode', 'Bina seçili — yerleştirme bağlamı', (d) async {
@@ -747,8 +781,10 @@ List<Step> _script() => <Step>[
   // Etiket cihaza göre değişir: telefonun sol rayı KISA etiketi yazar
   // (KANUN), tablet/masaüstü rafı tam adı (KANUNNAME). İkisini de dene.
   Step('14_ledger_kanun', 'Köy Defteri — Kanunname', (d) async {
-    final short =
-        await _tapText(LedgerSection.kanun.short, within: 'VillageLedger');
+    final short = await _tapText(
+      LedgerSection.kanun.short,
+      within: 'VillageLedger',
+    );
     if (short == null) return null;
     return _tapText(LedgerSection.kanun.label, within: 'VillageLedger');
   }, closeLedger: false),

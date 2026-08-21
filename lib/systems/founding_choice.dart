@@ -58,10 +58,10 @@ class FoundingChoice {
   /// sayıları göstermek, henüz odunun/taşın ne işe yaradığını bilmeyen kişiye
   /// seçim yaptırmak yerine muhasebe yaptırıyordu.
   String get choiceSummary => switch (id) {
-    'seed' => 'Bol yiyecek · İlk günler daha rahat',
-    'tools' => 'Bol alet · İnşaat daha hızlı başlar',
-    'people' => 'Daha çok el · Daha kalabalık başlangıç',
-    _ => 'Dengeli yük · Her şeyden biraz',
+    'seed' => 'Bol yiyecek',
+    'tools' => 'Hızlı inşaat',
+    'people' => 'Bir kişi fazla',
+    _ => 'Dengeli başlangıç',
   };
 
   /// Sinematikteki üç seçenek. Denge kasıtlı olarak ÜÇ AYRI EKSENDE kurulu:
@@ -73,7 +73,7 @@ class FoundingChoice {
       icon: '🌾',
       title: 'Tohum sandığını yükledik',
       blurb: 'Tohum, kuru et, bir de değirmen taşı. Kimse aç kalmayacak.',
-      cost: 'Alet yerine azık aldık: elimizde doğru dürüst odun yok.',
+      cost: 'Az odun',
       roster: [
         (VillagerType.farmer, true), // reis
         (VillagerType.miller, false), // eşi
@@ -90,7 +90,7 @@ class FoundingChoice {
       icon: '🪓',
       title: 'Aletleri yükledik',
       blurb: 'Balta, keser, testere, bir çuval çivi. İlk dam çabuk kalkar.',
-      cost: 'Kiler boş geldi: ilk sıcak yemek gecikirse karın kazınır.',
+      cost: 'Az yiyecek',
       roster: [
         (VillagerType.farmer, true),
         (VillagerType.shepherd, false),
@@ -106,8 +106,8 @@ class FoundingChoice {
       id: 'people',
       icon: '🤝',
       title: 'Kimseyi bırakmadık',
-      blurb: 'Araba yük yerine can aldı — komşunun öksüz oğlu da bizimle.',
-      cost: 'Ne alet var ne azık; üstelik bir ağız fazla.',
+      blurb: 'Araba yük yerine can aldı — kafiledeki öksüz çocuk da bizimle.',
+      cost: 'Az alet ve azık',
       roster: [
         (VillagerType.farmer, true),
         (VillagerType.shepherd, false),
@@ -132,7 +132,7 @@ class FoundingChoice {
     icon: '🧭',
     title: 'Elimizde ne varsa',
     blurb: 'Aceleyle yüklenmiş bir araba: biraz azık, biraz alet.',
-    cost: 'Hiçbir şeyden yeterince yok.',
+    cost: 'Her şeyden biraz',
     roster: [
       (VillagerType.farmer, true),
       (VillagerType.shepherd, false),

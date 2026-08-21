@@ -273,7 +273,11 @@ extension _SceneSave on _VillageSceneState {
       'timeOfDay': _cycle.timeOfDay,
       'camera': [_camera.dx, _camera.dy],
       'zoom': _zoom,
+      'cameraGuideSeen': _cameraGuideSeen,
       'speedIdx': _speedIdx,
+      // 4× kaldırıldı. Değeri ayrıca yazmak eski indeks düzeninden (0/1/2/3)
+      // yeni düzene (0/1/2) güvenli göç sağlar.
+      'timeScale': _timeScale,
       'morale': _morale,
       'avgIndividualMorale': _avgIndividualMorale,
       'foodHunger': _foodHunger,
@@ -318,6 +322,27 @@ extension _SceneSave on _VillageSceneState {
       'firstShearShown': _firstShearShown,
       'firstCoatShown': _firstCoatShown,
       'villageMemory': _villageMemory.toList(),
+      // KÖY NABZI — açık küçük hikâye + ileride dönecek sonuç yankıları.
+      // Kartın açık/kapalı hâli UI geçicisidir; yalnız hikâyenin kendisi kalır.
+      'villagePulseNextReal': _villagePulseNextReal,
+      'villagePulse': _villagePulse == null
+          ? null
+          : {
+              'kind': _villagePulse!.kind.name,
+              'actor': vRef(_villagePulse!.actor),
+              'other': vRef(_villagePulse!.other),
+              'remainingReal': _villagePulse!.remainingReal,
+              'totalReal': _villagePulse!.totalReal,
+            },
+      'villagePulseEchoes': [
+        for (final e in _villagePulseEchoes)
+          {
+            'dueSim': e.dueSim,
+            'icon': e.icon,
+            'text': e.text,
+            'actor': vRef(e.actor),
+          },
+      ],
       'knownCrafts': _knownCrafts.toList(),
       // Hikâye güncesi (yapısal) + başarımlar + sinematik durumu (anılar kalıcı).
       'storyLog': [for (final e in _storyLog) e.toJson()],
@@ -345,6 +370,16 @@ extension _SceneSave on _VillageSceneState {
       'farmTiles': [for (final t in _farmTiles) _farmTileToJson(t)],
       'trees': [for (final t in _trees) _treeToJson(t)],
       'mineNodes': [for (final n in _mineNodes) _mineNodeToJson(n)],
+      'landmarks': [
+        for (final s in _landmarks)
+          {
+            'col': s.col,
+            'row': s.row,
+            'kind': s.kind.name,
+            'outcome': s.outcome.name,
+            'discovered': s.discovered,
+          },
+      ],
       'animals': [for (final a in _cows) _animalToJson(a)],
       'lotuses': [
         for (final l in _lotuses)
@@ -746,6 +781,7 @@ extension _SceneSave on _VillageSceneState {
     'type': r.type.name,
     'x': r.gridX,
     'y': r.gridY,
+    'amount': r.amount,
     'slotIndex': r.slotIndex,
   };
 
@@ -765,6 +801,7 @@ extension _SceneSave on _VillageSceneState {
   /// Kaydedilmiş dünyayı geri kurar. initState'ten (asset yüklemeden önce)
   /// `_generateWorld` yerine çağrılır → setState KULLANMAZ.
   void restoreWorld(Map<String, dynamic> w) {
+    _foundingHearthCameraSecured = false;
     // 1) Her şeyi temizle (generator'ın yaptığı scaffolding ama generator yok).
     _waterTiles.clear();
     _lotuses.clear();
@@ -779,6 +816,7 @@ extension _SceneSave on _VillageSceneState {
     _wilderness.clear();
     _wildTreeTiles.clear();
     _mineNodes.clear();
+    _landmarks.clear();
     _buildings.clear();
     _orders.clear();
     _roadOrders.clear();
@@ -798,6 +836,11 @@ extension _SceneSave on _VillageSceneState {
     _petitionFollowUps.clear();
     _petitionCooldowns.clear();
     _villageMemory.clear();
+    _villagePulse = null;
+    _villagePulseOpen = false;
+    _villagePulseLastKind = null;
+    _villagePulseLastActor = null;
+    _villagePulseEchoes.clear();
     _knownCrafts.clear();
     _completedQuests.clear();
     _guideShown.clear();
@@ -816,6 +859,9 @@ extension _SceneSave on _VillageSceneState {
     _questVoiceWho = null;
     _questVoiceLine = '';
     _questVoiceLeft = 0;
+    _npcVoiceWho = null;
+    _npcVoiceLine = '';
+    _npcVoiceLeft = 0;
     _storyLog.clear();
     _achievedMilestones.clear();
     _activeCutscene = null; // yüklenen oyunda sinematik oynamaz
@@ -863,9 +909,17 @@ extension _SceneSave on _VillageSceneState {
       _camera = Offset(_d(cam[0]), _d(cam[1]));
     }
     _zoom = _d(w['zoom'], 1.0);
-    _speedIdx = _i(
-      w['speedIdx'],
-    ).clamp(0, _VillageSceneState._speedSteps.length - 1);
+    _cameraGuideSeen = _b(w['cameraGuideSeen']);
+    final savedScale = w['timeScale'];
+    if (savedScale is num) {
+      final scale = savedScale.toDouble();
+      _speedIdx = scale <= 0 ? 2 : (scale >= 1.5 ? 1 : 0);
+    } else {
+      // Eski düzen: 0=1×, 1=2×, 2=4×, 3=duraklat. 4× kayıt 2×'e iner;
+      // eski duraklatılmış kayıt yeni duraklat indeksine taşınır.
+      final old = _i(w['speedIdx']);
+      _speedIdx = old == 3 ? 2 : (old >= 1 ? 1 : 0);
+    }
     _timeScale = _VillageSceneState._speedSteps[_speedIdx];
     _morale = _d(w['morale'], 0.5);
     _avgIndividualMorale = _d(w['avgIndividualMorale'], 0.6);
@@ -1010,6 +1064,41 @@ extension _SceneSave on _VillageSceneState {
       }
     }
 
+    // 5a) Köy Nabzı — aktör referansları ancak köylüler kurulduktan sonra
+    // çözülebilir. Geçersiz/ölmüş indeks sessizce düşer; yeni hikâye zamanla gelir.
+    _villagePulseNextReal = _d(w['villagePulseNextReal'], 38.0);
+    final pulseRaw = w['villagePulse'];
+    if (pulseRaw is Map) {
+      final j = Map<String, dynamic>.from(pulseRaw);
+      final ai = _i(j['actor'], -1), oi = _i(j['other'], -1);
+      if (ai >= 0 && ai < _villagers.length) {
+        final kind = _enumByName(
+          _VillagePulseKind.values,
+          j['kind'],
+          _VillagePulseKind.sharedMeal,
+        );
+        _villagePulse = _VillagePulse(
+          kind: kind,
+          actor: _villagers[ai],
+          other: oi >= 0 && oi < _villagers.length ? _villagers[oi] : null,
+          totalReal: _d(j['totalReal'], 22.0),
+          remainingReal: _d(j['remainingReal'], 12.0),
+        );
+      }
+    }
+    for (final raw in (w['villagePulseEchoes'] as List? ?? const [])) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      final ai = _i(j['actor'], -1);
+      _villagePulseEchoes.add(
+        _VillagePulseEcho(
+          dueSim: _d(j['dueSim']),
+          icon: '${j['icon'] ?? '•'}',
+          text: '${j['text'] ?? ''}',
+          actor: ai >= 0 && ai < _villagers.length ? _villagers[ai] : null,
+        ),
+      );
+    }
+
     // 5b) ESKİ KAYIT GÖÇÜ — soyadsız köylüleri hanelere bağla.
     _migrateHouseholdSurnames();
 
@@ -1064,6 +1153,26 @@ extension _SceneSave on _VillageSceneState {
     for (final raw in (w['mineNodes'] as List? ?? const [])) {
       _mineNodes.add(_mineNodeFromJson(Map<String, dynamic>.from(raw as Map)));
     }
+    for (final raw in (w['landmarks'] as List? ?? const [])) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      _landmarks.add(
+        WorldLandmark(
+          col: _i(j['col']),
+          row: _i(j['row']),
+          kind: _enumByName(
+            WorldLandmarkKind.values,
+            j['kind'],
+            WorldLandmarkKind.ruinedWatchtower,
+          ),
+          outcome: _enumByName(
+            LandmarkOutcome.values,
+            j['outcome'],
+            LandmarkOutcome.salvage,
+          ),
+          discovered: _b(j['discovered']),
+        ),
+      );
+    }
     // Reveal artık KAMERA KISITI (zoom) — arazi örtüsü yok. Eski kayıtlardaki
     // 'cleared' alanı yok sayılır; land setleri boş kalır (scene_land).
     for (final raw in (w['lotuses'] as List? ?? const [])) {
@@ -1106,6 +1215,9 @@ extension _SceneSave on _VillageSceneState {
     for (final raw in (w['decor'] as List? ?? const [])) {
       _decor.add(_decorFromJson(Map<String, dynamic>.from(raw as Map)));
     }
+    if (!w.containsKey('landmarks')) {
+      _seedLandmarksForLegacySave();
+    }
     for (final raw in (w['graves'] as List? ?? const [])) {
       _graves.add(_graveFromJson(Map<String, dynamic>.from(raw as Map)));
     }
@@ -1127,6 +1239,7 @@ extension _SceneSave on _VillageSceneState {
           ),
           gridX: _d(j['x']),
           gridY: _d(j['y']),
+          amount: _i(j['amount'], 1),
         )..slotIndex = _i(j['slotIndex']),
       );
     }
@@ -1239,6 +1352,10 @@ extension _SceneSave on _VillageSceneState {
     _petitionTimer = _d(w['petitionTimer'], 1.0 * kGameDaySeconds);
     _petitionDeadline = _d(w['petitionDeadline']);
     _petitionModalOpen = _b(w['petitionModalOpen']) && _pendingPetition != null;
+    if (_pendingPetition != null &&
+        petitionRequiresPlayerVerdict(_pendingPetition!.id, _charterTier)) {
+      _petitionModalOpen = true;
+    }
     // Eski kayıtlarda alanın adı 'petitionForced' (zorunlu huzur) — donma
     // kaldırıldı, bayrak kapıda bekleyen huzura göçer: aynı an, yeni bedeni.
     _petitionOverdue =
@@ -1568,6 +1685,41 @@ extension _SceneSave on _VillageSceneState {
     jitterY: _d(j['jitterY']),
     swaySeed: _i(j['swaySeed']),
   );
+
+  /// Eski kayıtlarda ilgi noktası alanı yoktur. Aynı dünya seed'inden bugünkü
+  /// adayları türet, fakat köyün yıllar içinde kapladığı hiçbir tile'ın üstüne
+  /// düşürme. Uygun olmayan aday sessizce atlanır; oyuncunun yapısı korunur.
+  void _seedLandmarksForLegacySave() {
+    final occupied = <(int, int)>{
+      ..._waterTiles,
+      for (final t in _trees) (t.col, t.row),
+      for (final n in _mineNodes) (n.col, n.row),
+      for (final f in _farmTiles) (f.col, f.row),
+      for (final r in _roadSystem.all) (r.col, r.row),
+      for (final d in _decor) (d.col, d.row),
+      for (final r in _reeds) ...[(r.col, r.row), (r.col2, r.row2)],
+    };
+    for (final b in _buildings) {
+      for (var c = b.col; c < b.col + b.cols; c++) {
+        for (var r = b.row; r < b.row + b.rows; r++) {
+          occupied.add((c, r));
+        }
+      }
+    }
+    for (final o in _orders) {
+      final meta = kBuildingMeta[o.type]!;
+      for (var c = o.col; c < o.col + meta.cols; c++) {
+        for (var r = o.row; r < o.row + meta.rows; r++) {
+          occupied.add((c, r));
+        }
+      }
+    }
+    for (final site in WorldGenerator(_worldSeed).generate().landmarks) {
+      if (!occupied.contains((site.col, site.row))) {
+        _landmarks.add(site);
+      }
+    }
+  }
 
   Grave _graveFromJson(Map<String, dynamic> j) => Grave(
     col: _d(j['col']),

@@ -83,12 +83,15 @@ extension _SceneWinter on _VillageSceneState {
       v.lookToward(target.gridX, target.gridY);
       _setWorkPose(v, ActPose.stoop);
       v.workCooldown = _kShearCooldown;
-      logDev('🧶 ${v.name} bir koyun kırktı (+$_kWoolPerSheep yün)',
-          tag: '🧶');
+      logDev('🧶 ${v.name} bir koyun kırktı (+$_kWoolPerSheep yün)', tag: '🧶');
       if (!_firstShearShown) {
         _firstShearShown = true;
-        _showNotification(Voice.say(_kFirstShearPool,
-            _voice(v, seed: _stableSeed('kırkım', _dayCount))));
+        _showNotification(
+          Voice.say(
+            _kFirstShearPool,
+            _voice(v, seed: _stableSeed('kırkım', _dayCount)),
+          ),
+        );
       }
     } else if (!_enRouteTo(v, target.gridX, target.gridY)) {
       v.goTo(target.gridX, target.gridY, 1.0);
@@ -151,16 +154,24 @@ extension _SceneWinter on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 0.8) % (2 * pi);
+    job.reportCycle(job.timer, _kWeaveDuration);
     if (job.timer >= _kWeaveDuration) {
       job.timer = 0;
       if (_stockpile.wool >= _kWoolPerCoat && _coatsNeeded) {
         _stockpile.wool -= _kWoolPerCoat;
         _coatsMade++;
+        job.finishCycle();
+        spot.deliveryPulse = 1.0;
+        spot.deliveryTally++;
         v.feel(NpcEmotion.content, 3, moodDelta: 0.03);
         if (!_firstCoatShown) {
           _firstCoatShown = true;
-          _showNotification(Voice.say(_kFirstCoatPool,
-              _voice(v, seed: _stableSeed('ilkgiysi', _dayCount))));
+          _showNotification(
+            Voice.say(
+              _kFirstCoatPool,
+              _voice(v, seed: _stableSeed('ilkgiysi', _dayCount)),
+            ),
+          );
           _feelVillage(NpcEmotion.joy, 3, 0.03);
         }
       }
@@ -259,16 +270,22 @@ extension _SceneWinter on _VillageSceneState {
     // "En uzak" bilinçli: köy merkezine yakın olan ateşten de ısınır, kenardaki
     // hane tamamen kendi başınadır — mesafenin kışın bedeli olması kuralı
     // burada da geçerli (bkz. cold-tent).
-    final coldCount =
-        ((need - paid) / kHouseHearthFuelPerDay).ceil().clamp(0, lit.length);
+    final coldCount = ((need - paid) / kHouseHearthFuelPerDay).ceil().clamp(
+      0,
+      lit.length,
+    );
     lit.sort((a, b) => _hearthDistanceOf(b).compareTo(_hearthDistanceOf(a)));
     for (var i = 0; i < coldCount; i++) {
       _coldHouses.add(lit[i]);
     }
     if (_coldHouses.isNotEmpty && _winterMurmurDay != _dayCount) {
       _winterMurmurDay = _dayCount;
-      _showNotification(Voice.say(
-          _kColdHousePool, _voice(null, seed: _stableSeed('soğukev', _dayCount))));
+      _showNotification(
+        Voice.say(
+          _kColdHousePool,
+          _voice(null, seed: _stableSeed('soğukev', _dayCount)),
+        ),
+      );
       _feelVillage(NpcEmotion.fear, 4, -0.04);
     }
   }
@@ -299,7 +316,10 @@ extension _SceneWinter on _VillageSceneState {
     // Kışın ortasındaysak KALAN gün üzerinden sor: "hazır mıyım" sorusu
     // mevsim ilerledikçe "dayanır mıyım"a döner.
     final days = _season == Season.winter
-        ? (kWinterDays - ((_dayCount - 1) % kDaysPerSeason)).clamp(1, kWinterDays)
+        ? (kWinterDays - ((_dayCount - 1) % kDaysPerSeason)).clamp(
+            1,
+            kWinterDays,
+          )
         : kWinterDays;
     return winterReadiness(
       mouths: _villagers.length,
@@ -353,35 +373,53 @@ extension _SceneWinter on _VillageSceneState {
     final r = _winterReadiness;
     if (r.ready) return;
     final w = r.weakest;
-    _showNotification(Voice.say(
-      _kAutumnPrepPool,
-      _voice(_winterSpeaker,
+    _showNotification(
+      Voice.say(
+        _kAutumnPrepPool,
+        _voice(
+          _winterSpeaker,
           seed: _stableSeed('kışhatırla', _dayCount),
-          extra: {'kalem': w.label.toLowerCase()}),
-    ));
+          extra: {'kalem': w.label.toLowerCase()},
+        ),
+      ),
+    );
   }
 
   /// Sonbaharın SON GÜNÜ köy bir kez konuşur: hazırsa rahat, değilse telaşlı.
   void _maybeWinterEve() {
     if (_season != Season.autumn) return;
-    if (_dayInSeason != kDaysPerSeason - 1 || _winterEveDay == _dayCount) return;
+    if (_dayInSeason != kDaysPerSeason - 1 || _winterEveDay == _dayCount) {
+      return;
+    }
     _winterEveDay = _dayCount;
     final r = _winterReadiness;
     if (r.ready) {
-      _showNotification(Voice.say(_kWinterReadyPool,
-          _voice(null, seed: _stableSeed('kışhazır', _dayCount))));
+      _showNotification(
+        Voice.say(
+          _kWinterReadyPool,
+          _voice(null, seed: _stableSeed('kışhazır', _dayCount)),
+        ),
+      );
       _feelVillage(NpcEmotion.content, 4, 0.04);
       _chronicle('Köy kışa hazır girdi', icon: '❄️');
     } else {
       final w = r.weakest;
-      _showNotification(Voice.say(
-        _kWinterShortPool,
-        _voice(_winterSpeaker,
+      _showNotification(
+        Voice.say(
+          _kWinterShortPool,
+          _voice(
+            _winterSpeaker,
             seed: _stableSeed('kışeksik', _dayCount),
-            extra: {'kalem': w.label.toLowerCase()}),
-      ));
+            extra: {'kalem': w.label.toLowerCase()},
+          ),
+        ),
+      );
       _feelVillage(NpcEmotion.fear, 4, -0.05);
-      _chronicle('Köy kışa eksik girdi: ${w.label.toLowerCase()}', icon: '❄️', kind: ChronicleKind.crisis);
+      _chronicle(
+        'Köy kışa eksik girdi: ${w.label.toLowerCase()}',
+        icon: '❄️',
+        kind: ChronicleKind.crisis,
+      );
     }
   }
 
@@ -397,12 +435,16 @@ extension _SceneWinter on _VillageSceneState {
     final t = r.tightest;
     if (r.daysLeftOf(t) >= 1.0) return;
     _winterPinchDay = _dayCount;
-    _showNotification(Voice.say(
-      _kWinterPinchPool,
-      _voice(_winterSpeaker,
+    _showNotification(
+      Voice.say(
+        _kWinterPinchPool,
+        _voice(
+          _winterSpeaker,
           seed: _stableSeed('kışkıtlık', _dayCount),
-          extra: {'kalem': t.label.toLowerCase()}),
-    ));
+          extra: {'kalem': t.label.toLowerCase()},
+        ),
+      ),
+    );
     _feelVillage(NpcEmotion.fear, 3, -0.03);
   }
 

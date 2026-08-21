@@ -14,6 +14,26 @@ enum CutsceneBg {
   titleCard, // koyu vinyet — kapanış/başlık
 }
 
+/// Çekimin anlattığı şeye özgü fiziksel dekor. Arka plan saati/iklimi verir;
+/// set-piece ise o planın NEDEN çekildiğini kadraja koyar.
+enum CutsceneSetPiece {
+  none,
+  caravan, // yüklü araba, çuvallar, yol tozu
+  camp, // çadırlar, kazıklar, ince duman
+  village, // çatı siluetleri, baca dumanı, çit
+  market, // tezgâhlar, tenteler, asılı fenerler
+  famine, // kuru saplar, boş varil, kırık çit
+  wedding, // ışık zinciri, halka olmuş kalabalık
+  imperial, // sancaklar, mızraklar, ağır toz
+  monument, // taş kaide, uzun sancak
+}
+
+/// Aktörün bütün gövde duruşu. Renderer katmanındaki tipe doğrudan bağımlı
+/// tutulmaz; sinematik veri modeli çizim motorundan bağımsız kalır.
+enum CutsceneActorPose { stand, sit, kneel, mourn }
+
+enum CutsceneActorGesture { none, wave, tell }
+
 /// Sahnedeki bir aktör — bir çekim boyunca [fromX]→[toX] (normalize 0..1)
 /// kayar; [walk] true ise yürüyüş animasyonu oynar. [y] taban çizgisi (0..1).
 class CutsceneActor {
@@ -33,6 +53,12 @@ class CutsceneActor {
   final double scale;
   final bool flip;
   final bool walk;
+  final CutsceneActorPose pose;
+  final CutsceneActorGesture gesture;
+
+  /// Toplu girişlerde herkes aynı karede kaymaya başlamaz. Saniye cinsinden
+  /// küçük gecikme kafileyi sıra, kalabalığı canlı bir grup gibi gösterir.
+  final double entranceDelay;
   const CutsceneActor({
     required this.type,
     this.name,
@@ -44,6 +70,9 @@ class CutsceneActor {
     this.scale = 1.0,
     this.flip = false,
     this.walk = false,
+    this.pose = CutsceneActorPose.stand,
+    this.gesture = CutsceneActorGesture.none,
+    this.entranceDelay = 0,
   }) : toX = toX ?? fromX;
 }
 
@@ -84,6 +113,7 @@ enum CutsceneFraming {
 /// Bir çekim: arka plan + aktörler + replikler + hafif kamera pan/zoom.
 class CutsceneShot {
   final CutsceneBg bg;
+  final CutsceneSetPiece setPiece;
   final List<CutsceneActor> actors;
   final List<CutsceneLine> lines;
 
@@ -114,6 +144,7 @@ class CutsceneShot {
   final CutsceneGate gate;
   const CutsceneShot({
     required this.bg,
+    this.setPiece = CutsceneSetPiece.none,
     this.actors = const [],
     this.lines = const [],
     this.panFrom = 0.0,
@@ -150,6 +181,7 @@ const Cutscene kOpeningCutscene = Cutscene([
   //    Kafile bu çekimde ekrana girer, gruplanır ve DURUR.
   CutsceneShot(
     bg: CutsceneBg.road,
+    setPiece: CutsceneSetPiece.caravan,
     panFrom: 0.0,
     panTo: 0.02,
     // Kamera gökten aşağı iner ve kafileyi bulur (tilt) + hafifçe yaklaşır.
@@ -178,6 +210,7 @@ const Cutscene kOpeningCutscene = Cutscene([
         y: 0.80,
         scale: 1.05,
         walk: true,
+        entranceDelay: 0.18,
       ),
       CutsceneActor(
         type: VillagerType.farmer,
@@ -187,6 +220,7 @@ const Cutscene kOpeningCutscene = Cutscene([
         y: 0.82,
         scale: 1.1,
         walk: true,
+        entranceDelay: 0.36,
       ),
       CutsceneActor(
         type: VillagerType.priest,
@@ -196,6 +230,7 @@ const Cutscene kOpeningCutscene = Cutscene([
         y: 0.78,
         scale: 1.0,
         walk: true,
+        entranceDelay: 0.54,
       ),
     ],
     lines: [
@@ -213,6 +248,7 @@ const Cutscene kOpeningCutscene = Cutscene([
   //    buradan çıkar (bkz. systems/founding_choice.dart).
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
+    setPiece: CutsceneSetPiece.camp,
     panFrom: 0.0,
     panTo: 0.03,
     tiltFrom: 0.06,
@@ -246,6 +282,7 @@ const Cutscene kOpeningCutscene = Cutscene([
   // haritada ateşi kurar. Bağımsız galeri/test kullanımı için kapı korunur.
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
+    setPiece: CutsceneSetPiece.camp,
     zoomFrom: 1.0,
     zoomTo: 1.04,
     gate: CutsceneGate.nameVillage,
@@ -286,6 +323,7 @@ const Cutscene kOpeningCutscene = Cutscene([
 const Cutscene kFireLightingCutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.fireNight,
+    setPiece: CutsceneSetPiece.camp,
     pov: true,
     tiltFrom: 0.06,
     tiltTo: -0.02,
@@ -299,6 +337,7 @@ const Cutscene kFireLightingCutscene = Cutscene([
         y: 0.80,
         scale: 1.2,
         flip: true,
+        pose: CutsceneActorPose.sit,
       ),
       CutsceneActor(
         type: VillagerType.priest,
@@ -307,6 +346,7 @@ const Cutscene kFireLightingCutscene = Cutscene([
         fromX: 0.70,
         y: 0.80,
         scale: 1.25,
+        pose: CutsceneActorPose.sit,
       ),
     ],
     lines: [
@@ -341,6 +381,7 @@ Cutscene? cutsceneForTier(int tier) => switch (tier) {
 const Cutscene _kTier1Cutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
+    setPiece: CutsceneSetPiece.village,
     zoomFrom: 1.0,
     zoomTo: 1.05,
     actors: [
@@ -377,6 +418,7 @@ const Cutscene _kTier1Cutscene = Cutscene([
 const Cutscene _kTier2Cutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
+    setPiece: CutsceneSetPiece.market,
     zoomFrom: 1.08,
     zoomTo: 1.0,
     actors: [
@@ -405,7 +447,7 @@ const Cutscene _kTier2Cutscene = Cutscene([
     ],
     lines: [
       CutsceneLine(
-        'Pazar kuruldu. Tezgâhta üç çeşit peynir var, biri komşu vadiden.',
+        'Pazar kuruldu. Tezgâhta üç çeşit peynir var, biri sabah gelen kervandan.',
       ),
       CutsceneLine(
         'Akşamları meydandan kaval sesi geliyor. Buraya artık köy demiyorlar.',
@@ -420,6 +462,7 @@ const Cutscene _kTier2Cutscene = Cutscene([
 const Cutscene _kTier3Cutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
+    setPiece: CutsceneSetPiece.village,
     zoomFrom: 1.0,
     zoomTo: 1.10,
     actors: [
@@ -483,6 +526,7 @@ const Cutscene _kTier3Cutscene = Cutscene([
 const Cutscene _kTier4Cutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.road,
+    setPiece: CutsceneSetPiece.village,
     zoomFrom: 1.06,
     zoomTo: 1.0,
     actors: [
@@ -515,6 +559,7 @@ const Cutscene _kTier4Cutscene = Cutscene([
   ),
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
+    setPiece: CutsceneSetPiece.village,
     zoomFrom: 1.0,
     zoomTo: 1.08,
     actors: [
@@ -558,6 +603,7 @@ const Cutscene _kTier4Cutscene = Cutscene([
 const Cutscene _kTier5Cutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
+    setPiece: CutsceneSetPiece.monument,
     zoomFrom: 1.0,
     zoomTo: 1.12,
     actors: [
@@ -625,6 +671,7 @@ const Cutscene _kTier5Cutscene = Cutscene([
 const Cutscene kFamineCutscene = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
+    setPiece: CutsceneSetPiece.famine,
     zoomFrom: 1.06,
     zoomTo: 1.0,
     actors: [
@@ -634,6 +681,7 @@ const Cutscene kFamineCutscene = Cutscene([
         fromX: 0.42,
         y: 0.82,
         scale: 1.3,
+        pose: CutsceneActorPose.mourn,
       ),
       CutsceneActor(
         type: VillagerType.priest,
@@ -673,6 +721,7 @@ Cutscene weddingCutscene({
     // 1) Çift ateş közü gecesinde yan yana — köy onları çevreler (anlatı).
     CutsceneShot(
       bg: CutsceneBg.fireNight,
+      setPiece: CutsceneSetPiece.wedding,
       zoomFrom: 1.10,
       zoomTo: 1.0,
       actors: [
@@ -703,6 +752,7 @@ Cutscene weddingCutscene({
     // 2) Yeminler — gelin & damat karşılıklı (yüz yüze, hafif zoom).
     CutsceneShot(
       bg: CutsceneBg.fireNight,
+      setPiece: CutsceneSetPiece.wedding,
       zoomFrom: 1.0,
       zoomTo: 1.06,
       actors: [
@@ -738,6 +788,7 @@ Cutscene weddingCutscene({
     // 3) Kutlama — köy halaya durur (anlatı, sıcak kapanış).
     CutsceneShot(
       bg: CutsceneBg.fireNight,
+      setPiece: CutsceneSetPiece.wedding,
       zoomFrom: 1.04,
       zoomTo: 1.0,
       actors: [
@@ -748,6 +799,7 @@ Cutscene weddingCutscene({
           fromX: 0.46,
           y: 0.82,
           scale: 1.35,
+          gesture: CutsceneActorGesture.wave,
         ),
         CutsceneActor(
           type: groomType,
@@ -757,6 +809,7 @@ Cutscene weddingCutscene({
           y: 0.82,
           scale: 1.35,
           flip: true,
+          gesture: CutsceneActorGesture.wave,
         ),
       ],
       lines: [

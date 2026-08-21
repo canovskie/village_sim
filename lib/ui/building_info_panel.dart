@@ -19,6 +19,7 @@ import '../systems/hearth_warmth.dart';
 import '../systems/winter.dart';
 import '../world/animal_entity.dart';
 import 'app_ui.dart';
+import 'gameplay_dioramas.dart';
 import 'mobile_ui.dart';
 import 'semantic_icon.dart';
 import 'winter_section.dart';
@@ -149,6 +150,24 @@ class BuildingInfoPanel extends StatelessWidget {
   BuildingFunction? get _fn => building.fn;
   Color get _accent => _accentFor(_fn, building.type);
 
+  Widget _cutaway() {
+    final hands = workSites.fold<int>(0, (sum, site) => sum + site.crew.length);
+    final wanted = workSites.fold<int>(0, (sum, site) => sum + site.wanted);
+    final cap = stats.stockCapacity.clamp(1, 999999);
+    final fullness =
+        ((stockpile.wood + stockpile.stone + stockpile.food + stockpile.coal) /
+                (cap * 4))
+            .clamp(0.0, 1.0);
+    return BuildingCutawayDiorama(
+      active: building.isActive,
+      damage: building.damage,
+      hands: hands,
+      wantedHands: wanted,
+      fullness: fullness,
+      accent: _accent,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final meta = kBuildingMeta[building.type]!;
@@ -183,6 +202,18 @@ class BuildingInfoPanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        _cutaway(),
+                        // Oyuncunun değiştirebildiği şey ilk ekranda görünür.
+                        // Eski düzende eylemler bütün istatistik ve kadronun
+                        // altında kalıyor, telefonda binayı salt rapor gibi
+                        // hissettiriyordu.
+                        if (_managementActions().isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          const AppSectionLabel('YÖNET'),
+                          const SizedBox(height: 8),
+                          _actionStrip(_managementActions()),
+                        ],
+                        const SizedBox(height: 14),
                         ..._vital(_fn),
                         ..._winterBlock(),
                         // KADRO — oyuncunun köye dokunduğu yer. Vital'in
@@ -190,9 +221,11 @@ class BuildingInfoPanel extends StatelessWidget {
                         // ile "bunu yıkayım mı" arasındaki asıl soru "burada
                         // kim çalışıyor".
                         ..._crewSections(),
-                        if (_actions().isNotEmpty) ...[
+                        if (_structureActions().isNotEmpty) ...[
                           const SizedBox(height: 14),
-                          _actionStrip(),
+                          const AppSectionLabel('YAPI'),
+                          const SizedBox(height: 8),
+                          _actionStrip(_structureActions()),
                         ],
                         if (_fn?.summary.isNotEmpty == true) ...[
                           const SizedBox(height: 12),
@@ -797,7 +830,7 @@ class BuildingInfoPanel extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Gündem · Meclis · Karar Defteri',
+                    'Gündem · Meclis · Kanunname',
                     style: AppUi.body.copyWith(
                       fontSize: 10,
                       color: AppUi.textLo,
@@ -815,7 +848,7 @@ class BuildingInfoPanel extends StatelessWidget {
 
   // ─── Aksiyonlar ───────────────────────────────────────────────────────────
 
-  List<_Action> _actions() {
+  List<_Action> _managementActions() {
     final fn = _fn;
     final out = <_Action>[];
 
@@ -897,6 +930,15 @@ class BuildingInfoPanel extends StatelessWidget {
       );
     }
 
+    return out;
+  }
+
+  /// Binanın gündelik işinden ayrı, seyrek kullanılan fiziksel müdahaleler.
+  /// Bunları ana kararlarla aynı şeride koymak her binayı "Taşı / Yık"
+  /// menüsüne indiriyordu; artık panelin sonunda sakin bir bakım bölümü.
+  List<_Action> _structureActions() {
+    final out = <_Action>[];
+
     if (onRepair != null && building.damage > 0.02) {
       out.add(
         _Action(
@@ -940,8 +982,7 @@ class BuildingInfoPanel extends StatelessWidget {
     return out;
   }
 
-  Widget _actionStrip() {
-    final actions = _actions();
+  Widget _actionStrip(List<_Action> actions) {
     return Wrap(
       spacing: 7,
       runSpacing: 7,

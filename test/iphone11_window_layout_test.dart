@@ -64,6 +64,54 @@ const _petition = Petition(
   ],
 );
 
+const _judgmentPetition = Petition(
+  id: 'crime_verdict_test',
+  petitioner: 'Köy divanı',
+  icon: '⚖️',
+  title: 'Hırsızlık hükmü',
+  bodyPool: [
+    'Sanık, ambar kilidini kırıp kışlık erzağı aldığı suçlamasıyla huzurunda.',
+  ],
+  stakes: 'Merhamet mi, ibret mi; köy senden açık bir hüküm bekliyor.',
+  options: [
+    PetitionOption(
+      label: 'Affet',
+      detail: 'Bir daha yapmaması için son bir fırsat ver.',
+      resolutionPool: ['Sanık bağışlandı.'],
+      moraleAmount: 0.02,
+    ),
+    PetitionOption(
+      label: 'Zararını ödet',
+      detail: 'Aldığını çalışarak yerine koysun.',
+      resolutionPool: ['Zarar çalışmayla ödendi.'],
+      foodDelta: 4,
+    ),
+    PetitionOption(
+      label: 'Köy önünde cezalandır',
+      detail: 'Herkes hükmü ve bedelini görsün.',
+      resolutionPool: ['Ceza meydanda uygulandı.'],
+      moraleAmount: -0.02,
+    ),
+    PetitionOption(
+      label: 'Sürgün et',
+      detail: 'Köy sınırından bir daha dönmemek üzere çıkar.',
+      resolutionPool: ['Sanık sürgüne gönderildi.'],
+    ),
+    PetitionOption(
+      label: 'Kürek cezası',
+      detail: 'Ağır işte köye olan borcunu ödesin.',
+      resolutionPool: ['Sanık ağır işe gönderildi.'],
+      woodDelta: 3,
+    ),
+    PetitionOption(
+      label: 'Tövbeye çağır',
+      detail: 'Cemaat önünde söz versin ve gözetilsin.',
+      resolutionPool: ['Sanık tövbe etti.'],
+      moraleAmount: 0.01,
+    ),
+  ],
+);
+
 Future<void> _pumpPhone(WidgetTester tester, Widget child) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = _iphone11;
@@ -104,12 +152,10 @@ void main() {
   });
 
   testWidgets('olay penceresi kompakt bütçeyi aşmıyor', (tester) async {
-    await _pumpPhone(
-      tester,
-      EventChoiceModal(event: _event, onChoose: (_) {}),
-    );
+    await _pumpPhone(tester, EventChoiceModal(event: _event, onChoose: (_) {}));
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(AppPanel).first), const Size(760, 360));
+    expect(find.byType(Scrollable), findsNothing);
   });
 
   testWidgets('imparatorluk penceresi seçenekleriyle birlikte taşmıyor', (
@@ -133,6 +179,13 @@ void main() {
     );
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(AppPanel).first), const Size(760, 360));
+    expect(find.byType(Scrollable), findsNothing);
+
+    await tester.tap(find.text('Pazarlık et'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.textContaining('öner'), findsNWidgets(3));
+    expect(find.byType(Scrollable), findsNothing);
   });
 
   testWidgets('dilekçe anlatısı ve kararları aynı kompakt pencerede', (
@@ -150,6 +203,27 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Paylaştır'), findsOneWidget);
     expect(find.text('Ambarda tut'), findsOneWidget);
+    expect(find.byType(Scrollable), findsNothing);
+  });
+
+  testWidgets('altı seçenekli yargı telefonda kaydırmadan tek ekrana sığıyor', (
+    tester,
+  ) async {
+    await _pumpPhone(
+      tester,
+      PetitionModal(
+        petition: _judgmentPetition,
+        state: (morale: 0.5, population: 42, food: 68, gold: 19),
+        onChoose: (_) {},
+        onDismiss: () {},
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    for (final option in _judgmentPetition.options) {
+      expect(find.text(option.label), findsOneWidget);
+    }
+    expect(find.byType(Scrollable), findsNothing);
   });
 
   testWidgets('ayarlar iPhone 11 üzerinde kaydırılabilir kompakt pencere', (
@@ -160,16 +234,22 @@ void main() {
     final panel = tester.getSize(find.byType(AppPanel).first);
     expect(panel.width, lessThanOrEqualTo(720));
     expect(panel.height, 360);
-    expect(tester.getSize(find.byType(AppIconButton).first), const Size(44, 44));
+    expect(
+      tester.getSize(find.byType(AppIconButton).first),
+      const Size(44, 44),
+    );
     expect(find.byType(Scrollable), findsWidgets);
   });
 
-  testWidgets('hakkında ekranı yatay iki sütunda taşmıyor', (tester) async {
+  testWidgets('hakkında ekranı sade yatay düzende taşmıyor', (tester) async {
     await _pumpPhone(tester, const AboutScreen());
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(AppPanel).first), const Size(720, 360));
-    expect(tester.getSize(find.byType(AppIconButton).first), const Size(44, 44));
-    expect(find.text('Kontroller'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(AppIconButton).first),
+      const Size(44, 44),
+    );
+    expect(find.text('Kontroller'), findsNothing);
     expect(find.text('Krediler'), findsOneWidget);
   });
 
@@ -219,8 +299,15 @@ void main() {
           years: 6,
           days: 81,
           population: 34,
-          rows: reckoningLedger(const ReckoningInput(
-              unity: 0.7, charter: 0.5, grit: 0.4, legacy: 0.5, favor: 0.6)),
+          rows: reckoningLedger(
+            const ReckoningInput(
+              unity: 0.7,
+              charter: 0.5,
+              grit: 0.4,
+              legacy: 0.5,
+              favor: 0.6,
+            ),
+          ),
           milestones: const ['📜 Berat yılı ilan edildi.'],
           onExit: () {},
         ),
@@ -233,37 +320,54 @@ void main() {
     }
   });
 
-  testWidgets('hesaplaşma ekranındaki çıkış düğmesine telefonda ulaşılabiliyor',
-      (tester) async {
-    var exited = false;
-    await _pumpPhone(
-      tester,
-      ReckoningScreen(
-        village: 'Pınarbaşı',
-        verdict: ReckoningVerdict.berat,
-        epilogue: verdictEpilogue(ReckoningVerdict.berat, VillageRegime.market),
-        identity: 'Açık Pazar',
-        years: 6,
-        days: 81,
-        population: 34,
-        rows: reckoningLedger(const ReckoningInput(
-            unity: 0.7, charter: 0.5, grit: 0.4, legacy: 0.5, favor: 0.6)),
-        milestones: const [],
-        onExit: () => exited = true,
-      ),
-    );
-    await tester.scrollUntilVisible(find.text('Ana Menü'), 120);
-    await tester.tap(find.text('Ana Menü'));
-    expect(exited, isTrue,
-        reason: 'kapanış ekranından çıkılamıyor — oyuncu koşusunu bitiremez');
-  });
+  testWidgets(
+    'hesaplaşma ekranındaki çıkış düğmesine telefonda ulaşılabiliyor',
+    (tester) async {
+      var exited = false;
+      await _pumpPhone(
+        tester,
+        ReckoningScreen(
+          village: 'Pınarbaşı',
+          verdict: ReckoningVerdict.berat,
+          epilogue: verdictEpilogue(
+            ReckoningVerdict.berat,
+            VillageRegime.market,
+          ),
+          identity: 'Açık Pazar',
+          years: 6,
+          days: 81,
+          population: 34,
+          rows: reckoningLedger(
+            const ReckoningInput(
+              unity: 0.7,
+              charter: 0.5,
+              grit: 0.4,
+              legacy: 0.5,
+              favor: 0.6,
+            ),
+          ),
+          milestones: const [],
+          onExit: () => exited = true,
+        ),
+      );
+      await tester.scrollUntilVisible(find.text('Ana Menü'), 120);
+      await tester.tap(find.text('Ana Menü'));
+      expect(
+        exited,
+        isTrue,
+        reason: 'kapanış ekranından çıkılamıyor — oyuncu koşusunu bitiremez',
+      );
+    },
+  );
 
   testWidgets('ders kartı telefon penceresine sığıyor', (tester) async {
     await _pumpPhone(
       tester,
-      Stack(children: [
-        LessonCard(lesson: VillageLessons.all.first, onClose: () {}),
-      ]),
+      Stack(
+        children: [
+          LessonCard(lesson: VillageLessons.all.first, onClose: () {}),
+        ],
+      ),
     );
     expect(tester.takeException(), isNull);
     final card = tester.getSize(find.byType(AppPanel).first);
@@ -285,12 +389,19 @@ void main() {
     }
     await _pumpPhone(
       tester,
-      Stack(children: [LessonCard(lesson: longest, onClose: () {})]),
+      Stack(
+        children: [LessonCard(lesson: longest, onClose: () {})],
+      ),
     );
-    expect(tester.takeException(), isNull,
-        reason: 'en uzun ders ("${longest.id}") telefonda taşıyor');
-    expect(tester.getSize(find.byType(AppPanel).first).height,
-        lessThanOrEqualTo(360),
-        reason: 'en uzun ders ("${longest.id}") telefon penceresini aşıyor');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'en uzun ders ("${longest.id}") telefonda taşıyor',
+    );
+    expect(
+      tester.getSize(find.byType(AppPanel).first).height,
+      lessThanOrEqualTo(360),
+      reason: 'en uzun ders ("${longest.id}") telefon penceresini aşıyor',
+    );
   });
 }

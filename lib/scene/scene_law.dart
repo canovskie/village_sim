@@ -27,9 +27,18 @@ extension _SceneLaw on _VillageSceneState {
   double _inkDryRemaining() =>
       (_policies.inkDryUntilSim - _time).clamp(0.0, double.infinity);
 
+  /// İlk Belediye tamamlanmadan köyün yazılı hüküm çıkaracak bir makamı yoktur.
+  /// Tek tek yasa kapıları bunun SONRASINDA köyün gerçek ihtiyaçlarına göre
+  /// açılır; böylece kuruluş kampı ilk günden bir devlet ekranına dönüşmez.
+  bool get _lawmakingUnlocked => LawBook.governanceReady(_lawContext);
+
   /// Fermanı meclisin önüne koy. Meclis burada toplanır — ayrı bir "topla"
   /// düğmesi yok, çünkü meclis bir aksiyon değil, imzanın kendisidir.
-  void _openLawRitual(LawDef l) => setStateHere(() => _lawRitual = l);
+  void _openLawRitual(LawDef l) {
+    if (!_lawmakingUnlocked) return;
+    setStateHere(() => _lawRitual = l);
+  }
+
   void _closeLawRitual() => setStateHere(() => _lawRitual = null);
 
   /// MÜHRÜ BAS — geri dönüşü yok. Ferman deftere girer, etkileri köye bağlanır,
@@ -93,8 +102,15 @@ extension _SceneLaw on _VillageSceneState {
     _lawCtxAge = 0;
     _lawCtxCache = null; // bir sonraki okumada tazelenir
 
+    // Belediye yokken Kanunname yalnız gizli değildir; arka planda gündem ve
+    // "yeni hüküm" bildirimleri de üretmez. Kuruluş akışı önce köyü kurar.
+    if (!_lawmakingUnlocked) return;
+
     final open = LawBook.openAgenda(_policies.sealed, _lawContext);
-    final fresh = [for (final l in open) if (!_lawSeen.contains(l.id)) l];
+    final fresh = [
+      for (final l in open)
+        if (!_lawSeen.contains(l.id)) l,
+    ];
     if (fresh.isEmpty) return;
     for (final l in fresh) {
       _lawSeen.add(l.id);
@@ -110,22 +126,27 @@ extension _SceneLaw on _VillageSceneState {
         : '📜 Kanunname kabardı — ${fresh.length} yeni hüküm gündemde.';
     _showNotification(title);
     _chronicle(
-        fresh.length == 1
-            ? '${fresh.first.title} Meclis gündemine girdi.'
-            : 'Köyün hâli değişti; deftere ${fresh.length} yeni hüküm düştü.',
-        icon: '📜');
+      fresh.length == 1
+          ? '${fresh.first.title} Meclis gündemine girdi.'
+          : 'Köyün hâli değişti; deftere ${fresh.length} yeni hüküm düştü.',
+      icon: '📜',
+    );
   }
 
   /// KÖYÜN SESİ — o an en çok ihtiyaç duyulan (çıkarılabilir) yasa. Serbest
   /// kataloğun içinden köyün gündemini öne çıkarır: önce geçim, ucuz/hızlı ve
   /// ağır olmayan hüküm. Path DEĞİL, bir tavsiye — istersen başkasını çıkarırsın.
   String? get _lawSpotlightId {
+    if (!_lawmakingUnlocked) return null;
     final ctx = _lawContext;
     LawDef? best;
     var bestScore = 1 << 30;
     for (final l in kLawBook) {
       if (!LawBook.available(l, _policies.sealed, ctx)) continue;
-      final score = (l.branch == LawBranch.gecim ? 0 : 1000) +
+      final customary = OralTradition.supports(l, _villageMemory);
+      final score =
+          (customary ? -2000 : 0) +
+          (l.branch == LawBranch.gecim ? 0 : 1000) +
           (l.isGrave ? 500 : 0) +
           (l.deliberationDays * 10).round() +
           l.seal.goldDelta.abs();
@@ -138,6 +159,7 @@ extension _SceneLaw on _VillageSceneState {
   }
 
   void _sealLaw(LawDef l) {
+    if (!_lawmakingUnlocked) return;
     if (_inkDryRemaining() > 0) return;
     if (!LawBook.available(l, _policies.sealed, _lawContext)) return;
 
@@ -155,9 +177,15 @@ extension _SceneLaw on _VillageSceneState {
           _lawRitual = null;
         });
         final no = vote.voices.where((v) => !v.yes).map((v) => v.line).take(2);
-        _showNotification('🏛 Meclis fermanı geçirmedi '
-            '(${(vote.support * 100).round()}% destek). ${no.join(' ')}');
-        _chronicle('${l.title} meclisten döndü.', icon: '🏛', kind: ChronicleKind.decision);
+        _showNotification(
+          '🏛 Meclis fermanı geçirmedi '
+          '(${(vote.support * 100).round()}% destek). ${no.join(' ')}',
+        );
+        _chronicle(
+          '${l.title} meclisten döndü.',
+          icon: '🏛',
+          kind: ChronicleKind.decision,
+        );
         // Reddedilen ferman meşruiyeti aşındırır: ısrar edersen köy gerilir.
         _unrest = (_unrest + 0.04).clamp(0.0, 1.0);
         return;
@@ -178,7 +206,8 @@ extension _SceneLaw on _VillageSceneState {
       // meclis uzun konuşur.
       // Rejim temposu × kronik divan felci (Faz 3: iz kalıcı olunca meclis
       // bir türlü toparlanamaz — bkz. scene_regime._chronicInkMul).
-      _inkDryTotal = l.deliberationDays *
+      _inkDryTotal =
+          l.deliberationDays *
           kGameDaySeconds *
           rule.inkDryMul *
           _chronicInkMul *
@@ -190,8 +219,12 @@ extension _SceneLaw on _VillageSceneState {
       // Köy kararı DUYSUN — mühür anının gövde karşılığı (bkz. scene_reactions).
       _announceLawInVillage(l);
     });
-    _chronicle('${l.title} deftere girdi.',
-        icon: l.icon, milestone: l.isGrave, kind: ChronicleKind.decision);
+    _chronicle(
+      '${l.title} deftere girdi.',
+      icon: l.icon,
+      milestone: l.isGrave,
+      kind: ChronicleKind.decision,
+    );
     if (l.seal.resolution.isNotEmpty) _showNotification(l.seal.resolution);
   }
 
@@ -199,14 +232,14 @@ extension _SceneLaw on _VillageSceneState {
   /// null: bir yasa bir haneye değil, bütün köye yazılır — kimse "bizim
   /// dilekçemiz kabul edildi" nüfuzunu ceplemez.
   Petition _lawAsDecision(LawDef l) => Petition(
-        id: 'law.${l.id}',
-        petitioner: 'Kanunname',
-        icon: l.icon,
-        title: l.title,
-        tone: PetitionTone.solemn,
-        bodyPool: [l.decree],
-        options: [l.seal],
-      );
+    id: 'law.${l.id}',
+    petitioner: 'Kanunname',
+    icon: l.icon,
+    title: l.title,
+    tone: PetitionTone.solemn,
+    bodyPool: [l.decree],
+    options: [l.seal],
+  );
 
   /// Mühürlü fermanların GÜNLÜK idamesi — gece bekçisi keseden yer, hane sicili
   /// vergi toplar, öşür ambardan alır. Bir yasa imzalandığı gün bitmez; her

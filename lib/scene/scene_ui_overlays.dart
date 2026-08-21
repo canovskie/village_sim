@@ -6,52 +6,153 @@ part of '../main.dart';
 /// farklı ama hedef aynı ([_VillageSceneState]) — çağıranlar için hiçbir
 /// şey değişmez, metotlar aynen taşındı.
 extension _SceneUiOverlays on _VillageSceneState {
-  Widget buildImperialClashOverlay() => ListenableBuilder(
+  /// Oyuncu kamerayı ilk kez gerçekten hareket ettirene dek kalan, kayıt başına
+  /// tek seferlik kontrol notu. Modlar kendi canlı şeritlerine sahip olduğu için
+  /// yalnız boş elde görünür.
+  Widget buildCameraGuide() => ListenableBuilder(
     listenable: _frame,
-    builder: (_, _) => Positioned(
-      top: useCompactGameUi(context) ? 54 : 84,
-      left: 0,
-      right: 0,
-      child: IgnorePointer(
-        child: Center(
-          child: AppReveal(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xE6121820),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppUi.accent.withValues(alpha: 0.7)),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x66000000),
-                    blurRadius: 14,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.asset(
-                    'assets/combat/combat_badge.png',
-                    width: 30,
-                    height: 30,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'SAVUNMA KARŞILIK VERİYOR',
-                    style: AppUi.label.copyWith(
-                      color: AppUi.accent,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+    builder: (_, _) {
+      if (_cameraGuideSeen ||
+          _activeCutscene != null ||
+          _mobileBuildCatalogOpen ||
+          _villageNamePromptOpen ||
+          _placing != null ||
+          _farmMode ||
+          _lumberMode ||
+          _mineMode ||
+          _roadMode ||
+          _ledgerSection != null ||
+          _petitionModalOpen ||
+          _choiceModalOpen ||
+          _imperialDemand != null) {
+        return const SizedBox.shrink();
+      }
+      final compact = useCompactGameUi(context);
+      return Positioned(
+        left: 0,
+        right: 0,
+        bottom: compact
+            ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
+            : 82,
+        child: IgnorePointer(
+          child: Center(
+            child: AppReveal(
+              child: AppChip(
+                label: cameraInteractionGuide(mobile: PlatformAdapt.isMobile),
+                color: AppUi.accentSoft,
               ),
             ),
           ),
         ),
-      ),
-    ),
+      );
+    },
+  );
+
+  Widget buildImperialClashOverlay() => ListenableBuilder(
+    listenable: _frame,
+    builder: (_, _) {
+      final raiding = _imperialPhase == ImperialVisitPhase.raiding;
+      final beat = imperialBattleBeat(_imperialClashTimer);
+      final line = raiding
+          ? (_impStruck
+                ? '${(_imperialRaidScenario?.target.label ?? 'MEYDAN').toUpperCase()} VURULDU · KOLON ÇEKİLİYOR'
+                : 'HAT KIRILDI · ${(_imperialRaidScenario?.target.label ?? 'MEYDAN').toUpperCase()} HEDEFTE')
+          : switch (beat) {
+              ImperialBattleBeat.mustering =>
+                '${_imperialDefensePlan.title.toUpperCase()} · SAFLAR KURULUYOR',
+              ImperialBattleBeat.firstImpact => 'İLK DARBE · MIZRAKLAR İNDİ',
+              ImperialBattleBeat.counterstrike => 'KÖY KARŞILIK VERİYOR',
+              ImperialBattleBeat.finalPush =>
+                _imperialBattleWon
+                    ? 'SON İTİŞ · HEYET GERİLİYOR'
+                    : 'SON İTİŞ · HAT ÇÖZÜLÜYOR',
+              ImperialBattleBeat.result =>
+                _imperialBattleWon ? 'EŞİK TUTULDU' : 'EŞİK DÜŞTÜ',
+            };
+      final progress = raiding ? 1.0 : _imperialBattleProgress;
+      return Positioned(
+        top: useCompactGameUi(context) ? 54 : 126,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(
+          child: Center(
+            child: AppReveal(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xE6121820),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppUi.accent.withValues(alpha: 0.7),
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x66000000),
+                      blurRadius: 14,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/combat/combat_badge.png',
+                          width: 30,
+                          height: 30,
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (_imperialRaidScenario?.title ??
+                                      'Eşik Muharebesi')
+                                  .toUpperCase(),
+                              style: AppUi.label.copyWith(
+                                color: AppUi.rust,
+                                fontSize: 8,
+                              ),
+                            ),
+                            Text(
+                              line,
+                              style: AppUi.label.copyWith(
+                                color: AppUi.accent,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 230,
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        minHeight: 3,
+                        backgroundColor: AppUi.surface0,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          raiding || (!_imperialBattleWon && progress > 0.62)
+                              ? AppUi.rust
+                              : AppUi.accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
   );
 
   Widget buildNotificationToast() {
@@ -73,7 +174,10 @@ extension _SceneUiOverlays on _VillageSceneState {
       left: 0,
       right: 0,
       bottom: MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap,
-      child: toast,
+      // Katalog açıldığında bu hat araç kartlarının üstünden geçebilir.
+      // Bildirim yalnız bilgi taşır; görünürken alttaki Tarla/Yol düğmesini
+      // kilitlememeli. Dokunuşu palete geçir.
+      child: IgnorePointer(child: toast),
     );
   }
 
@@ -342,6 +446,18 @@ extension _SceneUiOverlays on _VillageSceneState {
                           ),
                         ),
                       ),
+                      if (_imperialAlertRaid.isNotEmpty) ...[
+                        const SizedBox(height: 7),
+                        Text(
+                          _imperialAlertRaid,
+                          textAlign: TextAlign.center,
+                          style: AppUi.label.copyWith(
+                            color: bone.withValues(alpha: .92),
+                            fontSize: 13,
+                            letterSpacing: 2.2,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       // Kan-kırmızı hat + elmas.
                       SizedBox(
@@ -423,7 +539,11 @@ extension _SceneUiOverlays on _VillageSceneState {
                 : _lumberMode
                 ? 'Oduncu — sürükle seç, bırak ağaçları işaretle'
                 : _farmMode
-                ? 'Tarla — sürükle seç, bırak onayla'
+                ? useTouchUi(context)
+                      ? (_farmTapAnchor == null
+                            ? 'Tarla — iki köşeye dokun veya sürükle'
+                            : 'Tarla — ikinci köşeye dokun (ya da sürükle)')
+                      : 'Tarla — sürükle seç, bırak onayla'
                 : _roadMode
                 ? _roadHint()
                 : '${kBuildingMeta[_placing!]!.label} — tıkla (basılı tut: çoklu)',
@@ -449,9 +569,18 @@ extension _SceneUiOverlays on _VillageSceneState {
   /// neye mal olacak. Oyuncu bırakmadan önce ne alacağını bilir; "yanlışlıkla
   /// yol döşedim" için yer kalmaz.
   String _roadHint() {
+    if (useTouchUi(context) && _roadTapAnchor != null) {
+      return _roadErase
+          ? 'Başlangıç seçildi — yolun diğer ucuna dokun'
+          : '${_placingRoad!.label} — bitiş noktasına dokun (ya da sürükle)';
+    }
     if (_roadPreview.isEmpty) {
       return _roadErase
-          ? 'Yol Silgisi — sürükle, bırak kaldır'
+          ? useTouchUi(context)
+                ? 'Yol Silgisi — iki uca dokun veya sürükle'
+                : 'Yol Silgisi — sürükle, bırak kaldır'
+          : useTouchUi(context)
+          ? '${_placingRoad!.label} — iki uca dokun veya sürükle'
           : '${_placingRoad!.label} — sürükle, bırak döşe (dik güzergâh)';
     }
     final ok = _roadPreview.where((e) => e.$2).length;

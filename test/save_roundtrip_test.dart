@@ -32,7 +32,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
 
     kProbeOn = false;
     kProbeNoEvents = true;
@@ -54,17 +56,22 @@ void main() {
     kCaptureSceneReady = false;
     var waitedMs = 0;
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'saveRoundtrip'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'saveRoundtrip'),
+        ),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         waitedMs += 50;
       }
     });
     await tester.pump();
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı',
+    );
   }
 
   testWidgets('kaydedilen köy JSON\'dan geri yüklenir', (tester) async {
@@ -81,10 +88,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
 
-    expect(kProbeSaveError, '',
-        reason: 'kaydedilen köy geri yüklenemedi — oyun kaydı açarken çöker');
-    expect(tester.takeException(), isNull,
-        reason: 'yükleme sırasında istisna atıldı');
+    expect(
+      kProbeSaveError,
+      '',
+      reason: 'kaydedilen köy geri yüklenemedi — oyun kaydı açarken çöker',
+    );
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'yükleme sırasında istisna atıldı',
+    );
     kProbeOn = false;
   });
 
@@ -95,8 +108,9 @@ void main() {
   // Yeni bir alan eklerken kolay unutulan şey budur — kendi yazdığın kaydı
   // açmak her zaman çalışır, oyuncununkini açmak çalışmayabilir.
 
-  testWidgets('önceki sürümle yazılmış kayıt açılır (alanlar eksik)',
-      (tester) async {
+  testWidgets('önceki sürümle yazılmış kayıt açılır (alanlar eksik)', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -113,8 +127,10 @@ void main() {
 
     // 2) Sürümü GERİYE al: bu turda eklenen alanları sök.
     final world = Map<String, dynamic>.from(
-        jsonDecode(kProbeWorldJson) as Map<String, dynamic>);
+      jsonDecode(kProbeWorldJson) as Map<String, dynamic>,
+    );
     (world['policies'] as Map).remove('sealedOn'); // mühür günü yoktu
+    world.remove('landmarks'); // harita ilgi noktaları henüz yoktu
     final log = world['storyLog'] as List;
     for (final e in log) {
       (e as Map).remove('k'); // günce satırının türü yoktu
@@ -130,8 +146,11 @@ void main() {
       for (var i = 0; i < 40 && kProbeRestoreJson.isNotEmpty; i++) {
         await tester.pump(const Duration(milliseconds: 16));
       }
-      expect(kProbeSaveError, '',
-          reason: '$label kayıt açılamadı — oyuncunun elindeki kayıt çöker');
+      expect(
+        kProbeSaveError,
+        '',
+        reason: '$label kayıt açılamadı — oyuncunun elindeki kayıt çöker',
+      );
       expect(tester.takeException(), isNull, reason: '$label: istisna atıldı');
     }
     kProbeOn = false;

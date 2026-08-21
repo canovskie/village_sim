@@ -842,7 +842,7 @@ extension _SceneCrime on _VillageSceneState {
     // TANIKLIK — eylem anı, suçun görülebildiği tek an. Kim o yöne bakıyorsa
     // GERÇEKTEN görür (bkz. scene_perception); gören hatırlar, hatırlayan
     // devriyeye koşabilir. Öncesinde suçun tek "görüleni" muhafızdı.
-    _witnessEvent(
+    final witnesses = _witnessEvent(
       Notion.crime,
       x: c.tx,
       y: c.ty,
@@ -850,6 +850,7 @@ extension _SceneCrime on _VillageSceneState {
       subjectName: v.name,
       exclude: c.victim == null ? const [] : [c.victim!],
     );
+    _stageCrimeWitnesses(witnesses, c.tx, c.ty);
 
     if (c.kind == CrimeKind.abduction) {
       // Kurbanı kavra, köyün dışına yönel — uzun, görünür bir sürükleme.
@@ -877,6 +878,18 @@ extension _SceneCrime on _VillageSceneState {
 
     c.phaseLeft = c.def.actSeconds;
     v.lookToward(c.tx, c.ty);
+    // Fail yalnız "telaşlanan NPC" olmasın: suçun nesnesi ve işi gövdede
+    // görünür. Temizliği bütün suç çıkışlarında [_clearCrimeState] yapar.
+    v.prop = switch (c.kind) {
+      CrimeKind.arson => PropKind.torch,
+      CrimeKind.vandalism || CrimeKind.poaching => PropKind.axe,
+      _ => PropKind.none,
+    };
+    v.actPose = switch (c.kind) {
+      CrimeKind.vandalism || CrimeKind.poaching => ActPose.labor,
+      CrimeKind.pickpocket || CrimeKind.fraud => ActPose.stoop,
+      _ => ActPose.stand,
+    };
     // Eylem yerinde dursun (wander eylemin ortasında kaçırmasın).
     v.state = VillagerState.idle;
     v.targetCol = v.gridX;
@@ -943,13 +956,14 @@ extension _SceneCrime on _VillageSceneState {
     v.actPose = ActPose.stoop;
 
     // TANIKLIK — asıl an. Kim o yöne bakıyorsa gerçekten görür.
-    _witnessEvent(
+    final witnesses = _witnessEvent(
       Notion.crime,
       x: v.gridX,
       y: v.gridY,
       subject: v,
       subjectName: v.name,
     );
+    _stageCrimeWitnesses(witnesses, v.gridX, v.gridY);
     _reactNearby(
       v.gridX,
       v.gridY,
@@ -992,6 +1006,7 @@ extension _SceneCrime on _VillageSceneState {
       subject: v,
       subjectName: v.name,
     );
+    _stageCrimeWitnesses(seen, v.gridX, v.gridY);
     cache.witnessed = seen.isNotEmpty;
   }
 
@@ -1049,6 +1064,10 @@ extension _SceneCrime on _VillageSceneState {
     v.activity = VillagerActivity.fleeing;
     v.hasteFactor = 1.35;
     v.feel(NpcEmotion.fear, _kFleeSeconds, moodDelta: -0.05);
+    if (c.kind != CrimeKind.theft) {
+      v.prop = PropKind.none;
+      v.actPose = null;
+    }
 
     // HIRSIZLIK — kaçış rastgele "uzağa" değil, ZULAYA doğrudur. Yükü olan
     // hırsızın gidecek bir yeri vardır; kaçış penceresi de bu yüzden uzun
@@ -1398,6 +1417,46 @@ extension _SceneCrime on _VillageSceneState {
     }
   }
 
+  /// Suçu gören köylü gündelik rotasında yürümeye devam etmez: kısa süre
+  /// durur, bedenini olay yerine çevirir; sonra hafızası/aklı uygunsa devriyeye
+  /// ihbar teklifi doğal olarak kazanır. Bu kısa [Act] ceremony değildir;
+  /// bitince eski işi güvenle sürebilir.
+  void _stageCrimeWitnesses(
+    List<VillagerEntity> witnesses,
+    double x,
+    double y, {
+    bool arrest = false,
+  }) {
+    final eligible =
+        witnesses
+            .where(
+              (w) =>
+                  !w.isDying &&
+                  !w.isSleeping &&
+                  !w.isInsideBuilding &&
+                  !w.isCarrying &&
+                  w.mind.intent.priority < IntentPriority.committed,
+            )
+            .toList()
+          ..sort(
+            (a, b) => _wdist(
+              a.gridX,
+              a.gridY,
+              x,
+              y,
+            ).compareTo(_wdist(b.gridX, b.gridY, x, y)),
+          );
+    final maxWitnesses = arrest ? 5 : 3;
+    for (final w in eligible.take(maxWitnesses)) {
+      _prepForScene(w);
+      w.act = Act(arrest ? 'yakalanan faile bakıyor' : 'suça tanık oldu', [
+        ActStep.face(x, y),
+        ActStep.work(arrest ? 5.0 : 2.8, pose: ActPose.stand),
+      ]);
+      w.feel(arrest ? NpcEmotion.wonder : NpcEmotion.fear, arrest ? 5.0 : 3.2);
+    }
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // MUHAFIZ — devriyeden koşar, suçüstü yakalar
   // ══════════════════════════════════════════════════════════════════════════
@@ -1505,13 +1564,14 @@ extension _SceneCrime on _VillageSceneState {
 
     // Yakalanma köyün gözü önünde olur — gören hatırlar (asayişin görünür
     // yüzü) ve failin sicili köylülerin kanaatine kazınır.
-    _witnessEvent(
+    final arrestWitnesses = _witnessEvent(
       Notion.arrest,
       x: v.gridX,
       y: v.gridY,
       subject: v,
       subjectName: v.name,
       loud: true,
+      exclude: guard == null ? const [] : [guard],
     );
 
     // ÇUVALLA YAKALANDI — mal doğrudan köye döner. Yakalamanın somut ödülü
@@ -1539,6 +1599,25 @@ extension _SceneCrime on _VillageSceneState {
     v.crimeCount++;
     _activeCrime = null;
     _crimeSuspicion = (_crimeSuspicion - 1).clamp(0, 99);
+
+    // Yakalama bir anda buharlaşmaz: fail çöker, muhafız başında durur,
+    // çevredekiler yüzünü olaydan çevirmez. Yargı kartının dünyadaki karşılığı.
+    final focus = _villageCenterD();
+    final faceX = guard?.gridX ?? focus.$1;
+    final faceY = guard?.gridY ?? focus.$2;
+    v.act = Act('hüküm bekliyor', [
+      ActStep.face(faceX, faceY),
+      const ActStep.work(8.0, pose: ActPose.kneel),
+    ]);
+    if (guard != null) {
+      _prepForScene(guard);
+      guard.act = Act('failin başında nöbet tutuyor', [
+        ActStep.face(v.gridX, v.gridY),
+        const ActStep.work(8.0, pose: ActPose.stand),
+      ]);
+      guard.feel(NpcEmotion.anger, 8.0);
+    }
+    _stageCrimeWitnesses(arrestWitnesses, v.gridX, v.gridY, arrest: true);
 
     // Önlendiyse kurban kurtulur (kaçırılan serbest, hedef sağ).
     if (prevented && vic != null && !vic.isDying) {

@@ -37,6 +37,7 @@ const mature = LawContext(
     BuildingType.lumberCamp,
     BuildingType.church,
     BuildingType.firepit, // Ocak Nöbeti Fermanı'nın kapısı
+    BuildingType.townhall, // Kanunname'nin kurumsal eşiği
   },
 );
 
@@ -44,25 +45,44 @@ const noSeal = <String>{};
 
 LawDef law(String id) => LawBook.byId(id)!;
 
-List<String> visibleIds(LawContext c) =>
-    [for (final l in kLawBook) if (LawBook.visible(l, noSeal, c)) l.id];
+List<String> visibleIds(LawContext c) => [
+  for (final l in kLawBook)
+    if (LawBook.visible(l, noSeal, c)) l.id,
+];
 
 void main() {
+  test('Kanunname nüfusa değil Belediye kurumuna bağlanır', () {
+    const kalabalikAmaKurumsuz = LawContext(
+      population: 30,
+      dayCount: 60,
+      households: 8,
+    );
+    expect(LawBook.governanceReady(kalabalikAmaKurumsuz), isFalse);
+    expect(LawBook.governanceReady(mature), isTrue);
+  });
+
   group('yeni köy defteri', () {
     test('yeni köy hükümlerin ezici çoğunluğunu GÖRMEZ', () {
       final vis = visibleIds(fresh);
       // Görünenlerin neredeyse tamamı AĞIR hüküm: ufukta kilitli dururlar
       // (gerekçesiyle) ama dokunulamazlar. Gerçek gündem avuç içi kalmalı.
       final actionable = LawBook.openAgenda(noSeal, fresh);
-      expect(actionable.length, lessThan(4),
-          reason: 'yeni köyün gündemi avuç içi olmalı: '
-              '${actionable.map((l) => l.id).toList()}');
+      expect(
+        actionable.length,
+        lessThan(4),
+        reason:
+            'yeni köyün gündemi avuç içi olmalı: '
+            '${actionable.map((l) => l.id).toList()}',
+      );
       final nonGrave = [
         for (final id in vis)
-          if (!law(id).grave) id
+          if (!law(id).grave) id,
       ];
-      expect(nonGrave.length, lessThan(4),
-          reason: 'ağır olmayan görünür hüküm çok fazla: $nonGrave');
+      expect(
+        nonGrave.length,
+        lessThan(4),
+        reason: 'ağır olmayan görünür hüküm çok fazla: $nonGrave',
+      );
       expect(kLawBook.length, greaterThan(25));
     });
 
@@ -96,32 +116,41 @@ void main() {
           // Yemini) — olgunluk onları açmaz, açmamalı. Kapıları regime_test
           // kilitliyor.
           if (!l.id.startsWith('rejim.') && !open.contains(l.id))
-            '${l.id} (${l.gateReason})'
+            '${l.id} (${l.gateReason})',
       ];
-      expect(missing, isEmpty,
-          reason: 'olgun köyde kapalı kalan hüküm var: $missing');
+      expect(
+        missing,
+        isEmpty,
+        reason: 'olgun köyde kapalı kalan hüküm var: $missing',
+      );
     });
 
-    test('rejim fermanları yemin edilmeden olgun köyde bile AÇILMAZ ama görünür',
-        () {
-      // Kapı yeminle açılır, olgunlukla değil. Ama hepsi `grave`: defterde
-      // gerekçesiyle DURURLAR. Aksi hâlde yeminin ödülü, yemin edilene kadar
-      // hiç görünmüyordu — oyuncu neyi kazanacağını bilmeden yemin ediyordu.
-      final regimeLaws =
-          [for (final l in kLawBook) if (l.id.startsWith('rejim.')) l];
-      expect(regimeLaws, isNotEmpty);
-      for (final l in regimeLaws) {
-        expect(l.grave, isTrue, reason: l.id);
-        expect(l.binding, isTrue, reason: l.id);
-        expect(LawBook.available(l, noSeal, mature), isFalse, reason: l.id);
-        expect(LawBook.visible(l, noSeal, mature), isTrue, reason: l.id);
-        expect(l.gateReason, isNotEmpty, reason: l.id);
-      }
-    });
+    test(
+      'rejim fermanları yemin edilmeden olgun köyde bile AÇILMAZ ama görünür',
+      () {
+        // Kapı yeminle açılır, olgunlukla değil. Ama hepsi `grave`: defterde
+        // gerekçesiyle DURURLAR. Aksi hâlde yeminin ödülü, yemin edilene kadar
+        // hiç görünmüyordu — oyuncu neyi kazanacağını bilmeden yemin ediyordu.
+        final regimeLaws = [
+          for (final l in kLawBook)
+            if (l.id.startsWith('rejim.')) l,
+        ];
+        expect(regimeLaws, isNotEmpty);
+        for (final l in regimeLaws) {
+          expect(l.grave, isTrue, reason: l.id);
+          expect(l.binding, isTrue, reason: l.id);
+          expect(LawBook.available(l, noSeal, mature), isFalse, reason: l.id);
+          expect(LawBook.visible(l, noSeal, mature), isTrue, reason: l.id);
+          expect(l.gateReason, isNotEmpty, reason: l.id);
+        }
+      },
+    );
 
     test('gündem yeni köyden olgun köye kesin olarak genişler', () {
-      expect(LawBook.openAgenda(noSeal, mature).length,
-          greaterThan(LawBook.openAgenda(noSeal, fresh).length * 4));
+      expect(
+        LawBook.openAgenda(noSeal, mature).length,
+        greaterThan(LawBook.openAgenda(noSeal, fresh).length * 4),
+      );
     });
   });
 
@@ -129,7 +158,11 @@ void main() {
     test('ilk suç işlenince bekçi fermanı kendiliğinden deftere düşer', () {
       const before = LawContext(population: 8, dayCount: 6, households: 2);
       const after = LawContext(
-          population: 8, dayCount: 6, households: 2, crimesSeen: 1);
+        population: 8,
+        dayCount: 6,
+        households: 2,
+        crimesSeen: 1,
+      );
       expect(LawBook.visible(law('nizam.watch'), noSeal, before), isFalse);
       expect(LawBook.available(law('nizam.watch'), noSeal, after), isTrue);
       // Tek vaka ceza kanununu açmaz — tekrar gerek.
@@ -139,22 +172,35 @@ void main() {
     test('tarla + kuyu olmadan su yolu fermanı yok', () {
       const fields = LawContext(population: 8, dayCount: 5, farmTiles: 3);
       const fieldsAndWell = LawContext(
-          population: 8,
-          dayCount: 5,
-          farmTiles: 3,
-          buildings: {BuildingType.well});
+        population: 8,
+        dayCount: 5,
+        farmTiles: 3,
+        buildings: {BuildingType.well},
+      );
       expect(LawBook.available(law('irrigation'), noSeal, fields), isFalse);
       expect(
-          LawBook.available(law('irrigation'), noSeal, fieldsAndWell), isTrue);
+        LawBook.available(law('irrigation'), noSeal, fieldsAndWell),
+        isTrue,
+      );
     });
 
     test('kandil yanmadan dergâh hükümleri konuşulmaz', () {
       const godless = LawContext(population: 12, dayCount: 20, deaths: 1);
-      expect(LawBook.available(law('dergah.holyDay'), noSeal, godless), isFalse);
-      expect(LawBook.available(law('dergah.oneFaith'), noSeal, godless), isFalse);
+      expect(
+        LawBook.available(law('dergah.holyDay'), noSeal, godless),
+        isFalse,
+      );
+      expect(
+        LawBook.available(law('dergah.oneFaith'), noSeal, godless),
+        isFalse,
+      );
       // Dergâh kurulmuş bir köy (dünya bayrağı) kapıyı açar.
       const lodged = LawContext(
-          population: 12, dayCount: 20, deaths: 1, memory: {'cult.active'});
+        population: 12,
+        dayCount: 20,
+        deaths: 1,
+        memory: {'cult.active'},
+      );
       expect(LawBook.available(law('dergah.holyDay'), noSeal, lodged), isTrue);
       expect(LawBook.available(law('dergah.oneFaith'), noSeal, lodged), isTrue);
     });
@@ -166,10 +212,13 @@ void main() {
         if (l.gate == null || l.gate!(fresh)) continue;
         final othersSealed = {
           for (final o in kLawBook)
-            if (o.id != l.id) o.id
+            if (o.id != l.id) o.id,
         };
-        expect(LawBook.available(l, othersSealed, fresh), isFalse,
-            reason: l.id);
+        expect(
+          LawBook.available(l, othersSealed, fresh),
+          isFalse,
+          reason: l.id,
+        );
       }
     });
 

@@ -21,7 +21,13 @@ extension _SceneTick on _VillageSceneState {
   void _onTick(Duration elapsed) {
     final raw = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _last = elapsed;
+    // Pause/modal frames are normally completely static. Remember whether a
+    // real-time overlay was alive before its countdown so its final hiding
+    // frame is still delivered, but do not repaint the full game canvas at
+    // 60 Hz merely because simulation dt is zero.
+    final hadRealtimeVisual = _shakeTime > 0 || _imperialAlertLeft > 0;
     _clampCamera(_viewSize); // kamera reach clamp'i (ilk ortalama + sürekli)
+    _secureFoundingHearthCamera();
     _maybeAutoSave(raw); // periyodik otomatik kayıt (gerçek-zaman birikimi)
     // HUD'u ~10Hz'de güncelle (her frame değil) — pahalı ağaç, yavaş veri.
     _hudAccum += raw;
@@ -89,8 +95,8 @@ extension _SceneTick on _VillageSceneState {
       _imperialAlertSub = 'Sancak göründü. Vergi kolonu köyün üstüne yürüyor.';
       _imperialAlertLeft = _VillageSceneState._kImperialAlertDur;
     }
-    // SİMİ DURDURAN yalnız üç şey kaldı: dağılma (dünyanın sonu), sinematik
-    // (kamera başka yerde) ve imparatorluk pazarlığı (nadir, meşru kesinti).
+    // SİMİ DURDURAN: dağılma, sinematik, imparatorluk pazarlığı ve kuruluşun
+    // oyuncuya karar vermeyi öğreten ilk kaynak hükmü (`woodLow`).
     // Olay kararı ve dilekçe artık DONDURMAZ — kapıda kuyruk: mühür bekler,
     // mühlet erir, dünya yaşamaya devam eder (bkz. scene_events/_petitions).
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
@@ -98,7 +104,8 @@ extension _SceneTick on _VillageSceneState {
     final effectiveScale =
         (_collapsed || // köy dağıldı → dünya durur
             _activeCutscene != null ||
-            _imperialDemand != null)
+            _imperialDemand != null ||
+            _petitionNeedsPlayerVerdict)
         ? 0.0
         : _timeScale *
               (kDevSpeedBoostOverride > 0
@@ -126,12 +133,15 @@ extension _SceneTick on _VillageSceneState {
     }
     final dt = (raw * effectiveScale).clamp(0.0, clampMax);
     if (dt <= 0) {
-      _frame.value = _frame.value + 1;
+      if (hadRealtimeVisual) _frame.value = _frame.value + 1;
       return;
     }
     // setState yerine sim mutate + _frame.value++ → outer ağaç rebuild olmaz,
     // sadece ListenableBuilder bağlı bölgeler repaint olur.
     _advanceWorldClock(dt);
+    // KÖY NABZI gerçek zamanla aralanır: 2× hız hikâye yağmuruna dönüşmez.
+    // Sim duruyorsa buraya gelinmediği için oyuncu mola verirken fırsat kaçmaz.
+    _tickVillagePulse(raw);
     _applyGodModeRefill();
     final starvation = _tickPopulationAndHunger(dt);
     _tickEventsAndFx(dt);
@@ -404,23 +414,38 @@ extension _SceneTick on _VillageSceneState {
 
     // Toplama binaları çalışıyor mu? (panel durumu)
     for (final b in _buildings) {
+      if (b.deliveryPulse > 0) {
+        b.deliveryPulse = max(0.0, b.deliveryPulse - dt * 1.7);
+      }
       switch (b.type) {
         // Toplama binaları: yakınında ATANMIŞ (çalışan) köylü varsa aktif —
         // işçiler artık gerçek köylü (job) olduğundan job rolüne bakılır.
         case BuildingType.mineBuilding:
-          b.isActive = _jobWorkerActiveNear(JobRole.miner, b);
+          b.isActive = !b.userPaused && _jobWorkerActiveNear(JobRole.miner, b);
         case BuildingType.lumberCamp:
-          b.isActive = _jobWorkerActiveNear(
-            JobRole.woodcutter,
-            b,
-            radius: kLumberTerritoryRadius,
-          );
+          b.isActive =
+              !b.userPaused &&
+              _jobWorkerActiveNear(
+                JobRole.woodcutter,
+                b,
+                radius: kLumberTerritoryRadius,
+              );
         case BuildingType.fisherCabin:
-          b.isActive = _villagers.any(
-            (v) => v.job?.role == JobRole.fisher && v.job!.working,
-          );
+          b.isActive =
+              !b.userPaused &&
+              _villagers.any(
+                (v) => v.job?.role == JobRole.fisher && v.job!.working,
+              );
         case BuildingType.barn:
-          b.isActive = _jobWorkerActiveNear(JobRole.shepherd, b, radius: 6.0);
+          b.isActive =
+              !b.userPaused &&
+              _jobWorkerActiveNear(JobRole.shepherd, b, radius: 6.0);
+        case BuildingType.firepit:
+          b.isActive = _jobWorkerActiveNear(JobRole.cook, b, radius: 3.5);
+        case BuildingType.warehouse:
+          b.isActive =
+              b.deliveryPulse > 0 ||
+              _jobWorkerActiveNear(JobRole.weaver, b, radius: 3.5);
         case BuildingType.mill:
           // Balya teslimleri grindPulse'ı besler (carrier_system); burada
           // tüketilir. >0 iken değirmen "çalışıyor" → çalışma dumanı + panel.
@@ -695,6 +720,7 @@ extension _SceneTick on _VillageSceneState {
     // 2-3 kat hızlanır → "doğru yerleşim" ödüllendirilir. Bal lüks/moral.
     for (final b in _buildings) {
       if (b.type != BuildingType.beehive) continue;
+      if (b.userPaused) continue;
       final meta = kBuildingMeta[BuildingType.beehive]!;
       final cx = b.col + meta.cols * 0.5;
       final cy = b.row + meta.rows * 0.5;
@@ -923,7 +949,8 @@ extension _SceneTick on _VillageSceneState {
 
     // HUD "yolda" kaynak sayımları — tek geçiş (build içinde 5 ayrı
     // .where().length taraması yerine; her frame allocation'ı keser).
-    _woodInTransit = _stoneInTransit = _ironInTransit = _coalInTransit = 0;
+    _woodInTransit = _stoneInTransit = _ironInTransit = _coalInTransit =
+        _foodInTransit = 0;
     for (final b in _resourceBoxes) {
       if (b.isDelivered) continue;
       switch (b.type) {
@@ -935,9 +962,10 @@ extension _SceneTick on _VillageSceneState {
           _ironInTransit++;
         case ResourceBoxType.coalBox:
           _coalInTransit++;
+        case ResourceBoxType.foodBasket:
+          _foodInTransit++;
       }
     }
-    _foodInTransit = 0;
     for (final h in _hayEntities) {
       if (h.isBale && !h.isDelivered) _foodInTransit++;
     }
@@ -1128,6 +1156,22 @@ extension _SceneTick on _VillageSceneState {
     final lerpT = (1.0 - 1.0 / (1.0 + 3.0 * dt)).clamp(0.0, 1.0);
     _camera = Offset.lerp(_camera, Offset(targetX, targetY), lerpT) ?? _camera;
     _clampCamera(_viewSize);
+  }
+
+  /// İlk günlerde HUD köşesinde kalmış bir ocağı bir kez ekranın güvenli
+  /// merkezine çeker. Yeni yerleştirmeyi ve hatadan etkilenmiş erken kayıtları
+  /// onarır; sonrasında kamera bütünüyle oyuncuya bırakılır.
+  void _secureFoundingHearthCamera() {
+    if (_foundingHearthCameraSecured || !_hasFire || _dayCount > 3) return;
+    final fp = _firepitBuilding;
+    if (fp == null || _viewSize.width <= 0 || _viewSize.height <= 0) return;
+    _foundingHearthCameraSecured = true;
+    _followedVillager = null;
+    _watchX = fp.col + fp.cols / 2.0;
+    _watchY = fp.row + fp.rows / 2.0;
+    _watchLeft = 2.4;
+    final readable = _viewSize.shortestSide < 500 ? 1.16 : 1.08;
+    _zoom = max(_minZoomForReach(_viewSize), readable);
   }
 
   void _tickCameraFollow(double dt) {
@@ -1332,6 +1376,7 @@ extension _SceneTick on _VillageSceneState {
     // Yumurtlama — her kümes için.
     for (final b in _buildings) {
       if (b.type != BuildingType.chickenCoop) continue;
+      if (b.userPaused) continue;
       AnimalEntity? hen;
       for (final c in _cows) {
         if (c.kind == AnimalKind.chicken &&

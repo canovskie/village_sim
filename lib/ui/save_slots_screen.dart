@@ -157,20 +157,9 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
           const Text('⌂', style: TextStyle(fontSize: 20, color: AppUi.gold)),
           const SizedBox(width: 11),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'KAYITLI KÖYLER',
-                  style: AppUi.title.copyWith(letterSpacing: 1.6),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'bıraktığın yere dön',
-                  style: AppUi.label.copyWith(color: AppUi.textLo),
-                ),
-              ],
+            child: Text(
+              'KÖYLER',
+              style: AppUi.title.copyWith(letterSpacing: 1.6),
             ),
           ),
           AppIconButton(
@@ -204,8 +193,14 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
 
     // Dağılmış köyler baş köşeye oturmaz: "Devam et" kartı sürdürülebilir bir
     // kayıt olmalı. Kapanmış defterler aşağıdaki listeye düşer.
-    final live = [for (final s in slots) if (!s.ended) s];
-    final closed = [for (final s in slots) if (s.ended) s];
+    final live = [
+      for (final s in slots)
+        if (!s.ended) s,
+    ];
+    final closed = [
+      for (final s in slots)
+        if (s.ended) s,
+    ];
     if (live.isEmpty) return _onlyClosed(closed);
     final latest = live.first;
     final rest = [...live.skip(1), ...closed];
@@ -225,9 +220,7 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
             onDelete: () => _delete(latest),
           ),
           if (rest.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            const AppSectionLabel('DİĞER KÖYLER'),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             for (final s in rest) ...[
               _SlotCard(
                 key: ValueKey(s.id),
@@ -247,25 +240,25 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
   /// Elde yalnız KAPANMIŞ defter kaldı — devam edilecek köy yok. Kartlar yine
   /// listelenir (okunabilir/silinebilir) ama hiçbiri açılmaz.
   Widget _onlyClosed(List<SaveSlotMeta> closed) => Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const AppSectionLabel('KAPANMIŞ DEFTERLER'),
-            const SizedBox(height: 4),
-            for (final s in closed) ...[
-              _SlotCard(
-                key: ValueKey(s.id),
-                meta: s,
-                onRename: (n) => _rename(s, n),
-                onDelete: () => _delete(s),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ],
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const AppSectionLabel('KAPANMIŞ DEFTERLER'),
+        const SizedBox(height: 4),
+        for (final s in closed) ...[
+          _SlotCard(
+            key: ValueKey(s.id),
+            meta: s,
+            onRename: (n) => _rename(s, n),
+            onDelete: () => _delete(s),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ],
+    ),
+  );
 
   Widget _empty() {
     return Padding(
@@ -276,16 +269,9 @@ class _SaveSlotsPanelState extends State<SaveSlotsPanel> {
           const GameIcon(GameIconData.reed, size: 34, color: AppUi.sage),
           const SizedBox(height: 12),
           Text(
-            'Henüz kurulmuş bir köyün yok.',
+            'Kayıtlı köyün yok.',
             textAlign: TextAlign.center,
             style: AppUi.bodyHi.copyWith(fontSize: 14),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Menüden "Yeni Köy" ile başla — kurduğun köy '
-            'buraya kendiliğinden yazılır.',
-            textAlign: TextAlign.center,
-            style: AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textLo),
           ),
         ],
       ),
@@ -303,6 +289,7 @@ enum _CardMode { idle, renaming, confirmDelete }
 class _SlotCard extends StatefulWidget {
   final SaveSlotMeta meta;
   final bool hero;
+
   /// null = kapanmış defter (dağılmış köy) — açılamaz, yalnız okunur/silinir.
   final VoidCallback? onOpen;
   final void Function(String) onRename;
@@ -425,62 +412,13 @@ class _SlotCardState extends State<_SlotCard> {
     final m = widget.meta;
     return Row(
       children: [
-        // Gün madalyonu — köyün kaçıncı gününde kaldığın, tek bakışta.
-        Container(
-          width: hero ? 50 : 42,
-          height: hero ? 50 : 42,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                Color.alphaBlend(
-                  accent.withValues(alpha: 0.22),
-                  AppUi.surface0,
-                ),
-                AppUi.surface0,
-              ],
-            ),
-            border: Border.all(
-              color: AppUi.gold.withValues(alpha: 0.5),
-              width: 1.2,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '${m.day}',
-                style: AppUi.number.copyWith(
-                  fontSize: hero ? 17 : 15,
-                  color: AppUi.textHi,
-                ),
-              ),
-              Text(
-                'GÜN',
-                style: AppUi.label.copyWith(fontSize: 6.5, color: AppUi.textLo),
-              ),
-            ],
-          ),
-        ),
+        _VillageMemoryThumbnail(meta: m, hero: hero, accent: accent),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (hero)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(
-                    'KALDIĞIN YERDEN DEVAM ET',
-                    style: AppUi.label.copyWith(
-                      fontSize: 8,
-                      letterSpacing: 1.2,
-                      color: accent,
-                    ),
-                  ),
-                ),
               Row(
                 children: [
                   if (m.ended)
@@ -510,7 +448,9 @@ class _SlotCardState extends State<_SlotCard> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppUi.body.copyWith(
-                      fontSize: 11, color: const Color(0xFFB07A78)),
+                    fontSize: 11,
+                    color: const Color(0xFFB07A78),
+                  ),
                 ),
                 const SizedBox(height: 3),
               ],
@@ -673,6 +613,161 @@ class _SlotCardState extends State<_SlotCard> {
       ),
     );
   }
+}
+
+/// Kayıt satırını bir dosya girdisi yerine o köyden kalmış küçük bir manzara
+/// gibi okutur. Görsel sabittir: köy adı ve nüfus aynıysa her açılışta aynı
+/// ufuk, ev ve güneş düzeni çizilir.
+class _VillageMemoryThumbnail extends StatelessWidget {
+  final SaveSlotMeta meta;
+  final bool hero;
+  final Color accent;
+
+  const _VillageMemoryThumbnail({
+    required this.meta,
+    required this.hero,
+    required this.accent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: hero ? 96 : 82,
+      height: hero ? 60 : 52,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(9),
+              child: CustomPaint(
+                painter: _VillageMemoryPainter(
+                  name: meta.name,
+                  population: meta.population,
+                  day: meta.day,
+                  ended: meta.ended,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 5,
+            top: 5,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xC90A0B0B),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: accent.withValues(alpha: 0.7)),
+              ),
+              child: Text(
+                '${meta.day}. GÜN',
+                style: AppUi.label.copyWith(
+                  fontSize: 6.5,
+                  color: AppUi.textHi,
+                  letterSpacing: 0.7,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VillageMemoryPainter extends CustomPainter {
+  final String name;
+  final int population;
+  final int day;
+  final bool ended;
+
+  const _VillageMemoryPainter({
+    required this.name,
+    required this.population,
+    required this.day,
+    required this.ended,
+  });
+
+  int get _seed => name.codeUnits.fold(day + population * 7, (a, b) => a + b);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final p = Paint()..isAntiAlias = false;
+    final dusk = _seed.isOdd;
+
+    p.shader = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: dusk
+          ? const [Color(0xFF3E3458), Color(0xFFC36E61)]
+          : const [Color(0xFF5C87A3), Color(0xFFF0B36C)],
+    ).createShader(Offset.zero & size);
+    canvas.drawRect(Offset.zero & size, p);
+    p.shader = null;
+
+    p.color = dusk ? const Color(0xFFF0C47D) : const Color(0xFFFFE3A0);
+    canvas.drawCircle(
+      Offset(w * (0.72 + (_seed % 3) * 0.05), h * 0.25),
+      h * 0.12,
+      p,
+    );
+
+    final farHill = Path()
+      ..moveTo(0, h * 0.62)
+      ..quadraticBezierTo(w * 0.23, h * 0.36, w * 0.48, h * 0.61)
+      ..quadraticBezierTo(w * 0.72, h * 0.40, w, h * 0.58)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+    p.color = dusk ? const Color(0xFF5A5261) : const Color(0xFF708166);
+    canvas.drawPath(farHill, p);
+
+    p.color = ended ? const Color(0xFF383A37) : const Color(0xFF3D523B);
+    canvas.drawRect(Rect.fromLTWH(0, h * 0.68, w, h * 0.32), p);
+
+    final homes = (population ~/ 8 + 2).clamp(2, 5);
+    for (var i = 0; i < homes; i++) {
+      final x = w * (0.18 + i * 0.15 + ((_seed + i) % 3) * 0.015);
+      final y = h * (0.58 + (i.isOdd ? 0.06 : 0));
+      final houseW = w * 0.10;
+      final houseH = h * (0.17 + ((_seed + i) % 2) * 0.03);
+      p.color = ended ? const Color(0xFF4A4540) : const Color(0xFF8B5A36);
+      canvas.drawRect(Rect.fromLTWH(x, y, houseW, houseH), p);
+      p.color = ended ? const Color(0xFF292725) : const Color(0xFF4A2D24);
+      final roof = Path()
+        ..moveTo(x - houseW * 0.10, y)
+        ..lineTo(x + houseW * 0.5, y - houseH * 0.48)
+        ..lineTo(x + houseW * 1.10, y)
+        ..close();
+      canvas.drawPath(roof, p);
+      if (!ended) {
+        p.color = const Color(0xFFFFD27A);
+        canvas.drawRect(
+          Rect.fromLTWH(
+            x + houseW * 0.58,
+            y + houseH * 0.32,
+            houseW * 0.20,
+            houseH * 0.24,
+          ),
+          p,
+        );
+      }
+    }
+
+    if (ended) {
+      p.color = const Color(0x66000000);
+      canvas.drawRect(Offset.zero & size, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _VillageMemoryPainter oldDelegate) =>
+      oldDelegate.name != name ||
+      oldDelegate.population != population ||
+      oldDelegate.day != day ||
+      oldDelegate.ended != ended;
 }
 
 /// Oyun içi kompakt manuel kaydet butonu — sol-altta küçük yuvarlak.

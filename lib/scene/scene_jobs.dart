@@ -59,6 +59,7 @@ extension _SceneJobs on _VillageSceneState {
   /// eder; claim korunur). Bu koşullarda `goTo` verilmez.
   bool _jobActiveNow(VillagerEntity v) =>
       v.hasActiveJob &&
+      !_jobPausedByPlayer(v) &&
       !v.isDying &&
       !v.isInsideBuilding &&
       !v.isSleeping &&
@@ -85,6 +86,19 @@ extension _SceneJobs on _VillageSceneState {
       (_cycle.dayLight > 0.35 || v.nightDuty) &&
       v.workPause <= 0 &&
       !identical(v, _draggedVillager);
+
+  /// Elle belirli bir bina yuvasına mühürlenmiş işçi, o bina kapalıyken işi
+  /// sürdürmez. Mühür korunur; yapı yeniden açıldığında aynı el geri döner.
+  bool _jobPausedByPlayer(VillagerEntity v) {
+    final role = v.job?.role;
+    final siteId = v.assignedSiteId;
+    if (role == null || siteId == null) return false;
+    for (final b in _buildings) {
+      if (!b.userPaused) continue;
+      if (_SceneWorkSites._buildingSiteId(b, role) == siteId) return true;
+    }
+    return false;
+  }
 
   /// Bu rolü ÜSTLENMİŞ köylü sayısı — HUD/panel sayaçlarının tek kaynağı.
   /// (Eski anonim işçi listeleri kaldırıldı; onlar hep boştu, sayaçlar da 0.)
@@ -151,17 +165,19 @@ extension _SceneJobs on _VillageSceneState {
     // MADENCİ / BALIKÇI / ÇİÇEKÇİ — bina başına 1 (kaynak varken); işyerine
     // en yakın boş köylü atanır.
     (double, double)? nearBuilding(BuildingType t) {
-      final b = _buildings.where((x) => x.type == t).firstOrNull;
+      final b = _buildings
+          .where((x) => x.type == t && !x.userPaused)
+          .firstOrNull;
       if (b == null) return null;
       final m = kBuildingMeta[t]!;
       return (b.col + m.cols / 2.0, b.row + m.rows / 2.0);
     }
 
     final mines = _buildings
-        .where((b) => b.type == BuildingType.mineBuilding)
+        .where((b) => b.type == BuildingType.mineBuilding && !b.userPaused)
         .length;
     final cabins = _buildings
-        .where((b) => b.type == BuildingType.fisherCabin)
+        .where((b) => b.type == BuildingType.fisherCabin && !b.userPaused)
         .length;
     final cottages = _buildings
         .where((b) => b.type == BuildingType.floristCottage)
@@ -190,7 +206,9 @@ extension _SceneJobs on _VillageSceneState {
 
     // ÇOBAN — ağıl başına 1 (sağım + sürü). Tek çoban hem güder hem sağar
     // (eski anonim ShepherdEntity mükerrerliği kalktı).
-    final barns = _buildings.where((b) => b.type == BuildingType.barn).length;
+    final barns = _buildings
+        .where((b) => b.type == BuildingType.barn && !b.userPaused)
+        .length;
     _reconcileRole(
       JobRole.shepherd,
       barns,
@@ -202,7 +220,7 @@ extension _SceneJobs on _VillageSceneState {
     // ODUNCU — kereste kampı başına 1 (kesim). Bölge yönetimi (işaretleme+
     // fidan) ayrı per-kamp yürür (_tickLumberCampManage).
     final camps = _buildings
-        .where((b) => b.type == BuildingType.lumberCamp)
+        .where((b) => b.type == BuildingType.lumberCamp && !b.userPaused)
         .length;
     _reconcileRole(
       JobRole.woodcutter,
@@ -301,6 +319,7 @@ extension _SceneJobs on _VillageSceneState {
     final forbidden = _forbiddenForTrees;
     for (final b in _buildings) {
       if (b.type != BuildingType.lumberCamp) continue;
+      if (b.userPaused) continue;
       final cx = b.col + 1.0, cy = b.row + 1.0;
       const r2 = kLumberTerritoryRadius * kLumberTerritoryRadius;
       final inZone = <TreeEntity>[];
@@ -398,8 +417,15 @@ extension _SceneJobs on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 1.1) % (2 * pi);
-    tree.chopPhase = job.phaseAnim;
-    if (job.timer >= kChopDuration) {
+    tree.chopPhase = workImpactPhase(job.phaseAnim);
+    // İlk kütük kontrol devrinin kapısıdır. Normal 15 saniyelik kesim
+    // ritmi burada bekleme ekranına dönüşüyordu; yalnız ilk kesim hızlı,
+    // sonraki bütün ağaçlar normal simülasyon süresini kullanır.
+    final chopDuration = _foundingModeActive && _woodHarvested == 0
+        ? 3.5
+        : kChopDuration;
+    job.reportCycle(job.timer, chopDuration);
+    if (job.timer >= chopDuration) {
       final hc = tree.col, hr = tree.row;
       // İzometrik ekran x'i (gridX-gridY) eksenidir. Ağaç oduncunun ekran
       // tarafının tersine düşer; böylece gövde işçinin üstüne kapanmaz.
@@ -413,21 +439,17 @@ extension _SceneJobs on _VillageSceneState {
       // Bir ağaç tek odun değil, küçük bir kütük yığını bırakır. Her kütük
       // ayrı kutu olduğundan taşıyıcıların görünür emeği ve HUD'daki "yolda"
       // sayısı korunur.
+      ResourceBox? ownLoad;
       for (var i = 0; i < kWoodYieldPerTree; i++) {
-        final box = ResourceBox(
-          type: ResourceBoxType.woodChunk,
-          gridX: hc.toDouble(),
-          gridY: hr.toDouble(),
-        );
-        ResourcePlacement.placeBox(
-          box,
+        final box = _spawnJobBox(
+          ResourceBoxType.woodChunk,
           hc.toDouble(),
           hr.toDouble(),
-          _resourceBoxes,
-          _time,
         );
-        _resourceBoxes.add(box);
+        ownLoad ??= box;
       }
+      job.finishCycle();
+      if (ownLoad != null) _sendOwnOutput(v, ownLoad);
       _woodHarvested++;
       if (_woodHarvested == 1) {
         _showNotification(
@@ -595,6 +617,75 @@ extension _SceneJobs on _VillageSceneState {
     return false;
   }
 
+  /// Üreticinin çıkardığı ilk somut ürünü KENDİSİ ambara götürür. Böylece
+  /// oyuncunun izlediği kişi "vur → ürün düştü" anından sonra başka bir NPC'ye
+  /// teslim olmadan zinciri tamamlar. Teslim yeri yoksa ürün yerde kalır ve
+  /// genel taşıyıcı sistemi daha sonra devralır.
+  bool _sendOwnOutput(VillagerEntity v, ResourceBox box) {
+    final claim = _anchorSystem.claimDeliverySlot(box.gridX, box.gridY, v);
+    if (claim == null) return false;
+    final (point, slot) = claim;
+    box.isBeingCarried = true;
+    v.assignCarryTask(
+      box,
+      box.gridX,
+      box.gridY,
+      slot.col,
+      slot.row,
+      onDelivered: () {
+        point.release(slot, v);
+        box.isDelivered = true;
+        _resourceBoxes.remove(box);
+        switch (box.type) {
+          case ResourceBoxType.woodChunk:
+            _stockpile.wood++;
+            v.gainMastery(Craft.carpentry, 1.0);
+          case ResourceBoxType.stoneBox:
+            _stockpile.stone++;
+            v.gainMastery(Craft.masonry, 1.0);
+          case ResourceBoxType.ironBox:
+            _stockpile.iron++;
+          case ResourceBoxType.coalBox:
+            _stockpile.coal++;
+          case ResourceBoxType.foodBasket:
+            _deliverFoodFrom(v, box.amount);
+        }
+        BuildingEntity? store;
+        var best = double.infinity;
+        for (final b in _buildings) {
+          if (b.type != BuildingType.warehouse &&
+              b.type != BuildingType.firepit) {
+            continue;
+          }
+          final dx = b.col + b.cols / 2.0 - slot.col;
+          final dy = b.row + b.rows / 2.0 - slot.row;
+          final d = dx * dx + dy * dy;
+          if (d < best) {
+            best = d;
+            store = b;
+          }
+        }
+        if (store != null) {
+          store.deliveryPulse = 1.0;
+          store.deliveryTally++;
+        }
+      },
+    );
+    return true;
+  }
+
+  ResourceBox _spawnJobBox(
+    ResourceBoxType type,
+    double x,
+    double y, {
+    int amount = 1,
+  }) {
+    final box = ResourceBox(type: type, gridX: x, gridY: y, amount: amount);
+    ResourcePlacement.placeBox(box, x, y, _resourceBoxes, _time);
+    _resourceBoxes.add(box);
+    return box;
+  }
+
   /// Köylüyü işten al — tuttuğu claim'leri SALIVER (yoksa sipariş "atandı"da
   /// asılı kalır), sonra işi temizle.
   void _releaseJob(VillagerEntity v) {
@@ -652,6 +743,7 @@ extension _SceneJobs on _VillageSceneState {
     Set<(int, int)> softObs,
   ) {
     final buildDt = dt * _fxBuilderMul;
+    if (_workHitSfxCd > 0) _workHitSfxCd -= dt;
     // Şantiyede o an kaç el var — bu karede yeniden sayılır, kadro şartı
     // (bkz. _runBuilder) bir önceki karenin sayısını okur. Kadro eksik kaldıkça
     // sabır dolar; dolunca eldeki el tek başına başlar.
@@ -712,6 +804,28 @@ extension _SceneJobs on _VillageSceneState {
           _runWeaver(v, dt * _fxNpcSpeedMul * cm);
         default:
           break;
+      }
+      // TEMAS SESİ — karakter/alet/hedefin kullandığı aynı keyframe. Seçili ya
+      // da takipteki köylü her vuruşta duyulur; uzak köy dokusu seyrek kalır.
+      final audibleTool =
+          job.role == JobRole.builder ||
+          job.role == JobRole.miner ||
+          job.role == JobRole.woodcutter;
+      final contact =
+          audibleTool && job.working && workContactAmount(job.phaseAnim) > 0.82;
+      if (contact && !job.impactLatched) {
+        job.impactLatched = true;
+        final foreground =
+            identical(v, _selectedVillager) || identical(v, _followedVillager);
+        if (_workHitSfxCd <= 0) {
+          AudioManager.instance.playSfxChance(
+            Sfx.workHit,
+            foreground ? 1.0 : 0.16,
+          );
+          _workHitSfxCd = foreground ? 0.13 : 0.28;
+        }
+      } else if (!contact) {
+        job.impactLatched = false;
       }
       // GÖVDE DİLİ — görev başında çalışan köylü ekranda da çalışsın (bkz.
       // _setWorkPose). "Çalışıyor" sinyali rol-bağımsız: bina-işlerinde
@@ -865,6 +979,7 @@ extension _SceneJobs on _VillageSceneState {
       job.timer += dt;
       job.phaseAnim = (job.phaseAnim + dt * 4.0) % (pi * 2);
       job.progress = (job.timer / r.surface.buildDuration).clamp(0.0, 1.0);
+      job.reportCycle(job.timer, r.surface.buildDuration);
       if (job.timer >= r.surface.buildDuration) {
         r.completed = true;
         _roadSystem.add(RoadTile(col: r.col, row: r.row, surface: r.surface));
@@ -873,6 +988,7 @@ extension _SceneJobs on _VillageSceneState {
         job.timer = 0;
         job.working = false;
         job.progress = 0;
+        job.finishCycle();
       }
       return;
     }
@@ -894,16 +1010,15 @@ extension _SceneJobs on _VillageSceneState {
     }
     job.working = true;
     job.phaseAnim = (job.phaseAnim + dt * 4.0) % (pi * 2);
+    final buildDuration = _buildDurationFor(bo.type);
     // İlerleme ŞANTİYEDE tutulur ve kare başına BİR kez yazılır — yoksa
     // kadrodaki her el ayrı ayrı ilerletir, bina kişi sayısı kadar hızlı çıkardı.
     if (bo.tickStamp != _time) {
       bo.tickStamp = _time;
-      bo.progress = (bo.progress + dt / _buildDurationFor(bo.type)).clamp(
-        0.0,
-        1.0,
-      );
+      bo.progress = (bo.progress + dt / buildDuration).clamp(0.0, 1.0);
     }
     job.progress = bo.progress;
+    job.reportCycle(bo.progress * buildDuration, buildDuration);
     if (bo.progress >= 1.0) {
       bo.completed = true;
       AudioManager.instance.playSfx(Sfx.buildDone);
@@ -914,6 +1029,7 @@ extension _SceneJobs on _VillageSceneState {
       job.timer = 0;
       job.working = false;
       job.progress = 0;
+      job.finishCycle();
     }
   }
 
@@ -996,11 +1112,13 @@ extension _SceneJobs on _VillageSceneState {
         v.idleTimer = 0.5;
         job.timer += dt;
         job.phaseAnim = (job.phaseAnim + dt * 2 * pi) % (2 * pi);
+        job.reportCycle(job.timer, kFarmSowDuration);
         if (job.timer >= kFarmSowDuration) {
           target?.sow();
           job.claim = null;
           job.phase = 0;
           job.phaseAnim = 0;
+          job.finishCycle();
         }
         return;
 
@@ -1020,6 +1138,7 @@ extension _SceneJobs on _VillageSceneState {
         v.idleTimer = 0.5;
         job.timer += dt;
         job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 1.4) % (2 * pi);
+        job.reportCycle(job.timer, kFarmHarvestDuration);
         if (job.timer >= kFarmHarvestDuration) {
           final hc = target?.col ?? v.gridX.round();
           final hr = target?.row ?? v.gridY.round();
@@ -1027,6 +1146,7 @@ extension _SceneJobs on _VillageSceneState {
           job.claim = null;
           job.phase = 0;
           job.phaseAnim = 0;
+          job.finishCycle();
           _spawnFarmHay(hc, hr);
         }
         return;
@@ -1049,6 +1169,7 @@ extension _SceneJobs on _VillageSceneState {
         v.idleTimer = 0.5;
         job.timer2 += dt;
         job.splashTimer = job.timer2;
+        job.reportCycle(job.timer2, kFarmWaterFetchTime);
         if (job.timer2 >= kFarmWaterFetchTime) {
           if (job.claim3 is AnchorPoint && job.claim2 is AnchorSlot) {
             (job.claim3 as AnchorPoint).release(job.claim2 as AnchorSlot, v);
@@ -1085,6 +1206,7 @@ extension _SceneJobs on _VillageSceneState {
         v.idleTimer = 0.5;
         job.timer2 += dt;
         job.splashTimer = job.timer2;
+        job.reportCycle(job.timer2, kFarmWaterTime);
         if (job.timer2 >= kFarmWaterTime) {
           if (target != null) {
             final cx = target.col + 0.5, cy = target.row + 0.5;
@@ -1100,6 +1222,7 @@ extension _SceneJobs on _VillageSceneState {
           job.claim = null;
           job.phase = 0;
           job.timer2 = 0;
+          job.finishCycle();
         }
         return;
     }
@@ -1206,7 +1329,8 @@ extension _SceneJobs on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi) % (2 * pi);
-    node.chopPhase = job.phaseAnim;
+    node.chopPhase = workImpactPhase(job.phaseAnim);
+    job.reportCycle(job.timer, node.type.mineTime);
     if (job.timer >= node.type.mineTime) {
       final ore = node.type;
       final hc = node.col, hr = node.row;
@@ -1222,19 +1346,9 @@ extension _SceneJobs on _VillageSceneState {
         OreType.coal => ResourceBoxType.coalBox,
         _ => ResourceBoxType.stoneBox,
       };
-      final box = ResourceBox(
-        type: boxType,
-        gridX: hc.toDouble(),
-        gridY: hr.toDouble(),
-      );
-      ResourcePlacement.placeBox(
-        box,
-        hc.toDouble(),
-        hr.toDouble(),
-        _resourceBoxes,
-        _time,
-      );
-      _resourceBoxes.add(box);
+      final box = _spawnJobBox(boxType, hc.toDouble(), hr.toDouble());
+      job.finishCycle();
+      _sendOwnOutput(v, box);
     }
   }
 
@@ -1277,11 +1391,14 @@ extension _SceneJobs on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 0.8) % (2 * pi);
+    job.reportCycle(job.timer, kFishDuration);
     if (job.timer >= kFishDuration) {
-      _deliverFoodFrom(v, 1);
+      final basket = _spawnJobBox(ResourceBoxType.foodBasket, v.gridX, v.gridY);
       job.phase = 0;
       job.working = false;
       job.phaseAnim = 0;
+      job.finishCycle();
+      _sendOwnOutput(v, basket);
     }
   }
 
@@ -1358,13 +1475,16 @@ extension _SceneJobs on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi) % (2 * pi);
+    job.reportCycle(job.timer, 6.0);
     if (job.timer >= 6.0) {
       cow.onMilked();
       job.claim = null;
       job.phase = 0;
       job.working = false;
       job.phaseAnim = 0;
-      _deliverFoodFrom(v, 1);
+      final basket = _spawnJobBox(ResourceBoxType.foodBasket, v.gridX, v.gridY);
+      job.finishCycle();
+      _sendOwnOutput(v, basket);
     }
   }
 
@@ -1425,12 +1545,14 @@ extension _SceneJobs on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 1.2) % (2 * pi);
+    job.reportCycle(job.timer, 1.6);
     if (job.timer >= 1.6) {
       job.claim = null;
       job.phase = 0;
       job.working = false;
       job.carryingWater = false;
       job.phaseAnim = 0;
+      job.finishCycle();
     }
   }
 

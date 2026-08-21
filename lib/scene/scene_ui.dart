@@ -71,13 +71,43 @@ extension _SceneUi on _VillageSceneState {
     return LayoutBuilder(
       builder: (ctx, constraints) {
         _viewSize = constraints.biggest;
+        if (kCaptureVisitors && !kCaptureVisitorsFocused) {
+          _focusVisitorCapture();
+        }
+        final effectivePerfMode =
+            _perfMode ||
+            useReducedEffectsForViewport(
+              _viewSize,
+              MediaQuery.devicePixelRatioOf(ctx),
+            );
         return Listener(
           onPointerSignal: _onCanvasPointerSignal,
           child: GestureDetector(
+            key: const ValueKey('game_canvas_gesture'),
             onScaleStart: _onCanvasScaleStart,
             onScaleUpdate: _onCanvasScaleUpdate,
             onScaleEnd: _onCanvasScaleEnd,
             onTapUp: _onCanvasTapUp,
+            // Aktif araçlarda çift-dokunma zaten anlamsız. Recognizer'ı yalnız
+            // handler içinde reddetmek yetmiyor: ilk dokunuşu ~300ms bekletip
+            // yol/tarla iki-nokta akışının ikinci dokunuşuyla yarışıyordu.
+            // Araç açıkken recognizer'ı tamamen kaldır → dokunuş anında düşer.
+            onDoubleTapDown:
+                (_roadMode ||
+                    _mineMode ||
+                    _lumberMode ||
+                    _farmMode ||
+                    _placing != null)
+                ? null
+                : _onCanvasDoubleTapDown,
+            onDoubleTap:
+                (_roadMode ||
+                    _mineMode ||
+                    _lumberMode ||
+                    _farmMode ||
+                    _placing != null)
+                ? null
+                : _onCanvasDoubleTap,
             // Çoklu dikim: yerleştirme modunda basılı tut + sürükle.
             onLongPressStart: _onCanvasLongPressStart,
             onLongPressMoveUpdate: _onCanvasLongPressMoveUpdate,
@@ -114,8 +144,6 @@ extension _SceneUi on _VillageSceneState {
                       overlayBottom: _cycle.overlayBottom,
                       rainIntensity: _cycle.rainIntensity,
                       nightClarity: _cycle.nightClarity,
-                      // Adımın dünyadaki hedefi — yönlendirmenin görsel ayağı.
-                      stepBeacon: _stepBeacon,
                       farmTiles: _farmTiles,
                       farmSelection:
                           (_farmMode && _farmStart != null && _farmEnd != null)
@@ -159,6 +187,7 @@ extension _SceneUi on _VillageSceneState {
                       reeds: _reeds,
                       berryBushes: _berryBushes,
                       decor: _decor,
+                      landmarks: _landmarks,
                       graves: _graves,
                       reedBeds: _reedBeds,
                       cows: _cows,
@@ -183,7 +212,7 @@ extension _SceneUi on _VillageSceneState {
                       burningBuildings: _burningBuildings,
                       birdFlocks: _birdFlocks,
                       beeSwarms: _beeSwarms,
-                      perfMode: _perfMode,
+                      perfMode: effectivePerfMode,
                     ),
                   ),
                 ),
@@ -259,12 +288,9 @@ extension _SceneUi on _VillageSceneState {
           onTriggerEvent: _triggerRandomEvent,
           timeScale: _timeScale,
           onCycleSpeed: _cycleSpeed,
-          // ŞU ANKİ ADIM — Köy Defteri'ni açmadan görünür tek satır.
-          stepText: _currentStep?.quest.label,
-          stepIcon: _currentStep == null
-              ? null
-              : questGlyph(_currentStep!.quest.id),
-          stepWho: _currentStep?.speakerName,
+          // Aktif adımın tek evi sağdaki QuestTracker. Aynı başlığı HUD'ın
+          // solunda ikinci kez çizmek kuruluşu iki ayrı görev sistemiymiş gibi
+          // gösteriyordu; Hud'un opsiyonel adım şeridi bu yüzden boş bırakılır.
           // Oyun dışı işler telefonda ray'ın araçlar menüsünde (masaüstünde
           // sol-üst "⚙ Menü" kümesi olarak kalır).
           onSaveNow: () => _saveNow(manual: true),
@@ -292,6 +318,10 @@ extension _SceneUi on _VillageSceneState {
           builder: (_, _) => CommandBar(
             agenda: _divanAgendaCount(),
             village: _villageName,
+            showCivicGates: !_foundingModeActive,
+            catalogOpen: _mobileBuildCatalogOpen,
+            onCatalogOpenChanged: (open) =>
+                setStateHere(() => _mobileBuildCatalogOpen = open),
             onDefter: () => _openLedger(LedgerSection.tuzuk),
             onDivan: () => _openLedger(LedgerSection.divan),
             onRoster: () => _openLedger(LedgerSection.nufus),
@@ -307,6 +337,18 @@ extension _SceneUi on _VillageSceneState {
   /// sekmesi + kartlar). Eski alt çubuğun içeriğini yeniden kullanır.
   Widget _commandBuildSegment() {
     if (kBuildingMeta.isEmpty) return const SizedBox.shrink();
+    if (_foundingModeActive) {
+      final target = _stepBuildTarget;
+      if (target == null) return _foundingWorkStatus();
+      return BuildingPanel(
+        stockpile: _stockpile,
+        selected: _placing,
+        hasFirepit: _hasFire,
+        onlyType: target,
+        hintType: target,
+        onSelect: _onSelectBuilding,
+      );
+    }
     if (!_hasFire) {
       return BuildingPanel(
         stockpile: _stockpile,
@@ -325,6 +367,53 @@ extension _SceneUi on _VillageSceneState {
         const SizedBox(height: 4),
         _buildCategoryContent(),
       ],
+    );
+  }
+
+  /// Kuruluş kararları arasındaki kısa otomatik emek anı. Alakasız bina
+  /// kartları açmak yerine köyün ne yaptığını tek satırda söyler.
+  Widget _foundingWorkStatus() {
+    final lumberReady = _buildings.any(
+      (b) => b.type == BuildingType.lumberCamp,
+    );
+    final worker = _villagers.where((v) => v.hasActiveJob).firstOrNull;
+    final feedback = worker == null ? null : feedbackFor(worker);
+    final text = worker != null && feedback != null
+        ? '${worker.name}: ${feedback.state}'
+        : lumberReady && _woodHarvested == 0
+        ? 'Oduncu ilk ağaca gidiyor…'
+        : 'Kuruluş ekibi sıradaki işi hazırlıyor…';
+    final eta = feedback?.etaLabel ?? '';
+    return AppPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const GameIcon(GameIconData.hammer, size: 14, color: AppUi.accent),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  eta.isEmpty ? text : '$text · $eta',
+                  style: AppUi.body.copyWith(color: AppUi.textMid),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (feedback?.result.isNotEmpty == true)
+                  Text(
+                    feedback!.result,
+                    style: AppUi.body.copyWith(
+                      fontSize: 10.5,
+                      color: AppUi.textLo,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -542,7 +631,14 @@ extension _SceneUi on _VillageSceneState {
             // aniden ince banda düşüyordu: parmak kalktığı yerde "nasıl"ı
             // anlatan tek yüzey de kapanıyor, oyuncu tam serbest kaldığı anda
             // yalnız kalıyordu. Spot dört adım, kart bütün kuruluş boyunca.
-            final expanded = _questCardOverride ?? (_charterTier == 0);
+            // Yerleştirme modu açıkken yeşil sahne komutu zaten sıradaki
+            // hareketi söylüyor. Görev kartı başlığa kapanır; oyuncu isterse
+            // elle yeniden açabilir. Şantiye konunca mod biter ve kart bu kez
+            // "Beklemeyi geç" eylemiyle kendiliğinden geri açılır.
+            final placingActive = _placing == active.quest.buildTarget;
+            final expanded =
+                _questCardOverride ?? (_charterTier == 0 && !placingActive);
+            final waitOrder = _foundingWaitOrder;
             return QuestTracker(
               icon: questGlyph(active.quest.id),
               activeLabel: active.quest.label,
@@ -555,12 +651,13 @@ extension _SceneUi on _VillageSceneState {
               expanded: expanded,
               onToggleExpand: () =>
                   setStateHere(() => _questCardOverride = !expanded),
-              // "Göster" yalnız kuruluşta: sonrası oyuncunun bildiği fiiller,
-              // orada kamerayı eline almak öğretmek değil elinden almaktır.
-              // Rehberli adımla sınırlı DEĞİL — rehbersiz kuruluş adımlarında
-              // da kamerayı hedefe götürür (spot çıkmaz, yalnız kayar), ki
-              // "ağaçların dibi neresi" sorusu cevapsız kalmasın.
-              onShow: _charterTier == 0 ? () => setStateHere(_guideShow) : null,
+              // Yer seçildiyse oyuncu öğreticinin istediği eylemi yaptı:
+              // aynı yeri tekrar göstermek yerine inşaat bekleyişini geçir.
+              // Bekleyen şantiye yokken "Göster" kuruluş boyunca kullanılır.
+              onShow: _charterTier == 0 && waitOrder == null
+                  ? () => setStateHere(_guideShow)
+                  : null,
+              onSkipWait: waitOrder == null ? null : _skipFoundingBuildWait,
             );
           },
         ),
@@ -747,6 +844,9 @@ extension _SceneUi on _VillageSceneState {
     }
     setStateHere(() {
       _farmMode = false;
+      _farmStart = null;
+      _farmEnd = null;
+      _farmTapAnchor = null;
       _lumberMode = false;
       _mineMode = false;
       _placingRoad = null;
@@ -777,9 +877,13 @@ extension _SceneUi on _VillageSceneState {
           stockpile: _stockpile,
           selected: _placingRoad,
           onSelect: (s) => setStateHere(() {
+            _mobileBuildCatalogOpen = false;
             _placing = null;
             _ghost = null;
             _farmMode = false;
+            _farmStart = null;
+            _farmEnd = null;
+            _farmTapAnchor = null;
             _lumberMode = false;
             _mineMode = false;
             _roadErase = false;
@@ -788,9 +892,13 @@ extension _SceneUi on _VillageSceneState {
           }),
           eraseSelected: _roadErase,
           onSelectErase: () => setStateHere(() {
+            _mobileBuildCatalogOpen = false;
             _placing = null;
             _ghost = null;
             _farmMode = false;
+            _farmStart = null;
+            _farmEnd = null;
+            _farmTapAnchor = null;
             _lumberMode = false;
             _mineMode = false;
             _placingRoad = null;
@@ -805,6 +913,7 @@ extension _SceneUi on _VillageSceneState {
           active: _farmMode,
           accentColor: const Color(0xFF88CC22),
           onTap: () => setStateHere(() {
+            _mobileBuildCatalogOpen = false;
             _placing = null;
             _ghost = null;
             _placingRoad = null;
@@ -819,6 +928,7 @@ extension _SceneUi on _VillageSceneState {
             _farmMode = !_farmMode;
             _farmStart = null;
             _farmEnd = null;
+            _farmTapAnchor = null;
           }),
         ),
         const SizedBox(width: 4),
@@ -828,6 +938,7 @@ extension _SceneUi on _VillageSceneState {
           active: _lumberMode,
           accentColor: const Color(0xFFCC6600),
           onTap: () => setStateHere(() {
+            _mobileBuildCatalogOpen = false;
             _placing = null;
             _ghost = null;
             _placingRoad = null;
@@ -836,6 +947,7 @@ extension _SceneUi on _VillageSceneState {
             _farmMode = false;
             _farmStart = null;
             _farmEnd = null;
+            _farmTapAnchor = null;
             _mineMode = false;
             _mineStart = null;
             _mineEnd = null;
@@ -851,6 +963,7 @@ extension _SceneUi on _VillageSceneState {
           active: _mineMode,
           accentColor: const Color(0xFF8888CC),
           onTap: () => setStateHere(() {
+            _mobileBuildCatalogOpen = false;
             _placing = null;
             _ghost = null;
             _placingRoad = null;
@@ -859,6 +972,7 @@ extension _SceneUi on _VillageSceneState {
             _farmMode = false;
             _farmStart = null;
             _farmEnd = null;
+            _farmTapAnchor = null;
             _lumberMode = false;
             _lumberStart = null;
             _lumberEnd = null;
@@ -933,9 +1047,7 @@ extension _SceneUi on _VillageSceneState {
           Positioned(
             top: useCompactGameUi(context) ? MobileUi.top(context) : 64,
             right: useCompactGameUi(context) ? MobileUi.right(context) : 14,
-            bottom: useCompactGameUi(context)
-                ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
-                : 96,
+            bottom: useCompactGameUi(context) ? MobileUi.bottom(context) : 96,
             child: _detailFrame(
               compact: useCompactGameUi(context),
               child: BuildingInfoPanel(
@@ -999,6 +1111,11 @@ extension _SceneUi on _VillageSceneState {
                   }
                 }),
                 onFestival: () => _hostFestival(selected),
+                onTogglePaused:
+                    selected.fn?.role == BuildingRole.gathering ||
+                        selected.fn?.role == BuildingRole.processing
+                    ? () => _toggleBuildingPaused(selected)
+                    : null,
                 repairCost: _repairCostFor(selected),
                 repairAffordable: _stockpile.canAfford(
                   _repairCostFor(selected),
@@ -1176,55 +1293,90 @@ extension _SceneUi on _VillageSceneState {
     );
   }
 
+  /// Üretim binasını gerçekten aç/kapat. Bayrak yalnız panel metni değildir:
+  /// iş yeri talebi, atanmış işçinin tick'i ve pasif üretim döngüleri aynı
+  /// [BuildingEntity.userPaused] değerini okur.
+  void _toggleBuildingPaused(BuildingEntity building) {
+    setStateHere(() {
+      building.userPaused = !building.userPaused;
+      if (building.userPaused) building.isActive = false;
+      // Otomatik kadro iki saniyelik normal taramayı beklemeden yeni talebi
+      // görsün. Elle mühürlenmiş el yerini korur, bina açılınca geri döner.
+      _jobSyncCd = 0;
+    });
+    final label = kBuildingMeta[building.type]?.label ?? 'Yapı';
+    _showNotification(
+      building.userPaused
+          ? '$label durduruldu — üretim ve işçi talebi kesildi.'
+          : '$label yeniden çalışmaya açıldı.',
+    );
+  }
+
   // ── Köylü bilgi paneli — bina paneliyle aynı pozisyon ─────────────────────
 
   Widget buildSelectedVillagerPanel() {
     final v = _selectedVillager!;
-    // Sağ-dock: bina paneliyle tutarlı, hep sağ kenarda. Backdrop YOK — oyun
-    // etkileşimli kalır (haritada başka köylüye tıklayıp panele geçilebilir).
+    // Sağ-dock: bina paneliyle tutarlı, hep sağ kenarda. Detay açıkken dünya
+    // kroması zaten susturulur; hafif tap-out perde de sahneyi ikinci bir bilgi
+    // katmanı gibi bağırmaktan çıkarır.
     //
     // MOBİL: yuva ızgaradan gelir (üst gutter → alt gutter) ve panel onu
     // DOLDURUR; kaydırma panelin İÇİNDE olur. Dıştaki SingleChildScrollView
     // telefonda yanlıştı — paneli sınırsız yükseklikte bırakıp altını
     // kırptırıyordu ("yarısı kesik kutu" görüntüsü).
     final compact = useCompactGameUi(context);
-    return Positioned(
-      top: compact ? MobileUi.top(context) : 64,
-      right: compact ? MobileUi.right(context) : 14,
-      bottom: compact
-          ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
-          : 96,
-      child: _detailFrame(
-        compact: compact,
-        child: VillagerInfoPanel(
-          villager: v,
-          homeLabel: v.homeBuilding == null
-              ? null
-              : kBuildingMeta[(v.homeBuilding as BuildingEntity).type]?.label,
-          isFollowed: _followedVillager == v,
-          onClose: () => setStateHere(() => _detailExpanded = false),
-          onSelect: (next) => setStateHere(() => _selectedVillager = next),
-          onToggleFollow: () => _toggleFollowVillager(v),
-          onToggleFavorite: () =>
-              setStateHere(() => v.isFavorite = !v.isFavorite),
-          onRename: (newName) {
-            final cleaned = newName.trim();
-            if (cleaned.isEmpty || cleaned.length > 20) return;
-            setStateHere(() => v.name = cleaned);
-          },
-          // İŞİN OKUNUŞU — panel iş VERMEZ, iş OKUR. Karar iş yerinin kendi
-          // kartında verilir; buradaki tek kapı oraya götürür.
-          workplaceLabel: _siteOfVillager(v)?.label,
-          onOpenWorkplace: v.hasActiveJob
-              ? () => setStateHere(() => _openWorkplaceOf(v))
-              : null,
-          onReleaseJob: v.hasActiveJob
-              ? () => setStateHere(() => _emptySlot(v))
-              : null,
-          // Kan davası yargısı — geri alınamaz, onay ister.
-          onExile: () => setStateHere(() => _pendingJudgment = (v, false)),
-          onExecute: () => setStateHere(() => _pendingJudgment = (v, true)),
-        ),
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setStateHere(() => _detailExpanded = false),
+              child: Container(color: const Color(0x2D000000)),
+            ),
+          ),
+          Positioned(
+            top: compact ? MobileUi.top(context) : 64,
+            right: compact ? MobileUi.right(context) : 14,
+            bottom: compact ? MobileUi.bottom(context) : 96,
+            child: _detailFrame(
+              compact: compact,
+              child: VillagerInfoPanel(
+                villager: v,
+                homeLabel: v.homeBuilding == null
+                    ? null
+                    : kBuildingMeta[(v.homeBuilding as BuildingEntity).type]
+                          ?.label,
+                isFollowed: _followedVillager == v,
+                onClose: () => setStateHere(() => _detailExpanded = false),
+                onSelect: (next) =>
+                    setStateHere(() => _selectedVillager = next),
+                onToggleFollow: () => _toggleFollowVillager(v),
+                onToggleFavorite: () =>
+                    setStateHere(() => v.isFavorite = !v.isFavorite),
+                onRename: (newName) {
+                  final cleaned = newName.trim();
+                  if (cleaned.isEmpty || cleaned.length > 20) return;
+                  setStateHere(() => v.name = cleaned);
+                },
+                // İŞİN OKUNUŞU — panel iş VERMEZ, iş OKUR. Karar iş yerinin
+                // kendi kartında verilir; buradaki tek kapı oraya götürür.
+                workplaceLabel: _siteOfVillager(v)?.label,
+                onOpenWorkplace: v.hasActiveJob
+                    ? () => setStateHere(() => _openWorkplaceOf(v))
+                    : null,
+                onReleaseJob: v.hasActiveJob
+                    ? () => setStateHere(() => _emptySlot(v))
+                    : null,
+                // Kan davası yargısı — geri alınamaz, oyuncu onaylar.
+                onExile: () =>
+                    setStateHere(() => _pendingJudgment = (v, false)),
+                onExecute: () =>
+                    setStateHere(() => _pendingJudgment = (v, true)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1239,26 +1391,37 @@ extension _SceneUi on _VillageSceneState {
     // gitsin — ölü bir şantiyenin kadrosunu göstermek yalan olurdu.
     if (site == null) return const SizedBox.shrink();
     final compact = useCompactGameUi(context);
-    return Positioned(
-      top: compact ? MobileUi.top(context) : 64,
-      right: compact ? MobileUi.right(context) : 14,
-      bottom: compact
-          ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap
-          : 96,
-      child: _detailFrame(
-        compact: compact,
-        child: WorkSitePanel(
-          site: site,
-          subtitle: _siteSubtitle(site),
-          onClose: () => setStateHere(() => _detailExpanded = false),
-          onAddHand: (s) => setStateHere(() => _fillSlot(s)),
-          onRemoveHand: (_, v) => setStateHere(() => _emptySlot(v)),
-          onSelectVillager: (v) => setStateHere(() {
-            _selectedVillager = v;
-            _selectedSiteId = null;
-            _selectedBuilding = null;
-          }),
-        ),
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => setStateHere(() => _detailExpanded = false),
+              child: Container(color: const Color(0x2D000000)),
+            ),
+          ),
+          Positioned(
+            top: compact ? MobileUi.top(context) : 64,
+            right: compact ? MobileUi.right(context) : 14,
+            bottom: compact ? MobileUi.bottom(context) : 96,
+            child: _detailFrame(
+              compact: compact,
+              child: WorkSitePanel(
+                site: site,
+                subtitle: _siteSubtitle(site),
+                onClose: () => setStateHere(() => _detailExpanded = false),
+                onAddHand: (s) => setStateHere(() => _fillSlot(s)),
+                onRemoveHand: (_, v) => setStateHere(() => _emptySlot(v)),
+                onSelectVillager: (v) => setStateHere(() {
+                  _selectedVillager = v;
+                  _selectedSiteId = null;
+                  _selectedBuilding = null;
+                }),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1311,6 +1474,8 @@ extension _SceneUi on _VillageSceneState {
     // ortasına oturmalı).
     final size = _viewSize;
     if (size.width > 0 && size.height > 0) {
+      final readable = size.shortestSide < 500 ? 1.18 : 1.12;
+      if (_zoom < readable) _zoom = readable;
       _centerCameraOnUV(site.cx - site.cy, site.cx + site.cy, size);
       _clampCamera(size);
     }

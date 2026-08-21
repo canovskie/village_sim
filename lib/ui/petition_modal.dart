@@ -8,6 +8,7 @@ import '../entities/villager_entity.dart';
 import '../rendering/portrait_renderer.dart';
 import '../systems/petition_system.dart';
 import 'app_ui.dart';
+import 'event_artwork.dart';
 import 'mobile_ui.dart';
 import 'option_scene_card.dart';
 import 'petition_scene_card.dart';
@@ -26,6 +27,8 @@ class PetitionModal extends StatelessWidget {
   final ({double morale, int population, int food, int gold})? state;
   final void Function(PetitionOption) onChoose;
   final VoidCallback onDismiss;
+  final bool mustChoose;
+  final String? decisionContext;
 
   /// Mühlet doldu → kapıda bekleyen huzur: bedel gün başına işliyor. Scrim
   /// koyulaşır + ipucu yerine uyarı yazılır; kapatma yine SERBEST (donma ve
@@ -61,6 +64,8 @@ class PetitionModal extends StatelessWidget {
     this.state,
     required this.onChoose,
     required this.onDismiss,
+    this.mustChoose = false,
+    this.decisionContext,
     this.forced = false,
     this.author,
     this.onAuthorTap,
@@ -122,7 +127,7 @@ class PetitionModal extends StatelessWidget {
         // yok, bedel dünyada işliyor); dolan mühlette scrim koyulaşır.
         Positioned.fill(
           child: GestureDetector(
-            onTap: onDismiss,
+            onTap: mustChoose ? () {} : onDismiss,
             child: ColoredBox(
               color: forced ? const Color(0xF20E0A06) : AppUi.scrim,
             ),
@@ -157,57 +162,70 @@ class PetitionModal extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // SOL — anlatı: hero + gerilim + gövde + köyün hâli.
+                    // Metin kaymaz; telefon bütçesine göre satır sınırlarıyla
+                    // tek bakışta okunur.
                     Expanded(
                       flex: 5,
-                      child: SingleChildScrollView(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _PetitionHero(
-                              petition: petition,
-                              accent: _toneAccent,
-                              author: author,
-                              onAuthorTap: onAuthorTap,
-                              kicker: kicker,
-                              height: 128,
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _PetitionHero(
+                            petition: petition,
+                            accent: _toneAccent,
+                            author: author,
+                            onAuthorTap: onAuthorTap,
+                            kicker: kicker,
+                            height: 108,
+                          ),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(9, 7, 9, 7),
                               child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   if (petition.stakes != null) ...[
                                     _StakesLine(
                                       text: petition.stakes!,
                                       accent: _toneAccent,
+                                      compact: true,
                                     ),
-                                    const SizedBox(height: 9),
+                                    const SizedBox(height: 5),
                                   ],
                                   Text(
                                     petition.body,
                                     textAlign: TextAlign.center,
-                                    maxLines: 4,
+                                    maxLines: 3,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppUi.body.copyWith(
                                       fontSize: 11,
-                                      height: 1.5,
+                                      height: 1.35,
                                       color: AppUi.textLo,
                                     ),
                                   ),
                                   if (state != null) ...[
-                                    const SizedBox(height: 10),
-                                    _VillageStateStrip(state: state!),
+                                    const SizedBox(height: 6),
+                                    _VillageStateStrip(
+                                      state: state!,
+                                      compact: true,
+                                    ),
+                                  ],
+                                  if (decisionContext != null) ...[
+                                    const SizedBox(height: 6),
+                                    _DecisionContext(
+                                      text: decisionContext!,
+                                      compact: true,
+                                    ),
                                   ],
                                 ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                     Container(width: 1, color: AppUi.line),
-                    // SAĞ — kararlar: dikey liste, panonun kendi kaydırması.
+                    // SAĞ — kararların tamamı sabit ızgarada aynı anda görünür.
                     Expanded(
                       flex: 4,
                       child: Padding(
@@ -228,7 +246,17 @@ class PetitionModal extends StatelessWidget {
                               _vetoRow(),
                             ],
                             const SizedBox(height: 7),
-                            forced
+                            mustChoose
+                                ? Text(
+                                    'Bu ilk kaynak kararını sen vereceksin',
+                                    textAlign: TextAlign.center,
+                                    style: AppUi.label.copyWith(
+                                      color: AppUi.accent,
+                                      fontSize: 9,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  )
+                                : forced
                                 ? Text(
                                     'mühlet doldu; bekletmenin bedeli işliyor',
                                     textAlign: TextAlign.center,
@@ -317,6 +345,10 @@ class PetitionModal extends StatelessWidget {
                             const SizedBox(height: 12),
                             _VillageStateStrip(state: state!),
                           ],
+                          if (decisionContext != null) ...[
+                            const SizedBox(height: 10),
+                            _DecisionContext(text: decisionContext!),
+                          ],
                           const SizedBox(height: 14),
                           // Kararlar YATAY kart şeridi — her kart eylemi
                           // canlandıran 2B sahneyle taçlanır (Reigns/Total
@@ -334,7 +366,17 @@ class PetitionModal extends StatelessWidget {
                           const SizedBox(height: 12),
                           // Ambient'te sakin ipucu; mühlet dolduysa
                           // ipucu yerine bedel uyarısı (kapatma yine serbest).
-                          forced
+                          mustChoose
+                              ? Text(
+                                  'Bu ilk kaynak kararını sen vereceksin',
+                                  textAlign: TextAlign.center,
+                                  style: AppUi.label.copyWith(
+                                    color: AppUi.accent,
+                                    fontSize: 9,
+                                    letterSpacing: 1.0,
+                                  ),
+                                )
+                              : forced
                               ? Text(
                                   'mühlet doldu; bekletmenin bedeli işliyor',
                                   textAlign: TextAlign.center,
@@ -365,7 +407,6 @@ class PetitionModal extends StatelessWidget {
   }
 }
 
-
 /// Dilekçe HERO bloğu — illüstrasyon panosu + üstte DİLEKÇE künyesi/not, altta
 /// gradient zemin üstüne madalyon portre + oyma başlık + sunan. Total War olay
 /// panosunun "tek nefeste oku" hissi: resim konuşur, yazı asgaridir.
@@ -391,17 +432,20 @@ class _PetitionHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final a = author;
+    final artwork = petitionArtworkAsset(petition);
     return SizedBox(
       height: height,
       child: Stack(
         children: [
           // Full-bleed prosedürel illüstrasyon (kendi kenarlığını çizmez).
           Positioned.fill(
-            child: PetitionSceneCard(
-              petition: petition,
-              height: height,
-              drawBorder: false,
-            ),
+            child: artwork == null
+                ? PetitionSceneCard(
+                    petition: petition,
+                    height: height,
+                    drawBorder: false,
+                  )
+                : EventArtwork(asset: artwork, height: height, accent: accent),
           ),
           // Alt okunaklılık zemini — başlık/portre için koyu gradient.
           const Positioned(
@@ -628,11 +672,44 @@ class _Medallion extends StatelessWidget {
   }
 }
 
+class _DecisionContext extends StatelessWidget {
+  final String text;
+  final bool compact;
+
+  const _DecisionContext({required this.text, this.compact = false});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: EdgeInsets.symmetric(
+      horizontal: compact ? 8 : 11,
+      vertical: compact ? 6 : 8,
+    ),
+    decoration: BoxDecoration(
+      color: AppUi.accent.withValues(alpha: .08),
+      borderRadius: BorderRadius.circular(AppUi.radiusSm),
+      border: Border.all(color: AppUi.accent.withValues(alpha: .32)),
+    ),
+    child: Text(
+      text,
+      textAlign: TextAlign.center,
+      maxLines: compact ? 3 : 4,
+      overflow: TextOverflow.ellipsis,
+      style: AppUi.body.copyWith(
+        color: AppUi.textHi,
+        fontSize: compact ? 9.5 : 10.5,
+        height: 1.35,
+      ),
+    ),
+  );
+}
+
 /// Köy durumu şeridi — karar anında moral/nüfus/yiyecek/altın özeti. Oyuncu
 /// dilekçeyi köyün gerçek hâliyle tartar. Koyu iç band.
 class _VillageStateStrip extends StatelessWidget {
   final ({double morale, int population, int food, int gold}) state;
-  const _VillageStateStrip({required this.state});
+  final bool compact;
+  const _VillageStateStrip({required this.state, this.compact = false});
 
   /// Morale göre yüz — köyün ruh hâlinin tek bakışta okunması.
   String get _moraleFace {
@@ -647,7 +724,10 @@ class _VillageStateStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 5 : 8,
+      ),
       decoration: BoxDecoration(
         color: AppUi.surface0,
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -688,7 +768,8 @@ class _VillageStateStrip extends StatelessWidget {
     );
   }
 
-  Widget _div() => Container(width: 1, height: 24, color: AppUi.line);
+  Widget _div() =>
+      Container(width: 1, height: compact ? 19 : 24, color: AppUi.line);
 
   Widget _cell({
     GameIconData? icon,
@@ -704,18 +785,28 @@ class _VillageStateStrip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (emoji != null)
-              SemanticIcon(emoji,
-                  size: 12, color: color, fallback: GameIconData.heart)
+              SemanticIcon(
+                emoji,
+                size: compact ? 10 : 12,
+                color: color,
+                fallback: GameIconData.heart,
+              )
             else if (icon != null)
-              GameIcon(icon, size: 12, color: color),
-            const SizedBox(width: 4),
-            Text(value, style: AppUi.number.copyWith(fontSize: 13)),
+              GameIcon(icon, size: compact ? 10 : 12, color: color),
+            SizedBox(width: compact ? 2 : 4),
+            Text(
+              value,
+              style: AppUi.number.copyWith(fontSize: compact ? 11 : 13),
+            ),
           ],
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: compact ? 1 : 2),
         Text(
           label,
-          style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 0.8),
+          style: AppUi.label.copyWith(
+            fontSize: compact ? 7 : 7.5,
+            letterSpacing: compact ? 0.4 : 0.8,
+          ),
         ),
       ],
     );
@@ -728,12 +819,20 @@ class _VillageStateStrip extends StatelessWidget {
 class _StakesLine extends StatelessWidget {
   final String text;
   final Color accent;
-  const _StakesLine({required this.text, required this.accent});
+  final bool compact;
+  const _StakesLine({
+    required this.text,
+    required this.accent,
+    this.compact = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 12,
+        vertical: compact ? 6 : 9,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -748,15 +847,17 @@ class _StakesLine extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          GameIcon(GameIconData.scroll, size: 13, color: accent),
-          const SizedBox(width: 9),
+          GameIcon(GameIconData.scroll, size: compact ? 11 : 13, color: accent),
+          SizedBox(width: compact ? 6 : 9),
           Flexible(
             child: Text(
               text,
               textAlign: TextAlign.center,
+              maxLines: compact ? 2 : null,
+              overflow: compact ? TextOverflow.ellipsis : null,
               style: AppUi.body.copyWith(
-                fontSize: 11.5,
-                height: 1.35,
+                fontSize: compact ? 10.5 : 11.5,
+                height: compact ? 1.25 : 1.35,
                 fontWeight: FontWeight.w700,
                 color: AppUi.textHi,
               ),
@@ -770,8 +871,8 @@ class _StakesLine extends StatelessWidget {
 
 /// Kararlar YATAY kart şeridi. Her seçenek eylemini canlandıran 2B sahneyle
 /// taçlanmış bir kart (Reigns/Total War hissi). Az seçenek (2) ortalanır ve
-/// panele yayılır; çok seçenek (4-5) yatay kaydırılır — kenarda soluk bir
-/// gradyan "devamı var" der.
+/// panele yayılır; masaüstünde çok seçenek yatay kaydırılır. Telefonda bütün
+/// kararlar sabit bir ızgarada görünür; karar ekranı kaydırma istemez.
 class _OptionStrip extends StatefulWidget {
   final List<PetitionOption> options;
   final Color accent;
@@ -805,20 +906,47 @@ class _OptionStripState extends State<_OptionStrip> {
     // 3'e kadar seçenek panele sığar → yay (Expanded). Fazlası kaydırılır.
     final fits = opts.length <= 3;
 
-    Widget card(PetitionOption o, {bool dense = false}) => _OptionCard(
+    Widget card(
+      PetitionOption o, {
+      bool dense = false,
+      bool gridCompact = false,
+    }) => _OptionCard(
       option: o,
       accent: widget.accent,
       dense: dense,
+      gridCompact: gridCompact,
       onTap: () => widget.onChoose(o),
     );
 
     if (widget.vertical) {
-      return ListView.separated(
-        controller: _scroll,
-        padding: EdgeInsets.zero,
-        itemCount: opts.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 7),
-        itemBuilder: (_, i) => card(opts[i], dense: true),
+      final columns = opts.length > 3 ? 2 : 1;
+      final rows = (opts.length / columns).ceil();
+      return Column(
+        children: [
+          for (var row = 0; row < rows; row++) ...[
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var column = 0; column < columns; column++) ...[
+                    if (row * columns + column < opts.length)
+                      Expanded(
+                        child: card(
+                          opts[row * columns + column],
+                          dense: columns == 1,
+                          gridCompact: columns > 1,
+                        ),
+                      )
+                    else
+                      const Expanded(child: SizedBox.shrink()),
+                    if (column != columns - 1) const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+            ),
+            if (row != rows - 1) const SizedBox(height: 6),
+          ],
+        ],
       );
     }
 
@@ -877,11 +1005,13 @@ class _OptionCard extends StatefulWidget {
   /// kararlar dar bir sütuna dizildiği için dikey kart (84dp sahne + 3 satır
   /// metin) sütuna iki karttan fazlasını sığdırmıyordu.
   final bool dense;
+  final bool gridCompact;
   const _OptionCard({
     required this.option,
     required this.accent,
     required this.onTap,
     this.dense = false,
+    this.gridCompact = false,
   });
   @override
   State<_OptionCard> createState() => _OptionCardState();
@@ -927,7 +1057,9 @@ class _OptionCardState extends State<_OptionCard> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            child: widget.dense
+            child: widget.gridCompact
+                ? _gridBody(o, chips)
+                : widget.dense
                 ? _denseBody(o, chips)
                 : Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1013,6 +1145,47 @@ class _OptionCardState extends State<_OptionCard> {
                   ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Dört ve üzeri telefon kararı — iki sütunlu, kaydırmasız kısa kart.
+  /// Başlık ve bedel ilk bakışta kalır; uzun açıklama tek satıra sıkışır.
+  Widget _gridBody(PetitionOption o, List<(String, String)> chips) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            o.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppUi.bodyHi.copyWith(fontSize: 11.5),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            o.detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppUi.body.copyWith(
+              fontSize: 9,
+              height: 1.2,
+              color: AppUi.textLo,
+            ),
+          ),
+          if (chips.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Wrap(
+              spacing: 3,
+              runSpacing: 3,
+              children: [
+                for (final d in chips.take(2)) _effectTablet(d.$1, d.$2),
+              ],
+            ),
+          ],
+        ],
       ),
     );
   }

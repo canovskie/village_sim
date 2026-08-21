@@ -72,7 +72,9 @@ flutter:
     # Dizin girdisi ÖZYİNELEMELİ DEĞİL — alt klasör ayrıca yazılmalı.
     - assets/nature/mud/
     - assets/effects/
+    - assets/events/
     - assets/animals/
+    - assets/vehicles/
     - assets/ui/
     - assets/audio/
 

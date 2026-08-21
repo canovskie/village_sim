@@ -38,11 +38,14 @@ import '../cutscene/cutscene_player.dart';
 import '../dev/dev_command.dart';
 import '../dev/dev_console.dart';
 import '../entities/villager_entity.dart';
+import '../entities/villager_job.dart';
+import '../entities/work_site.dart';
 import '../rendering/character_renderer.dart';
 import '../save/save_manager.dart';
 import '../scene/scene_data.dart';
 import '../systems/building_system.dart';
 import '../systems/chronicle.dart';
+import '../systems/contextual_guides.dart';
 import '../systems/estate_system.dart';
 import '../systems/event_system.dart';
 import '../systems/house_system.dart';
@@ -50,13 +53,16 @@ import '../systems/imperial.dart';
 import '../systems/law_book.dart';
 import '../systems/petition_system.dart';
 import '../systems/quest_book.dart';
+import '../systems/reckoning.dart';
 import '../systems/regime.dart';
+import '../systems/village_collapse.dart';
 import '../text/voice.dart';
 import '../ui/about_screen.dart';
 import '../ui/app_ui.dart';
 import '../ui/building_brief.dart';
 import '../ui/building_info_panel.dart';
 import '../ui/building_panel.dart';
+import '../ui/collapse_screen.dart';
 import '../ui/command_bar.dart';
 import '../ui/dev_panel.dart';
 import '../ui/event_banner.dart';
@@ -73,10 +79,12 @@ import '../ui/objective_panel.dart';
 import '../ui/option_scene_card.dart';
 import '../ui/petition_modal.dart';
 import '../ui/petition_scene_card.dart';
+import '../ui/reckoning_screen.dart';
 import '../ui/road_panel.dart';
 import '../ui/save_slots_screen.dart';
 import '../ui/settings_screen.dart';
 import '../ui/village_ledger.dart';
+import '../ui/village_pulse_card.dart';
 import '../ui/villager_info_panel.dart';
 import '../ui/villager_roster_view.dart';
 import '../ui/world_tag.dart';
@@ -470,6 +478,74 @@ Widget _label(String text) => Padding(
 // ─────────────────────────────────────────────────────────────────────────────
 
 List<Shot> buildShots() => <Shot>[
+  Shot(
+    id: 'village_pulse',
+    title: 'Köy Nabzı — Dünya İşi ve Karar Kartı',
+    group: 'Oyun HUD',
+    note:
+        'Modal olmayan tek kişilik küçük hikâye; 44dp dünya işareti ve iki kısa karar.',
+    w: 896,
+    h: 414,
+    build: () => _worldBackdrop(
+      child: Stack(
+        children: [
+          const Positioned(
+            left: 426,
+            top: 92,
+            child: Icon(Icons.person, size: 44, color: Color(0xFFDFC9A0)),
+          ),
+          const Positioned(
+            left: 426,
+            top: 52,
+            child: VillagePulseMarker(icon: '🍲', urgent: false, onTap: _noop),
+          ),
+          const Positioned(
+            left: 12,
+            right: 12,
+            bottom: 74,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: VillagePulseCard(
+                icon: '🍲',
+                actor: 'Ayşe',
+                title: 'Ateş başında bir tas daha',
+                body:
+                    'Ayşe, bu akşam ocaktaki yemeği bütün komşularla paylaşmak istiyor.',
+                primaryLabel: 'Sofrayı büyüt',
+                primarySub: '3 yiyecek',
+                primaryEnabled: true,
+                secondaryLabel: 'Kendi aralarında paylaşsınlar',
+                secondarySub: 'Küçük bir sofra',
+                remainingFraction: 0.62,
+                secondsLeft: 14,
+                onPrimary: _noop,
+                onSecondary: _noop,
+                onClose: _noop,
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 62,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: AppUi.surface0,
+                border: Border(top: BorderSide(color: AppUi.line)),
+              ),
+              child: Center(
+                child: Text(
+                  'İNŞA      KÖY BAĞLAMI      DEFTER · DİVAN · NÜFUS',
+                  style: AppUi.label.copyWith(color: AppUi.textLo),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
   // ── Ekranlar ────────────────────────────────────────────────────────────
   Shot(
     id: 'main_menu',
@@ -554,6 +630,65 @@ List<Shot> buildShots() => <Shot>[
     build: LoadingScreen.new,
   ),
   Shot(
+    id: 'reckoning',
+    title: 'Hesaplaşma — Köyün Son Hâli',
+    group: 'Ekranlar',
+    note: 'Sonuçlar karne yerine yaşayan köy ve beş karar işaretiyle okunur.',
+    w: 900,
+    h: 860,
+    build: () => const ReckoningScreen(
+      village: 'Pınarköy',
+      verdict: ReckoningVerdict.berat,
+      epilogue: 'Ocak ayakta kaldı; köy artık kendi sözünü taşıyabiliyor.',
+      identity: 'Ortak Ocak',
+      years: 3,
+      days: 47,
+      population: 26,
+      rows: [
+        ReckoningLedgerRow(
+          'Hanelerin rızası',
+          .76,
+          'Haneler aynı ateşe baktı.',
+        ),
+        ReckoningLedgerRow('Tüzüğün kalınlığı', .64, 'Beratlar kök saldı.'),
+        ReckoningLedgerRow('Köyün ağırlığı', .82, 'Ambar ve eller güçlüydü.'),
+        ReckoningLedgerRow(
+          'Kararların mirası',
+          .58,
+          'Bazı sözler hâlâ tartışılıyor.',
+        ),
+        ReckoningLedgerRow(
+          'İmparatorlukla arası',
+          .41,
+          'Defterde birkaç çentik kaldı.',
+        ),
+      ],
+      milestones: ['İlk tarla sürüldü', 'Meclis toplandı', 'Berat mühürlendi'],
+      onExit: _noop,
+    ),
+  ),
+  Shot(
+    id: 'collapse',
+    title: 'Köy Dağıldı — Sönmüş Ocak',
+    group: 'Ekranlar',
+    note: 'Başarısızlık metin belgesi değil, terk edilmiş köy dioraması.',
+    w: 900,
+    h: 760,
+    build: () => const CollapseScreen(
+      village: 'Kavaklı',
+      cause: CollapseCause.noHands,
+      days: 38,
+      peakAdults: 17,
+      identity: 'Demirhan Hanesi',
+      epitaph: [
+        'Kış uzun sürdü.',
+        'Son odun da ocağa atıldı.',
+        'Kapılar birer birer kapandı.',
+      ],
+      onExit: _noop,
+    ),
+  ),
+  Shot(
     id: 'cutscene_opening',
     title: 'Açılış Sinematiği',
     group: 'Ekranlar',
@@ -561,7 +696,8 @@ List<Shot> buildShots() => <Shot>[
     w: 1440,
     h: 810,
     settleMs: 2600,
-    build: () => const CutscenePlayer(cutscene: kOpeningCutscene, onDone: _noop),
+    build: () =>
+        const CutscenePlayer(cutscene: kOpeningCutscene, onDone: _noop),
   ),
   Shot(
     id: 'cutscene_choice',
@@ -590,13 +726,13 @@ List<Shot> buildShots() => <Shot>[
         'soyadına işlenir.',
     w: 1440,
     h: 810,
-    settleMs: 5000,
+    settleMs: 1800,
     // Ad kapısı sinematiğin SON çekimidir; önündeki kapı (kafile yükü)
     // oyuncu cevabı beklediği için yakalama oraya kendiliğinden varamaz.
     // O yüzden yalnız son çekim oynatılır.
     build: () => CutscenePlayer(
       cutscene: Cutscene([kOpeningCutscene.shots.last]),
-      timeScale: 6.0,
+      startAtGate: true,
       onDone: _noop,
     ),
   ),
@@ -611,7 +747,7 @@ List<Shot> buildShots() => <Shot>[
         'kimlik rayı klavyenin hemen üstünde kalır.',
     w: 1440,
     h: 810,
-    settleMs: 5000,
+    settleMs: 1800,
     build: () => Builder(
       builder: (context) {
         final media = MediaQuery.of(context);
@@ -619,7 +755,7 @@ List<Shot> buildShots() => <Shot>[
           data: media.copyWith(viewInsets: const EdgeInsets.only(bottom: 180)),
           child: CutscenePlayer(
             cutscene: Cutscene([kOpeningCutscene.shots.last]),
-            timeScale: 6.0,
+            startAtGate: true,
             onDone: _noop,
           ),
         );
@@ -628,44 +764,106 @@ List<Shot> buildShots() => <Shot>[
   ),
   Shot(
     id: 'world_tag',
-    title: 'Hover Künyesi — Dünya İçi',
+    title: 'Hover Künyeleri — Bağlamsal Kılavuzlar',
     group: 'Oyun İçi HUD',
     note:
-        'İmleç bir NPC üstüne gelince: kutu/kart YOK, hedefi takip eden '
-        'yazıt + ayak halkası. Okunurluk gölgeden gelir.',
-    w: 1000,
+        'Normal NPC, kavga, suçüstü, şantiye ve mezar aynı dünya diliyle '
+        'kendi tıklama davranışını söyler.',
+    w: 1300,
     h: 460,
     build: () => _worldBackdrop(
       child: Stack(
         children: [
           Positioned.fill(child: CustomPaint(painter: _TagDemoPainter())),
-          const WorldTagRing(feet: Offset(250, 330), radius: 26, opacity: 1.0),
-          const WorldTag(
-            anchor: Offset(250, 108),
+          const WorldTagRing(feet: Offset(170, 330), radius: 26, opacity: 1.0),
+          WorldTag(
+            anchor: const Offset(170, 108),
             title: 'Ayşe Hatun',
             line2: 'çiftçi · Demirci Hanesi',
             line3: 'tarlada · keyfi iyi',
+            hint: npcInteractionGuide(
+              isCriminalInAct: false,
+              isInConflict: false,
+            ),
             opacity: 1.0,
           ),
-          const WorldTagRing(feet: Offset(560, 330), radius: 26, opacity: 1.0),
-          const WorldTag(
-            anchor: Offset(560, 108),
+          const WorldTagRing(feet: Offset(440, 330), radius: 26, opacity: 1.0),
+          WorldTag(
+            anchor: const Offset(440, 108),
             title: 'Kara Mustafa',
-            line2: 'madenci · evsiz',
-            line3: 'hasta · kırgın',
+            line2: 'madenci · Kaya Hanesi',
+            line3: 'kavgada · öfkeli',
+            hint: npcInteractionGuide(
+              isCriminalInAct: false,
+              isInConflict: true,
+            ),
+            opacity: 1.0,
+          ),
+          const WorldTagRing(feet: Offset(700, 330), radius: 26, opacity: 1.0),
+          WorldTag(
+            anchor: const Offset(700, 108),
+            title: 'Veli',
+            line2: 'köylü · evsiz',
+            line3: 'suçüstü · tedirgin',
+            hint: npcInteractionGuide(
+              isCriminalInAct: true,
+              isInConflict: false,
+            ),
+            opacity: 1.0,
+          ),
+          WorldTag(
+            anchor: const Offset(980, 250),
+            title: 'Şantiye · Ambar',
+            line2: '2/3 usta çalışıyor · %46 tamam',
+            line3: '',
+            hint: workSiteInteractionGuide(WorkSiteKind.construction),
             opacity: 1.0,
           ),
           // Mezar künyesi — aynı dil, nötr renk.
           const WorldTag(
-            anchor: Offset(830, 300),
+            anchor: Offset(1190, 300),
             title: 'İsmail Dede',
             line2: 'huzur içinde yatıyor',
             line3: '',
+            hint: 'Tıkla: an',
             opacity: 1.0,
             accent: Color(0xFF7E86A0),
           ),
         ],
       ),
+    ),
+  ),
+  Shot(
+    id: 'camera_guide',
+    title: 'Kamera — İlk Kullanım Notu',
+    group: 'Oyun İçi HUD',
+    note:
+        'İlk gerçek kamera hareketine kadar komuta çubuğunun üstünde kalır; '
+        'giriş yöntemine göre masaüstü veya mobil sözlüğünü kullanır.',
+    w: 1000,
+    h: 460,
+    build: () => Builder(
+      builder: (context) {
+        final compact = useCompactGameUi(context);
+        return _worldBackdrop(
+          child: Stack(
+            children: [
+              Positioned.fill(child: CustomPaint(painter: _TagDemoPainter())),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: compact ? MobileUi.actionH + MobileUi.gap : 82,
+                child: Center(
+                  child: AppChip(
+                    label: cameraInteractionGuide(mobile: compact),
+                    color: AppUi.accentSoft,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     ),
   ),
   Shot(
@@ -704,7 +902,7 @@ List<Shot> buildShots() => <Shot>[
         morale: 0.63,
         lowWater: false,
         starving: false,
-        eventLabel: 'Gezgin ozan köye uğradı',
+        eventLabel: 'Kervan ozanı köye uğradı',
         stockCapacity: 200,
         fullPulse: 0,
         moraleBreakdown: const [
@@ -1053,24 +1251,25 @@ List<Shot> buildShots() => <Shot>[
       w: 560,
       h: 900,
       settleMs: 1500,
-      build: () => Scaffold(
-        backgroundColor: AppUi.surface0,
-        body: Center(
-          child: SingleChildScrollView(
-            child: VillagerInfoPanel(
-              villager: _richVillager(),
-              homeLabel: 'Konak',
-              isFollowed: false,
-              onClose: _noop,
-              onSelect: (_) {},
-              onToggleFollow: _noop,
-              onToggleFavorite: _noop,
-              onRename: (_) {},
-              initialTab: i,
-            ),
-          ),
-        ),
-      ),
+      build: () {
+        final panel = VillagerInfoPanel(
+          villager: _richVillager(),
+          homeLabel: 'Konak',
+          isFollowed: false,
+          onClose: _noop,
+          onSelect: (_) {},
+          onToggleFollow: _noop,
+          onToggleFavorite: _noop,
+          onRename: (_) {},
+          initialTab: i,
+        );
+        return Scaffold(
+          backgroundColor: AppUi.surface0,
+          body: kPhoneMode
+              ? Align(alignment: Alignment.centerRight, child: panel)
+              : Center(child: SingleChildScrollView(child: panel)),
+        );
+      },
     ),
   for (final (i, name) in const [(0, 'Köylüler'), (1, 'Haneler')])
     Shot(
@@ -1104,6 +1303,7 @@ List<Shot> buildShots() => <Shot>[
     ('building_townhall', BuildingType.townhall, 'Belediye'),
     ('building_market', BuildingType.market, 'Pazar'),
     ('building_house', BuildingType.woodenHouse, 'Ahşap Ev'),
+    ('building_mine', BuildingType.mineBuilding, 'Maden Ocağı'),
   ])
     Shot(
       id: 'info_$id',
@@ -1122,46 +1322,59 @@ List<Shot> buildShots() => <Shot>[
           _mkVillager('Nur', 'Demirhan', VillagerType.farmer, 12, seed: 6),
           _mkVillager('Deniz', 'Demirhan', VillagerType.farmer, 1.2, seed: 3),
         ];
+        final panel = BuildingInfoPanel(
+          building: b,
+          residents: residents,
+          workSites: type == BuildingType.mineBuilding
+              ? [
+                  WorkSite(
+                    id: 'gallery_mine',
+                    kind: WorkSiteKind.building,
+                    role: JobRole.miner,
+                    label: 'Maden Ocağı',
+                    wanted: 3,
+                    cx: 40,
+                    cy: 40,
+                    crew: [residents[0], residents[1]],
+                  ),
+                ]
+              : const [],
+          stockpile: _stock(),
+          stats: const VillageStats(
+            stockCapacity: 200,
+            morale: 0.63,
+            carrierSpeedMultiplier: 1.1,
+            wellCount: 2,
+            amenityMorale: 0.12,
+          ),
+          population: 24,
+          populationCap: 30,
+          onClose: _noop,
+          onSell: (_) {},
+          onFestival: _noop,
+          onDemolish: _noop,
+          onMove: _noop,
+          onTogglePaused: _noop,
+          onCollectTax: _noop,
+          onRefillWater: _noop,
+          onOpenDivan: _noop,
+          planning: const PopulationPlanning(
+            children: 6,
+            adults: 14,
+            elders: 4,
+            couples: 5,
+            pregnantSoon: 1,
+            housedSlots: 22,
+            totalHousing: 26,
+            foodPerDay: 12.5,
+            foodStock: 74,
+          ),
+        );
         return Scaffold(
           backgroundColor: AppUi.surface0,
-          body: Center(
-            child: SingleChildScrollView(
-              child: BuildingInfoPanel(
-                building: b,
-                residents: residents,
-                stockpile: _stock(),
-                stats: const VillageStats(
-                  stockCapacity: 200,
-                  morale: 0.63,
-                  carrierSpeedMultiplier: 1.1,
-                  wellCount: 2,
-                  amenityMorale: 0.12,
-                ),
-                population: 24,
-                populationCap: 30,
-                onClose: _noop,
-                onSell: (_) {},
-                onFestival: _noop,
-                onDemolish: _noop,
-                onMove: _noop,
-                onTogglePaused: _noop,
-                onCollectTax: _noop,
-                onRefillWater: _noop,
-                onOpenDivan: _noop,
-                planning: const PopulationPlanning(
-                  children: 6,
-                  adults: 14,
-                  elders: 4,
-                  couples: 5,
-                  pregnantSoon: 1,
-                  housedSlots: 22,
-                  totalHousing: 26,
-                  foodPerDay: 12.5,
-                  foodStock: 74,
-                ),
-              ),
-            ),
-          ),
+          body: kPhoneMode
+              ? Align(alignment: Alignment.centerRight, child: panel)
+              : Center(child: SingleChildScrollView(child: panel)),
         );
       },
     ),
@@ -1205,7 +1418,7 @@ List<Shot> buildShots() => <Shot>[
               ],
               marks: const [
                 DivanFact('🌾', 'Tarlalara iyi bakıldı', AppUi.sage),
-                DivanFact('🤝', 'Komşuyla anlaşma', AppUi.sage),
+                DivanFact('🤝', 'Kervanla anlaşma', AppUi.sage),
               ],
               legacy: 0.09,
               onOpenPetition: _noop,
@@ -2204,7 +2417,7 @@ Future<Uint8List?> _grab(Shot s) async {
   }
 }
 
-/// Künye shot'ı için iki gerçek köylü sprite'ı — künyenin sahnenin ÜSTÜNDE
+/// Künye shot'ı için üç gerçek köylü sprite'ı — künyenin sahnenin ÜSTÜNDE
 /// değil, sahneye AİT durduğu ancak gerçek gövdeyle görülür.
 class _TagDemoPainter extends CustomPainter {
   @override
@@ -2217,12 +2430,21 @@ class _TagDemoPainter extends CustomPainter {
       canvas.restore();
     }
 
-    body(250, 330, VillagerType.farmer, 1.2);
-    body(560, 330, VillagerType.miner, 3.4);
+    body(170, 330, VillagerType.farmer, 1.2);
+    body(440, 330, VillagerType.miner, 3.4);
+    body(700, 330, VillagerType.hunter, 2.2);
+    // Şantiye gövdesi — yarım yükselmiş taş kaide.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        const Rect.fromLTWH(930, 286, 100, 56),
+        const Radius.circular(5),
+      ),
+      Paint()..color = const Color(0xFF62533E),
+    );
     // Mezar taşı yerine sade bir höyük — künyenin nötr rengini denemek için.
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        const Rect.fromLTWH(806, 316, 48, 26),
+        const Rect.fromLTWH(1166, 316, 48, 26),
         const Radius.circular(12),
       ),
       Paint()..color = const Color(0xFF3A4038),

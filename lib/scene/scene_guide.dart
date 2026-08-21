@@ -12,9 +12,8 @@ part of '../main.dart';
 /// Önce "kademe 0"dı, yani kuruluşun dokuz adımının dokuzu da rehberliydi:
 /// oyuncu köyü kurarken sürekli birinin parmağını izliyordu, öğretici
 /// öğretmiyor EŞLİK EDİYORDU. Şimdi kapsam adımın kendisinde yazıyor
-/// ([Quest.guided]) ve yalnız DÖRT adım rehberli — dördü de kendi başına
-/// bulunamayacak şeyler. Gerisi o dördünün tekrarı; orada işaret öğretmez,
-/// dırdır eder.
+/// ([Quest.guided]). Kuruluşta yalnız üç fiziksel adım rehberli; Kanunname
+/// rehberi ise Belediye kurulana kadar hiç doğmaz.
 ///
 /// İkinci daralma iş vermeydi: "bir köylüye tıkla, İŞ bölümünden Toplayıcı de"
 /// zinciri tamamen kalktı, çünkü artık köy kadrosunu kendi kuruyor
@@ -68,6 +67,7 @@ extension _SceneGuide on _VillageSceneState {
     // İki halka: Defter'i aç → KANUNNAME rafına geç. (Mühür ânı rafın içinde;
     // orası artık oyuncunun kendi kararı, işaret oraya kadar götürür.)
     if (q.uiTarget == QuestUi.lawBook) {
+      if (!_lawmakingUnlocked) return null;
       if (_ledgerSection == null) {
         return const GuideCue(
           anchorId: GuideAnchors.gateDefter,
@@ -92,7 +92,10 @@ extension _SceneGuide on _VillageSceneState {
     }
 
     // ── 2) İNŞA ADIMI ─────────────────────────────────────────────────────
-    // İki halka: kartı seç → yerini göster. (Kart görünmüyorsa önce sekme.)
+    // Kartı bulana kadar rehberlik et; kart seçildikten sonra yerleştirme
+    // modunun kendi hayaleti + yeşil komutu devralır. Aynı anda ortada bir
+    // "Yerini seç" kartı daha açmak, sağdaki görev kartı ve yerleştirme
+    // komutuyla aynı şeyi üç kez söylüyordu.
     final bt = _stepBuildTarget;
     if (bt != null) {
       // Oduncu kulübesi dikildikten sonra görev, ilk kütüğü bekler. Bu arada
@@ -105,17 +108,7 @@ extension _SceneGuide on _VillageSceneState {
       }
       final label = kBuildingMeta[bt]?.label ?? 'yapı';
       if (_placing == bt) {
-        final heart = _villageHeart();
-        final at = heart == null ? null : _guideScreenOf(heart.$1, heart.$2);
-        if (at == null) return null;
-        return GuideCue(
-          spot: at,
-          radius: 62,
-          title: 'Yerini seç',
-          body:
-              'Boş bir kareye tıkla, $label oraya kurulsun. Hayalet '
-              'kırmızıysa orası uygun değil — biraz yana kay.',
-        );
+        return null;
       }
       final cardId = GuideAnchors.build(bt.name);
       if (GuideAnchors.has(cardId)) {
@@ -177,12 +170,30 @@ extension _SceneGuide on _VillageSceneState {
     _questVoiceLife = life;
   }
 
+  /// Tek tıklanan köylü kendi anlık işini söyler. Cümle state-machine'den
+  /// türetilmiştir; burada yalnız dünyaya bağlanıp görünür süre kazanır.
+  void _npcSpeak(VillagerEntity who, String line, {double life = 4.2}) {
+    if (line.isEmpty || who.isDying || !_villagers.contains(who)) return;
+    _npcVoiceWho = who;
+    _npcVoiceLine = line;
+    _npcVoiceLeft = life;
+    _npcVoiceLife = life;
+  }
+
   /// Konuşma balonunun 0→1 görünürlüğü (giriş 0.35 sn, çıkış 0.9 sn).
   double get _questVoiceOpacity {
     if (_questVoiceLeft <= 0) return 0;
     final elapsed = _questVoiceLife - _questVoiceLeft;
     final fadeIn = (elapsed / 0.35).clamp(0.0, 1.0);
     final fadeOut = (_questVoiceLeft / 0.9).clamp(0.0, 1.0);
+    return fadeIn < fadeOut ? fadeIn : fadeOut;
+  }
+
+  double get _npcVoiceOpacity {
+    if (_npcVoiceLeft <= 0) return 0;
+    final elapsed = _npcVoiceLife - _npcVoiceLeft;
+    final fadeIn = (elapsed / 0.18).clamp(0.0, 1.0);
+    final fadeOut = (_npcVoiceLeft / 0.65).clamp(0.0, 1.0);
     return fadeIn < fadeOut ? fadeIn : fadeOut;
   }
 
@@ -194,6 +205,15 @@ extension _SceneGuide on _VillageSceneState {
       if (_questVoiceLeft <= 0) {
         _questVoiceWho = null;
         _questVoiceLine = '';
+      }
+    }
+    if (_npcVoiceLeft > 0) {
+      _npcVoiceLeft -= dt;
+      if (_npcVoiceLeft <= 0 ||
+          _npcVoiceWho == null ||
+          !_villagers.contains(_npcVoiceWho)) {
+        _npcVoiceWho = null;
+        _npcVoiceLine = '';
       }
     }
     final id = _stepCache?.quest.id ?? '';
@@ -237,7 +257,7 @@ extension _SceneGuide on _VillageSceneState {
     if (!_guideWanted) return;
     // Dilekçe/modal açıkken öğretme — oyuncu başka bir işin içinde.
     //
-    // DEFTER İSTİSNA: berat adımının hedefi Defter'in İÇİNDE (kanunname rafı).
+    // DEFTER İSTİSNA: yazılı hüküm adımının hedefi Defter'in İÇİNDE.
     // Genel kural burada uygulansaydı öğretici tam gideceği yerde susardı.
     final inLedgerStep = _stepCache?.quest.uiTarget == QuestUi.lawBook;
     if ((_ledgerSection != null && !inLedgerStep) ||
@@ -288,7 +308,9 @@ extension _SceneGuide on _VillageSceneState {
     _guideOpen = false;
   }
 
-  /// Köyün sesi katmanı — konuşanın başının üstünde tek cümle.
+  /// Köyün sesi katmanı — konuşanın başının üstünde tek cümle. Oyuncunun tek
+  /// tıkla sorduğu anlık cevap varsa kuruluş cümlesinin üstüne yazılmaz; kısa
+  /// cevap sönünce devam eden kuruluş cümlesi yeniden görünür.
   ///
   /// Künye katmanıyla AYNI dönüşümü kullanır (zoom dahil); iki ayrı hesap
   /// cümleyi köylünün yanına değil yakınına koyar. Konuşan içeri girdiyse
@@ -300,9 +322,11 @@ extension _SceneGuide on _VillageSceneState {
           child: ListenableBuilder(
             listenable: _frame,
             builder: (_, _) {
-              final who = _questVoiceWho;
-              final op = _questVoiceOpacity;
-              if (who == null || op <= 0.01 || _questVoiceLine.isEmpty) {
+              final inspecting = _npcVoiceWho != null && _npcVoiceLeft > 0;
+              final who = inspecting ? _npcVoiceWho : _questVoiceWho;
+              final line = inspecting ? _npcVoiceLine : _questVoiceLine;
+              final op = inspecting ? _npcVoiceOpacity : _questVoiceOpacity;
+              if (who == null || op <= 0.01 || line.isEmpty) {
                 return const SizedBox.shrink();
               }
               if (who.isInsideBuilding || !_villagers.contains(who)) {
@@ -322,7 +346,7 @@ extension _SceneGuide on _VillageSceneState {
                       (at.dy - 126 * sc - 10).clamp(56.0, _viewSize.height),
                     ),
                     name: who.name,
-                    line: _questVoiceLine,
+                    line: line,
                     opacity: op,
                   ),
                 ],

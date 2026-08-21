@@ -65,10 +65,10 @@ extension _SceneRegime on _VillageSceneState {
   /// Köyün rejiminden gelen dış-güç duruşu (bkz. scene_imperial: direniş şansı,
   /// pazarlık eşiği, dikkat çarpanı ve hür rejimde meclis vetosu buradan okur).
   ImperialPosture get _imperialPosture => Regime.imperialPostureOf(
-        _regimeIdentity.regime,
-        oath: _oathRegime != null,
-        committed: _regimeIdentity.committed,
-      );
+    _regimeIdentity.regime,
+    oath: _oathRegime != null,
+    committed: _regimeIdentity.committed,
+  );
 
   /// İmparatorluğun köyde GÖRDÜĞÜ servet — mülkçü köy göz doldurur, ortakçı köy
   /// gözden ırak kalır. Ziyaret sıklığı ve talep sertliği bunu okur.
@@ -116,16 +116,21 @@ extension _SceneRegime on _VillageSceneState {
     final base = _regimeIdentity.base;
     if (base != null) _nudgeHousesByEstate(base, moodDelta: -0.08 * mult);
     _chronicle(
-        'Meclisin duruşuna rağmen imparatorluk kararını sen verdin.',
-        icon: '🏛', kind: ChronicleKind.decision);
+      'Meclisin duruşuna rağmen imparatorluk kararını sen verdin.',
+      icon: '🏛',
+      kind: ChronicleKind.decision,
+    );
     _showNotification('🏛 Meclisi dinlemedin — köy sesini bir kez daha yuttu.');
   }
 
   /// İmparatorluk yükünün İÇ politik dalgası + huzursuzluk kaplinajı. Her ödeme/
   /// yağma köyün sabrını yer; hangi kaynağın alındığı hangi zümreyi vurur.
   /// [severity] 0..1 (tam yağma = 1, hafif öşür = ~0.3); [raid] kanlı bitiş.
-  void _imperialInternalToll(ImperialDemand d, double severity,
-      {bool raid = false}) {
+  void _imperialInternalToll(
+    ImperialDemand d,
+    double severity, {
+    bool raid = false,
+  }) {
     // Zaten huzursuz bir köyü kanatmak daha tehlikeli: sabrı eşiği aşmışsa
     // sızıntı %50 artar (bir sonraki tikte krize dönebilir).
     final onEdge = _unrest >= Regime.kStir ? 1.5 : 1.0;
@@ -168,11 +173,11 @@ extension _SceneRegime on _VillageSceneState {
     // İMAN: inanan köy sıkıntıya sabreder — yatıştırma payı büyür (kader).
     // Dinî bir tiranın neden daha uzun ayakta kalabildiğinin cevabı burası.
     final faith = _faithEffect;
-    _unrest = (_unrest +
-            Regime.unrestStep(rule,
-                    morale: _stats.morale, days: days) -
+    _unrest =
+        (_unrest +
+                Regime.unrestStep(rule, morale: _stats.morale, days: days) -
                 faith.unrestRelief * days)
-        .clamp(0.0, 1.0);
+            .clamp(0.0, 1.0);
 
     // ÇÜRÜME — kaynayan köy iz bırakır, sakin köy izini yavaşça siler.
     _tickRegimeRot(days);
@@ -185,10 +190,15 @@ extension _SceneRegime on _VillageSceneState {
     if (before < Regime.kStir && _unrest >= Regime.kStir && !_unrestStirShown) {
       _unrestStirShown = true;
       final (title, _) = Regime.crisisText(rule.crisis);
-      _showNotification('⚠ Köy huzursuz — ${_regimeIdentity.title} '
-          'altında sabır azalıyor.${title.isEmpty ? '' : ' ($title yaklaşıyor)'}');
-      _chronicle('${_regimeIdentity.title} altında köy homurdanmaya başladı.',
-          icon: '⚠', kind: ChronicleKind.crisis);
+      _showNotification(
+        '⚠ Köy huzursuz — ${_regimeIdentity.title} '
+        'altında sabır azalıyor.${title.isEmpty ? '' : ' ($title yaklaşıyor)'}',
+      );
+      _chronicle(
+        '${_regimeIdentity.title} altında köy homurdanmaya başladı.',
+        icon: '⚠',
+        kind: ChronicleKind.crisis,
+      );
     }
     if (_unrest < Regime.kStir * 0.7) _unrestStirShown = false;
 
@@ -213,35 +223,42 @@ extension _SceneRegime on _VillageSceneState {
 
   /// Köy kronik bir hâle düştü mü — süregiden, rejime özgü bedel.
   bool get _isChronic =>
-      _regimeRot >= Regime.kChronic &&
-      _regimeRule.crisis != RegimeCrisis.none;
+      _regimeRot >= Regime.kChronic && _regimeRule.crisis != RegimeCrisis.none;
 
   /// Rejim tamamen çözülüyor mu — kronik bedel ağırlaşır, dış güç kokuyu alır.
   bool get _isFailing =>
-      _regimeRot >= Regime.kFailing &&
-      _regimeRule.crisis != RegimeCrisis.none;
+      _regimeRot >= Regime.kFailing && _regimeRule.crisis != RegimeCrisis.none;
 
   /// Çürüme döngüsü + kronik hâlin giriş/çıkış duyurusu. Kronikleşmek bir
   /// oyun-sonu değil: köy bu hâlde YAŞAR, ama bedelini her gün öder — ve uzun
   /// süre sakin kalırsa iz silinir, hâl kalkar (çıkış kapalı değil).
   void _tickRegimeRot(double days) {
     final was = _isChronic;
-    _regimeRot =
-        (_regimeRot + Regime.rotStep(unrest: _unrest, days: days))
-            .clamp(0.0, 1.0);
+    _regimeRot = (_regimeRot + Regime.rotStep(unrest: _unrest, days: days))
+        .clamp(0.0, 1.0);
     final now = _isChronic;
 
     if (now && !was && !_chronicShown) {
       _chronicShown = true;
       final (title, body) = Regime.chronicText(_regimeRule.crisis);
-      _showNotification('🕯 $title — ${_regimeIdentity.title} artık eskisi gibi değil.');
-      _chronicle('$title  $body', icon: '🕯', milestone: true, kind: ChronicleKind.crisis);
+      _showNotification(
+        '🕯 $title — ${_regimeIdentity.title} artık eskisi gibi değil.',
+      );
+      _chronicle(
+        '$title  $body',
+        icon: '🕯',
+        milestone: true,
+        kind: ChronicleKind.crisis,
+      );
       _award('regime.chronic.${_regimeRule.crisis.name}', title, '🕯');
     } else if (!now && was) {
       _chronicShown = false;
       _showNotification('🌱 Köy kendine geldi — yaralar kapandı.');
-      _chronicle('${_regimeIdentity.title} toparlandı; kronik hâl geçti.',
-          icon: '🌱', milestone: true);
+      _chronicle(
+        '${_regimeIdentity.title} toparlandı; kronik hâl geçti.',
+        icon: '🌱',
+        milestone: true,
+      );
     }
   }
 
@@ -259,7 +276,9 @@ extension _SceneRegime on _VillageSceneState {
       case RegimeCrisis.revolt:
         // Köy bölündü: sızıntı sürüyor, ara sıra biri sessizce çekip gider.
         nudgeMorale(-0.02 * heavy * days);
-        if (_isFailing && _villagers.length >= 8 && _rng.nextDouble() < 0.10 * days) {
+        if (_isFailing &&
+            _villagers.length >= 8 &&
+            _rng.nextDouble() < 0.10 * days) {
           final q = _mostAggrieved();
           if (q != null) _emigrateVillager(q);
         }
@@ -281,8 +300,8 @@ extension _SceneRegime on _VillageSceneState {
   }
 
   /// Kronik felçte müzakere daha da ağırlaşır — mühür temposu çarpanı.
-  double get _chronicInkMul => (_isChronic &&
-          _regimeRule.crisis == RegimeCrisis.deadlock)
+  double get _chronicInkMul =>
+      (_isChronic && _regimeRule.crisis == RegimeCrisis.deadlock)
       ? (_isFailing ? 1.45 : 1.25)
       : 1.0;
 
@@ -318,7 +337,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Meydana in, taviz ver',
             detail: 'Kese açılır, öfke iner.',
             resolutionPool: [
-              '👑 Meydanda konuştun. Kese hafifledi, omuzlar gevşedi.'
+              '👑 Meydanda konuştun. Kese hafifledi, omuzlar gevşedi.',
             ],
             goldDelta: -15,
             moraleAmount: 0.06,
@@ -329,7 +348,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Elebaşını bul, sürgün et',
             detail: 'Korku susturur — bir süreliğine.',
             resolutionPool: [
-              '👑 Elebaşı köyden sürüldü. Meydan sustu; bakışlar susmadı.'
+              '👑 Elebaşı köyden sürüldü. Meydan sustu; bakışlar susmadı.',
             ],
             moraleAmount: -0.05,
             moraleDays: 4,
@@ -360,7 +379,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Arabulucu ata',
             detail: 'Dışarıdan bir söz, düğümü çözer (10 akçe).',
             resolutionPool: [
-              '🤝 Arabulucu masaya oturdu. Divan üç gün sonra ilk kez dağıldı.'
+              '🤝 Arabulucu masaya oturdu. Divan üç gün sonra ilk kez dağıldı.',
             ],
             goldDelta: -10,
             moraleAmount: 0.05,
@@ -371,7 +390,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Meclisi dağıt, kararı sen ver',
             detail: 'Düğüm çözülür — meşruiyet çözülmez.',
             resolutionPool: [
-              '🤝 Meclisi dağıttın. Karar çıktı; kimse alkışlamadı.'
+              '🤝 Meclisi dağıttın. Karar çıktı; kimse alkışlamadı.',
             ],
             moraleAmount: -0.05,
             moraleDays: 4,
@@ -381,7 +400,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Bekle, konuşsunlar',
             detail: 'Meşru ama yavaş; divan bir gün daha kilitli.',
             resolutionPool: [
-              '🤝 Bekledin. Meclis hâlâ konuşuyor, defter hâlâ kapalı.'
+              '🤝 Bekledin. Meclis hâlâ konuşuyor, defter hâlâ kapalı.',
             ],
             estateMood: [(Estate.laborers, 0.04)],
           ),
@@ -399,7 +418,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Denetçi koy',
             detail: 'Kim ne yaptı yazılır (12 akçe).',
             resolutionPool: [
-              '⚖ Denetçi tezgâh tezgâh geziyor. İş yürüdü; keyif kaçtı.'
+              '⚖ Denetçi tezgâh tezgâh geziyor. İş yürüdü; keyif kaçtı.',
             ],
             goldDelta: -12,
             estateMood: [(Estate.laborers, -0.08), (Estate.artisans, 0.05)],
@@ -408,7 +427,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Çok çalışana fazla pay',
             detail: 'Eşitlikten bir tutam ödün.',
             resolutionPool: [
-              '⚖ Fazla çalışana fazla pay. Tezgâh ısındı, sofrada mırıltı var.'
+              '⚖ Fazla çalışana fazla pay. Tezgâh ısındı, sofrada mırıltı var.',
             ],
             moraleAmount: 0.04,
             moraleDays: 5,
@@ -435,7 +454,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Zenginden al, muhtaca ver',
             detail: 'Kese 20 akçe hafifler, sofra dolar.',
             resolutionPool: [
-              '🏪 Pay dağıtıldı. Sazlıktaki yatak bu gece boş kaldı.'
+              '🏪 Pay dağıtıldı. Sazlıktaki yatak bu gece boş kaldı.',
             ],
             goldDelta: -20,
             moraleAmount: 0.06,
@@ -446,7 +465,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Hayrat kur',
             detail: 'Veren el görünsün; makas kapanmaz ama acı diner.',
             resolutionPool: [
-              '🏪 Hayrat kuruldu. Kapıda sıra var ama kimse aç dönmüyor.'
+              '🏪 Hayrat kuruldu. Kapıda sıra var ama kimse aç dönmüyor.',
             ],
             goldDelta: -8,
             moraleAmount: 0.04,
@@ -457,7 +476,7 @@ extension _SceneRegime on _VillageSceneState {
             label: 'Pazar kendi dengesini bulur',
             detail: 'Karışma; kese dolsun.',
             resolutionPool: [
-              '🏪 Karışmadın. Kese doldu, sazlıktaki yatak sayısı da arttı.'
+              '🏪 Karışmadın. Kese doldu, sazlıktaki yatak sayısı da arttı.',
             ],
             goldDelta: 15,
             moraleAmount: -0.05,
@@ -474,16 +493,19 @@ extension _SceneRegime on _VillageSceneState {
     }
 
     _regimeCrisisUnrest = unrestByLabel;
-    _presentPetition(Petition(
-      id: 'regime.crisis.${c.name}',
-      petitioner: 'Köyün hâli',
-      icon: _regimeIdentity.icon,
-      title: title,
-      bodyPool: [body],
-      stakes: 'Rejimin bedeli — kararsız kalırsan huzursuzluk kaynamaya devam eder.',
-      tone: PetitionTone.ominous,
-      options: options,
-    ));
+    _presentPetition(
+      Petition(
+        id: 'regime.crisis.${c.name}',
+        petitioner: 'Köyün hâli',
+        icon: _regimeIdentity.icon,
+        title: title,
+        bodyPool: [body],
+        stakes:
+            'Rejimin bedeli — kararsız kalırsan huzursuzluk kaynamaya devam eder.',
+        tone: PetitionTone.ominous,
+        options: options,
+      ),
+    );
   }
 
   /// Kriz dilekçesinin seçilen şıkkının huzursuzluğa etkisi. [_resolvePetition]
@@ -563,10 +585,19 @@ extension _SceneRegime on _VillageSceneState {
     // Yemin köyün kendini DIŞARIYA ilan ettiği andır — bu yüzden cümle "köy"
     // demez, köyün adını söyler (bkz. scene_voice `_villageWith` kuralı).
     _showNotification(
-        '${id.icon} $title. ${_villageWith(Suffix.genitive)} yemini.');
-    _chronicle('$title  $decree', icon: id.icon, milestone: true, kind: ChronicleKind.decision);
-    _award('oath.${id.regime.name}', '${id.title}: $_villageName yeminini etti',
-        id.icon);
+      '${id.icon} $title. ${_villageWith(Suffix.genitive)} yemini.',
+    );
+    _chronicle(
+      '$title  $decree',
+      icon: id.icon,
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
+    _award(
+      'oath.${id.regime.name}',
+      '${id.title}: $_villageName yeminini etti',
+      id.icon,
+    );
   }
 
   // ── MECLİS (hür rejim) ─────────────────────────────────────────────────────
@@ -578,12 +609,18 @@ extension _SceneRegime on _VillageSceneState {
   void _councilResolvePetition() {
     final p = _pendingPetition;
     if (p == null || p.options.isEmpty) return;
-    final i = Regime.pickCouncilOption(p.options,
-        mood: _estateMoodMap(), villageMorale: _stats.morale);
+    final i = Regime.pickCouncilOption(
+      p.options,
+      mood: _estateMoodMap(),
+      villageMorale: _stats.morale,
+    );
     final o = p.options[i];
     _showNotification('🏛 Meclis sen olmadan karar verdi: ${o.label}');
-    _chronicle('Meclis "${p.title}" için kendi kararını verdi: ${o.label}.',
-        icon: '🏛', kind: ChronicleKind.decision);
+    _chronicle(
+      'Meclis "${p.title}" için kendi kararını verdi: ${o.label}.',
+      icon: '🏛',
+      kind: ChronicleKind.decision,
+    );
     _resolvePetition(p, o);
     // Köy kendi işini gördü — bu bir başarısızlık değil, rejimin doğası.
     // Yine de senin sesin duyulmadı: küçük bir meşruiyet aşınması.
@@ -611,7 +648,11 @@ extension _SceneRegime on _VillageSceneState {
       _petitionTimer = _petitionInterval();
     });
     _showNotification('✋ Dilekçeyi reddettin. Meydan sessiz — ama boş değil.');
-    _chronicle('"${p.title}" dilekçesi meclise varmadan reddedildi.', icon: '✋', kind: ChronicleKind.decision);
+    _chronicle(
+      '"${p.title}" dilekçesi meclise varmadan reddedildi.',
+      icon: '✋',
+      kind: ChronicleKind.decision,
+    );
   }
 
   /// Baskı rejimi: mühlet dolan dilekçe zorunlu huzura ÇIKMAZ, sessizce düşer.
@@ -644,10 +685,11 @@ extension _SceneRegime on _VillageSceneState {
       _regimeRule.councilVotesLaws && _regimeIdentity.committed;
 
   CouncilVote _voteOnLaw(LawDef l) => Regime.voteOnLaw(
-        effects: l.seal.estateMood,
-        mood: _estateMoodMap(),
-        villageMorale: _stats.morale,
-      );
+    effects: l.seal.estateMood,
+    mood: _estateMoodMap(),
+    villageMorale: _stats.morale,
+    traditionSupport: OralTradition.supports(l, _villageMemory) ? 0.12 : 0,
+  );
 
   // ── FESİH ──────────────────────────────────────────────────────────────────
 
@@ -660,16 +702,17 @@ extension _SceneRegime on _VillageSceneState {
     final heavy = _oathRegime != null ? 1.6 : 1.0;
 
     setStateHere(() {
-      _policies.restoreSealed(
-          [for (final id in _policies.sealed) if (id != l.id) id]);
+      _policies.restoreSealed([
+        for (final id in _policies.sealed)
+          if (id != l.id) id,
+      ]);
       // Fermanın KENDİ bayrakları kalkar (kapılar tazelensin). setsFlags'in
       // tamamı DEĞİL: aynı bayrağı bir dilekçe de basabiliyor ve fermanı bozmak
       // o kararın izini silmemeli (bkz. LawDef.repealClears).
       _villageMemory.removeAll(l.repealClears);
       _lawCtxCache = null;
       pushPolicyMorale(-0.05 * heavy, 4.0);
-      _governanceLegacy =
-          (_governanceLegacy - 0.02 * heavy).clamp(-0.12, 0.12);
+      _governanceLegacy = (_governanceLegacy - 0.02 * heavy).clamp(-0.12, 0.12);
       _inkDryTotal = l.deliberationDays * kGameDaySeconds * 1.5 * heavy;
       _policies.inkDryUntilSim = _time + _inkDryTotal;
       _applyPolicySideChannels();
@@ -680,7 +723,14 @@ extension _SceneRegime on _VillageSceneState {
       }
       _lawRitual = null;
     });
-    _showNotification('🕯 ${l.title} defterden silindi. Mürekkep uzun kuruyacak.');
-    _chronicle('${l.title} feshedildi.', icon: '🕯', milestone: true, kind: ChronicleKind.decision);
+    _showNotification(
+      '🕯 ${l.title} defterden silindi. Mürekkep uzun kuruyacak.',
+    );
+    _chronicle(
+      '${l.title} feshedildi.',
+      icon: '🕯',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
   }
 }

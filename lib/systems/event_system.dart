@@ -8,15 +8,15 @@ import '../text/voice.dart';
 /// Başlık oyuncunun gördüğü metindir ve serbestçe yeniden yazılabilir; id ise
 /// omen/sahne/senaryo bağlarının tutunduğu çividir.
 abstract final class EventIds {
-  static const drought   = 'drought';
-  static const plague    = 'plague';
+  static const drought = 'drought';
+  static const plague = 'plague';
   static const beastRaid = 'beastRaid';
-  static const storm     = 'storm';
+  static const storm = 'storm';
   static const houseFire = 'houseFire';
-  static const bard      = 'bard';
-  static const caravan   = 'caravan';
-  static const bounty    = 'bounty';
-  static const accord    = 'accord';
+  static const bard = 'bard';
+  static const caravan = 'caravan';
+  static const bounty = 'bounty';
+  static const accord = 'accord';
 }
 
 /// Olay kategorisi — UI banner rengi ve filtre için.
@@ -26,18 +26,18 @@ enum EventCategory { positive, negative, neutral }
 /// Her id painter içinde özel partikül/overlay pass'e karşılık gelir.
 enum EventFx {
   none,
-  festival,       // BESPOKE şenlik: flama/çelenk + konfeti yağmuru + yükselen fener
-  cropBlight,     // BESPOKE: tarlalarda yayılan mantar lekesi + şapka + spor
-  vigil,          // BESPOKE: ateş çevresinde mum halkası + yükselen ruh kıvılcımı (matem)
-  cultRite,       // BESPOKE: parlayan ayin çemberi + dönen rünler + okült ışıltı
-  meteorShower,   // BESPOKE: gece gökten süzülen kayan yıldızlar + köye düşen göktaşı flaşı
-  wedding,        // BESPOKE: ateş başında dans eden çift + yükselen kalpler + yaprak/konfeti yağmuru
-  harvestBounty,  // BESPOKE: tarlalarda altın ışıltı + olgunlaşan başak + yukarı süzülen bereket zerresi
-  plagueAura,     // hastalıklı yeşil ekran tonu + yavaşlama (görsel: sick duruşu)
-  fireOutbreak,   // rastgele bina üstünde alev + yoğun duman
-  storm,          // yağmur boost + ekran maviye kayar
-  droughtHaze,    // ekran sarımsı, hava sıcak hissi
-  beastEyes,      // gece ateş etrafında çift kırmızı göz
+  festival, // BESPOKE şenlik: flama/çelenk + konfeti yağmuru + yükselen fener
+  cropBlight, // BESPOKE: tarlalarda yayılan mantar lekesi + şapka + spor
+  vigil, // BESPOKE: ateş çevresinde mum halkası + yükselen ruh kıvılcımı (matem)
+  cultRite, // BESPOKE: parlayan ayin çemberi + dönen rünler + okült ışıltı
+  meteorShower, // BESPOKE: gece gökten süzülen kayan yıldızlar + köye düşen göktaşı flaşı
+  wedding, // BESPOKE: ateş başında dans eden çift + yükselen kalpler + yaprak/konfeti yağmuru
+  harvestBounty, // BESPOKE: tarlalarda altın ışıltı + olgunlaşan başak + yukarı süzülen bereket zerresi
+  plagueAura, // hastalıklı yeşil ekran tonu + yavaşlama (görsel: sick duruşu)
+  fireOutbreak, // rastgele bina üstünde alev + yoğun duman
+  storm, // yağmur boost + ekran maviye kayar
+  droughtHaze, // ekran sarımsı, hava sıcak hissi
+  beastEyes, // gece ateş etrafında çift kırmızı göz
 }
 
 /// Bir olayın aktifken sahneye uyguladığı görsel + simülasyon etkileri.
@@ -45,17 +45,23 @@ enum EventFx {
 class EventEffect {
   /// Sahne partikül/overlay seçici.
   final EventFx fx;
+
   /// Ekran tonu — yumuşak alpha ile sahne üstüne çizilir.
   /// Null = ton değişimi yok.
   final Color? screenTint;
+
   /// Yağmur şiddeti override — efekt aktifken bu en az `rainBoost` olur.
   final double rainBoost;
+
   /// NPC hız çarpanı (1.0 = değişim yok). Salgın 0.7, vb.
   final double npcSpeedMul;
+
   /// Çiftçi/tarla büyüme çarpanı (1.0 = değişim yok). Kuraklık 0.4, hasat 1.5.
   final double farmGrowthMul;
+
   /// İnşaatçı çalışma çarpanı (1.0 = değişim yok). Fırtınada 0.0 (durur).
   final double builderMul;
+
   /// Bu sahne efektinin toplam aktif süresi (sn). Genelde moral süresi ile
   /// uyumlu, ama anlık olaylar için de görsel "buruşma" verebilir.
   final double duration;
@@ -77,7 +83,7 @@ enum EventSeverity { minor, major }
 /// Bir olay tetiklendiğinde sahnenin görmesi gereken durum.
 /// `EventSystem.roll` koşullu filtrelemede kullanır.
 class EventContext {
-  final int  population;
+  final int population;
   final ResourceBundle stockpile;
   final List<BuildingEntity> buildings;
 
@@ -86,7 +92,6 @@ class EventContext {
     required this.stockpile,
     required this.buildings,
   });
-
 }
 
 /// Karar gerektiren olaylarda oyuncuya sunulan seçenek. Seçilince delta'lar
@@ -96,8 +101,8 @@ class EventChoice {
   /// Buton metni değişince davranış bozulmasın diye label'a ASLA switch'lenmez.
   final String id;
 
-  final String label;   // buton metni (örn. "Yakala")
-  final String detail;  // alt açıklama (örn. "15 altına muhafız tutarsın")
+  final String label; // buton metni (örn. "Yakala")
+  final String detail; // alt açıklama (örn. "15 altına muhafız tutarsın")
 
   /// Vakanüvis satırı — kuru, kısa; kararın yıllığa düşen izi.
   final String annal;
@@ -135,12 +140,12 @@ class EventChoice {
   /// UI önizlemesi için kompakt etki listesi (banner deltaSummary ile aynı şema).
   List<(String, String)> deltaSummary() {
     final r = <(String, String)>[];
-    if (foodDelta  != 0) r.add(('🍞', EventOutcome._fmt(foodDelta)));
-    if (goldDelta  != 0) r.add(('🪙', EventOutcome._fmt(goldDelta)));
-    if (woodDelta  != 0) r.add(('🪵', EventOutcome._fmt(woodDelta)));
+    if (foodDelta != 0) r.add(('🍞', EventOutcome._fmt(foodDelta)));
+    if (goldDelta != 0) r.add(('🪙', EventOutcome._fmt(goldDelta)));
+    if (woodDelta != 0) r.add(('🪵', EventOutcome._fmt(woodDelta)));
     if (stoneDelta != 0) r.add(('🪨', EventOutcome._fmt(stoneDelta)));
-    if (ironDelta  != 0) r.add(('⚙', EventOutcome._fmt(ironDelta)));
-    if (coalDelta  != 0) r.add(('⬛', EventOutcome._fmt(coalDelta)));
+    if (ironDelta != 0) r.add(('⚙', EventOutcome._fmt(ironDelta)));
+    if (coalDelta != 0) r.add(('⬛', EventOutcome._fmt(coalDelta)));
     if (moraleModifier != 0) {
       final m = moraleModifier > 0
           ? '+${(moraleModifier * 100).round()}%'
@@ -244,26 +249,26 @@ class EventOutcome {
   /// Seçilen varyantı taşıyan kopya — banner/modal ile bildirim aynı cümleyi
   /// göstersin diye olay vurduğu anda materyalize edilir.
   EventOutcome withMessage(String m) => EventOutcome(
-        id: id,
-        title: title,
-        icon: icon,
-        message: m,
-        annalPool: annalPool,
-        category: category,
-        severity: severity,
-        foodDelta: foodDelta,
-        goldDelta: goldDelta,
-        woodDelta: woodDelta,
-        stoneDelta: stoneDelta,
-        ironDelta: ironDelta,
-        coalDelta: coalDelta,
-        moraleModifier: moraleModifier,
-        duration: duration,
-        canFire: canFire,
-        weight: weight,
-        effect: effect,
-        choices: choices,
-      );
+    id: id,
+    title: title,
+    icon: icon,
+    message: m,
+    annalPool: annalPool,
+    category: category,
+    severity: severity,
+    foodDelta: foodDelta,
+    goldDelta: goldDelta,
+    woodDelta: woodDelta,
+    stoneDelta: stoneDelta,
+    ironDelta: ironDelta,
+    coalDelta: coalDelta,
+    moraleModifier: moraleModifier,
+    duration: duration,
+    canFire: canFire,
+    weight: weight,
+    effect: effect,
+    choices: choices,
+  );
 
   bool get isTemporary => duration > 0 && moraleModifier != 0;
 
@@ -271,12 +276,12 @@ class EventOutcome {
   /// Her giriş: ('🍞', '+28') gibi.
   List<(String, String)> deltaSummary() {
     final r = <(String, String)>[];
-    if (foodDelta  != 0) r.add(('🍞', _fmt(foodDelta)));
-    if (goldDelta  != 0) r.add(('🪙', _fmt(goldDelta)));
-    if (woodDelta  != 0) r.add(('🪵', _fmt(woodDelta)));
+    if (foodDelta != 0) r.add(('🍞', _fmt(foodDelta)));
+    if (goldDelta != 0) r.add(('🪙', _fmt(goldDelta)));
+    if (woodDelta != 0) r.add(('🪵', _fmt(woodDelta)));
     if (stoneDelta != 0) r.add(('🪨', _fmt(stoneDelta)));
-    if (ironDelta  != 0) r.add(('⚙', _fmt(ironDelta)));
-    if (coalDelta  != 0) r.add(('⬛', _fmt(coalDelta)));
+    if (ironDelta != 0) r.add(('⚙', _fmt(ironDelta)));
+    if (coalDelta != 0) r.add(('⬛', _fmt(coalDelta)));
     if (moraleModifier != 0) {
       final m = moraleModifier > 0
           ? '+${(moraleModifier * 100).round()}%'
@@ -309,7 +314,8 @@ class EventSystem {
     // ─── NEGATİF (afet/tehdit — hepsi bespoke fx) ─────────────────────────────
     EventOutcome(
       id: EventIds.drought,
-      title: 'Kuraklık', icon: '☀',
+      title: 'Kuraklık',
+      icon: '☀',
       messagePool: [
         'Kuyunun kovası bugün iki kez boş çıktı. Tarlada toprak ayak altında un gibi dağılıyor.',
         'Dere yatağı taş kesti. Başaklar öğle olmadan başını eğiyor.',
@@ -321,7 +327,9 @@ class EventSystem {
         'Gün {gün}. {mevsim} kurak geçti. Ambar eksik doldu.',
       ],
       category: EventCategory.negative,
-      foodDelta: -15, moraleModifier: -0.20, duration: 45,
+      foodDelta: -15,
+      moraleModifier: -0.20,
+      duration: 45,
       weight: 1.0,
       effect: EventEffect(
         fx: EventFx.droughtHaze,
@@ -332,7 +340,8 @@ class EventSystem {
     ),
     EventOutcome(
       id: EventIds.plague,
-      title: 'Salgın', icon: '🤒',
+      title: 'Salgın',
+      icon: '🤒',
       messagePool: [
         'İki hane kapısını içeriden sürgüledi. Geceleri öksürük sesi geliyor.',
         'Ateşi çıkan üç köylü yatağa düştü. Hastalık ocaktan ocağa atlıyor.',
@@ -356,11 +365,13 @@ class EventSystem {
         EventChoice(
           id: 'healer',
           label: 'Şifacı çağır',
-          detail: '20 altın. Kasabadan şifacı gelir, hastalık erken kırılır.',
+          detail: '20 altın. Kervanla gelen şifacı hastalığı erken kırar.',
           resolutionMessage:
-              'Şifacı kapı kapı dolaştı, kaynattığı otu her ocağa bıraktı. Öksürük seyrekleşti.',
-          annal: 'Şifacı çağrıldı. Hastalık erken kırıldı.',
-          goldDelta: -20, moraleModifier: -0.10, duration: 20,
+              'Kervanın şifacısı kapı kapı dolaştı, kaynattığı otu her ocağa bıraktı. Öksürük seyrekleşti.',
+          annal: 'Kervanın şifacısı çağrıldı. Hastalık erken kırıldı.',
+          goldDelta: -20,
+          moraleModifier: -0.10,
+          duration: 20,
           effect: EventEffect(
             fx: EventFx.plagueAura,
             screenTint: Color(0x18507040),
@@ -375,7 +386,8 @@ class EventSystem {
           resolutionMessage:
               'Köy hastalığı kendi yatağında bekledi. Bedelini de o yatakta ödedi.',
           annal: 'Şifacı çağrılmadı. Köy hastalığı yatarak bekledi.',
-          moraleModifier: -0.25, duration: 50,
+          moraleModifier: -0.25,
+          duration: 50,
           effect: EventEffect(
             fx: EventFx.plagueAura,
             screenTint: Color(0x22507040),
@@ -387,7 +399,8 @@ class EventSystem {
     ),
     EventOutcome(
       id: EventIds.beastRaid,
-      title: 'Kurtlar', icon: '🐺',
+      title: 'Kurtlar',
+      icon: '🐺',
       messagePool: [
         'Ağılın çiti gece yarısı yıkıldı. Geriye kan ve dört ayak izi kaldı.',
         'Sürü bu sabah eksik döndü. Ağaç hattında kırık dallar, taze iz var.',
@@ -405,7 +418,8 @@ class EventSystem {
         EventChoice(
           id: 'guards',
           label: 'Muhafızları gönder',
-          detail: '5 yiyecek. Meşaleli adamlar ağaç hattına dayanır, sürü kurtulur.',
+          detail:
+              '5 yiyecek. Meşaleli adamlar ağaç hattına dayanır, sürü kurtulur.',
           resolutionMessage:
               'Meşaleler ağaç hattına dayandı. Uluma uzaklaştı, sürü ağılda kaldı.',
           annal: 'Muhafızlar gönderildi. Sürü kurtarıldı.',
@@ -414,17 +428,21 @@ class EventSystem {
         EventChoice(
           id: 'hide',
           label: 'Kapıları sürgüle',
-          detail: 'Kimse dışarı çıkmaz. Ağıl açıkta kalır: yiyecek -18, moral -10%.',
+          detail:
+              'Kimse dışarı çıkmaz. Ağıl açıkta kalır: yiyecek -18, moral -10%.',
           resolutionMessage:
               'Kapılar sürgülendi, ağıl açıkta kaldı. Sabah sayım eksik çıktı.',
           annal: 'Kapılar sürgülendi. Ağıl kurda bırakıldı.',
-          foodDelta: -18, moraleModifier: -0.10, duration: 25,
+          foodDelta: -18,
+          moraleModifier: -0.10,
+          duration: 25,
         ),
       ],
     ),
     EventOutcome(
       id: EventIds.storm,
-      title: 'Fırtına', icon: '⛈',
+      title: 'Fırtına',
+      icon: '⛈',
       messagePool: [
         'Rüzgâr çatı kirişini söktü, tahtalar avluya savruldu.',
         'Kepenkler gece boyu çarptı. Sabah damların yarısı yerdeydi.',
@@ -436,7 +454,9 @@ class EventSystem {
         'Gün {gün}. {mevsim} fırtınası vurdu. İnşaat durdu.',
       ],
       category: EventCategory.negative,
-      woodDelta: -16, moraleModifier: -0.10, duration: 20,
+      woodDelta: -16,
+      moraleModifier: -0.10,
+      duration: 20,
       weight: 0.9,
       effect: EventEffect(
         fx: EventFx.storm,
@@ -448,7 +468,8 @@ class EventSystem {
     ),
     EventOutcome(
       id: EventIds.houseFire,
-      title: 'Ev Yangını', icon: '🔥',
+      title: 'Ev Yangını',
+      icon: '🔥',
       messagePool: [
         'Bacadan sıçrayan kıvılcım samanı tutuşturdu. Alev şimdiden kirişte.',
         'Bir kulübenin kapısından duman fışkırıyor, içeriden çıtırtı geliyor.',
@@ -475,7 +496,10 @@ class EventSystem {
           resolutionMessage:
               'Kova zinciri kuyudan çatıya uzandı. Kirişler tuttu, ev ayakta kaldı.',
           annal: 'Kova zinciri kuruldu. Ev kurtarıldı.',
-          woodDelta: -10, foodDelta: -4, moraleModifier: -0.05, duration: 18,
+          woodDelta: -10,
+          foodDelta: -4,
+          moraleModifier: -0.05,
+          duration: 18,
         ),
         EventChoice(
           id: 'letBurn',
@@ -484,7 +508,9 @@ class EventSystem {
           resolutionMessage:
               'Kulübe sabaha kül oldu. Köylüler tek kelime etmeden dağıldı.',
           annal: 'Yangına girilmedi. Kulübe kül oldu.',
-          woodDelta: -28, moraleModifier: -0.15, duration: 30,
+          woodDelta: -28,
+          moraleModifier: -0.15,
+          duration: 30,
         ),
       ],
     ),
@@ -494,41 +520,48 @@ class EventSystem {
     // (sevinçli bekleyiş) + dünya-içi sahne (toplanma/müzik/dans/şölen) yaşar.
     EventOutcome(
       id: EventIds.bard,
-      title: 'Gezgin Ozan', icon: '🎵',
+      title: 'Kervan Ozanı',
+      icon: '🎵',
       messagePool: [
-        'Yoldan sazlı bir adam geldi, ateşin başına oturdu. Çemberi ilk kuran çocuklar oldu.',
+        'Kervanla sazlı bir adam geldi, ateşin başına oturdu. Çemberi ilk kuran çocuklar oldu.',
         'Ozan ilk türküye başlayınca kimse işine dönmedi. Akşam uzadıkça uzadı.',
         'Bir kopuz sesi meydanı doldurdu. {köy} bu gece geç yattı.',
       ],
       annalPool: [
-        'Gün {gün}. Bir ozan uğradı. Meydanda türkü söylendi.',
-        'Gün {gün}. Ozan geldi, iki gece kaldı.',
+        'Gün {gün}. Kervanla bir ozan uğradı. Meydanda türkü söylendi.',
+        'Gün {gün}. Kervanın ozanı iki gece kaldı.',
         'Gün {gün}. Ateş başında saz çalındı.',
       ],
       category: EventCategory.positive,
-      moraleModifier: 0.12, duration: 40,
+      moraleModifier: 0.12,
+      duration: 40,
       weight: 0.9,
     ),
     EventOutcome(
       id: EventIds.caravan,
-      title: 'Kervan', icon: '🛒',
+      title: 'Kervan',
+      icon: '🛒',
       messagePool: [
         'Kervan tepeyi aştı, katırlar yüklü. Pazara tuz, kumaş, bir de bal kokusu indi.',
-        'Tüccar denkleri açtı. Akşama kadar el kese değiştirdi.',
-        'Yabancının terazisi doğru tarttı. Alışveriş {köy} lehine kapandı.',
+        'Kervan denkleri açtı. Akşama kadar el kese değiştirdi.',
+        'Kervanın terazisi doğru tarttı. Alışveriş {köy} lehine kapandı.',
       ],
       annalPool: [
         'Gün {gün}. Kervan geldi. Pazar bir gün açık kaldı.',
         'Gün {gün}. Tuz ve kumaş alındı, kese doldu.',
-        'Gün {gün}. Tüccar uğradı. Ticaret {köy} lehine döndü.',
+        'Gün {gün}. Kervan uğradı. Ticaret {köy} lehine döndü.',
       ],
       category: EventCategory.positive,
-      goldDelta: 10, foodDelta: 4, moraleModifier: 0.05, duration: 30,
+      goldDelta: 10,
+      foodDelta: 4,
+      moraleModifier: 0.05,
+      duration: 30,
       weight: 0.8,
     ),
     EventOutcome(
       id: EventIds.bounty,
-      title: 'Bereketli Hasat', icon: '🌾',
+      title: 'Bereketli Hasat',
+      icon: '🌾',
       messagePool: [
         'Başak öyle ağır ki sap taşımıyor. Orak bugün iki kat iş gördü.',
         'Ambarın kapısı zor kapandı. Çuvallar duvara kadar dizili.',
@@ -540,7 +573,9 @@ class EventSystem {
         'Gün {gün}. Toprak cömert davrandı.',
       ],
       category: EventCategory.positive,
-      foodDelta: 18, moraleModifier: 0.08, duration: 30,
+      foodDelta: 18,
+      moraleModifier: 0.08,
+      duration: 30,
       weight: 0.7,
       effect: EventEffect(
         fx: EventFx.harvestBounty,
@@ -550,7 +585,8 @@ class EventSystem {
     ),
     EventOutcome(
       id: EventIds.accord,
-      title: 'Hanelerin Barışı', icon: '🤝',
+      title: 'Hanelerin Barışı',
+      icon: '🤝',
       messagePool: [
         'İki hane kuyu başında karşılaştı, kavga çıkmadı. Biri diğerine sıra verdi.',
         'Yıllardır selam vermeyen iki kapı bu akşam aynı ateşe oturdu.',
@@ -562,7 +598,8 @@ class EventSystem {
         'Gün {gün}. {köy} dargınlığı bıraktı.',
       ],
       category: EventCategory.positive,
-      moraleModifier: 0.10, duration: 40,
+      moraleModifier: 0.10,
+      duration: 40,
       weight: 0.6,
     ),
   ];
@@ -584,7 +621,9 @@ class EventSystem {
     if (viable.isEmpty) {
       // Güvenlik: en azından kuraklık daima uygun olsun
       return events.firstWhere(
-          (e) => e.id == EventIds.drought, orElse: () => events.first);
+        (e) => e.id == EventIds.drought,
+        orElse: () => events.first,
+      );
     }
     return _weightedPick(rng, viable, weights);
   }
@@ -610,7 +649,10 @@ class EventSystem {
   }
 
   static EventOutcome _weightedPick(
-      Random rng, List<EventOutcome> viable, List<double> weights) {
+    Random rng,
+    List<EventOutcome> viable,
+    List<double> weights,
+  ) {
     var total = 0.0;
     for (final w in weights) {
       total += w;

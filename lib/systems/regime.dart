@@ -191,7 +191,8 @@ abstract final class Regime {
       powerTitle: base.powerTitle,
       powerNote: base.powerNote,
       inkDryMul: base.inkDryMul < 1
-          ? base.inkDryMul * 0.85 // baskı: daha da hızlı
+          ? base.inkDryMul *
+                0.85 // baskı: daha da hızlı
           : base.inkDryMul * 1.10, // hür: meclis daha da ağır işler
       councilDecides: base.councilDecides,
       councilVotesLaws: base.councilVotesLaws,
@@ -204,73 +205,78 @@ abstract final class Regime {
   }
 
   static RegimeRule _base(VillageRegime r) => switch (r) {
-        // Merkez CEZASIZ — ılımlı köy sönüktür ama zorlanmaz.
-        VillageRegime.moderate => const RegimeRule(
-            powerTitle: 'SÖZÜN GEÇER',
-            powerNote: 'Kimse itiraz etmiyor, kimse de arkanda değil. '
-                'Uçların gücüne erişemezsin ama bedelini de ödemezsin.',
-            inkDryMul: 1.0,
-            councilDecides: false,
-            councilVotesLaws: false,
-            ignoresPetitions: false,
-            vetoMoraleCost: 0,
-            unrestPerDay: 0,
-            unrestRelief: 0.05,
-            crisis: RegimeCrisis.none,
-          ),
-        VillageRegime.commune => const RegimeRule(
-            powerTitle: 'MECLİS ORTAK',
-            powerNote: 'Ferman meclis oyuna sunulur, bekleyen dilekçeyi köy '
-                'kendi çözer. Yavaşsın ama meşrusun.',
-            inkDryMul: 1.35,
-            councilDecides: true,
-            councilVotesLaws: true,
-            ignoresPetitions: false,
-            vetoMoraleCost: 0.07,
-            unrestPerDay: 0.010,
-            unrestRelief: 0.050,
-            crisis: RegimeCrisis.deadlock,
-          ),
-        VillageRegime.market => const RegimeRule(
-            powerTitle: 'AZ MÜDAHALE',
-            powerNote: 'Köy kendi işini görür; sen karışmazsan da döner. '
-                'Ama para konuşur, makas açılır.',
-            inkDryMul: 1.15,
-            councilDecides: true,
-            councilVotesLaws: false,
-            ignoresPetitions: false,
-            vetoMoraleCost: 0.035,
-            unrestPerDay: 0.012,
-            unrestRelief: 0.045,
-            crisis: RegimeCrisis.inequality,
-          ),
-        VillageRegime.ironTable => const RegimeRule(
-            powerTitle: 'YÜKSEK YETKİ',
-            powerNote: 'Eşitliği dağıtan el senin: mühür çabuk basılır, itiraz '
-                'kısadır. Bedeli sinsi bir tembellik.',
-            inkDryMul: 0.80,
-            councilDecides: false,
-            councilVotesLaws: false,
-            ignoresPetitions: false,
-            vetoMoraleCost: 0.02,
-            unrestPerDay: 0.018,
-            unrestRelief: 0.035,
-            crisis: RegimeCrisis.idleness,
-          ),
-        VillageRegime.sealedHand => const RegimeRule(
-            powerTitle: 'MUTLAK SÖZ',
-            powerNote: 'Mühür anında basılır, dilekçe susar. Kimse itiraz '
-                'etmiyor — sebebi rıza değil ve sen bunu biliyorsun.',
-            inkDryMul: 0.60,
-            councilDecides: false,
-            councilVotesLaws: false,
-            ignoresPetitions: true,
-            vetoMoraleCost: 0,
-            unrestPerDay: 0.028,
-            unrestRelief: 0.030,
-            crisis: RegimeCrisis.revolt,
-          ),
-      };
+    // Merkez CEZASIZ — ılımlı köy sönüktür ama zorlanmaz.
+    VillageRegime.moderate => const RegimeRule(
+      powerTitle: 'SÖZÜN GEÇER',
+      powerNote:
+          'Kimse itiraz etmiyor, kimse de arkanda değil. '
+          'Uçların gücüne erişemezsin ama bedelini de ödemezsin.',
+      inkDryMul: 1.0,
+      councilDecides: false,
+      councilVotesLaws: false,
+      ignoresPetitions: false,
+      vetoMoraleCost: 0,
+      unrestPerDay: 0,
+      unrestRelief: 0.05,
+      crisis: RegimeCrisis.none,
+    ),
+    VillageRegime.commune => const RegimeRule(
+      powerTitle: 'MECLİS ORTAK',
+      powerNote:
+          'Ferman meclis oyuna sunulur, bekleyen dilekçeyi köy '
+          'kendi çözer. Yavaşsın ama meşrusun.',
+      inkDryMul: 1.35,
+      councilDecides: true,
+      councilVotesLaws: true,
+      ignoresPetitions: false,
+      vetoMoraleCost: 0.07,
+      unrestPerDay: 0.010,
+      unrestRelief: 0.050,
+      crisis: RegimeCrisis.deadlock,
+    ),
+    VillageRegime.market => const RegimeRule(
+      powerTitle: 'AZ MÜDAHALE',
+      powerNote:
+          'Köy kendi işini görür; sen karışmazsan da döner. '
+          'Ama para konuşur, makas açılır.',
+      inkDryMul: 1.15,
+      councilDecides: true,
+      councilVotesLaws: false,
+      ignoresPetitions: false,
+      vetoMoraleCost: 0.035,
+      unrestPerDay: 0.012,
+      unrestRelief: 0.045,
+      crisis: RegimeCrisis.inequality,
+    ),
+    VillageRegime.ironTable => const RegimeRule(
+      powerTitle: 'YÜKSEK YETKİ',
+      powerNote:
+          'Eşitliği dağıtan el senin: mühür çabuk basılır, itiraz '
+          'kısadır. Bedeli sinsi bir tembellik.',
+      inkDryMul: 0.80,
+      councilDecides: false,
+      councilVotesLaws: false,
+      ignoresPetitions: false,
+      vetoMoraleCost: 0.02,
+      unrestPerDay: 0.018,
+      unrestRelief: 0.035,
+      crisis: RegimeCrisis.idleness,
+    ),
+    VillageRegime.sealedHand => const RegimeRule(
+      powerTitle: 'MUTLAK SÖZ',
+      powerNote:
+          'Mühür anında basılır, dilekçe susar. Kimse itiraz '
+          'etmiyor — sebebi rıza değil ve sen bunu biliyorsun.',
+      inkDryMul: 0.60,
+      councilDecides: false,
+      councilVotesLaws: false,
+      ignoresPetitions: true,
+      vetoMoraleCost: 0,
+      unrestPerDay: 0.028,
+      unrestRelief: 0.030,
+      crisis: RegimeCrisis.revolt,
+    ),
+  };
 
   /// Bir gün(ün parçası) için huzursuzluk deltası.
   ///
@@ -282,8 +288,7 @@ abstract final class Regime {
     required double morale,
     required double days,
   }) {
-    final calm =
-        rule.unrestRelief * ((morale - 0.45) / 0.55).clamp(0.0, 1.0);
+    final calm = rule.unrestRelief * ((morale - 0.45) / 0.55).clamp(0.0, 1.0);
     return (rule.unrestPerDay - calm) * days;
   }
 
@@ -323,71 +328,71 @@ abstract final class Regime {
   /// Kronik hâlin okunur adı + köyün ağzından ne olduğu. Rejime özgü: her köy
   /// kendi seçtiği yoldan çürür.
   static (String, String) chronicText(RegimeCrisis c) => switch (c) {
-        RegimeCrisis.revolt => (
-            'KÖY BÖLÜNDÜ',
-            'Artık iki köy var: senin gördüğün ve ambar arkasında toplanan. '
-                'Kimse gitmiyor, kimse de kalmıyor.'
-          ),
-        RegimeCrisis.deadlock => (
-            'DİVAN FELCİ',
-            'Meclis toplanıyor, dağılıyor, yine toplanıyor. Mürekkep '
-                'kurumadan yeni bir tartışma başlıyor.'
-          ),
-        RegimeCrisis.idleness => (
-            'DURGUNLUK',
-            'Tezgâh açık, eller yavaş. Kimse tembel değil; kimse de acele '
-                'etmiyor. Köy kendi hızını unuttu.'
-          ),
-        RegimeCrisis.inequality => (
-            'İKİ AYRI KÖY',
-            'Bir uçta iki damlı haneler, öbür uçta sazlıkta yatanlar. '
-                'Aynı çeşmeden su içiyorlar, aynı köyde yaşamıyorlar.'
-          ),
-        RegimeCrisis.none => ('', ''),
-      };
+    RegimeCrisis.revolt => (
+      'KÖY BÖLÜNDÜ',
+      'Artık iki köy var: senin gördüğün ve ambar arkasında toplanan. '
+          'Kimse gitmiyor, kimse de kalmıyor.',
+    ),
+    RegimeCrisis.deadlock => (
+      'DİVAN FELCİ',
+      'Meclis toplanıyor, dağılıyor, yine toplanıyor. Mürekkep '
+          'kurumadan yeni bir tartışma başlıyor.',
+    ),
+    RegimeCrisis.idleness => (
+      'DURGUNLUK',
+      'Tezgâh açık, eller yavaş. Kimse tembel değil; kimse de acele '
+          'etmiyor. Köy kendi hızını unuttu.',
+    ),
+    RegimeCrisis.inequality => (
+      'İKİ AYRI KÖY',
+      'Bir uçta iki damlı haneler, öbür uçta sazlıkta yatanlar. '
+          'Aynı çeşmeden su içiyorlar, aynı köyde yaşamıyorlar.',
+    ),
+    RegimeCrisis.none => ('', ''),
+  };
 
   /// Çürümenin okunur hâli.
   static String rotLabel(double rot) => rot >= kFailing
       ? 'çözülüyor'
       : rot >= kChronic
-          ? 'kronikleşti'
-          : rot >= 0.30
-              ? 'iz bıraktı'
-              : 'sağlam';
+      ? 'kronikleşti'
+      : rot >= 0.30
+      ? 'iz bıraktı'
+      : 'sağlam';
 
   /// Huzursuzluğun okunur hâli — Divan'da tek kelime.
   static String unrestLabel(double u) => u >= kCrisis
       ? 'kaynıyor'
       : u >= kStir
-          ? 'kıpırdanıyor'
-          : u >= 0.25
-              ? 'homurdanıyor'
-              : 'sakin';
+      ? 'kıpırdanıyor'
+      : u >= 0.25
+      ? 'homurdanıyor'
+      : 'sakin';
 
   /// Kriz başlığı + köyün ağzından ne olduğu.
   static (String, String) crisisText(RegimeCrisis c) => switch (c) {
-        RegimeCrisis.revolt => (
-            'İSYAN KAYNIYOR',
-            'Ambar arkasında toplananlar var. Konuşmayı kesmiyorlar, '
-                'sen geçerken kesiyorlar.'
-          ),
-        RegimeCrisis.deadlock => (
-            'MECLİS KİLİTLENDİ',
-            'Herkes konuştu, kimse ikna olmadı. Divan üç gündür aynı '
-                'cümlenin etrafında dönüyor.'
-          ),
-        RegimeCrisis.idleness => (
-            'TEZGÂH SOĞUDU',
-            'Pay nasılsa eşit; kimse fazladan bir kova taşımıyor. '
-                'İş görünüyor ama iş yürümüyor.'
-          ),
-        RegimeCrisis.inequality => (
-            'MAKAS AÇILDI',
-            'Bir hane iki ev birden yaptırdı, öbürü sazlıkta yatıyor. '
-                'Aynı köyde iki ayrı kış yaşanıyor.'
-          ),
-        RegimeCrisis.none => ('', ''),
-      };
+    RegimeCrisis.revolt => (
+      'İSYAN KAYNIYOR',
+      'Ambar arkasında toplananlar var. Konuşmayı kesmiyorlar, '
+          'sen geçerken kesiyorlar.',
+    ),
+    RegimeCrisis.deadlock => (
+      'MECLİS KİLİTLENDİ',
+      'Herkes konuştu, kimse ikna olmadı. Divan üç gündür aynı '
+          'cümlenin etrafında dönüyor.',
+    ),
+    RegimeCrisis.idleness => (
+      'TEZGÂH SOĞUDU',
+      'Pay nasılsa eşit; kimse fazladan bir kova taşımıyor. '
+          'İş görünüyor ama iş yürümüyor.',
+    ),
+    RegimeCrisis.inequality => (
+      'MAKAS AÇILDI',
+      'Bir hane iki ev birden yaptırdı, öbürü sazlıkta yatıyor. '
+          'Aynı köyde iki ayrı kış yaşanıyor.',
+    ),
+    RegimeCrisis.none => ('', ''),
+  };
 
   // ── İMAN — overlay'in MEKANİK gövdesi ───────────────────────────────────────
   //
@@ -406,7 +411,8 @@ abstract final class Regime {
     // Bant altında etki cılız kalsın: eğrinin ağırlığı bandın ÜSTÜNDE.
     final w = f <= LawCompass.kFaithBand
         ? f * 0.45 / LawCompass.kFaithBand * 0.45
-        : 0.45 + (f - LawCompass.kFaithBand) / (1 - LawCompass.kFaithBand) * 0.55;
+        : 0.45 +
+              (f - LawCompass.kFaithBand) / (1 - LawCompass.kFaithBand) * 0.55;
     return FaithEffect(
       // SABIR — "kader" hikâyesi olan köy yoksulluğu ve baskıyı daha uzun taşır.
       // Bu, dinî bir tiranın neden ayakta kalabildiğinin cevabıdır.
@@ -422,7 +428,7 @@ abstract final class Regime {
       note: f < LawCompass.kFaithBand
           ? ''
           : 'İnanan köy: sıkıntıya sabreder, suça az meyleder, inancı için '
-              'direnir — ama evladını yabancıya vermek ona ağır gelir.',
+                'direnir — ama evladını yabancıya vermek ona ağır gelir.',
     );
   }
 
@@ -438,6 +444,7 @@ abstract final class Regime {
     required Map<Estate, double> mood,
     required double villageMorale,
     double threshold = 0.5,
+    double traditionSupport = 0,
   }) {
     final eff = <Estate, double>{};
     for (final (e, d) in effects) {
@@ -449,18 +456,33 @@ abstract final class Regime {
       final d = eff[e] ?? 0.0;
       final m = mood[e] ?? 0.55;
       final score =
-          0.5 + d * 3.0 + (m - 0.55) * 0.9 + (villageMorale - 0.5) * 0.35;
+          0.5 +
+          d * 3.0 +
+          (m - 0.55) * 0.9 +
+          (villageMorale - 0.5) * 0.35 +
+          traditionSupport;
       final ok = score >= 0.5;
       if (ok) yes++;
-      voices.add(CouncilVoice(e, ok, _voiceLine(e, ok, d, m)));
+      voices.add(
+        CouncilVoice(e, ok, _voiceLine(e, ok, d, m, traditionSupport > 0)),
+      );
     }
     final support = yes / Estate.values.length;
     return CouncilVote(support, support >= threshold, voices);
   }
 
-  static String _voiceLine(Estate e, bool yes, double effect, double mood) {
+  static String _voiceLine(
+    Estate e,
+    bool yes,
+    double effect,
+    double mood,
+    bool rootedInTradition,
+  ) {
     if (yes) {
       if (effect > 0.02) return '${e.label}: "Bunu biz de isterdik."';
+      if (rootedInTradition) {
+        return '${e.label}: "Bu zaten tuttuğumuz yol."';
+      }
       if (mood >= 0.6) return '${e.label}: "Senin sözün, biz arkasındayız."';
       return '${e.label}: "İtirazımız yok."';
     }
@@ -538,42 +560,44 @@ abstract final class Regime {
       // Heyet dimdik bir köyle konuştuğunu bilir: direniş eli güçlü, ama boyun
       // eğerse de makbul bir tâbi olur (itibar payı büyük).
       VillageRegime.sealedHand => const ImperialPosture(
-          resistBonus: 0.20,
-          haggleEase: -0.05,
-          attentionMul: 1.12,
-          note: 'Mühürlü El: köy tek yumruk. Direnişte elin güçlü; boyun '
-              'eğersen makbul bir tâbi olursun.',
-        ),
+        resistBonus: 0.20,
+        haggleEase: -0.05,
+        attentionMul: 1.12,
+        note:
+            'Mühürlü El: köy tek yumruk. Direnişte elin güçlü; boyun '
+            'eğersen makbul bir tâbi olursun.',
+      ),
       // ⚖ Demir Sofra — ortak disiplin: herkes aynı safta, ama zorla eşitlik
       // tezgâhı soğutmuş olabilir. Yükü hep birlikte kaldırır.
       VillageRegime.ironTable => const ImperialPosture(
-          resistBonus: 0.12,
-          haggleEase: 0.05,
-          attentionMul: 0.88,
-          note: 'Demir Sofra: yük ortak, saf tek. Herkes aynı anda diş sıkar.',
-        ),
+        resistBonus: 0.12,
+        haggleEase: 0.05,
+        attentionMul: 0.88,
+        note: 'Demir Sofra: yük ortak, saf tek. Herkes aynı anda diş sıkar.',
+      ),
       // 🤝 Ortak Ocak — bütün köy eşiğe dizilir, ama karar meclisindir.
       VillageRegime.commune => const ImperialPosture(
-          resistBonus: 0.10,
-          haggleEase: 0.08,
-          attentionMul: 0.85,
-          note: 'Ortak Ocak: bütün köy eşikte. Ama vergiye cevabı meclis verir.',
-        ),
+        resistBonus: 0.10,
+        haggleEase: 0.08,
+        attentionMul: 0.85,
+        note: 'Ortak Ocak: bütün köy eşikte. Ama vergiye cevabı meclis verir.',
+      ),
       // 🏪 Açık Pazar — kese dolu, kol zayıf: kavgada değil pazarlıkta usta.
       // Görünür servet heyetin iştahını kabartır.
       VillageRegime.market => const ImperialPosture(
-          resistBonus: -0.05,
-          haggleEase: 0.16,
-          attentionMul: 1.25,
-          note: 'Açık Pazar: kavgada değil pazarlıkta güçlü — ama dolu kese '
-              'heyetin gözünü de üstüne çeker.',
-        ),
+        resistBonus: -0.05,
+        haggleEase: 0.16,
+        attentionMul: 1.25,
+        note:
+            'Açık Pazar: kavgada değil pazarlıkta güçlü — ama dolu kese '
+            'heyetin gözünü de üstüne çeker.',
+      ),
       VillageRegime.moderate => const ImperialPosture(
-          resistBonus: 0,
-          haggleEase: 0,
-          attentionMul: 1.0,
-          note: '',
-        ),
+        resistBonus: 0,
+        haggleEase: 0,
+        attentionMul: 1.0,
+        note: '',
+      ),
     };
     if (!oath || r == VillageRegime.moderate) return base;
     // Yemin duruşu keskinleştirir: militan köy daha da dik, tüccar köy daha da
@@ -622,9 +646,10 @@ abstract final class Regime {
   /// Meclisin duruşunun tek cümlelik okunuşu (modal başlığı).
   static String verdictLine(ImperialVerdict v, {required bool conscript}) =>
       switch (v) {
-        ImperialVerdict.comply => conscript
-            ? 'Meclis bir evladı fidyeyle kurtarmaktan yana.'
-            : 'Meclis ödemekten yana — iş büyümesin diyor.',
+        ImperialVerdict.comply =>
+          conscript
+              ? 'Meclis bir evladı fidyeyle kurtarmaktan yana.'
+              : 'Meclis ödemekten yana — iş büyümesin diyor.',
         ImperialVerdict.haggle =>
           'Meclis pazarlıktan yana — verilecekse en azı verilsin.',
         ImperialVerdict.resist =>
@@ -633,26 +658,26 @@ abstract final class Regime {
 
   /// Yemin metni — ritüelde okunan ferman. Köyün ağzından, buyuruldu diliyle.
   static (String, String) oathText(RegimeIdentity id) => switch (id.regime) {
-        VillageRegime.commune => (
-            'KÖYÜN YEMİNİ · ORTAK OCAK',
-            '"Buyuruldu ki: bu köyde sofra ortaktır, söz meydanındır. '
-                'Kimse öne geçmeye, kimse geride kalmaya. Elimiz birdir."'
-          ),
-        VillageRegime.market => (
-            'KÖYÜN YEMİNİ · AÇIK PAZAR',
-            '"Buyuruldu ki: bu köyün kapısı yola, yolu kervana açıktır. '
-                'Herkes kendi kısmetinin sahibidir; alan da veren de serbesttir."'
-          ),
-        VillageRegime.ironTable => (
-            'KÖYÜN YEMİNİ · DEMİR SOFRA',
-            '"Buyuruldu ki: bu köyde pay eşittir ve payı ayıran eldir. '
-                'Eşitliğe itiraz, sofraya itirazdır."'
-          ),
-        VillageRegime.sealedHand => (
-            'KÖYÜN YEMİNİ · MÜHÜRLÜ EL',
-            '"Buyuruldu ki: bu köyün tek sözü, tek mührü, tek eli vardır. '
-                'Söz sorulmaz, söz verilir."'
-          ),
-        VillageRegime.moderate => ('', ''),
-      };
+    VillageRegime.commune => (
+      'KÖYÜN YEMİNİ · ORTAK OCAK',
+      '"Buyuruldu ki: bu köyde sofra ortaktır, söz meydanındır. '
+          'Kimse öne geçmeye, kimse geride kalmaya. Elimiz birdir."',
+    ),
+    VillageRegime.market => (
+      'KÖYÜN YEMİNİ · AÇIK PAZAR',
+      '"Buyuruldu ki: bu köyün kapısı yola, yolu kervana açıktır. '
+          'Herkes kendi kısmetinin sahibidir; alan da veren de serbesttir."',
+    ),
+    VillageRegime.ironTable => (
+      'KÖYÜN YEMİNİ · DEMİR SOFRA',
+      '"Buyuruldu ki: bu köyde pay eşittir ve payı ayıran eldir. '
+          'Eşitliğe itiraz, sofraya itirazdır."',
+    ),
+    VillageRegime.sealedHand => (
+      'KÖYÜN YEMİNİ · MÜHÜRLÜ EL',
+      '"Buyuruldu ki: bu köyün tek sözü, tek mührü, tek eli vardır. '
+          'Söz sorulmaz, söz verilir."',
+    ),
+    VillageRegime.moderate => ('', ''),
+  };
 }

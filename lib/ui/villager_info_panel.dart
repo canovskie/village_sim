@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../buildings/craft.dart';
@@ -75,6 +77,85 @@ class VillagerInfoPanel extends StatefulWidget {
   State<VillagerInfoPanel> createState() => _VillagerInfoPanelState();
 }
 
+class _VillagerConstellationPainter extends CustomPainter {
+  final double age;
+  final double morale;
+  final double energy;
+  final Color accent;
+
+  const _VillagerConstellationPainter({
+    required this.age,
+    required this.morale,
+    required this.energy,
+    required this.accent,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final line = Paint()
+      ..color = AppUi.line.withValues(alpha: .75)
+      ..strokeWidth = 1;
+    for (final target in [
+      const Offset(.18, .25),
+      const Offset(.82, .25),
+      const Offset(.18, .76),
+      const Offset(.82, .76),
+    ]) {
+      canvas.drawLine(
+        center,
+        Offset(size.width * target.dx, size.height * target.dy),
+        line,
+      );
+    }
+
+    final ring = Rect.fromCircle(center: center, radius: 38);
+    canvas.drawArc(
+      ring,
+      math.pi * .62,
+      math.pi * .76 * age.clamp(0.0, 1.0),
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 3
+        ..color = accent,
+    );
+    canvas.drawArc(
+      ring,
+      -math.pi * .38,
+      math.pi * .76 * morale.clamp(0.0, 1.0),
+      false,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = 3
+        ..color = morale >= .55
+            ? AppUi.sage
+            : morale >= .3
+            ? AppUi.gold
+            : AppUi.rust,
+    );
+
+    // Enerji, portrenin altındaki küçük ışık dizisi olarak okunur.
+    final lit = (energy.clamp(0.0, 1.0) * 5).round();
+    for (var i = 0; i < 5; i++) {
+      canvas.drawCircle(
+        Offset(center.dx - 16 + i * 8, center.dy + 42),
+        2.2,
+        Paint()..color = i < lit ? AppUi.accentSoft : AppUi.line,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _VillagerConstellationPainter old) =>
+      old.age != age ||
+      old.morale != morale ||
+      old.energy != energy ||
+      old.accent != accent;
+}
+
 class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
   bool _renaming = false;
   late TextEditingController _nameCtrl;
@@ -148,14 +229,9 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // ÜST — her zaman görünen "bir bakışta" hayati bilgi.
+                    _lifeConstellation(v, stage),
+                    const SizedBox(height: 9),
                     _statusStrip(v),
-                    const SizedBox(height: 14),
-                    _ageBar(v, stage),
-                    const SizedBox(height: 12),
-                    _moraleBar(v),
-                    const SizedBox(height: 4),
-                    _moodRow(v),
                     const SizedBox(height: 14),
                     // SEKMELER — gerisi tek kaydırma duvarı yerine üç görünüm.
                     AppTabs(tabs: _tabs(v), initial: widget.initialTab),
@@ -198,13 +274,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _statusStrip(v),
-                    const SizedBox(height: 9),
-                    _ageBar(v, stage),
-                    const SizedBox(height: 8),
-                    _moraleBar(v),
-                    const SizedBox(height: 4),
-                    _moodRow(v),
+                    _mobileDashboard(v, stage),
                     const SizedBox(height: 9),
                     AppTabs(tabs: _tabs(v), initial: widget.initialTab),
                   ],
@@ -475,6 +545,171 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
 
   // ─── Status strip — durum + aktivite + özel rozetler ────────────────────────
 
+  /// Telefonda ilk bakış yüzeyi. Eski yörünge diyagramı aynı portreyi ikinci
+  /// kez çiziyor ve dört küçük etiketi çizgilerle bağlayıp oyuncudan anlamını
+  /// çözmesini bekliyordu. Bu pano üç soruya doğrudan cevap verir: ne yapıyor,
+  /// morali nasıl, ne kadar gücü kaldı. Ayrıntı isteyen aşağıdaki sekmelere iner.
+  Widget _mobileDashboard(VillagerEntity v, LifeStage stage) {
+    final (state, stateColor, stateIcon) = _stateChip(v);
+    final intent = v.mind.intent.isIdle
+        ? state
+        : intentLabel(v.mind.intent.kind);
+    final activity = _activityLabel(v);
+    return Container(
+      padding: const EdgeInsets.all(9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1211),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: stateColor.withValues(alpha: 0.42)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                flex: 5,
+                child: _dashboardState(intent, activity, stateIcon, stateColor),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: _dashboardMeter(
+                  'MORAL',
+                  v.morale,
+                  GameIconData.heart,
+                  _moraleColor(v.morale),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: _dashboardMeter(
+                  'ENERJİ',
+                  v.energy,
+                  GameIconData.bolt,
+                  v.energy > .35 ? AppUi.sage : AppUi.gold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              const GameIcon(GameIconData.home, size: 11, color: AppUi.textLo),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  widget.workplaceLabel ?? widget.homeLabel ?? stage.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.body.copyWith(
+                    fontSize: 11,
+                    color: AppUi.textMid,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dashboardState(
+    String label,
+    String? activity,
+    String icon,
+    Color color,
+  ) => Row(
+    children: [
+      Container(
+        width: 34,
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: SemanticIcon(
+          icon,
+          size: 17,
+          color: color,
+          fallback: GameIconData.people,
+        ),
+      ),
+      const SizedBox(width: 7),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'ŞU AN',
+              style: AppUi.label.copyWith(fontSize: 9, color: color),
+            ),
+            Text(
+              activity ?? label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppUi.bodyHi.copyWith(fontSize: 12.5),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _dashboardMeter(
+    String label,
+    double value,
+    GameIconData icon,
+    Color color,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          GameIcon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(label, style: AppUi.label.copyWith(fontSize: 8.5, color: color)),
+        ],
+      ),
+      const SizedBox(height: 3),
+      Text(
+        '${(value.clamp(0.0, 1.0) * 100).round()}%',
+        style: AppUi.number.copyWith(fontSize: 13, color: AppUi.textHi),
+      ),
+      const SizedBox(height: 3),
+      SizedBox(
+        height: 3,
+        child: LinearProgressIndicator(
+          value: value.clamp(0.0, 1.0),
+          backgroundColor: AppUi.surface0,
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+        ),
+      ),
+    ],
+  );
+
+  String? _activityLabel(VillagerEntity v) => switch (v.activity) {
+    VillagerActivity.chat => 'Sohbet ediyor',
+    VillagerActivity.music => 'Müzik çalıyor',
+    VillagerActivity.dance => 'Dans ediyor',
+    VillagerActivity.warm => 'Isınıyor',
+    VillagerActivity.storytelling => 'Hikâye anlatıyor',
+    VillagerActivity.listening => 'Dinliyor',
+    VillagerActivity.arguing => 'Tartışıyor',
+    VillagerActivity.brawling => 'Kavgada',
+    VillagerActivity.watchingConflict => 'Kavgayı izliyor',
+    VillagerActivity.prowling => 'Sinsice dolaşıyor',
+    VillagerActivity.committing => 'Suçüstü',
+    VillagerActivity.fleeing => 'Kaçıyor',
+    VillagerActivity.chasing => 'Kovalıyor',
+    VillagerActivity.abducted => 'Kaçırıldı',
+    VillagerActivity.playing => 'Oynuyor',
+    VillagerActivity.none => null,
+  };
+
   Widget _statusStrip(VillagerEntity v) {
     final badges = <Widget>[];
     final (label, color, icon) = _stateChip(v);
@@ -490,6 +725,116 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     return Wrap(spacing: 6, runSpacing: 6, children: badges);
   }
 
+  /// Kişinin temel hâlini satır satır raporlamak yerine portresinin çevresine
+  /// yerleştirir: sol yay yaşam evresi, sağ yay moral; çevrede yuva, iş ve aile.
+  Widget _lifeConstellation(VillagerEntity v, LifeStage stage) {
+    final family = v.parents.length + v.children.length;
+    final (moodIcon, moodLabel) = _moodLabel(v.mood);
+    final (lo, hi) = _stageBounds(stage);
+    final age = ((v.ageDays - lo) / (hi - lo)).clamp(0.0, 1.0);
+    return Container(
+      height: 118,
+      decoration: BoxDecoration(
+        color: AppUi.surface0,
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: _stageColor(stage).withValues(alpha: .28)),
+      ),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _VillagerConstellationPainter(
+                age: age,
+                morale: v.morale,
+                energy: v.energy,
+                accent: _stageColor(stage),
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.center,
+            child: Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppUi.surface1,
+                border: Border.all(color: _stageColor(stage), width: 1.5),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: CustomPaint(
+                painter: PortraitPainter(
+                  visual: v.visual,
+                  stage: stage,
+                  type: v.type,
+                  hasProfession: v.hasProfession,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 9,
+            top: 10,
+            child: _orbitNode(stage.label, stage.icon, _stageColor(stage)),
+          ),
+          Positioned(
+            right: 9,
+            top: 10,
+            child: _orbitNode(moodLabel, moodIcon, _moraleColor(v.morale)),
+          ),
+          Positioned(
+            left: 9,
+            bottom: 9,
+            child: _orbitNode(
+              family == 0 ? 'Tek başına' : '$family yakın',
+              '♥',
+              family == 0 ? AppUi.textLo : AppUi.rust,
+            ),
+          ),
+          Positioned(
+            right: 9,
+            bottom: 9,
+            child: _orbitNode(
+              widget.workplaceLabel ?? widget.homeLabel ?? 'Köyde',
+              widget.workplaceLabel == null ? '⌂' : '⚒',
+              v.energy > .35 ? AppUi.sage : AppUi.gold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _orbitNode(String label, String icon, Color color) => Container(
+    constraints: const BoxConstraints(maxWidth: 92),
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .11),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: color.withValues(alpha: .36)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SemanticIcon(icon, size: 9, color: color, fallback: GameIconData.star),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: AppUi.label.copyWith(fontSize: 8.5, color: AppUi.textHi),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Color _moraleColor(double morale) => morale >= .6
+      ? AppUi.sage
+      : morale >= .35
+      ? AppUi.accent
+      : AppUi.rust;
+
   /// Durum/aktivite rozetleri veri tarafındaki kısa işareti korur, ekranda
   /// ise ortak vektör ikon diline çevirir.
   Widget _emojiChip(String label, Color color, String emoji) {
@@ -503,8 +848,12 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SemanticIcon(emoji,
-              size: 10, color: color, fallback: GameIconData.star),
+          SemanticIcon(
+            emoji,
+            size: 10,
+            color: color,
+            fallback: GameIconData.star,
+          ),
           const SizedBox(width: 5),
           Text(
             label,
@@ -549,6 +898,8 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
         return _emojiChip('Tartışıyor', AppUi.rust, '💢');
       case VillagerActivity.brawling:
         return _emojiChip('Kavgada', AppUi.rust, '👊');
+      case VillagerActivity.watchingConflict:
+        return _emojiChip('Kavgayı izliyor', AppUi.gold, '👁');
       // Suç evreleri (scene_crime) — panel de aynı dili konuşsun.
       case VillagerActivity.prowling:
         return _emojiChip('Sinsice', AppUi.rust, '🌑');
@@ -567,76 +918,6 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     }
   }
 
-  // ─── Yaş çubuğu + life stage chip ───────────────────────────────────────────
-
-  Widget _ageBar(VillagerEntity v, LifeStage stage) {
-    final (segLo, segHi) = _stageBounds(stage);
-    final clamped = v.ageDays.clamp(segLo, segHi);
-    final pct = ((clamped - segLo) / (segHi - segLo)).clamp(0.0, 1.0);
-    final ageStr = '${v.ageDays.toStringAsFixed(1)} gün';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            SemanticIcon(stage.icon,
-                size: 13, color: AppUi.accentSoft, fallback: GameIconData.people),
-            const SizedBox(width: 6),
-            Text(
-              '${stage.label} · $ageStr',
-              style: AppUi.bodyHi.copyWith(fontSize: 12),
-            ),
-            const Spacer(),
-            Text(
-              _lifeStageTail(stage, v),
-              style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Container(
-          height: 6,
-          decoration: BoxDecoration(
-            color: AppUi.surface0,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: AppUi.line, width: 0.8),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: pct),
-                duration: const Duration(milliseconds: 450),
-                curve: Curves.easeOutCubic,
-                builder: (_, val, _) => FractionallySizedBox(
-                  widthFactor: val,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _stageColor(stage).withValues(alpha: 0.8),
-                          _stageColor(stage),
-                          Color.lerp(_stageColor(stage), Colors.white, 0.28)!,
-                        ],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _stageColor(stage).withValues(alpha: 0.5),
-                          blurRadius: 5,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   (double, double) _stageBounds(LifeStage s) => switch (s) {
     LifeStage.child => (0.0, kYouthStartDay),
     LifeStage.youth => (kYouthStartDay, kAdultStartDay),
@@ -651,61 +932,7 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
     LifeStage.elder => const Color(0xFFB079D4),
   };
 
-  String _lifeStageTail(LifeStage s, VillagerEntity v) {
-    final (lo, hi) = _stageBounds(s);
-    final left = (hi - v.ageDays).clamp(0.0, hi - lo);
-    if (s == LifeStage.elder) {
-      // Yaşlıya kalan ömür belirsiz, sade ifade.
-      return 'huzurlu yıllar';
-    }
-    return '→ ${left.toStringAsFixed(1)} gün';
-  }
-
   // ─── Rows ───────────────────────────────────────────────────────────────────
-
-  /// Ruh hali + enerji satırı — NPC'nin iç dünyasını oyuncuya gösterir.
-  /// Bireysel moral (kalıcı memnuniyet) + baskın sebep — yaş çubuğunun eşi.
-  Widget _moraleBar(VillagerEntity v) {
-    final m = v.morale.clamp(0.0, 1.0);
-    final c = m >= 0.6
-        ? AppUi.sage
-        : m >= 0.35
-        ? AppUi.accent
-        : AppUi.rust;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AppStatBar(
-          label: 'MORAL',
-          value: m,
-          trailing: '${(m * 100).round()}%',
-          color: c,
-          labelWidth: 54,
-        ),
-        Padding(
-          padding: const EdgeInsets.only(left: 54, top: 3),
-          child: Text(
-            '· ${v.moraleReason}',
-            style: AppUi.body.copyWith(
-              fontSize: 10.5,
-              color: AppUi.textLo,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _moodRow(VillagerEntity v) {
-    final (icon, label) = _moodLabel(v.mood);
-    final energyPct = (v.energy * 100).round();
-    return _row(
-      'Hâli',
-      '$icon $label · ⚡$energyPct%',
-      icon: GameIconData.heart,
-    );
-  }
 
   (String, String) _moodLabel(double m) {
     if (m > 0.45) return ('😄', 'Neşeli');
@@ -781,8 +1008,12 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       else ...[
         Row(
           children: [
-            SemanticIcon(role.icon,
-                size: 13, color: AppUi.accent, fallback: GameIconData.hammer),
+            SemanticIcon(
+              role.icon,
+              size: 13,
+              color: AppUi.accent,
+              fallback: GameIconData.hammer,
+            ),
             const SizedBox(width: 7),
             Expanded(
               child: Text(
@@ -1168,8 +1399,12 @@ class _VillagerInfoPanelState extends State<VillagerInfoPanel> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SemanticIcon(e.icon,
-              size: 12, color: AppUi.textLo, fallback: GameIconData.scroll),
+          SemanticIcon(
+            e.icon,
+            size: 12,
+            color: AppUi.textLo,
+            fallback: GameIconData.scroll,
+          ),
           const SizedBox(width: 8),
           SizedBox(
             width: 30,

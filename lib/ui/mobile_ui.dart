@@ -22,6 +22,13 @@ bool debugForceTouchUi = false;
 bool useTouchUi(BuildContext context) =>
     debugForceTouchUi || PlatformAdapt.isMobile || useCompactGameUi(context);
 
+/// Mobil inşa paletindeki gerçek bir araç/kart seçildiğinde paletin dünyayı
+/// örtmeye devam etmemesi için yukarı doğru gönderilen niyet. Kategori sekmesi
+/// bunu göndermez; oyuncu önce sekmeyi, sonra istediği aracı seçebilir.
+class MobileCatalogCloseNotification extends Notification {
+  const MobileCatalogCloseNotification();
+}
+
 /// ═══════════════════════════════════════════════════════════════════════════
 /// MOBİL TEMA — "KENAR RAYI"
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -34,11 +41,9 @@ bool useTouchUi(BuildContext context) =>
 /// Bu dosya TEMANIN KENDİSİDİR. Üç kural vardır, hiçbir yüzey tek başına
 /// bunları bükmez:
 ///
-///  1. **TEK YÜZEY** — bütün mobil kroma aynı cam reçetesini kullanır
-///     ([MobileSurface]). Aynı bulanıklık, aynı yoğunluk, aynı grafit taban,
-///     aynı çeper, aynı yarıçap. Reçete grafite ÇEKİLİDİR: aksi halde cam
-///     altındaki çimeni emip yeşeriyor, kışın griye kayıyor, ekranda tek bir
-///     yüzey kimliği kalmıyordu.
+///  1. **TEK YÜZEY** — bütün mobil kroma aynı opak grafit yüzeyi kullanır
+///     ([MobileSurface]). Cam/bulanıklık yoktur: hareketli köy mobilde yüzeylerin
+///     rengini ve okunurluğunu değiştirmez; HUD masaüstü panel diliyle aynıdır.
 ///
 ///  2. **TEK IZGARA** — kroma yalnız KENARA yapışır, ortası daima köydür.
 ///     Üstte TEK ince şerit (kaynaklar · saat · kontroller aynı satırda), altta
@@ -209,11 +214,11 @@ class MobileTextFloor extends StatelessWidget {
 
 // ─── 1. kural: tek yüzey ─────────────────────────────────────────────────────
 
-/// TEK cam reçetesi — mobil kromanın bütünü bundan yapılır.
+/// Mobil kromanın ortak opak grafit yüzeyi.
 ///
-/// [AppGlass]'ı sarar ama parametrelerini KİLİTLER. Amaç tam olarak bu: her
-/// çağrı yeri kendi sigma/density/radius'unu seçtiğinde ekranda beş farklı
-/// malzeme oluyor ve hiçbiri "tema" gibi durmuyordu.
+/// Telefonda hareketli dünya üstündeki blur/cam, her paneli ayrı bir lens gibi
+/// gösteriyor ve GPU'ya da gereksiz backdrop pass'i ekliyordu. Bu yüzey normal
+/// panel diliyle aynı gradient + hairline kenarı kullanır; arkasını bulanıklaştırmaz.
 class MobileSurface extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
@@ -234,19 +239,62 @@ class MobileSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppGlass(
-      borderRadius: shape ?? BorderRadius.circular(MobileUi.radius),
-      // Grafite ÇEKİLİ taban: cam altındaki çimeni emip yeşermesin. Yoğunluk
-      // 0.62 — dünyanın hareketi hâlâ sezilir ama yüzey kendi rengini korur.
-      tint: tone == null
-          ? AppUi.surface1
-          : Color.alphaBlend(tone!.withValues(alpha: 0.22), AppUi.surface1),
-      density: 0.62,
-      sigma: 14,
-      padding: padding,
-      child: child,
+    final radius = shape ?? BorderRadius.circular(MobileUi.radius);
+    final top = tone == null
+        ? AppUi.surface2
+        : Color.alphaBlend(tone!.withValues(alpha: 0.26), AppUi.surface2);
+    final bottom = tone == null
+        ? AppUi.surface1
+        : Color.alphaBlend(tone!.withValues(alpha: 0.18), AppUi.surface1);
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [top, bottom],
+        ),
+        borderRadius: radius,
+        border: Border.all(color: AppUi.line, width: 1),
+        boxShadow: AppUi.softShadow,
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          children: [
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(height: 1, color: AppUi.lineSoft),
+            ),
+            Padding(padding: padding, child: child),
+          ],
+        ),
+      ),
     );
   }
+}
+
+/// Tam ekran mobil inşa kataloğu içinde kartların raf yerine geniş ızgara
+/// kullanmasını sağlayan yerleşim bağlamı.
+class MobileCatalogScope extends InheritedWidget {
+  final bool expanded;
+
+  const MobileCatalogScope({
+    super.key,
+    required this.expanded,
+    required super.child,
+  });
+
+  static bool expandedOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<MobileCatalogScope>()
+          ?.expanded ??
+      false;
+
+  @override
+  bool updateShouldNotify(MobileCatalogScope oldWidget) =>
+      expanded != oldWidget.expanded;
 }
 
 /// Kapsül içi dikey ayraç — grup ayrımı, kutu açmadan.

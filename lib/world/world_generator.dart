@@ -5,6 +5,7 @@ import 'decor_entity.dart';
 import 'mine_node.dart';
 import 'nature_entity.dart';
 import 'tree_entity.dart';
+import 'world_landmark.dart';
 
 // ── Result ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ class WorldGeneratorResult {
   final List<MineNode> mineNodes;
   final List<DecorEntity> decor;
   final List<BerryBush> berryBushes;
+  final List<WorldLandmark> landmarks;
 
   const WorldGeneratorResult({
     required this.waterTiles,
@@ -25,6 +27,7 @@ class WorldGeneratorResult {
     required this.mineNodes,
     required this.decor,
     this.berryBushes = const [],
+    this.landmarks = const [],
   });
 }
 
@@ -84,10 +87,28 @@ class WorldGenerator {
     final treeTiles = {for (final t in trees) (t.col, t.row)};
     final mines = _generateMines(water, treeTiles);
     final mineTiles = {for (final m in mines) (m.col, m.row)};
-    final decor = _generateDecor(water, treeTiles, mineTiles, reedTiles);
+    final landmarks = _generateLandmarks(
+      water,
+      treeTiles,
+      mineTiles,
+      reedTiles,
+    );
+    final landmarkTiles = {for (final l in landmarks) (l.col, l.row)};
+    final decor = _generateDecor(
+      water,
+      treeTiles,
+      mineTiles,
+      reedTiles,
+      landmarkTiles,
+    );
     final decorTiles = {for (final d in decor) (d.col, d.row)};
-    final berries =
-        _generateBerryBushes(water, treeTiles, mineTiles, reedTiles, decorTiles);
+    final berries = _generateBerryBushes(
+      water,
+      treeTiles,
+      mineTiles,
+      reedTiles,
+      {...decorTiles, ...landmarkTiles},
+    );
     return WorldGeneratorResult(
       waterTiles: water,
       lotuses: lotuses,
@@ -96,6 +117,7 @@ class WorldGenerator {
       mineNodes: mines,
       decor: decor,
       berryBushes: berries,
+      landmarks: landmarks,
     );
   }
 
@@ -423,6 +445,7 @@ class WorldGenerator {
   static const double _kSpanStone = 56;
   static const double _kSpanCoal = 72;
   static const double _kSpanIron = 88;
+
   /// Bunun ötesi (maxSpan ~117'ye tampanlı) pratikte hiç kadraja girmez —
   /// oraya maden koymak israftır.
   static const double _kSpanCap = 112;
@@ -510,6 +533,65 @@ class WorldGenerator {
     }
   }
 
+  // ── Harita ilgi noktaları ──────────────────────────────────────────────────
+
+  /// Beş küçük yer, kamera erişiminin ardışık bantlarına dağıtılır. Sonuç
+  /// torbasında üç bonus ve iki bela vardır; sıra seed'le karışır ama bir dünya
+  /// yalnız ödül ya da yalnız ceza üretemez.
+  List<WorldLandmark> _generateLandmarks(
+    Set<(int, int)> water,
+    Set<(int, int)> treeTiles,
+    Set<(int, int)> mineTiles,
+    Set<(int, int)> reedTiles,
+  ) {
+    final result = <WorldLandmark>[];
+    final occupied = <(int, int)>{};
+    final kinds = WorldLandmarkKind.values.toList()..shuffle(_rng);
+    final outcomes = <LandmarkOutcome>[
+      LandmarkOutcome.salvage,
+      LandmarkOutcome.provisions,
+      LandmarkOutcome.oldCoin,
+      LandmarkOutcome.spoiledStores,
+      LandmarkOutcome.illOmen,
+    ]..shuffle(_rng);
+    const bands = <(double, double)>[
+      (54, 64),
+      (64, 74),
+      (74, 84),
+      (84, 94),
+      (94, 110),
+    ];
+
+    for (var i = 0; i < bands.length; i++) {
+      final (lo, hi) = bands[i];
+      for (var attempt = 0; attempt < 500; attempt++) {
+        final c = 2 + _rng.nextInt(kCols - 4);
+        final r = 2 + _rng.nextInt(kRows - 4);
+        final tile = (c, r);
+        final span = _spanNeeded(c, r);
+        if (span < lo ||
+            span > hi ||
+            water.contains(tile) ||
+            treeTiles.contains(tile) ||
+            mineTiles.contains(tile) ||
+            reedTiles.contains(tile)) {
+          continue;
+        }
+        // Ayrı siluetler olarak okunsun; iki keşif aynı kadrajda üst üste
+        // binmesin. Kare mesafe bu küçük sabit listede yeterli.
+        if (occupied.any((p) => (p.$1 - c).abs() < 7 && (p.$2 - r).abs() < 7)) {
+          continue;
+        }
+        occupied.add(tile);
+        result.add(
+          WorldLandmark(col: c, row: r, kind: kinds[i], outcome: outcomes[i]),
+        );
+        break;
+      }
+    }
+    return result;
+  }
+
   // ── Decor ───────────────────────────────────────────────────────────────────
   /// Çimene serpiştirilen pure-visual dekor. Hedef: "doğal landmark" hissi —
   /// her yere serpilmiş gereksiz kalabalık DEĞİL. Tile yoğunluğu düşük tutulur
@@ -522,6 +604,7 @@ class WorldGenerator {
     Set<(int, int)> treeTiles,
     Set<(int, int)> mineTiles,
     Set<(int, int)> reedTiles,
+    Set<(int, int)> landmarkTiles,
   ) {
     final decor = <DecorEntity>[];
     final occupied = <(int, int)>{};
@@ -532,6 +615,7 @@ class WorldGenerator {
         !treeTiles.contains((c, r)) &&
         !mineTiles.contains((c, r)) &&
         !reedTiles.contains((c, r)) &&
+        !landmarkTiles.contains((c, r)) &&
         !occupied.contains((c, r));
 
     // Landmark adjacency helpers — tile'ın 8-komşusunda ağaç/su var mı?

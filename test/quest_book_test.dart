@@ -197,15 +197,43 @@ void main() {
       expect(QuestBook.all.any((q) => q.id == 'giveCook'), isFalse);
     });
 
-    test('kuruluş yönetişime DEĞER — yalnız bina dikmekten ibaret değil', () {
-      // Berat uzun süre tier 1'deydi: oyuncu köyü kuruyor, öğretici susuyor ve
-      // oyunun asıl konusuna (mühür/divan/hane) kendi başına çarpması
-      // bekleniyordu. Kuruluşta en az bir yönetişim adımı olmalı.
-      expect(
-        tier0().any((q) => q.category == QuestCategory.governance),
-        isTrue,
-        reason: 'kuruluş yeniden saf inşaat listesine dönmüş',
+    test('Kanunname kuruluşta görünmez, Belediye sonrasında açılır', () {
+      final firstPolicy = QuestBook.all.firstWhere(
+        (q) => q.id == 'firstPolicy',
       );
+      final townhallIndex = QuestBook.all.indexWhere((q) => q.id == 'townhall');
+      final policyIndex = QuestBook.all.indexOf(firstPolicy);
+      expect(
+        tier0().any((q) => q.uiTarget == QuestUi.lawBook),
+        isFalse,
+        reason: 'Belediye yokken kuruluş öğreticisi Kanunname gösteriyor',
+      );
+      expect(firstPolicy.tier, 1);
+      expect(firstPolicy.guided, isTrue);
+      expect(policyIndex, townhallIndex + 1);
+    });
+
+    test('yazılı hüküm rehberi Belediye görevi bitmeden sıra almaz', () {
+      final foundingDone = {
+        for (final q in QuestBook.all.where((q) => q.tier == 0)) q.id,
+      };
+      final beforeHall = QuestBook.activeQuests(
+        _ctx(charterTier: 1),
+        foundingDone,
+      );
+      expect(beforeHall.first.quest.id, 'townhall');
+
+      final afterHall = QuestBook.activeQuests(
+        _ctx(
+          charterTier: 1,
+          buildings: [
+            BuildingEntity(type: BuildingType.townhall, col: 4, row: 4),
+          ],
+        ),
+        {...foundingDone, 'townhall'},
+      );
+      expect(afterHall.first.quest.id, 'firstPolicy');
+      expect(afterHall.first.quest.uiTarget, QuestUi.lawBook);
     });
 
     test('öğretici 3-5 adıma eşlik eder, kuruluşun tamamına değil', () {
@@ -215,10 +243,10 @@ void main() {
       final guided = QuestBook.all.where((q) => q.guided).toList();
       expect(guided.length, greaterThanOrEqualTo(3));
       expect(guided.length, lessThanOrEqualTo(5));
+      expect(guided.where((q) => q.tier == 0).length, 3);
       expect(
-        guided.every((q) => q.tier == 0),
-        isTrue,
-        reason: 'kuruluştan sonra spot öğretmez, dırdır eder',
+        guided.where((q) => q.tier > 0).map((q) => q.id),
+        orderedEquals(const ['firstPolicy']),
       );
     });
 

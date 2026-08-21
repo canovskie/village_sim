@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/resources.dart';
 import '../world/road_surface.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 import 'semantic_icon.dart';
 
 /// Yol rafı — 3 surface chip (toprak / taş / köprü) + SİLGİ. Modern koyu panel;
@@ -45,10 +46,7 @@ class RoadPanel extends StatelessWidget {
             ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: _EraseChip(
-              selected: eraseSelected,
-              onTap: onSelectErase,
-            ),
+            child: _EraseChip(selected: eraseSelected, onTap: onSelectErase),
           ),
         ],
       ),
@@ -67,7 +65,12 @@ class _EraseChip extends StatelessWidget {
   Widget build(BuildContext context) {
     const tint = Color(0xFFCC6655);
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        onTap();
+        if (useCompactGameUi(context)) {
+          const MobileCatalogCloseNotification().dispatch(context);
+        }
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         width: 58,
@@ -91,8 +94,11 @@ class _EraseChip extends StatelessWidget {
             const SizedBox(
               height: 26,
               child: Center(
-                child: GameIcon(GameIconData.demolish,
-                    size: 20, color: AppUi.rust),
+                child: GameIcon(
+                  GameIconData.demolish,
+                  size: 20,
+                  color: AppUi.rust,
+                ),
               ),
             ),
             const SizedBox(height: 3),
@@ -114,12 +120,14 @@ class _EraseChip extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 3),
-            Text('yarı iade',
-                style: AppUi.body.copyWith(
-                  fontSize: 8,
-                  color: AppUi.textLo,
-                  fontWeight: FontWeight.w600,
-                )),
+            Text(
+              'yarı iade',
+              style: AppUi.body.copyWith(
+                fontSize: 8,
+                color: AppUi.textLo,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -147,7 +155,12 @@ class _Chip extends StatelessWidget {
     final cost = surface.cost;
     const tint = AppUi.accent;
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        onTap();
+        if (useCompactGameUi(context)) {
+          const MobileCatalogCloseNotification().dispatch(context);
+        }
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 140),
         width: 58,
@@ -173,8 +186,12 @@ class _Chip extends StatelessWidget {
               SizedBox(
                 height: 26,
                 child: Center(
-                  child: SemanticIcon(surface.icon,
-                      size: 20, color: tint, fallback: GameIconData.map),
+                  child: SemanticIcon(
+                    surface.icon,
+                    size: 20,
+                    color: tint,
+                    fallback: GameIconData.map,
+                  ),
                 ),
               ),
               const SizedBox(height: 3),
@@ -215,12 +232,14 @@ class _CostLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cost.isFree) {
-      return Text('Ücretsiz',
-          style: AppUi.body.copyWith(
-            color: AppUi.sage,
-            fontSize: 8.5,
-            fontWeight: FontWeight.w700,
-          ));
+      return Text(
+        'Ücretsiz',
+        style: AppUi.body.copyWith(
+          color: AppUi.sage,
+          fontSize: 8.5,
+          fontWeight: FontWeight.w700,
+        ),
+      );
     }
     return Wrap(
       alignment: WrapAlignment.center,
@@ -228,14 +247,22 @@ class _CostLine extends StatelessWidget {
       runSpacing: 1,
       children: [
         for (final (kind, amount) in cost.entries)
-          _ResourceCost(kind: kind, amount: amount, available: stockpile.get(kind)),
+          _ResourceCost(
+            kind: kind,
+            amount: amount,
+            available: stockpile.get(kind),
+          ),
       ],
     );
   }
 }
 
 class _ResourceCost extends StatelessWidget {
-  const _ResourceCost({required this.kind, required this.amount, required this.available});
+  const _ResourceCost({
+    required this.kind,
+    required this.amount,
+    required this.available,
+  });
   final ResourceKind kind;
   final int amount;
   final int available;
@@ -246,15 +273,21 @@ class _ResourceCost extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SemanticIcon(kind.icon,
-            size: 10, color: color, fallback: GameIconData.star),
+        SemanticIcon(
+          kind.icon,
+          size: 10,
+          color: color,
+          fallback: GameIconData.star,
+        ),
         const SizedBox(width: 2),
-        Text('$amount',
-            style: AppUi.body.copyWith(
-              color: color,
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-            )),
+        Text(
+          '$amount',
+          style: AppUi.body.copyWith(
+            color: color,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ],
     );
   }

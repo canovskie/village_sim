@@ -18,33 +18,32 @@ enum Sfx {
   birds,
   thunderClap,
   imperialMarch, // İmparatorluk kolonu yaklaşırken — kalabalık ordu yürüyüşü
-
   // ── Beklenen dosyalar (bkz. assets/audio/README.md) ─────────────────────
   // Oyunun duygusal anları bugüne dek TEK çanla karşılanıyordu: görev de,
   // mühür de, rejim değişimi de aynı sesti. Bunlar o çanı bölüyor.
-  sealStamp,   // mühür vurulur — Kanunname'nin sesi
-  birthJoy,    // doğum
+  sealStamp, // mühür vurulur — Kanunname'nin sesi
+  birthJoy, // doğum
   funeralToll, // cenaze
-  fightScuffle,// yumruklaşma / çekişme
-  buildDone,   // inşaat biter, gövde tamamlanır
-  uiTap,       // panel/düğme dokunuşu
-
+  fightScuffle, // yumruklaşma / çekişme
+  buildDone, // inşaat biter, gövde tamamlanır
+  uiTap, // panel/düğme dokunuşu
   // ── İNSAN SESLERİ ────────────────────────────────────────────────────────
   // Köyde bugüne dek hiç insan sesi yoktu: çan, hayvan ve hava vardı, ağız
   // yoktu. Bunlar o boşluğu kapatır. Hepsi KELİMESİZ — metni `voice.dart`
   // yazıyor, ses ayrıca cümle kurarsa ikisi çelişir ve dil eklenince kadro
   // çöpe gider.
-  childLaugh,    // çocuk kıkırdaması — gündüz seyrek aksan (çocuk varsa)
-  childrenPlay,  // çocuk kalabalığı uğultusu — köyde 3+ çocuk varken
-  cough,         // hastalık: onset + hastalık sürerken seyrek
-  throatClear,   // dilekçe sahibi söze başlar ("öhöm")
+  childLaugh, // çocuk kıkırdaması — gündüz seyrek aksan (çocuk varsa)
+  childrenPlay, // çocuk kalabalığı uğultusu — köyde 3+ çocuk varken
+  cough, // hastalık: onset + hastalık sürerken seyrek
+  throatClear, // dilekçe sahibi söze başlar ("öhöm")
   crowdApplause, // düğün alayı — köy ölçeğinde küçük grup alkışı
-  buildStart,    // şantiye kurulur, aletler çıkar
+  buildStart, // şantiye kurulur, aletler çıkar
+  workHit, // balta/kazma/çekiç temasının kısa, kuru aksanı
 }
 
 /// Müzik parçaları — ortamdan AYRI katman (bkz. [AudioManager.playMusic]).
 enum MusicTrack {
-  menu,    // açılış/şafak menüsü
+  menu, // açılış/şafak menüsü
   village, // oyun döngüsü
 }
 
@@ -67,6 +66,7 @@ class AudioManager {
 
   static const _dir = 'audio';
   bool _started = false;
+  bool _suspended = false;
 
   // Ortam döngü kanalları.
   late final AudioPlayer _day;
@@ -113,6 +113,7 @@ class AudioManager {
     Sfx.throatClear: 0.5,
     Sfx.crowdApplause: 0.7,
     Sfx.buildStart: 0.5,
+    Sfx.workHit: 0.34,
   };
 
   /// Efekt → DOSYA(LAR). Birden çok dosya varsa her çalışta rastgele biri
@@ -136,6 +137,7 @@ class AudioManager {
     Sfx.throatClear: ['throat_clear.mp3'],
     Sfx.crowdApplause: ['crowd_applause.mp3'],
     Sfx.buildStart: ['build_start.mp3'],
+    Sfx.workHit: ['work_hit.mp3'],
     Sfx.sealStamp: ['seal_stamp.mp3'],
     Sfx.birthJoy: ['birth_joy.mp3'],
     Sfx.funeralToll: ['funeral_toll.mp3'],
@@ -156,7 +158,7 @@ class AudioManager {
   static const double _baseStorm = 0.75;
   static const double _baseFire = 0.8;
 
-  double _owlTimer = 22.0;  // gece baykuş aksanı sayacı (sn)
+  double _owlTimer = 22.0; // gece baykuş aksanı sayacı (sn)
   double _birdsTimer = 18.0; // gündüz kuş cıvıltısı aksanı sayacı (sn)
   double _childTimer = 30.0; // gündüz çocuk sesi aksanı sayacı (sn)
 
@@ -171,8 +173,8 @@ class AudioManager {
   // maskeleniyor; iki kanal boşuna bellek ve boşuna karmaşa olurdu.
   AudioPlayer? _music;
   MusicTrack? _musicTrack;
-  double _musicCur = 0.0;   // anlık taban seviye (ayar öncesi)
-  double _musicTgt = 0.0;   // hedef taban seviye
+  double _musicCur = 0.0; // anlık taban seviye (ayar öncesi)
+  double _musicTgt = 0.0; // hedef taban seviye
   static const double _baseMusic = 0.55; // müzik ortamı EZMEZ, altına serilir
 
   /// İlk çağrıda kanalları kurar + döngüleri sessiz başlatır. Hatalar yutulur.
@@ -252,8 +254,12 @@ class AudioManager {
   /// [children] köydeki çocuk sayısı — gündüz çocuk sesi aksanını açar. Sıfırsa
   /// hiç duyulmaz: çocuğu olmayan köyden çocuk sesi gelmesi, sesin dünyayla
   /// bağını koparan tam olarak o "arka planda teyp çalıyor" hissini verir.
-  void update(double dt,
-      {double dayLight = 1.0, Random? rng, int children = 0}) {
+  void update(
+    double dt, {
+    double dayLight = 1.0,
+    Random? rng,
+    int children = 0,
+  }) {
     if (!_started) return;
     final ambient = SettingsModel.instance.effectiveAmbientVolume;
     final k = (dt * 1.5).clamp(0.0, 1.0); // ~0.7s crossfade
@@ -267,8 +273,11 @@ class AudioManager {
       _musicCur += (_musicTgt - _musicCur) * mk;
     }
     if (_music != null) {
-      _safe(_music!.setVolume(
-          _musicCur * SettingsModel.instance.effectiveMusicVolume));
+      _safe(
+        _music!.setVolume(
+          _musicCur * SettingsModel.instance.effectiveMusicVolume,
+        ),
+      );
     }
 
     for (final p in _cur.keys) {
@@ -310,8 +319,9 @@ class AudioManager {
 
   /// Tek-atış efekt çal — havuzdan sıradaki oynatıcıyla (üst üste binebilir).
   void playSfx(Sfx s) {
-    if (!_started || _sfxPool.isEmpty) return;
-    final vol = (_sfxGain[s] ?? 0.8) * SettingsModel.instance.effectiveSfxVolume;
+    if (!_started || _suspended || _sfxPool.isEmpty) return;
+    final vol =
+        (_sfxGain[s] ?? 0.8) * SettingsModel.instance.effectiveSfxVolume;
     if (vol <= 0.001) return;
     final files = _sfxFile[s];
     if (files == null || files.isEmpty) return;
@@ -346,6 +356,32 @@ class AudioManager {
     f.catchError((_) {});
   }
 
+  /// Mobil yaşam döngüsü: uygulama arka plandayken döngüleri gerçekten durdur.
+  /// Ticker'ın susması tek başına yeterli değildir; native ses oynatıcıları
+  /// Flutter kare üretmese de çalmayı sürdürebilir.
+  void suspend() {
+    if (!_started || _suspended) return;
+    _suspended = true;
+    for (final p in _cur.keys) {
+      _safe(p.pause());
+    }
+    if (_music != null) _safe(_music!.pause());
+    // Kısa efektleri geri dönüşte ortasından devam ettirmek anlamsızdır.
+    for (final p in _sfxPool) {
+      _safe(p.stop());
+    }
+  }
+
+  /// Askıya alınan ortam ve müzik döngülerini kaldıkları yerden sürdür.
+  void resume() {
+    if (!_started || !_suspended) return;
+    _suspended = false;
+    for (final p in _cur.keys) {
+      _safe(p.resume());
+    }
+    if (_music != null && _musicTrack != null) _safe(_music!.resume());
+  }
+
   Future<void> dispose() async {
     for (final p in [..._cur.keys, ..._sfxPool, ?_music]) {
       _safe(p.stop());
@@ -358,6 +394,7 @@ class AudioManager {
     _musicTrack = null;
     _musicCur = 0;
     _musicTgt = 0;
+    _suspended = false;
     _started = false;
   }
 }

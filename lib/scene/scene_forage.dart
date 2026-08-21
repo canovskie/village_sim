@@ -54,7 +54,10 @@ extension _SceneForage on _VillageSceneState {
         if (!b.harvestable || b.isBeingPicked) continue;
         final dx = b.col + 0.5 - v.gridX, dy = b.row + 0.5 - v.gridY;
         final d = dx * dx + dy * dy;
-        if (d < bestD) { bestD = d; best = b; }
+        if (d < bestD) {
+          bestD = d;
+          best = b;
+        }
       }
       if (best == null) return; // olgun çalı yok → bekle (regrow)
       best.isBeingPicked = true;
@@ -85,10 +88,16 @@ extension _SceneForage on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 0.85) % (2 * pi);
+    job.reportCycle(job.timer, kBerryPickDuration);
     if (job.timer >= kBerryPickDuration) {
       bush.harvest();
       bush.isBeingPicked = false;
-      _deliverFoodFrom(v, kBerryYield);
+      final basket = _spawnJobBox(
+        ResourceBoxType.foodBasket,
+        v.gridX,
+        v.gridY,
+        amount: kBerryYield,
+      );
       _berriesPicked++;
       job.claim = null;
       job.phase = 0;
@@ -96,6 +105,8 @@ extension _SceneForage on _VillageSceneState {
       job.working = false;
       job.harvesting = false;
       job.phaseAnim = 0;
+      job.finishCycle();
+      _sendOwnOutput(v, basket);
       v.feel(NpcEmotion.content, 2.5, moodDelta: 0.02);
     }
   }
@@ -144,18 +155,26 @@ extension _SceneForage on _VillageSceneState {
     v.idleTimer = 0.5;
     job.timer += dt;
     job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 0.7) % (2 * pi);
+    job.reportCycle(job.timer, kCookDuration);
     if (job.timer >= kCookDuration) {
       job.timer = 0;
       // Son bir kez kontrol: pişirim süresince stok tükenmiş olabilir.
       if (_stockpile.food >= kCookFoodCost && _cookedMeals < _mealCap) {
         _stockpile.food -= kCookFoodCost;
         _cookedMeals += kCookMealsPerBatch;
+        job.finishCycle();
+        fp.deliveryPulse = 1.0;
+        fp.deliveryTally++;
         v.feel(NpcEmotion.content, 3, moodDelta: 0.03);
         // İlk sıcak yemek köyde bir andır — bir kez duyurulur.
         if (!_firstMealShown) {
           _firstMealShown = true;
-          _showNotification(Voice.say(
-              _kFirstMealPool, _voice(v, seed: _stableSeed('ilkyemek', _dayCount))));
+          _showNotification(
+            Voice.say(
+              _kFirstMealPool,
+              _voice(v, seed: _stableSeed('ilkyemek', _dayCount)),
+            ),
+          );
           _feelVillage(NpcEmotion.joy, 4, 0.05);
         }
       }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
+import 'event_artwork.dart';
 import 'mobile_ui.dart';
 import 'semantic_icon.dart';
 
@@ -54,12 +55,36 @@ class EventChoiceModal extends StatelessWidget {
   /// dokunmak modalı KAPATMAZ (yanlışlıkla kapama en çok telefonda can yakar).
   Widget _swallow(Widget child) => GestureDetector(onTap: () {}, child: child);
 
-  List<Widget> _choiceCards() => [
+  List<Widget> _choiceCards({bool compact = false}) => [
     for (final c in event.choices!) ...[
-      _ChoiceCard(choice: c, accent: _accent, onTap: () => onChoose(c)),
+      _ChoiceCard(
+        choice: c,
+        accent: _accent,
+        compact: compact,
+        onTap: () => onChoose(c),
+      ),
       if (c != event.choices!.last) const SizedBox(height: 9),
     ],
   ];
+
+  /// Mobil kararlar kaymaz: mevcut yüksekliği seçenekler eşit paylaşır.
+  /// Olay kataloğunda 2 seçenek var; üçe çıksa da aynı ekrana bölünür.
+  Widget _compactChoices() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (int i = 0; i < event.choices!.length; i++) ...[
+        Expanded(
+          child: _ChoiceCard(
+            choice: event.choices![i],
+            accent: _accent,
+            compact: true,
+            onTap: () => onChoose(event.choices![i]),
+          ),
+        ),
+        if (i != event.choices!.length - 1) const SizedBox(height: 7),
+      ],
+    ],
+  );
 
   /// TELEFON YATAY — solda olay, sağda seçenekler. Tek sütunda üç seçenekli
   /// bir olay 414dp'lik ekranın altından taşıyordu; iki sütun hem taşmayı hem
@@ -70,47 +95,49 @@ class EventChoiceModal extends StatelessWidget {
       child: SizedBox(
         width: window.width,
         height: window.height,
-        child: _swallow(AppReveal(
-          child: AppPanel(
-            accent: _accent,
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: SingleChildScrollView(
+        child: _swallow(
+          AppReveal(
+            child: AppPanel(
+              accent: _accent,
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    flex: 5,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _header(),
-                        const SizedBox(height: 12),
+                        _header(compact: true),
+                        const SizedBox(height: 7),
+                        EventArtwork(
+                          asset: eventArtworkAsset(event),
+                          height: 100,
+                          accent: _accent,
+                        ),
+                        const SizedBox(height: 7),
                         Text(
                           event.message,
-                          style: AppUi.body.copyWith(fontSize: 12, height: 1.5),
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppUi.body.copyWith(
+                            fontSize: 12,
+                            height: 1.45,
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Container(width: 1, color: AppUi.line),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 4,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: _choiceCards(),
-                    ),
-                  ),
-                ),
-              ],
+                  const SizedBox(width: 10),
+                  Container(width: 1, color: AppUi.line),
+                  const SizedBox(width: 10),
+                  Expanded(flex: 4, child: _compactChoices()),
+                ],
+              ),
             ),
           ),
-        )),
+        ),
       ),
     );
   }
@@ -121,38 +148,46 @@ class EventChoiceModal extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: _swallow(AppReveal(
-            child: AppPanel(
-              accent: _accent,
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _header(),
-                  const SizedBox(height: 14),
-                  Text(
-                    event.message,
-                    textAlign: TextAlign.center,
-                    style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
-                  ),
-                  const AppDivider(),
-                  ..._choiceCards(),
-                ],
+          child: _swallow(
+            AppReveal(
+              child: AppPanel(
+                accent: _accent,
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _header(),
+                    const SizedBox(height: 12),
+                    EventArtwork(
+                      asset: eventArtworkAsset(event),
+                      height: 164,
+                      accent: _accent,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      event.message,
+                      textAlign: TextAlign.center,
+                      style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
+                    ),
+                    const AppDivider(),
+                    ..._choiceCards(),
+                  ],
+                ),
               ),
             ),
-          )),
+          ),
         ),
       ),
     );
   }
 
-  Widget _header() {
+  Widget _header({bool compact = false}) {
     return Row(
       children: [
         // Olay ikonu — koyu kare, aksan kenar + soft glow.
         Container(
-          width: 60,
-          height: 60,
+          width: compact ? 50 : 60,
+          height: compact ? 50 : 60,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: AppUi.surface0,
@@ -167,7 +202,7 @@ class EventChoiceModal extends StatelessWidget {
           ),
           child: SemanticIcon(
             event.icon,
-            size: 32,
+            size: compact ? 27 : 32,
             color: _accent,
             fallback: GameIconData.dice,
             label: event.title,
@@ -183,7 +218,12 @@ class EventChoiceModal extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 event.title,
-                style: AppUi.title.copyWith(fontSize: 18, color: _accent),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppUi.title.copyWith(
+                  fontSize: compact ? 16 : 18,
+                  color: _accent,
+                ),
               ),
             ],
           ),
@@ -198,10 +238,12 @@ class _ChoiceCard extends StatefulWidget {
   final EventChoice choice;
   final Color accent;
   final VoidCallback onTap;
+  final bool compact;
   const _ChoiceCard({
     required this.choice,
     required this.accent,
     required this.onTap,
+    this.compact = false,
   });
   @override
   State<_ChoiceCard> createState() => _ChoiceCardState();
@@ -224,7 +266,9 @@ class _ChoiceCardState extends State<_ChoiceCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+          padding: widget.compact
+              ? const EdgeInsets.fromLTRB(10, 8, 10, 8)
+              : const EdgeInsets.fromLTRB(12, 10, 12, 11),
           decoration: BoxDecoration(
             color: _hover
                 ? Color.alphaBlend(
@@ -264,7 +308,11 @@ class _ChoiceCardState extends State<_ChoiceCard> {
                   Expanded(
                     child: Text(
                       c.label,
-                      style: AppUi.bodyHi.copyWith(fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppUi.bodyHi.copyWith(
+                        fontSize: widget.compact ? 12.5 : 13,
+                      ),
                     ),
                   ),
                   GameIcon(
@@ -279,10 +327,16 @@ class _ChoiceCardState extends State<_ChoiceCard> {
                 padding: const EdgeInsets.only(left: 13),
                 child: Text(
                   c.detail,
-                  style: AppUi.body.copyWith(fontSize: 11, height: 1.4),
+                  maxLines: widget.compact ? 2 : null,
+                  overflow: widget.compact ? TextOverflow.ellipsis : null,
+                  style: AppUi.body.copyWith(
+                    fontSize: widget.compact ? 10.5 : 11,
+                    height: 1.35,
+                  ),
                 ),
               ),
-              if (deltas.isNotEmpty) ...[
+              if (deltas.isNotEmpty &&
+                  (!widget.compact || deltas.length <= 3)) ...[
                 const SizedBox(height: 8),
                 Padding(
                   padding: const EdgeInsets.only(left: 13),

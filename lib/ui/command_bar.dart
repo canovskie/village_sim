@@ -26,6 +26,10 @@ class CommandBar extends StatefulWidget {
   final VoidCallback onDivan;
   final VoidCallback onRoster;
 
+  /// Kuruluş tamamlanana kadar henüz sırası gelmeyen derin yönetim
+  /// kapılarını saklar.
+  final bool showCivicGates;
+
   /// Defter kapısındaki bekleyen gündem rozeti (0 = rozet yok).
   final int agenda;
 
@@ -34,15 +38,23 @@ class CommandBar extends StatefulWidget {
   /// geçmiyordu; en sakin yer burası.
   final String village;
 
+  /// Oyun sahnesinde Android geri hareketinin de kapatabilmesi için katalog
+  /// kontrollü kullanılabilir. null ise widget kendi yerel durumunu tutar.
+  final bool? catalogOpen;
+  final ValueChanged<bool>? onCatalogOpenChanged;
+
   const CommandBar({
     super.key,
     required this.buildSegment,
     required this.onDefter,
     required this.onDivan,
     required this.onRoster,
+    this.showCivicGates = true,
     this.context,
     this.agenda = 0,
     this.village = '',
+    this.catalogOpen,
+    this.onCatalogOpenChanged,
   });
 
   @override
@@ -52,10 +64,21 @@ class CommandBar extends StatefulWidget {
 class _CommandBarState extends State<CommandBar> {
   bool _catalogOpen = false;
 
+  bool get _isCatalogOpen => widget.catalogOpen ?? _catalogOpen;
+
+  void _setCatalogOpen(bool value) {
+    if (widget.catalogOpen == null) {
+      setState(() => _catalogOpen = value);
+    }
+    widget.onCatalogOpenChanged?.call(value);
+  }
+
   @override
   void didUpdateWidget(covariant CommandBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.context == null && widget.context != null) {
+    if (widget.catalogOpen == null &&
+        oldWidget.context == null &&
+        widget.context != null) {
       _catalogOpen = false;
     }
   }
@@ -67,156 +90,115 @@ class _CommandBarState extends State<CommandBar> {
   }
 
   Widget _desktop() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Color(0xEE0C0D0F), Color(0x660C0D0F)],
-        ),
-        border: Border(top: BorderSide(color: AppUi.line)),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 5, 10, 5),
+    // Masaüstünde tam genişlikte koyu bir "duvar" yok. Yalnız gerçekten
+    // etkileşim taşıyan kümeler kendi yüzeyini alır; boş orta alan dünyayı
+    // açık bırakır. Böylece alt komutlar okunur kalırken harita daha ferah
+    // görünür.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // ── SOL: inşa ────────────────────────────────────────────────────
-          // Esnek + yatay kaydırılabilir: çok binalı kategoride dar ekranda
-          // (mobil, yatay-kilitli) TAŞMASIN — fazlası kayar. Geniş ekranda
-          // doğal genişliğinde durur (loose fit).
+          // BuildingPanel zaten kendi kapsülünü çiziyor; ikinci bir dış yüzey
+          // açmak iç içe panel ve gereksiz koyu alan üretirdi.
           Flexible(
             flex: 3,
             fit: FlexFit.loose,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                RotatedBox(
-                  quarterTurns: 3,
-                  child: Text(
-                    'İNŞA',
-                    style: AppUi.label.copyWith(
-                      fontSize: 7.5,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: widget.buildSegment,
-                  ),
-                ),
-              ],
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: widget.buildSegment,
             ),
           ),
-          const _Divider(),
+          const SizedBox(width: 14),
           // ── ORTA: bağlam ─────────────────────────────────────────────────
           Expanded(
             flex: 2,
-            child: widget.context ?? _ContextHint(village: widget.village),
-          ),
-          const _Divider(),
-          // ── SAĞ: menü kapıları ───────────────────────────────────────────
-          _Seg(
-            label: 'KÖY',
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Öğretici yönetişim adımında bu kapıyı gösterir — berat bir
-                // bina değil, defterin içindeki bir hüküm.
-                GuideTarget(
-                  id: GuideAnchors.gateDefter,
-                  child: _MenuButton(
-                    icon: GameIconData.scroll,
-                    label: 'Defter',
-                    badge: widget.agenda,
-                    onTap: widget.onDefter,
+            // Boş ipucu arka plansız; gerçek seçim ve eylemler geldiğinde
+            // okunurluk/etkileşim için yalnız o küme kapsül kazanır.
+            child: widget.context == null
+                ? _ContextHint(village: widget.village)
+                : AppPanel(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
+                    child: widget.context!,
                   ),
-                ),
-                const SizedBox(width: 4),
-                _MenuButton(
-                  icon: GameIconData.bank,
-                  label: 'Divan',
-                  onTap: widget.onDivan,
-                ),
-                const SizedBox(width: 4),
-                _MenuButton(
-                  icon: GameIconData.people,
-                  label: 'Nüfus',
-                  onTap: widget.onRoster,
-                ),
-              ],
-            ),
           ),
+          if (widget.showCivicGates) ...[
+            const SizedBox(width: 14),
+            // ── SAĞ: menü kapıları ───────────────────────────────────────────
+            AppPanel(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Öğretici yönetişim adımında bu kapıyı gösterir — berat bir
+                  // bina değil, defterin içindeki bir hüküm.
+                  GuideTarget(
+                    id: GuideAnchors.gateDefter,
+                    child: _MenuButton(
+                      icon: GameIconData.scroll,
+                      label: 'Defter',
+                      badge: widget.agenda,
+                      onTap: widget.onDefter,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  _MenuButton(
+                    icon: GameIconData.bank,
+                    label: 'Divan',
+                    onTap: widget.onDivan,
+                  ),
+                  const SizedBox(width: 4),
+                  _MenuButton(
+                    icon: GameIconData.people,
+                    label: 'Nüfus',
+                    onTap: widget.onRoster,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _mobile() {
-    // "KENAR RAYI"nın ALT hattı — üç yuva, hepsi AYNI yükseklikte
-    // ([MobileUi.actionH]) ve aynı taban çizgisinde: inşa · bağlam · kapılar.
-    //
-    // Önceki hâl yine üç kapsüldü ama her biri kendi yüksekliğini içeriğinden
-    // alıyordu (48'lik inşa düğmesi, 40'lık bağlam, 52'lik kapılar) ve
-    // `CrossAxisAlignment.end` ile alttan hizalanıyordu → üstleri basamak
-    // basamaktı. Sabit yükseklik bunu bitirir; kroma tek bir hat gibi okunur.
-    // Kenar boşlukları SafeArea'dan DEĞİL [MobileUi] ızgarasından: yatayda
-    // SafeArea çentiğin tam inset'ini (59dp) uyguluyor, alt sıra iki yandan
-    // kenardan kopuyordu. Alt hat çentik bandının altında kalır — orada yalnız
-    // yuvarlak köşe payı gerekir. Altta ise gerçek güvenli alan (ana ekran
-    // çubuğu) aynen korunur.
     return Builder(
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          left: MobileUi.edgeLeft(context),
-          right: MobileUi.edgeRight(context),
-          bottom: MobileUi.bottom(context),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.bottomCenter,
-              child: !_catalogOpen
-                  ? const SizedBox(width: double.infinity)
-                  : MobileSurface(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: widget.buildSegment,
+      builder: (context) {
+        if (_isCatalogOpen) return _mobileCatalog(context);
+        return Padding(
+          padding: EdgeInsets.only(
+            left: MobileUi.edgeLeft(context),
+            right: MobileUi.edgeRight(context),
+            bottom: MobileUi.bottom(context),
+          ),
+          child: SizedBox(
+            height: MobileUi.actionH,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                MobileSurface(
+                  child: _MobileBuildButton(
+                    open: false,
+                    onTap: () => _setCatalogOpen(true),
+                  ),
+                ),
+                // Bağlam yuvası yalnız seçim VARSA yer kaplar — boşken kapsül
+                // açılmaz, orası harita kalır.
+                if (widget.context != null)
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: MobileUi.gap,
                       ),
-                    ),
-            ),
-            const SizedBox(height: MobileUi.gap),
-            SizedBox(
-              height: MobileUi.actionH,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  MobileSurface(
-                    child: _MobileBuildButton(
-                      open: _catalogOpen,
-                      onTap: () => setState(() => _catalogOpen = !_catalogOpen),
+                      child: MobileSurface(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Center(child: widget.context!),
+                      ),
                     ),
                   ),
-                  // Bağlam yuvası yalnız seçim VARSA yer kaplar — boşken kapsül
-                  // açılmaz, orası harita kalır.
-                  if (widget.context != null)
-                    Flexible(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: MobileUi.gap,
-                        ),
-                        child: MobileSurface(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Center(child: widget.context!),
-                        ),
-                      ),
-                    ),
+                if (widget.showCivicGates)
                   MobileSurface(
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -246,10 +228,107 @@ class _CommandBarState extends State<CommandBar> {
                       ],
                     ),
                   ),
-                ],
-              ),
+              ],
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Telefonda inşa bir alt raf değil, bağımsız bir çalışma modu. Opak
+  /// yüzey HUD/dünya kalabalığını tamamen susturur; seçim yapılınca bildirim
+  /// katalogu kapatır ve oyuncu doğrudan yerleştirme görünümüne döner.
+  Widget _mobileCatalog(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return SizedBox(
+      key: const ValueKey('mobile_build_catalog'),
+      height: media.size.height,
+      child: ColoredBox(
+        color: AppUi.surface0,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            media.padding.left,
+            media.padding.top,
+            media.padding.right,
+            media.padding.bottom,
+          ),
+          child: NotificationListener<MobileCatalogCloseNotification>(
+            onNotification: (_) {
+              _setCatalogOpen(false);
+              return true;
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 58,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Row(
+                      children: [
+                        const GameIcon(
+                          GameIconData.hammer,
+                          size: 19,
+                          color: AppUi.accent,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'İNŞA',
+                          style: AppUi.title.copyWith(
+                            fontSize: 16,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Bir yapı veya araç seç',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppUi.body.copyWith(color: AppUi.textLo),
+                          ),
+                        ),
+                        GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _setCatalogOpen(false),
+                          child: const SizedBox(
+                            width: MobileUi.tap,
+                            height: MobileUi.tap,
+                            child: Center(
+                              child: GameIcon(
+                                GameIconData.close,
+                                size: 19,
+                                color: AppUi.textMid,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(height: 1, color: AppUi.line),
+                Expanded(
+                  child: MobileCatalogScope(
+                    expanded: true,
+                    child: widget.buildSegment,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+                  child: Text(
+                    'Seçimden sonra haritada yerini belirle.',
+                    textAlign: TextAlign.center,
+                    style: AppUi.body.copyWith(
+                      fontSize: 11,
+                      color: AppUi.textLo,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -310,42 +389,6 @@ class _MobileBuildButton extends StatelessWidget {
   }
 }
 
-/// Bir komuta segmenti — üstte küçük dikey etiket + içerik.
-class _Seg extends StatelessWidget {
-  final String label;
-  final Widget child;
-  const _Seg({required this.label, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        RotatedBox(
-          quarterTurns: 3,
-          child: Text(
-            label,
-            style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 1.4),
-          ),
-        ),
-        const SizedBox(width: 8),
-        child,
-      ],
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 1,
-    height: 52,
-    margin: const EdgeInsets.symmetric(horizontal: 12),
-    color: AppUi.lineSoft,
-  );
-}
-
 /// Orta segment boşken — köyün nabzını fısıldayan sakin satır.
 class _ContextHint extends StatelessWidget {
   final String village;
@@ -371,7 +414,16 @@ class _ContextHint extends StatelessWidget {
             _line,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppUi.body.copyWith(fontSize: 12, color: AppUi.textLo),
+            style: AppUi.body.copyWith(
+              fontSize: 12,
+              color: AppUi.textLo,
+              // Dünya üstünde kutusuz kaldığı için açık çim/su üzerinde de
+              // okunabilsin; bu gölge panel gibi alan kaplamaz.
+              shadows: const [
+                Shadow(color: Color(0xF0000000), blurRadius: 3),
+                Shadow(color: Color(0xCC000000), offset: Offset(0, 1)),
+              ],
+            ),
           ),
         ),
       ],
@@ -653,6 +705,7 @@ class _MenuButtonState extends State<_MenuButton> {
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Stack(
                 clipBehavior: Clip.none,
@@ -695,8 +748,14 @@ class _MenuButtonState extends State<_MenuButton> {
               const SizedBox(height: 4),
               Text(
                 widget.label.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.clip,
                 style: AppUi.label.copyWith(
                   fontSize: widget.compact ? 11 : 7.5,
+                  // Cinzel'in varsayılan satır kutusu 11px glifi yaklaşık
+                  // 21px'e çıkarıyor; 48dp mobil yuvada ikon+etiket 10px
+                  // taşıyordu. Tek satırlık kapıda gerçek glif yüksekliği yeter.
+                  height: 1,
                   letterSpacing: 0.8,
                   color: _hover ? AppUi.textMid : AppUi.textLo,
                 ),
@@ -742,6 +801,10 @@ class QuestTracker extends StatelessWidget {
   /// düğme çizilmez (gösterilecek bir yeri olmayan adımlar).
   final VoidCallback? onShow;
 
+  /// Kuruluşta oyuncu yer seçimini yaptıktan sonra kalan inşaat bekleyişini
+  /// geçer. Yalnız gerçekten bekleyen bir şantiye varken verilir.
+  final VoidCallback? onSkipWait;
+
   const QuestTracker({
     super.key,
     required this.icon,
@@ -755,6 +818,7 @@ class QuestTracker extends StatelessWidget {
     this.expanded = false,
     this.onToggleExpand,
     this.onShow,
+    this.onSkipWait,
   });
 
   @override
@@ -773,8 +837,8 @@ class QuestTracker extends StatelessWidget {
       // nadir uzun görevlerde kartın içi kayar, dünya ve komutlar kapanmaz.
       final screen = MediaQuery.sizeOf(context);
       final top = MobileUi.top(context) + MobileUi.barH + MobileUi.gap;
-      final bottom = MobileUi.bottom(context) +
-          MobileUi.actionH + MobileUi.gap * 2;
+      final bottom =
+          MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap * 2;
       final maxH = math.max(MobileUi.tap, screen.height - top - bottom);
       return MobileSurface(
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -806,14 +870,19 @@ class QuestTracker extends StatelessWidget {
                         Text(
                           '$done/$total',
                           style: AppUi.number.copyWith(
-                              fontSize: 11, color: AppUi.sage),
+                            fontSize: 11,
+                            color: AppUi.sage,
+                          ),
                         ),
                         if (hint != null) ...[
                           const SizedBox(width: 6),
                           Transform.rotate(
                             angle: open ? -1.5708 : 1.5708,
-                            child: const GameIcon(GameIconData.chevron,
-                                size: 13, color: AppUi.textLo),
+                            child: const GameIcon(
+                              GameIconData.chevron,
+                              size: 13,
+                              color: AppUi.textLo,
+                            ),
                           ),
                         ],
                       ],
@@ -838,7 +907,9 @@ class QuestTracker extends StatelessWidget {
         width: open ? 248 : 208,
         padding: const EdgeInsets.fromLTRB(13, 10, 13, 11),
         decoration: BoxDecoration(
-          color: const Color(0xEB14161A),
+          // Dünya kartın altından hafifçe hissedilir; görev hâlâ okunur ve
+          // tıklanabilir bir yüzey olarak kalır.
+          color: const Color(0xD914161A),
           borderRadius: BorderRadius.circular(AppUi.radius),
           border: Border.all(
             // Kuruluşta kart oyuncunun bakması GEREKEN yer — kenarı ember.
@@ -855,7 +926,11 @@ class QuestTracker extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               child: Row(
                 children: [
-                  const GameIcon(GameIconData.scroll, size: 12, color: AppUi.accent),
+                  const GameIcon(
+                    GameIconData.scroll,
+                    size: 12,
+                    color: AppUi.accent,
+                  ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
@@ -907,8 +982,11 @@ class QuestTracker extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 2),
                       child: Transform.rotate(
                         angle: open ? -1.5708 : 1.5708,
-                        child: const GameIcon(GameIconData.chevron,
-                            size: 12, color: AppUi.textLo),
+                        child: const GameIcon(
+                          GameIconData.chevron,
+                          size: 12,
+                          color: AppUi.textLo,
+                        ),
                       ),
                     ),
                   ],
@@ -972,7 +1050,19 @@ class QuestTracker extends StatelessWidget {
               height: 1.45,
             ),
           ),
-          if (onShow != null) ...[
+          if (onSkipWait != null) ...[
+            const SizedBox(height: 9),
+            SizedBox(
+              height: 34,
+              child: AppButton(
+                label: 'Beklemeyi geç',
+                icon: GameIconData.speed,
+                height: 34,
+                expand: true,
+                onTap: onSkipWait,
+              ),
+            ),
+          ] else if (onShow != null) ...[
             const SizedBox(height: 9),
             SizedBox(
               height: 30,

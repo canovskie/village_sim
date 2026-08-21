@@ -14,8 +14,7 @@ import 'package:flutter/services.dart';
 ///
 /// Masaüstünde (macOS) hiçbir şey yapmaz — pencere serbest kalır.
 abstract final class PlatformAdapt {
-  static bool get isMobile =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  static bool get isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   /// main() içinde runApp'ten ÖNCE bir kez çağrılır (binding hazır olmalı).
   static Future<void> applyMobileChrome() async {
@@ -24,6 +23,14 @@ abstract final class PlatformAdapt {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
+    await restoreMobileChrome();
+  }
+
+  /// Klavye, uygulama değiştirici veya sistem izni tam ekran görünümünü geçici
+  /// olarak bozabilir. Uygulama yeniden öne geldiğinde oyun alanını tekrar
+  /// kenardan kenara kurmak için yaşam döngüsünden çağrılır.
+  static Future<void> restoreMobileChrome() async {
+    if (!isMobile) return;
     // Kenardan kenara + tam ekran. Sticky: kenar kaydırmada UI geçici döner,
     // oyunu bölmez.
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);

@@ -4,6 +4,7 @@ import '../entities/villager_entity.dart';
 import '../entities/villager_job.dart';
 import '../entities/work_site.dart';
 import '../rendering/portrait_renderer.dart';
+import '../systems/job_feedback.dart';
 import 'app_ui.dart';
 import 'semantic_icon.dart';
 
@@ -67,6 +68,10 @@ class WorkCrewSection extends StatelessWidget {
                 _emptySlot(i),
           ],
         ),
+        if (crew.isNotEmpty && feedbackFor(crew.first).result.isNotEmpty) ...[
+          const SizedBox(height: 7),
+          _note(feedbackFor(crew.first).result, AppUi.textLo),
+        ],
         if (site.idleReason != null) ...[
           const SizedBox(height: 7),
           _note(site.idleReason!, AppUi.gold),
@@ -86,8 +91,12 @@ class WorkCrewSection extends StatelessWidget {
         : AppUi.gold;
     return Row(
       children: [
-        SemanticIcon(site.role.icon,
-            size: 12, color: tone, fallback: GameIconData.hammer),
+        SemanticIcon(
+          site.role.icon,
+          size: 12,
+          color: tone,
+          fallback: GameIconData.hammer,
+        ),
         const SizedBox(width: 6),
         Text(
           site.role.label.toUpperCase(),
@@ -147,6 +156,7 @@ class _FilledSlot extends StatelessWidget {
   Widget build(BuildContext context) {
     final pinned = villager.isPlayerAssigned;
     final tint = extra ? AppUi.textLo : accent;
+    final feedback = feedbackFor(villager);
     return Container(
       decoration: BoxDecoration(
         color: tint.withValues(alpha: 0.10),
@@ -164,15 +174,15 @@ class _FilledSlot extends StatelessWidget {
               ),
               onTap: onSelect,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(5, 4, 7, 4),
+                padding: const EdgeInsets.fromLTRB(5, 5, 8, 5),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(5),
                       child: SizedBox(
-                        width: 22,
-                        height: 22,
+                        width: 26,
+                        height: 26,
                         child: CustomPaint(
                           painter: PortraitPainter(
                             visual: villager.visual,
@@ -184,22 +194,71 @@ class _FilledSlot extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      villager.name,
-                      style: AppUi.body.copyWith(
-                        fontSize: 11.5,
-                        color: AppUi.textHi,
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 170),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  villager.name,
+                                  style: AppUi.body.copyWith(
+                                    fontSize: 11.5,
+                                    color: AppUi.textHi,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              // Oyuncunun mührü — köyün kendi yolladığı elden
+                              // ayrılsın ki "bunu ben koydum" okunabilsin.
+                              if (pinned) ...[
+                                const SizedBox(width: 5),
+                                Text(
+                                  '•',
+                                  style: AppUi.body.copyWith(
+                                    fontSize: 12,
+                                    color: tint,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            feedback.etaLabel.isEmpty
+                                ? feedback.state
+                                : '${feedback.state} · ${feedback.etaLabel}',
+                            style: AppUi.body.copyWith(
+                              fontSize: 10,
+                              color: feedback.progress > 0
+                                  ? AppUi.sage
+                                  : AppUi.textLo,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (feedback.progress > 0) ...[
+                            const SizedBox(height: 3),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(2),
+                              child: SizedBox(
+                                height: 2,
+                                child: LinearProgressIndicator(
+                                  value: feedback.progress,
+                                  backgroundColor: AppUi.line,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    tint,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
-                    // Oyuncunun mührü — köyün kendi yolladığı elden ayrılsın
-                    // ki "bunu ben koydum" bir bakışta okunsun.
-                    if (pinned) ...[
-                      const SizedBox(width: 5),
-                      Text(
-                        '•',
-                        style: AppUi.body.copyWith(fontSize: 12, color: tint),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -238,11 +297,7 @@ class _EmptySlot extends StatelessWidget {
   final bool enabled;
   final VoidCallback? onTap;
 
-  const _EmptySlot({
-    required this.calling,
-    required this.enabled,
-    this.onTap,
-  });
+  const _EmptySlot({required this.calling, required this.enabled, this.onTap});
 
   @override
   Widget build(BuildContext context) {

@@ -47,6 +47,7 @@ abstract final class PropRenderer {
       PropKind.scythe: 'assets/tools/prop_scythe.png',
       // Balta için projede zaten uyumlu, yönlü alet sprite'ı vardı.
       PropKind.axe: 'assets/tools/axe.png',
+      PropKind.torch: 'assets/tools/torch.png',
     };
     await Future.wait(paths.entries.map((e) => _load(e.key, e.value)));
   }
@@ -121,6 +122,7 @@ abstract final class PropRenderer {
     double walkPhase = 0,
     double moveIntensity = 0,
     double time = 0,
+    bool combat = false,
   }) {
     if (prop == PropKind.none) return;
     final dir = facingRight ? 1.0 : -1.0;
@@ -128,6 +130,13 @@ abstract final class PropRenderer {
     final sway = sin(walkPhase * 2) * 0.9 * moveIntensity.clamp(0.0, 1.0);
 
     canvas.save();
+    if (combat && (prop == PropKind.scythe || prop == PropKind.axe)) {
+      // El çevresinde ağır bir yay: alet elde taşınmıyor, rakibe savruluyor.
+      final swing = sin(time * 8.6) * 0.52;
+      canvas.translate(dir * 7, -48);
+      canvas.rotate(dir * (0.55 + swing));
+      canvas.translate(-dir * 7, 48);
+    }
     switch (prop) {
       case PropKind.none:
         break;
@@ -254,13 +263,53 @@ abstract final class PropRenderer {
       case PropKind.axe:
         final img = _sprite(prop);
         if (img != null) {
-          _drawSprite(canvas, img, x: dir * 9, bottomY: -26, width: 15,
-              flip: dir < 0, sway: sway);
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 9,
+            bottomY: -26,
+            width: 15,
+            flip: dir < 0,
+            sway: sway,
+          );
         } else {
           _axe(canvas, dir, sway);
         }
+      case PropKind.torch:
+        final img = _sprite(prop);
+        if (img != null) {
+          _drawSprite(
+            canvas,
+            img,
+            x: dir * 9,
+            bottomY: -27,
+            width: 15,
+            flip: dir < 0,
+            sway: sway,
+          );
+        } else {
+          _torch(canvas, dir, sway, time);
+        }
     }
     canvas.restore();
+  }
+
+  static void _torch(Canvas c, double dir, double sway, double time) {
+    final x = dir * 9 + sway;
+    c.drawRect(Rect.fromLTWH(x - 1, -48, 2, 22), _f(const Color(0xFF6E4728)));
+    final flicker = sin(time * 13.0) * 1.2;
+    c.drawOval(
+      Rect.fromCenter(
+        center: Offset(x + flicker * 0.25, -51),
+        width: 7,
+        height: 11,
+      ),
+      _f(const Color(0xFFFF8A28)),
+    );
+    c.drawOval(
+      Rect.fromCenter(center: Offset(x, -51), width: 3.5, height: 7),
+      _f(const Color(0xFFFFD36A)),
+    );
   }
 
   // ── KOVA — yanda, elden sarkar ────────────────────────────────────────────

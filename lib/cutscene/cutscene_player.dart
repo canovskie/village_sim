@@ -52,6 +52,10 @@ class CutscenePlayer extends StatefulWidget {
   /// Sinematik bitince kendiliğinden başa sarar (oda listesinde döngü).
   final bool loop;
 
+  /// Görsel galeri ve yakalama araçlarında karar anını beklemeden açar.
+  /// Oyunda kapalıdır; gerçek sinematik akışını değiştirmez.
+  final bool startAtGate;
+
   const CutscenePlayer({
     super.key,
     required this.cutscene,
@@ -63,6 +67,7 @@ class CutscenePlayer extends StatefulWidget {
     this.paused = false,
     this.onProgress,
     this.loop = false,
+    this.startAtGate = false,
   });
 
   @override
@@ -86,17 +91,9 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   final _nameFocus = FocusNode();
   final _houseFocus = FocusNode();
 
-  /// Ad önerileri — havuzun karışık bir kopyası, üçerli pencereyle gezilir.
-  /// Boş kutu "ne yazsam?" diye baktırıyordu; öneri hem kutuyu doldurur hem de
-  /// adın NEREDEN geldiğini söyler (bkz. text/village_names.dart).
+  /// Ad önerileri — tek düğme her dokunuşta sıradaki adı verir.
   late final List<VillageNameIdea> _ideaPool = shuffledVillageNameIdeas();
   int _ideaOffset = 0;
-  static const int _ideaWindow = 3;
-
-  List<VillageNameIdea> get _nameIdeas => [
-    for (var i = 0; i < _ideaWindow; i++)
-      _ideaPool[(_ideaOffset + i) % _ideaPool.length],
-  ];
 
   /// Diyalog kutusunun ÖLÇÜLEN yüksekliği (px). Kamera özneyi kutunun üstünde
   /// tutabilmek için ekranın altında ne kadar yer kaldığını bilmek zorunda;
@@ -126,6 +123,7 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   @override
   void initState() {
     super.initState();
+    if (widget.startAtGate) _shotElapsed = _gateReadyAt();
     _ticker = createTicker(_onTick)..start();
   }
 
@@ -181,7 +179,8 @@ class _CutscenePlayerState extends State<CutscenePlayer>
     return starts[last] + _reveal(last);
   }
 
-  bool get _gateReady => _gated && _shotElapsed >= _gateReadyAt() - 0.001;
+  bool get _gateReady =>
+      _gated && (widget.startAtGate || _shotElapsed >= _gateReadyAt() - 0.001);
 
   void _satisfyGate() {
     if (_gateSatisfied) return;
@@ -210,19 +209,6 @@ class _CutscenePlayerState extends State<CutscenePlayer>
       _nameCtrl.selection = TextSelection.collapsed(offset: idea.name.length);
     });
   }
-
-  /// Bir sonraki üç öneri. Havuz döngüseldir; "başka" hiç tükenmez.
-  void _rerollIdeas() => setState(
-    () => _ideaOffset = (_ideaOffset + _ideaWindow) % _ideaPool.length,
-  );
-
-  /// Kutudaki adın (havuzdaysa) gerekçesi — başlık satırı bunu gösterir.
-  String? get _nameMeaning => meaningOfVillageName(_nameCtrl.text);
-
-  /// Telefonda alt satır çift görevli: ad havuzdansa gerekçesi, değilse ne
-  /// yapılacağı.
-  String get _mobileSubtitle =>
-      _nameMeaning ?? 'Köyünü ve kurucu haneni yaz, ya da 🎲 ile öner.';
 
   /// TELEFON öneri düğmesi: havuzdan SIRADAKİ adı kutuya yazar, hane kutusu
   /// boşsa ona da bir soyad koyar. Yatay telefonda çip galerisine yer yok
@@ -429,10 +415,14 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                   child: Padding(
                     padding: const EdgeInsets.all(14),
                     child: TextButton(
+                      key: const ValueKey('cutscene_skip'),
                       onPressed: _finish,
                       style: TextButton.styleFrom(
-                        foregroundColor: AppUi.textMid,
-                        backgroundColor: const Color(0x55000000),
+                        foregroundColor: AppUi.accentSoft,
+                        backgroundColor: const Color(0xB8141519),
+                        side: BorderSide(
+                          color: AppUi.accent.withValues(alpha: 0.45),
+                        ),
                         // Sinematiği atlamak telefondaki en kritik kaçış kapısı;
                         // 66×32dp'de kalıyordu. HIG tabanı 44dp. minimumSize tek
                         // başına yetmiyor (VisualDensity kutuyu geri kısıyor) —
@@ -448,8 +438,10 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                         ),
                       ),
                       child: Text(
-                        'Atla ▸',
-                        style: AppUi.button.copyWith(color: AppUi.textMid),
+                        identical(widget.cutscene, kOpeningCutscene)
+                            ? 'İntroyu geç ▸'
+                            : 'Atla ▸',
+                        style: AppUi.button.copyWith(color: AppUi.accentSoft),
                       ),
                     ),
                   ),
@@ -586,74 +578,47 @@ class _CutscenePlayerState extends State<CutscenePlayer>
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: touch ? 540 : 760,
+                maxWidth: 760,
                 maxHeight: touch ? screen.height - 24 : 520,
               ),
-              child: Container(
-                padding: EdgeInsets.fromLTRB(
-                  touch ? 14 : 18,
-                  touch ? 14 : 18,
-                  touch ? 14 : 18,
-                  touch ? 12 : 16,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xF214151A),
-                  borderRadius: BorderRadius.circular(AppUi.radius),
-                  border: Border.all(
-                    color: AppUi.accent.withValues(alpha: 0.55),
-                  ),
-                  boxShadow: AppUi.softShadow,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'ARABAYA NE YÜKLEDİK?',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xD914151A),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: AppUi.accent.withValues(alpha: 0.42),
+                      ),
+                      boxShadow: AppUi.softShadow,
+                    ),
+                    child: Text(
+                      'ARABAYA NE ALDIK?',
                       style: AppUi.label.copyWith(
-                        color: AppUi.accent,
+                        color: AppUi.accentSoft,
                         letterSpacing: 2.0,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'İlk günlerin nasıl geçeceğini seç.',
-                      style: AppUi.body.copyWith(color: AppUi.textMid),
+                  ),
+                  SizedBox(height: touch ? 8 : 12),
+                  IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final c in FoundingChoice.all) ...[
+                          Expanded(child: _caravanCard(c)),
+                          if (c != FoundingChoice.all.last)
+                            const SizedBox(width: 10),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    if (touch)
-                      SizedBox(
-                        // Column'un yüksekliği içerikten türediği için burada
-                        // Expanded kullanılamaz: telefonda kartlar sonsuz
-                        // yüksekliğe açılıp başlık ve alt metinle çakışıyordu.
-                        height: (screen.height - 24).clamp(260.0, 420.0),
-                        child: PageView.builder(
-                          itemCount: FoundingChoice.all.length,
-                          itemBuilder: (_, index) =>
-                              _caravanCard(FoundingChoice.all[index]),
-                        ),
-                      )
-                    else
-                      IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (final c in FoundingChoice.all) ...[
-                              Expanded(child: _caravanCard(c)),
-                              if (c != FoundingChoice.all.last)
-                                const SizedBox(width: 10),
-                            ],
-                          ],
-                        ),
-                      ),
-                    if (touch) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Kartı yana kaydır · Birini seç',
-                        style: AppUi.label.copyWith(color: AppUi.textLo),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -663,53 +628,10 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   }
 
   Widget _caravanCard(FoundingChoice c) {
-    return GestureDetector(
+    return _FoundingLoadCard(
+      key: ValueKey('founding_choice_${c.id}'),
+      choice: c,
       onTap: () => _chooseCaravan(c),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 11),
-        decoration: BoxDecoration(
-          color: const Color(0xF21A130B),
-          borderRadius: BorderRadius.circular(AppUi.radiusSm),
-          border: Border.all(color: AppUi.accent.withValues(alpha: 0.55)),
-          boxShadow: AppUi.softShadow,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${c.icon}  ${c.title}',
-              style: AppUi.bodyHi.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              c.blurb,
-              style: AppUi.body.copyWith(fontSize: 12, height: 1.35),
-            ),
-            const SizedBox(height: 7),
-            // BEDEL — kısık renkte ama görünür. Bedeli gizlenmiş bir seçim
-            // karar değil, süstür.
-            Text(
-              c.cost,
-              style: AppUi.body.copyWith(
-                fontSize: 11,
-                height: 1.3,
-                color: AppUi.textLo,
-              ),
-            ),
-            const SizedBox(height: 9),
-            Text(
-              c.choiceSummary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: AppUi.label.copyWith(color: AppUi.accentSoft),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -758,35 +680,12 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                           const GameLogo(size: 24),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'YUVANI ADLANDIR',
-                                  style: AppUi.title.copyWith(
-                                    fontSize: 14,
-                                    letterSpacing: 1.3,
-                                  ),
-                                ),
-                                const SizedBox(height: 1),
-                                // Alt satır çift görevli: normalde ne
-                                // yapılacağını söyler, kutuda havuzdan bir ad
-                                // varsa o adın NEREDEN geldiğini. Telefonda
-                                // ayrı bir öneri şeridi rayı 185dp'ye
-                                // çıkarıyordu (yatay telefonda ekranın yarısı)
-                                // — öneri bu yüzden başlığın içinde yaşar.
-                                Text(
-                                  _mobileSubtitle,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppUi.body.copyWith(
-                                    color: _nameMeaning == null
-                                        ? AppUi.textLo
-                                        : AppUi.accentSoft,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
+                            child: Text(
+                              'KÖYÜNÜ ADLANDIR',
+                              style: AppUi.title.copyWith(
+                                fontSize: 14,
+                                letterSpacing: 1.3,
+                              ),
                             ),
                           ),
                           TextButton(
@@ -882,6 +781,7 @@ class _CutscenePlayerState extends State<CutscenePlayer>
     required TextEditingController controller,
     required String hint,
     required FocusNode focusNode,
+    bool autofocus = false,
     required TextInputAction action,
     required ValueChanged<String> onSubmitted,
   }) {
@@ -903,6 +803,7 @@ class _CutscenePlayerState extends State<CutscenePlayer>
         TextField(
           key: fieldKey,
           controller: controller,
+          autofocus: autofocus,
           focusNode: focusNode,
           textCapitalization: TextCapitalization.words,
           textInputAction: action,
@@ -941,50 +842,75 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   Widget _desktopNameInput() {
     return Positioned.fill(
       child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 54, 20, 18),
-          child: Center(
-            child: SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 920),
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xF2171D19), Color(0xF50B0F0D)],
-                    ),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0x52F1C588)),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0xA6000000),
-                        blurRadius: 36,
-                        offset: Offset(0, 18),
+        child: Stack(
+          children: [
+            Align(
+              alignment: const Alignment(0, -0.08),
+              child: _FoundingIdentity(
+                village: _nameCtrl.text.trim(),
+                house: _houseCtrl.text.trim(),
+              ),
+            ),
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 18,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 860),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 13),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xEB211E22), Color(0xF20D0E0F)],
                       ),
-                    ],
-                  ),
-                  child: IntrinsicHeight(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0x4CF1C588)),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0xA6000000),
+                          blurRadius: 28,
+                          offset: Offset(0, 14),
+                        ),
+                      ],
+                    ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Expanded(
-                          flex: 4,
-                          child: _FoundingIdentity(
-                            village: _nameCtrl.text.trim(),
-                            house: _houseCtrl.text.trim(),
+                          child: _mobileNameField(
+                            fieldKey: const ValueKey('village_name_field'),
+                            label: 'KÖYÜN ADI',
+                            controller: _nameCtrl,
+                            hint: 'Pınarköy',
+                            focusNode: _nameFocus,
+                            autofocus: true,
+                            action: TextInputAction.next,
+                            onSubmitted: (_) => _houseFocus.requestFocus(),
                           ),
                         ),
-                        Container(
-                          width: 1,
-                          margin: const EdgeInsets.symmetric(vertical: 22),
-                          color: const Color(0x38F1C588),
-                        ),
+                        const SizedBox(width: 10),
                         Expanded(
-                          flex: 5,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(26, 22, 26, 22),
-                            child: _nameForm(compact: false),
+                          child: _mobileNameField(
+                            fieldKey: const ValueKey('house_name_field'),
+                            label: 'KURUCU SOYU',
+                            controller: _houseCtrl,
+                            hint: 'Yılmaz',
+                            focusNode: _houseFocus,
+                            action: TextInputAction.done,
+                            onSubmitted: (_) => _submitName(),
                           ),
+                        ),
+                        const SizedBox(width: 10),
+                        _IdeaChip(label: '🎲 ÖNER', onTap: _suggestForMobile),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          key: const ValueKey('founding_name_submit'),
+                          width: 180,
+                          child: _FoundingSubmitButton(onTap: _submitName),
                         ),
                       ],
                     ),
@@ -992,199 +918,7 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                 ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _nameForm({required bool compact}) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Container(width: 28, height: 1, color: AppUi.accent),
-            const SizedBox(width: 9),
-            Text(
-              'KURULUŞ MÜHRÜ',
-              style: AppUi.label.copyWith(
-                color: AppUi.accentSoft,
-                fontSize: 9,
-                letterSpacing: 2.4,
-              ),
-            ),
           ],
-        ),
-        SizedBox(height: compact ? 8 : 12),
-        Text(
-          'BU YUVAYA BİR AD VER',
-          style: AppUi.title.copyWith(
-            fontSize: compact ? 17 : 20,
-            letterSpacing: 1.8,
-          ),
-        ),
-        if (!compact) ...[
-          const SizedBox(height: 5),
-          Text(
-            'Bu ad, ilk ateşten son vakayinameye kadar yaşayacak.',
-            style: AppUi.body.copyWith(color: AppUi.textLo, fontSize: 11.5),
-          ),
-        ],
-        SizedBox(height: compact ? 10 : 16),
-        Text(
-          'KÖYÜN ADI',
-          style: AppUi.label.copyWith(color: AppUi.textMid, letterSpacing: 1.8),
-        ),
-        const SizedBox(height: 6),
-        _nameField(
-          _nameCtrl,
-          'örn. Pınarköy',
-          fieldKey: const ValueKey('village_name_field'),
-          focusNode: _nameFocus,
-          autofocus: true,
-          textInputAction: TextInputAction.next,
-          onSubmitted: (_) => _houseFocus.requestFocus(),
-        ),
-        const SizedBox(height: 7),
-        _ideaRow(),
-        _meaningLine(),
-        SizedBox(height: compact ? 9 : 12),
-        Row(
-          children: [
-            Text(
-              'OCAĞIN ADI — SOY',
-              style: AppUi.label.copyWith(
-                color: AppUi.textMid,
-                letterSpacing: 1.8,
-              ),
-            ),
-            const Spacer(),
-            _IdeaChip(label: '🎲 çek', onTap: _rollHouseName),
-          ],
-        ),
-        const SizedBox(height: 6),
-        _nameField(
-          _houseCtrl,
-          'örn. Yılmaz',
-          fieldKey: const ValueKey('house_name_field'),
-          focusNode: _houseFocus,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _submitName(),
-        ),
-        if (!compact) ...[
-          const SizedBox(height: 5),
-          Text(
-            'Kurucular bu soyadı taşıyacak: “... Hanesi”.',
-            style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
-          ),
-        ],
-        SizedBox(height: compact ? 10 : 14),
-        KeyedSubtree(
-          key: const ValueKey('founding_name_submit'),
-          child: _FoundingSubmitButton(onTap: _submitName),
-        ),
-      ],
-    );
-  }
-
-  /// Ad ÖNERİLERİ — üç ad + "başka". Dokunmak kutuyu doldurur; serbest yazı
-  /// duruyor. Öneriler bir liste değil bir başlangıç: köyün adı keyfî bir
-  /// etiket olmasın diye her birinin bir gerekçesi var ([_meaningLine]).
-  Widget _ideaRow() {
-    final current = _nameCtrl.text.trim().toLowerCase();
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final idea in _nameIdeas)
-          _IdeaChip(
-            label: idea.name,
-            selected: idea.name.toLowerCase() == current,
-            onTap: () => _applyIdea(idea),
-          ),
-        _IdeaChip(label: '🎲 başka', onTap: _rerollIdeas),
-      ],
-    );
-  }
-
-  /// Kutudaki ad havuzdaysa NEREDEN geldiğini söyler. Oyuncu kendi adını
-  /// yazdıysa satır sessizce boşalır — kimse ona "yanlış ad" demez.
-  Widget _meaningLine() {
-    final meaning = _nameMeaning;
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 160),
-      curve: Curves.easeOut,
-      alignment: Alignment.topLeft,
-      child: meaning == null
-          ? const SizedBox(width: double.infinity, height: 0)
-          : Padding(
-              padding: const EdgeInsets.only(top: 7),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 2,
-                    height: 22,
-                    margin: const EdgeInsets.only(right: 8, top: 1),
-                    color: AppUi.accent.withValues(alpha: 0.65),
-                  ),
-                  Expanded(
-                    child: Text(
-                      meaning,
-                      style: AppUi.body.copyWith(
-                        fontSize: 11,
-                        height: 1.3,
-                        color: AppUi.accentSoft,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
-  /// Ad kapısının metin alanı — iki alan aynı görünmeli (köy/hane).
-  Widget _nameField(
-    TextEditingController ctrl,
-    String hint, {
-    Key? fieldKey,
-    bool autofocus = false,
-    FocusNode? focusNode,
-    TextInputAction? textInputAction,
-    ValueChanged<String>? onSubmitted,
-  }) {
-    return TextField(
-      key: fieldKey,
-      controller: ctrl,
-      autofocus: autofocus,
-      focusNode: focusNode,
-      textCapitalization: TextCapitalization.words,
-      textInputAction: textInputAction,
-      maxLength: 22,
-      onChanged: (_) => setState(() {}),
-      onSubmitted: onSubmitted,
-      style: AppUi.bodyHi.copyWith(fontSize: 16, letterSpacing: 0.3),
-      cursorColor: AppUi.accent,
-      decoration: InputDecoration(
-        counterText: '',
-        hintText: hint,
-        hintStyle: AppUi.body.copyWith(color: AppUi.textLo),
-        filled: true,
-        fillColor: const Color(0xB30A0E0C),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 11,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0x38FFFFFF)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppUi.accent, width: 1.4),
         ),
       ),
     );

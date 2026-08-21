@@ -203,6 +203,9 @@ extension _SceneWorld on _VillageSceneState {
     for (final n in _mineNodes) {
       if (!n.isDepleted) _obstacles.add((n.col, n.row));
     }
+    for (final site in _landmarks) {
+      _obstacles.add((site.col, site.row));
+    }
     // Solid binalar — BuildingMeta.walkable=false olanlar NPC engel sayar.
     // (walkable: firepit, well, lamppost, woodenHouse — etrafında/içinde
     // dolaşılanlar). Pending order'lar engel SAYILMAZ — builder içine girmeli.
@@ -290,6 +293,7 @@ extension _SceneWorld on _VillageSceneState {
     _decor.clear();
     _trees.clear();
     _mineNodes.clear();
+    _landmarks.clear();
     _buildings.clear();
     _orders.clear();
     _roadOrders.clear();
@@ -323,6 +327,7 @@ extension _SceneWorld on _VillageSceneState {
     // köyün insanlarından organik doğar (çağrı/birikim/dışarıdan).
     _knownCrafts.clear();
     _ledgerSection = null;
+    _mobileBuildCatalogOpen = false;
     _lawRitual = null;
     _policies.restoreSealed(const []); // defter boş: yeni köy, yeni hüküm
     _policies.inkDryUntilSim = 0;
@@ -342,6 +347,7 @@ extension _SceneWorld on _VillageSceneState {
     _stockpile.food = 25;
     _hasFire = false;
     _firepitBuilding = null;
+    _foundingHearthCameraSecured = false;
     _selectedBuilding = null;
 
     // Kilometre taşı bayrakları
@@ -385,6 +391,7 @@ extension _SceneWorld on _VillageSceneState {
     _decor.addAll(result.decor);
     _trees.addAll(result.trees);
     _mineNodes.addAll(result.mineNodes);
+    _landmarks.addAll(result.landmarks);
     _berryBushes.addAll(result.berryBushes);
 
     // Arazi: merkezde açıklık aç, gen ormanını yoğun vahşi ormanla değiştir,

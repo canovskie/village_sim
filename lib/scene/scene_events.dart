@@ -597,8 +597,8 @@ extension _SceneEvents on _VillageSceneState {
     }
   }
 
-  /// Birkaç boştaki köylüyü bir noktaya doğru koşturur (tehdide en yakınlar
-  /// önce → "koşuşturma" hissi) + uygun gövde dili. `goTo` ile güvenilir hareket.
+  /// Olay korosunu odağa toplar. Koro da vinyet kadrosudur: gündelik işi
+  /// gerçekten keser, odağa gider ve olay sürerken normal rutine dönmez.
   void _rallyToward(
     double x,
     double y, {
@@ -606,40 +606,31 @@ extension _SceneEvents on _VillageSceneState {
     NpcEmotion emotion = NpcEmotion.fear,
     double dwell = 4.0,
   }) {
-    final cands = _villagers
-        .where(
-          (v) =>
-              !v.isInsideBuilding &&
-              !v.isSleeping &&
-              v.hasProfession &&
-              !v.isCarrying &&
-              !v.isDying &&
-              !v.sitClaimed &&
-              // Vinyetin baş rolü koroya karışmaz: ceremony niyeti `activity`yi
-              // none bırakır, bu yüzden filtre onu YAKALAMAZ ve koşturarak
-              // koreografiyi bozardı (kova doldurmaya giden adam meydana kaçar).
-              v.mind.intent.priority < IntentPriority.ceremony &&
-              v.activity == VillagerActivity.none,
-        )
-        .toList();
-    cands.sort((a, b) {
-      final da = (a.gridX - x) * (a.gridX - x) + (a.gridY - y) * (a.gridY - y);
-      final db = (b.gridX - x) * (b.gridX - x) + (b.gridY - y) * (b.gridY - y);
-      return da.compareTo(db);
-    });
-    int n = 0;
-    for (final v in cands) {
-      if (n >= count) break;
-      final ox = (_rng.nextDouble() - 0.5) * 1.6;
-      final oy = (_rng.nextDouble() - 0.5) * 1.6;
-      v.goTo(
-        (x + ox).clamp(1.0, kCols - 2.0),
-        (y + oy).clamp(1.0, kRows - 2.0),
-        dwell,
+    final target = _eventCrowdTarget(count, share: 0.42, cap: 11);
+    final hold = dwell < 9.0 ? 9.0 : dwell;
+    for (var n = 0; n < target; n++) {
+      final angle = n * 2.39996;
+      final radius = 1.4 + (n % 3) * 0.55;
+      final px = (x + cos(angle) * radius).clamp(1.0, kCols - 2.0);
+      final py = (y + sin(angle) * radius).clamp(1.0, kRows - 2.0);
+      final v = _role(
+        'olaya koştu',
+        emotion == NpcEmotion.joy
+            ? 'köydeki sevince katılıyorum'
+            : 'köyde olan bitene koşuyorum',
+        x,
+        y,
+        [
+          ActStep.goTo(px, py),
+          ActStep.face(x, y),
+          ActStep.work(hold, pose: ActPose.stand),
+        ],
+        emotion: emotion,
+        emotionDur: hold + 3.0,
       );
-      v.feel(emotion, dwell + 2.0);
-      n++;
+      if (v == null) break;
     }
+    kProbeVignetteCast = _vignette?.cast.length ?? 0;
   }
 
   /// Pozitif olay sahnesi: birkaç köylü müzik/dans eder, gerisi toplanır (ateş
@@ -651,61 +642,77 @@ extension _SceneEvents on _VillageSceneState {
     bool dance = false,
     int gather = 6,
   }) {
-    const dur = kGameDaySeconds * 0.4;
-    // Önce müzisyen/dansçılar (activity != none olur → toplanma onları atlamaz).
-    if (music) _startActivityForSome(_tryStartMusicFor, 2, dur);
-    if (dance) _startActivityForSome(_tryStartDanceFor, 2, dur);
-    // Kalabalık toplanır — tüccarda pazara, diğerlerinde ateşe.
-    if (atMarket) {
-      final m = _firstBuildingOf(BuildingType.market);
-      if (m != null) {
-        _rallyToward(
-          m.col + m.cols / 2.0,
-          m.row + m.rows / 2.0,
-          count: gather,
-          emotion: NpcEmotion.joy,
-          dwell: 6,
-        );
-      } else {
-        _gatherAtFire(dur, max: gather);
+    final market = atMarket ? _firstBuildingOf(BuildingType.market) : null;
+    final fire = _firepitBuilding;
+    final (fx, fy) = market != null
+        ? _centerOf(market)
+        : fire != null
+        ? _centerOf(fire)
+        : _villageCenterD();
+    final target = _eventCrowdTarget(gather, share: 0.58, cap: 14);
+    const hold = 18.0;
+    var musiciansLeft = music ? 2 : 0;
+    var dancersLeft = dance ? (target >= 8 ? 5 : 3) : 0;
+    for (var n = 0; n < target; n++) {
+      final angle = n * 2.39996;
+      final radius = 1.8 + (n % 4) * 0.55;
+      final px = (fx + cos(angle) * radius).clamp(1.0, kCols - 2.0);
+      final py = (fy + sin(angle) * radius).clamp(1.0, kRows - 2.0);
+      final activity = musiciansLeft > 0
+          ? VillagerActivity.music
+          : dancersLeft > 0
+          ? VillagerActivity.dance
+          : VillagerActivity.none;
+      final label = activity == VillagerActivity.music
+          ? 'şenlikte çalıyor'
+          : activity == VillagerActivity.dance
+          ? 'şenlikte oynuyor'
+          : 'şenliğe katıldı';
+      final v = _role(
+        label,
+        'köy hep birlikte kutluyor',
+        fx,
+        fy,
+        [
+          ActStep.goTo(px, py),
+          ActStep.face(fx, fy),
+          const ActStep.work(hold, pose: ActPose.stand),
+        ],
+        emotion: NpcEmotion.joy,
+        emotionDur: hold + 3.0,
+      );
+      if (v == null) break;
+      if (activity != VillagerActivity.none) {
+        v.activity = activity;
+        // Aktivitenin gerçek ömrü budur. Eski yol yalnız socialCooldown'u uzun
+        // tutuyor, dans/müziği kendi 7-14 sn sayacında hemen söndürüyordu.
+        v.chatBubbleIcon = '';
+        v.chatBubbleTime = hold + 4.0;
+        v.socialCooldown = kGameDaySeconds * 0.4;
       }
-    } else {
-      _gatherAtFire(dur, max: gather);
+      if (activity == VillagerActivity.music) musiciansLeft--;
+      if (activity == VillagerActivity.dance) dancersLeft--;
     }
-    _feelVillage(NpcEmotion.joy, 8.0, 0.04);
+    kProbeVignetteCast = _vignette?.cast.length ?? 0;
+    _feelVillage(NpcEmotion.joy, hold, 0.04);
   }
 
-  /// Bir aktiviteyi (müzik/dans) en fazla [count] uygun boş köylüde başlatır.
-  void _startActivityForSome(
-    bool Function(VillagerEntity) start,
-    int count,
-    double dur,
-  ) {
-    final idle =
-        _villagers
-            .where(
-              (v) =>
-                  !v.isInsideBuilding &&
-                  !v.isSleeping &&
-                  v.hasProfession &&
-                  !v.isCarrying &&
-                  !v.isDying &&
-                  !v.sitClaimed &&
-                  v.mind.intent.priority <
-                      IntentPriority.ceremony && // baş rol hariç
-                  v.activity == VillagerActivity.none &&
-                  v.socialCooldown <= 0,
-            )
-            .toList()
-          ..shuffle(_rng);
-    int n = 0;
-    for (final v in idle) {
-      if (n >= count) break;
-      if (start(v)) {
-        v.socialCooldown = dur;
-        n++;
-      }
-    }
+  /// Sabit "4-5 kişi" yerine mevcut uygun nüfusun görünür bir bölümünü çağır.
+  int _eventCrowdTarget(
+    int minimum, {
+    required double share,
+    required int cap,
+  }) {
+    final vg = _vignette;
+    final available = _villagers.where((v) {
+      if (vg != null && vg.cast.contains(v)) return false;
+      return _vignetteInterruptible(v);
+    }).length;
+    var target = (available * share).ceil();
+    if (target < minimum) target = minimum;
+    if (target > cap) target = cap;
+    if (target > available) target = available;
+    return target;
   }
 
   /// Zümre barışı: en küskün zümrenin morali belirgin yükselir + köy ateş

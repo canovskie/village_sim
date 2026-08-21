@@ -26,12 +26,14 @@ void assignCarriers({
   required ResourceBundle stockpile,
   required AnchorSystem anchorSystem,
   double baleYieldMultiplier = 1.0,
+
   /// Yiyeceğin köy ambarına GİRİŞ kapısı. Verilmezse doğrudan eklenir.
   /// Sahne bunu hane karşılığına bağlar: küskün hanenin taşıdığı balya köy
   /// ambarına değil hanenin kendi ambarına iner (bkz. scene_house_stance).
   void Function(VillagerEntity carrier, int amount)? routeFood,
 }) {
-  final hasAnyAnchor = anchorSystem.warehousePoints.isNotEmpty ||
+  final hasAnyAnchor =
+      anchorSystem.warehousePoints.isNotEmpty ||
       anchorSystem.firepitPoints.isNotEmpty;
   if (!hasAnyAnchor) return; // teslim noktası yoksa hiç başlama
   // Hay balyası için depo şartı korunur — eski davranış (sadece warehouse'a).
@@ -43,9 +45,10 @@ void assignCarriers({
   // (bkz. scene_work._millerYieldMul) — bina makine, değirmenci bereket.
   final mills = [
     for (final b in buildings)
-      if (b.type == BuildingType.mill && !b.userPaused) b
+      if (b.type == BuildingType.mill && !b.userPaused) b,
   ];
-  final int millBonus = kMillBaleBonus *
+  final int millBonus =
+      kMillBaleBonus *
       (mills.length > kMillBonusMaxCount ? kMillBonusMaxCount : mills.length);
 
   for (final v in villagers) {
@@ -62,23 +65,28 @@ void assignCarriers({
         if (b.isBeingCarried || b.isDelivered) continue;
         final dx = b.gridX - v.gridX;
         final dy = b.gridY - v.gridY;
-        final d  = dx * dx + dy * dy;
+        final d = dx * dx + dy * dy;
         if (d < bestDist && d < 10 * 10) {
-          bestDist   = d;
+          bestDist = d;
           nearestBox = b;
         }
       }
       if (nearestBox != null) {
         final claim = anchorSystem.claimDeliverySlot(
-            nearestBox.gridX, nearestBox.gridY, v);
+          nearestBox.gridX,
+          nearestBox.gridY,
+          v,
+        );
         if (claim == null) continue; // tüm slot'lar dolu, bir dahaki tick'te
         final (point, slot) = claim;
         nearestBox.isBeingCarried = true;
         final box = nearestBox;
         v.assignCarryTask(
           box,
-          box.gridX, box.gridY,
-          slot.col, slot.row,
+          box.gridX,
+          box.gridY,
+          slot.col,
+          slot.row,
           onDelivered: () {
             point.release(slot, v);
             box.isDelivered = true;
@@ -93,8 +101,12 @@ void assignCarriers({
               case ResourceBoxType.stoneBox:
                 stockpile.stone++;
                 v.gainMastery(Craft.masonry, 1.0);
-              case ResourceBoxType.ironBox:   stockpile.iron++;
-              case ResourceBoxType.coalBox:   stockpile.coal++;
+              case ResourceBoxType.ironBox:
+                stockpile.iron++;
+              case ResourceBoxType.coalBox:
+                stockpile.coal++;
+              case ResourceBoxType.foodBasket:
+                stockpile.food += box.amount;
             }
           },
         );
@@ -111,23 +123,28 @@ void assignCarriers({
         if (!h.isBale || h.isBeingCarried || h.isDelivered) continue;
         final dx = h.gridX - v.gridX;
         final dy = h.gridY - v.gridY;
-        final d  = dx * dx + dy * dy;
+        final d = dx * dx + dy * dy;
         if (d < bestBaleDist && d < 12 * 12) {
           bestBaleDist = d;
-          nearestBale  = h;
+          nearestBale = h;
         }
       }
       if (nearestBale != null) {
         final claim = anchorSystem.claimDeliverySlot(
-            nearestBale.gridX, nearestBale.gridY, v);
+          nearestBale.gridX,
+          nearestBale.gridY,
+          v,
+        );
         if (claim == null) continue;
         final (point, slot) = claim;
         nearestBale.isBeingCarried = true;
         final bale = nearestBale;
         v.assignCarryTask(
           bale,
-          bale.gridX, bale.gridY,
-          slot.col, slot.row,
+          bale.gridX,
+          bale.gridY,
+          slot.col,
+          slot.row,
           onDelivered: () {
             point.release(slot, v);
             bale.isDelivered = true;

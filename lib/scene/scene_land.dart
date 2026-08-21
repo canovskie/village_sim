@@ -47,8 +47,8 @@ extension _SceneLand on _VillageSceneState {
   ///  • Organik: bina sayısıyla — köy büyüyünce bu baskın gelir, yani hikâye
   ///    kendiliğinden PASİFLEŞİR ve dünya sessizce açılmaya devam eder.
   double get _landExpansionTarget {
-    final story   = _completedQuests.length * 1.5; // hikâye beat'leri
-    final organic = _buildings.length * 0.5;       // köyün büyümesi
+    final story = _completedQuests.length * 1.5; // hikâye beat'leri
+    final organic = _buildings.length * 0.5; // köyün büyümesi
     return landExpansionTarget(
       start: _VillageSceneState._kSpanStart,
       ceil: _maxSpan - kSpanCeilMargin,
@@ -70,11 +70,13 @@ extension _SceneLand on _VillageSceneState {
     // önünde belirir. Oyuncu içeri zoom'lamışsa DOKUNMA (elini rahatsız etme).
     final mz = _minZoomForReach(_viewSize);
     if (_zoom <= _lastMinZoom * 1.03 + 0.001 && _zoom > mz) {
-      _zoom += (mz - _zoom) * (dt * 1.5).clamp(0.0, 1.0); // yumuşak geri çekilme
+      _zoom +=
+          (mz - _zoom) * (dt * 1.5).clamp(0.0, 1.0); // yumuşak geri çekilme
     }
     _lastMinZoom = mz;
 
     _tickOreDiscovery(dt);
+    _tickLandmarkDiscovery(dt);
   }
 
   // ── Kaynak keşfi ────────────────────────────────────────────────────────────
@@ -118,10 +120,57 @@ extension _SceneLand on _VillageSceneState {
       if (((n.col - n.row) - _centerU).abs() > hu) continue;
       if (((n.col + n.row) - _centerV).abs() > hv) continue;
       _oreDiscovered.add(n.type.name);
-      final line = Voice.say(_kOreFoundPool[n.type]!,
-          _voice(null, seed: _stableSeed('ore_${n.type.name}', _dayCount)));
+      final line = Voice.say(
+        _kOreFoundPool[n.type]!,
+        _voice(null, seed: _stableSeed('ore_${n.type.name}', _dayCount)),
+      );
       _showNotification('⛏️ $line');
       _chronicle(line, icon: '⛏️', milestone: true);
     }
+  }
+
+  /// Harabe/özel yer ilk kez erişim kutusuna girdiğinde sonucunu uygular.
+  /// Aynı taramada yalnız bir keşif çözülür; hızlı bir açılım bile bildirimleri
+  /// üst üste bindirmez, sonraki saniyelerde sırayla gelir.
+  void _tickLandmarkDiscovery(double dt) {
+    _landmarkScanTimer -= dt;
+    if (_landmarkScanTimer > 0) return;
+    _landmarkScanTimer = 1.0;
+    if (_landmarks.every((s) => s.discovered)) return;
+    final size = _viewSize;
+    if (size.width <= 0 || size.height <= 0) return;
+    final (hu, hv) = _reachHalfExtents(size);
+    for (final site in _landmarks) {
+      if (site.discovered) continue;
+      if (((site.col - site.row) - _centerU).abs() > hu) continue;
+      if (((site.col + site.row) - _centerV).abs() > hv) continue;
+      _discoverLandmark(site);
+      return;
+    }
+  }
+
+  void _discoverLandmark(WorldLandmark site) {
+    site.discovered =
+        true; // önce mühürle: aşağıdaki hiçbir yan etki tekrarlanmaz
+    final effect = landmarkEffect(site.outcome);
+    final resource = effect.resource;
+    if (resource != null && effect.resourceDelta != 0) {
+      final before = _stockpile.get(resource);
+      final after = max(0, before + effect.resourceDelta);
+      _stockpile.add(resource, after - before);
+    }
+    if (effect.moraleDelta != 0 && effect.moraleDays > 0) {
+      pushPolicyMorale(effect.moraleDelta, effect.moraleDays);
+      nudgeMorale(effect.moraleDelta);
+    }
+
+    final title = site.kind.title;
+    final icon = site.kind.icon;
+    _showNotification('$icon $title keşfedildi — ${effect.text}');
+    _chronicle(
+      '$title bulundu. ${effect.text}',
+      icon: icon,
+      kind: effect.isBoon ? ChronicleKind.life : ChronicleKind.crisis,
+    );
   }
 }

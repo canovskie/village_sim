@@ -10,6 +10,7 @@ import '../buildings/building_type.dart';
 import '../characters/npc_visual.dart';
 import '../core/constants.dart';
 import '../entities/build_order.dart';
+import '../entities/merchant_entity.dart';
 import '../entities/road_order.dart';
 import '../entities/villager_entity.dart';
 import '../entities/villager_job.dart';
@@ -39,6 +40,7 @@ import '../world/resource_placement.dart';
 import '../world/road_surface.dart';
 import '../world/season.dart';
 import '../world/tree_entity.dart';
+import '../world/world_landmark.dart';
 import 'animal_renderer.dart';
 import 'character_renderer.dart';
 import 'decor_renderer.dart';
@@ -58,12 +60,36 @@ import 'snow_ground_renderer.dart';
 import 'tile_renderer.dart';
 import 'tool_renderer.dart';
 import 'tree_renderer.dart';
+import 'vehicle_renderer.dart';
 import 'water_renderer.dart';
+import 'world_landmark_renderer.dart';
 
 part 'game_ambient.dart';
 part 'game_drawables.dart';
 part 'game_fx.dart';
 part 'game_paints.dart';
+
+/// Retina/4K tam ekranlarda tam çözünürlüklü offscreen katmanlar raster
+/// bütçesini tek başına aşabiliyor. Telefonu yalnız yüksek DPR'ı yüzünden bu
+/// yola sokmamak için hem fiziksel piksel hem kısa kenar koşulu aranır.
+const double kReducedEffectsPhysicalPixelThreshold = 2000000;
+
+bool useReducedEffectsForViewport(Size logicalSize, double devicePixelRatio) {
+  if (logicalSize.isEmpty ||
+      !logicalSize.width.isFinite ||
+      !logicalSize.height.isFinite ||
+      !devicePixelRatio.isFinite ||
+      devicePixelRatio <= 0) {
+    return false;
+  }
+  if (logicalSize.shortestSide < 700) return false;
+  final physicalPixels =
+      logicalSize.width *
+      logicalSize.height *
+      devicePixelRatio *
+      devicePixelRatio;
+  return physicalPixels >= kReducedEffectsPhysicalPixelThreshold;
+}
 
 /// Karakterin ayağı altında ince yatay elips. (sx, sy) = feet pozisyonu
 /// (her character drawable'da gridToScreen sonucu). [scale] karakterin
@@ -249,12 +275,74 @@ class _LightInfo {
 
 final List<_LightInfo> _lightBuffer = [];
 
+// All local lights share the same seven-stop radial falloff. Building that
+// gradient shader for every light in every pass is substantially more
+// expensive than scaling a small pre-baked texture (see light_bench_main).
+// The sprite is created lazily on the first night frame and reused forever.
+ui.Image? _lightRadialSprite;
+final Paint _pLightSprite = Paint()
+  ..filterQuality = FilterQuality.low
+  ..blendMode = BlendMode.lighten;
+
+ui.Image _getLightRadialSprite() {
+  final cached = _lightRadialSprite;
+  if (cached != null) return cached;
+  const side = 256;
+  const radius = side / 2.0;
+  final recorder = ui.PictureRecorder();
+  final canvas = Canvas(recorder);
+  canvas.drawCircle(
+    const Offset(radius, radius),
+    radius,
+    Paint()
+      ..shader = ui.Gradient.radial(
+        const Offset(radius, radius),
+        radius,
+        const [
+          Color(0xFFFFFFFF),
+          Color(0xEBFFFFFF),
+          Color(0xB5FFFFFF),
+          Color(0x4DFFFFFF),
+          Color(0x14FFFFFF),
+          Color(0x05FFFFFF),
+          Color(0x00FFFFFF),
+        ],
+        const [0.0, 0.15, 0.30, 0.50, 0.70, 0.85, 1.0],
+      ),
+  );
+  final picture = recorder.endRecording();
+  final image = picture.toImageSync(side, side);
+  picture.dispose();
+  return _lightRadialSprite = image;
+}
+
+void _drawBakedLight(
+  Canvas canvas,
+  double x,
+  double y,
+  double radius,
+  Color color,
+  int alpha,
+) {
+  final sprite = _getLightRadialSprite();
+  _pLightSprite.colorFilter = ui.ColorFilter.mode(
+    color.withAlpha(alpha),
+    BlendMode.modulate,
+  );
+  canvas.drawImageRect(
+    sprite,
+    Rect.fromLTWH(0, 0, sprite.width.toDouble(), sprite.height.toDouble()),
+    Rect.fromCircle(center: Offset(x, y), radius: radius),
+    _pLightSprite,
+  );
+}
+
 class VillageGamePainter extends CustomPainter {
   final List<VillagerEntity> villagers;
 
   /// Gezgin tüccarlar — sakin köylülerden ayrı listede çizilir ama görsel
   /// olarak [_VillagerDrawable] ile (MerchantEntity extends VillagerEntity).
-  final List<VillagerEntity> merchants;
+  final List<MerchantEntity> merchants;
 
   /// İmparatorluk askerleri — dış güç heyeti; köylülerden ayrı listede ama
   /// aynı [_VillagerDrawable] ile (ImperialSoldier extends VillagerEntity,
@@ -298,10 +386,6 @@ class VillageGamePainter extends CustomPainter {
   /// %55'e kadar çekilir, yıldızlar ve overlay hafiflemesi sky_widgets +
   /// cycle getter'larından gelir.
   final double nightClarity;
-
-  /// ŞU ANKİ ADIMIN HEDEFİ (ızgara koordinatı) — yönlendirmenin görsel ayağı.
-  /// null ise işaret çizilmez (bkz. scene_flow `_refreshStepBeacon`).
-  final (double, double)? stepBeacon;
 
   /// Sahne sprite'larına BlendMode.modulate ile uygulanan "atmosfer rengi".
   /// Gece soğuk mavi mehtap, şafak şeftali, altın saat amber, öğle ~beyaz.
@@ -348,6 +432,7 @@ class VillageGamePainter extends CustomPainter {
   final List<ReedClump> reeds;
   final List<BerryBush> berryBushes;
   final List<DecorEntity> decor;
+  final List<WorldLandmark> landmarks;
   final List<Grave> graves;
   final List<ReedBed> reedBeds;
   final List<AnimalEntity> cows;
@@ -431,7 +516,6 @@ class VillageGamePainter extends CustomPainter {
     this.overlayBottom = const Color(0x00000000),
     this.rainIntensity = 0.0,
     this.nightClarity = 0.0,
-    this.stepBeacon,
     this.ambientTint = const Color(0xFFFFFFFF),
     this.ambientStrength = 0.0,
     this.farmTiles = const [],
@@ -450,6 +534,7 @@ class VillageGamePainter extends CustomPainter {
     this.reeds = const [],
     this.berryBushes = const [],
     this.decor = const [],
+    this.landmarks = const [],
     this.graves = const [],
     this.reedBeds = const [],
     this.cows = const [],
@@ -491,6 +576,7 @@ class VillageGamePainter extends CustomPainter {
       sunOpacity: sunOpacity,
       moonOpacity: moonOpacity,
       timeOfDay: timeOfDay,
+      reducedEffects: perfMode,
     );
 
     // ── Zoom: dünya içeriği ekran merkezine göre ölçeklenir ──────────────────
@@ -558,10 +644,6 @@ class VillageGamePainter extends CustomPainter {
       _drawBeeSwarms(canvas, size);
     }
     _drawRain(canvas, size);
-    // ADIM İŞARETİ — ışıklandırmadan SONRA: bu bir dünya nesnesi değil, yol
-    // gösteren bir işaret. Gece karanlığının altında kalırsa tam da en çok
-    // gerektiği anda (ilk gece) görünmez olur.
-    _drawStepBeacon(canvas, size);
     // Event overlay — aktif olayların ekran toneu + olaya özel partiküller.
     _drawEventOverlay(canvas, size);
   }
@@ -1254,6 +1336,13 @@ class VillageGamePainter extends CustomPainter {
       }
     }
 
+    // Harabe/özel yerler — dünya başına yalnız beş tane; bucket gereksiz.
+    for (final site in landmarks) {
+      if (inView(site.col + 0.5, site.row + 0.5, upTall, sideS)) {
+        _sceneBuffer.add(_WorldLandmarkDrawable(site));
+      }
+    }
+
     // Saz yatakları — sayı az (ateş etrafı); bucket'a gerek yok.
     for (final b in reedBeds) {
       if (inView(b.gridX, b.gridY, upSmall, sideS)) {
@@ -1358,7 +1447,11 @@ class VillageGamePainter extends CustomPainter {
     }
     for (final e in merchants) {
       if (inView(e.renderX, e.renderY, upChar, sideM)) {
-        _sceneBuffer.add(_VillagerDrawable(e, time, dayLight));
+        _sceneBuffer.add(
+          e.hasCart
+              ? _HorseCartDrawable(e, time)
+              : _VillagerDrawable(e, time, dayLight),
+        );
       }
     }
     for (final e in soldiers) {
@@ -1785,22 +1878,15 @@ class VillageGamePainter extends CustomPainter {
   void _drawLightingPass(Canvas canvas, Size size) {
     final darkness = (1.0 - dayLight).clamp(0.0, 1.0);
 
-    // (0) Ambient color grade — gece/şafak/altın saatte sahneyi tonlar.
-    // Modulate olduğu için strength=0'da beyaza lerp ederiz → identity.
-    _drawAmbientGrade(canvas, size);
-
-    // Gündüz fast path — overlay bantları şeffaf, tam aydınlık. Gündüz
-    // atmosfer pass'i (güneş formu + hava perspektifi + bloom + sıcak vignette).
-    if (overlayTop.a == 0 && overlayBottom.a == 0 && darkness < 0.05) {
-      _drawDayAtmosphere(canvas, size);
-      return;
-    }
-
     // PerfMode fast path — tek vertical gradient overlay, ışık cutout / halo
     // saveLayer × 3 + 7-stop gradient × N tamamen atlanır. Gece basit dark
-    // overlay olur, sokak feneri/ateş ışığı yok. Görsel atmosfer feda, FPS
-    // büyük kazanç.
+    // overlay olur, gündüz ise tam ekran atmosfer katmanları tamamen atlanır.
+    // Bu kontrol gündüz fast path'inden ÖNCE olmalı; aksi halde performans modu
+    // fullscreen'da dört ayrı tam-ekran blend pass'i çizmeye devam eder.
     if (perfMode) {
+      if (overlayTop.a == 0 && overlayBottom.a == 0 && darkness < 0.05) {
+        return;
+      }
       final rect = Rect.fromLTWH(0, 0, size.width, size.height);
       _pLighting.shader = ui.Gradient.linear(
         const Offset(0, 0),
@@ -1809,6 +1895,17 @@ class VillageGamePainter extends CustomPainter {
       );
       canvas.drawRect(rect, _pLighting);
       _pLighting.shader = null;
+      return;
+    }
+
+    // (0) Ambient color grade — gece/şafak/altın saatte sahneyi tonlar.
+    // Modulate olduğu için strength=0'da beyaza lerp ederiz → identity.
+    _drawAmbientGrade(canvas, size);
+
+    // Gündüz fast path — overlay bantları şeffaf, tam aydınlık. Gündüz
+    // atmosfer pass'i (güneş formu + hava perspektifi + bloom + sıcak vignette).
+    if (overlayTop.a == 0 && overlayBottom.a == 0 && darkness < 0.05) {
+      _drawDayAtmosphere(canvas, size);
       return;
     }
 
@@ -1871,40 +1968,30 @@ class VillageGamePainter extends CustomPainter {
       // Dış halo (4) atmosferik kapsamı veriyor → bu iç katman çekirdek
       // aydınlatma için sıkı tutuldu (radius 0.45×). Hâlâ blur ile yumuşak
       // sınır ama lit area kaynağın hemen çevresinde kalır.
-      canvas.saveLayer(
-        rect,
-        Paint()
-          ..blendMode = BlendMode.dstOut
-          ..imageFilter = ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+      final coreBounds = _lightLayerBounds(
+        size,
+        radiusMultiplier: 0.45,
+        blurSigma: 6,
       );
-      for (final l in _lightBuffer) {
-        // Viewport reject — ekran dışı ışıkların gradient + drawCircle pahalı.
-        // Core radius * 1.5 (gradient buffer'ı için biraz fazla margin).
-        final rCheck = l.radius * 1.5;
-        if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
-        if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
-        final coreA = (l.intensity * 130).round().clamp(0, 140);
-        final r = l.radius * 0.45;
-        _pLightMask
-          ..maskFilter = null
-          ..shader = ui.Gradient.radial(
-            Offset(l.sx, l.sy),
-            r,
-            [
-              Color.fromARGB(coreA, 0xFF, 0xFF, 0xFF),
-              Color.fromARGB((coreA * 0.92).round(), 0xFF, 0xFF, 0xFF),
-              Color.fromARGB((coreA * 0.71).round(), 0xFF, 0xFF, 0xFF),
-              Color.fromARGB((coreA * 0.30).round(), 0xFF, 0xFF, 0xFF),
-              Color.fromARGB((coreA * 0.08).round(), 0xFF, 0xFF, 0xFF),
-              Color.fromARGB((coreA * 0.02).round(), 0xFF, 0xFF, 0xFF),
-              const Color(0x00FFFFFF),
-            ],
-            const [0.0, 0.15, 0.30, 0.50, 0.70, 0.85, 1.0],
-          );
-        canvas.drawCircle(Offset(l.sx, l.sy), r, _pLightMask);
-        _pLightMask.shader = null;
+      if (coreBounds != null) {
+        canvas.saveLayer(
+          coreBounds,
+          Paint()
+            ..blendMode = BlendMode.dstOut
+            ..imageFilter = ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+        );
+        for (final l in _lightBuffer) {
+          // Viewport reject — ekran dışı ışıkların gradient + drawCircle pahalı.
+          // Core radius * 1.5 (gradient buffer'ı için biraz fazla margin).
+          final rCheck = l.radius * 1.5;
+          if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
+          if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
+          final coreA = (l.intensity * 130).round().clamp(0, 140);
+          final r = l.radius * 0.45;
+          _drawBakedLight(canvas, l.sx, l.sy, r, Colors.white, coreA);
+        }
+        canvas.restore();
       }
-      canvas.restore();
     }
 
     canvas.restore();
@@ -1919,44 +2006,41 @@ class VillageGamePainter extends CustomPainter {
     if (_lightBuffer.isNotEmpty && darkness > 0.15) {
       // Warm wash sprite hue ısıtması için sıkı tutuldu (radius 0.55×):
       // sprite alanı warm renge çekilir, atmosferik yayılım dış halo (4)'de.
-      canvas.saveLayer(
-        rect,
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..isAntiAlias = true
-          ..imageFilter = ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+      final warmBounds = _lightLayerBounds(
+        size,
+        radiusMultiplier: 0.55,
+        blurSigma: 8,
       );
-      for (final l in _lightBuffer) {
-        // Viewport reject (warm wash pass)
-        final rCheck = l.radius * 2.0;
-        if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
-        if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
-        final innerA = (l.intensity * darkness * 55).round().clamp(0, 65);
-        if (innerA < 4) continue;
-        final wr = (l.warm.r * 255).round();
-        final wg = (l.warm.g * 255).round();
-        final wb = (l.warm.b * 255).round();
-        final r = l.radius * 0.55;
-        _pWarmWash
-          ..maskFilter = null
-          ..shader = ui.Gradient.radial(
-            Offset(l.sx, l.sy),
+      if (warmBounds != null) {
+        canvas.saveLayer(
+          warmBounds,
+          Paint()
+            ..blendMode = BlendMode.plus
+            ..isAntiAlias = true
+            ..imageFilter = ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        );
+        for (final l in _lightBuffer) {
+          // Viewport reject (warm wash pass)
+          final rCheck = l.radius * 2.0;
+          if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
+          if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
+          final innerA = (l.intensity * darkness * 55).round().clamp(0, 65);
+          if (innerA < 4) continue;
+          final wr = (l.warm.r * 255).round();
+          final wg = (l.warm.g * 255).round();
+          final wb = (l.warm.b * 255).round();
+          final r = l.radius * 0.55;
+          _drawBakedLight(
+            canvas,
+            l.sx,
+            l.sy,
             r,
-            [
-              Color.fromARGB(innerA, wr, wg, wb),
-              Color.fromARGB((innerA * 0.92).round(), wr, wg, wb),
-              Color.fromARGB((innerA * 0.71).round(), wr, wg, wb),
-              Color.fromARGB((innerA * 0.30).round(), wr, wg, wb),
-              Color.fromARGB((innerA * 0.08).round(), wr, wg, wb),
-              Color.fromARGB((innerA * 0.02).round(), wr, wg, wb),
-              Color.fromARGB(0, wr, wg, wb),
-            ],
-            const [0.0, 0.15, 0.30, 0.50, 0.70, 0.85, 1.0],
+            Color.fromARGB(255, wr, wg, wb),
+            innerA,
           );
-        canvas.drawCircle(Offset(l.sx, l.sy), r, _pWarmWash);
-        _pWarmWash.shader = null;
+        }
+        canvas.restore();
       }
-      canvas.restore();
     }
 
     // (4) Sıcak halo — geniş atmosferik gauss. Sigma 1.05× core radius +
@@ -1968,142 +2052,40 @@ class VillageGamePainter extends CustomPainter {
     if (_lightBuffer.isNotEmpty && darkness > 0.20) {
       // Önceki: haloAlpha cap 115, radius 2.5×, sigma 32 — ortalanmış noktada
       // 3 katman birikip patladı. Düşürüldü: cap 35, radius 1.7×, sigma 18.
-      canvas.saveLayer(
-        rect,
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..imageFilter = ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+      final haloBounds = _lightLayerBounds(
+        size,
+        radiusMultiplier: 1.7,
+        blurSigma: 18,
       );
-      for (final l in _lightBuffer) {
-        // Viewport reject (outer halo pass) — radius 2.5× drawing
-        final rCheck = l.radius * 2.5;
-        if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
-        if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
-        final haloAlpha = (l.intensity * darkness * 28).round().clamp(0, 35);
-        if (haloAlpha < 3) continue;
-        final wr = (l.warm.r * 255).round();
-        final wg = (l.warm.g * 255).round();
-        final wb = (l.warm.b * 255).round();
-        _pWarmHalo
-          ..maskFilter = null
-          ..shader = ui.Gradient.radial(
-            Offset(l.sx, l.sy),
+      if (haloBounds != null) {
+        canvas.saveLayer(
+          haloBounds,
+          Paint()
+            ..blendMode = BlendMode.plus
+            ..imageFilter = ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        );
+        for (final l in _lightBuffer) {
+          // Viewport reject (outer halo pass) — radius 2.5× drawing
+          final rCheck = l.radius * 2.5;
+          if (l.sx + rCheck < 0 || l.sx - rCheck > size.width) continue;
+          if (l.sy + rCheck < 0 || l.sy - rCheck > size.height) continue;
+          final haloAlpha = (l.intensity * darkness * 28).round().clamp(0, 35);
+          if (haloAlpha < 3) continue;
+          final wr = (l.warm.r * 255).round();
+          final wg = (l.warm.g * 255).round();
+          final wb = (l.warm.b * 255).round();
+          _drawBakedLight(
+            canvas,
+            l.sx,
+            l.sy,
             l.radius * 1.7,
-            [
-              Color.fromARGB(haloAlpha, wr, wg, wb),
-              Color.fromARGB((haloAlpha * 0.92).round(), wr, wg, wb),
-              Color.fromARGB((haloAlpha * 0.71).round(), wr, wg, wb),
-              Color.fromARGB((haloAlpha * 0.30).round(), wr, wg, wb),
-              Color.fromARGB((haloAlpha * 0.08).round(), wr, wg, wb),
-              Color.fromARGB((haloAlpha * 0.02).round(), wr, wg, wb),
-              Color.fromARGB(0, wr, wg, wb),
-            ],
-            const [0.0, 0.15, 0.30, 0.50, 0.70, 0.85, 1.0],
+            Color.fromARGB(255, wr, wg, wb),
+            haloAlpha,
           );
-        canvas.drawCircle(Offset(l.sx, l.sy), l.radius * 1.7, _pWarmHalo);
-        _pWarmHalo.shader = null;
+        }
+        canvas.restore();
       }
-      canvas.restore();
     }
-  }
-
-  /// ADIM İŞARETİ — "şuraya bak" der, bağırmaz.
-  ///
-  /// Tasarım kısıtları (bu projede üçü de daha önce öğrenildi):
-  ///   • Baş üstü emoji / dev ok YOK ([[feedback-event-animation]]) — işaret
-  ///     yere ait bir hâle, sahneye yapıştırılmış bir arayüz parçası değil.
-  ///   • Additive patlama YOK ([[feedback-lighting-restraint]]) — normal blend,
-  ///     düşük alfa, yavaş nefes. Göz almadan yakalanmalı.
-  ///   • İZOMETRİK: halka daire değil OVAL (kTileH/kTileW oranı), yoksa zemine
-  ///     oturmaz, üstünde yüzer.
-  ///
-  /// Nabız yavaş (≈0.55 Hz): hızlı yanıp sönen bir işaret "acele et" der ve
-  /// oyunun sakin temposuyla kavga eder.
-  void _drawStepBeacon(Canvas canvas, Size size) {
-    final b = stepBeacon;
-    if (b == null) return;
-    // ZOOM DERSİ: bu pass `canvas.restore()`tan SONRA, yani EKRAN uzayında
-    // çalışıyor (gece karanlığının üstünde kalması için — yukarıdaki nota bkz.).
-    // Ama konumu düz `gridToScreen` ile hesaplıyordu; o dönüşüm zoom'u
-    // bilmiyor. Sonuç: dünya merkeze göre ölçeklenirken halka yerinde kalıyor,
-    // yaklaş/uzaklaş yapan oyuncunun gözünde işaret hedefinden KAYIYORDU —
-    // hem de en çok güvenilmesi gereken şey olan "şuraya bak" işaretinde.
-    // `_worldToScreen` tam bu iş için var (paint'teki dönüşümün aynısı).
-    final s = _worldToScreen(b.$1, b.$2, size);
-    // Ekran dışındaysa çizme (kenarda ok göstermek ayrı bir iş; yanlış yerde
-    // duran bir hâle yol göstermez, kafa karıştırır).
-    if (s.dx < -80 || s.dx > size.width + 80) return;
-    if (s.dy < -80 || s.dy > size.height + 80) return;
-
-    // Halka ZEMİNE ait: ekran uzayında çizildiği için ölçeğini kendi taşımalı,
-    // yoksa uzaklaşınca yedi tile'ı kaplar, yaklaşınca bir ayak izi kadar
-    // kalır. Zoom'a bağlı ama kelepçeli: alt sınır işaretin kaybolmasını,
-    // üst sınır ekranı yutmasını engeller.
-    final k = zoom.clamp(0.65, 1.6);
-    final pulse = 0.5 + 0.5 * sin(time * 3.4);
-    const accent = Color(0xFFE9A23B); // HUD kehribarı — arayüzle aynı dil
-
-    // 1) Zemin halkası — nefes alan izometrik oval.
-    //    ÖLÇEK DERSİ: ilk sürüm 44px genişti ve açılış karesinde kayboldu.
-    //    Bu işaret bir süs değil, oyuncunun ilk dakikada aradığı TEK şey;
-    //    "abartısız" olması "görünmez" olması demek değil. Bir tile'dan geniş
-    //    (kTileW=64) olmalı ki zemindeki desenden ayrışsın.
-    final rw = (92.0 + 16.0 * pulse) * k;
-    // En dıştaki geniş ve çok soluk halka — gözü uzaktan çeker.
-    canvas.drawOval(
-      Rect.fromCenter(center: s, width: rw, height: rw * kTileH / kTileW),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.4
-        ..isAntiAlias = true
-        ..color = accent.withValues(alpha: 0.14 + 0.14 * pulse),
-    );
-    final mw = 62 * k;
-    // Orta halka — asıl okunan çember.
-    canvas.drawOval(
-      Rect.fromCenter(center: s, width: mw, height: mw * kTileH / kTileW),
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.6
-        ..isAntiAlias = true
-        ..color = accent.withValues(alpha: 0.50),
-    );
-    // İçteki dolgu — çok hafif, zemini "sıcak" yapar (nokta belli olsun).
-    canvas.drawOval(
-      Rect.fromCenter(center: s, width: mw, height: mw * kTileH / kTileW),
-      Paint()
-        ..isAntiAlias = true
-        ..color = accent.withValues(alpha: 0.08 + 0.05 * pulse),
-    );
-
-    // 2) Yukarıda çengel (chevron) — yön verir, "burası" der. Hedefin
-    //    ÜSTÜNDE durur ki sprite'ı kapatmasın; hafifçe inip kalkar.
-    final bob = sin(time * 2.6) * 3.5;
-    final ty = s.dy - 58 * k + bob;
-    // Çengelden zemine inen ince bağ — işaretin havada asılı kalmasını önler,
-    // "şu nokta" ile "şu ok" arasındaki ilişkiyi kurar.
-    canvas.drawLine(
-      Offset(s.dx, ty + 12 * k),
-      Offset(s.dx, s.dy - 10 * k),
-      Paint()
-        ..strokeWidth = 1.2
-        ..isAntiAlias = true
-        ..color = accent.withValues(alpha: 0.20),
-    );
-    final chevron = Path()
-      ..moveTo(s.dx - 10 * k, ty)
-      ..lineTo(s.dx, ty + 12 * k)
-      ..lineTo(s.dx + 10 * k, ty);
-    canvas.drawPath(
-      chevron,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.2
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..isAntiAlias = true
-        ..color = accent.withValues(alpha: 0.55 + 0.25 * pulse),
-    );
   }
 
   /// Tüm binaların gölgesini tek pass'te çizer (sahne sprite'larından önce).
@@ -2323,6 +2305,39 @@ class VillageGamePainter extends CustomPainter {
     }
   }
 
+  /// Smallest on-screen buffer that can contain a light pass, including the
+  /// visible 3σ extent of its Gaussian blur. The scene-wide darkness layer
+  /// still covers the full viewport; only the three local-light intermediate
+  /// buffers use this bound. This preserves the exact pixels while avoiding
+  /// full-screen offscreen textures for lights clustered around the village.
+  Rect? _lightLayerBounds(
+    Size size, {
+    required double radiusMultiplier,
+    required double blurSigma,
+  }) {
+    var left = double.infinity;
+    var top = double.infinity;
+    var right = -double.infinity;
+    var bottom = -double.infinity;
+    for (final l in _lightBuffer) {
+      final extent = l.radius * radiusMultiplier + blurSigma * 3.0;
+      if (l.sx + extent < 0 ||
+          l.sx - extent > size.width ||
+          l.sy + extent < 0 ||
+          l.sy - extent > size.height) {
+        continue;
+      }
+      left = min(left, l.sx - extent);
+      top = min(top, l.sy - extent);
+      right = max(right, l.sx + extent);
+      bottom = max(bottom, l.sy + extent);
+    }
+    if (!left.isFinite) return null;
+    final viewport = Rect.fromLTWH(0, 0, size.width, size.height);
+    final bounds = Rect.fromLTRB(left, top, right, bottom).intersect(viewport);
+    return bounds.isEmpty ? null : bounds;
+  }
+
   // ── Olay overlay'i (tint + partiküller) ─────────────────────────────────
   //
   // Aggregate tint, lighting pass üstüne yumuşak alpha çekilir. Sonra her
@@ -2346,7 +2361,6 @@ class VillageGamePainter extends CustomPainter {
       old.overlayBottom != overlayBottom ||
       old.rainIntensity != rainIntensity ||
       old.nightClarity != nightClarity ||
-      old.stepBeacon != stepBeacon ||
       old.farmTiles != farmTiles ||
       old.farmSelection != farmSelection ||
       old.lumberSelection != lumberSelection ||
@@ -2365,6 +2379,7 @@ class VillageGamePainter extends CustomPainter {
       old.reeds != reeds ||
       old.berryBushes != berryBushes ||
       old.decor != decor ||
+      old.landmarks != landmarks ||
       old.cows != cows ||
       old.zoom != zoom ||
       old.resourceBoxes != resourceBoxes ||
@@ -2378,5 +2393,6 @@ class VillageGamePainter extends CustomPainter {
       old.ambientStrength != ambientStrength ||
       old.eventTint != eventTint ||
       old.activeFx != activeFx ||
-      old.burningBuildings != burningBuildings;
+      old.burningBuildings != burningBuildings ||
+      old.perfMode != perfMode;
 }

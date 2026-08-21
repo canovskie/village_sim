@@ -30,8 +30,10 @@ extension _ScenePersonality on _VillageSceneState {
     '{ad} ve {öteki} arasında sağlam bir dostluk kuruldu.',
     '{ad-in} yol arkadaşı {öteki} oldu.',
   ];
+
   /// Dostluk anı tarama periyodu (sn) — seyrek, sakin tempo.
   static const double _kBondScanInterval = 5.0;
+
   /// İki köylünün "can dostu" sayılması için karşılıklı kanaat eşiği ([-1,1]).
   static const double _kBondThreshold = 0.55;
 
@@ -40,7 +42,7 @@ extension _ScenePersonality on _VillageSceneState {
   static const _kAnnivPool = [
     '🎂 {ad} köyde {yıl}. yılını doldurdu. Akşam kâsesine fazladan çorba kondu.',
     '🎂 {yıl} yıldır burada. {sevdiği} deyince {ad-in} hâlâ gözü parlıyor.',
-    '🎂 {ad} için {yıl}. yıl. Komşuları kapısına bir demet bırakmış.',
+    '🎂 {ad} için {yıl}. yıl. Köylüler kapısına bir demet bırakmış.',
   ];
   static const _kCallingPioneerPool = [
     '🌟 {ad} büyüdü. Köyde bu işi ilk o yapıyor: {iş}.',
@@ -87,7 +89,8 @@ extension _ScenePersonality on _VillageSceneState {
 
     // Yıldönümü hak eden bir köylü bul (taramada yalnız biri — sakin tempo).
     // Karışık gez ki hep aynı kişi öne çıkmasın.
-    final order = List<int>.generate(_villagers.length, (i) => i)..shuffle(_rng);
+    final order = List<int>.generate(_villagers.length, (i) => i)
+      ..shuffle(_rng);
     for (final i in order) {
       final v = _villagers[i];
       if (v.isDying) continue;
@@ -119,14 +122,16 @@ extension _ScenePersonality on _VillageSceneState {
   void _celebrateAnniversary(VillagerEntity v, int years) {
     v.feel(NpcEmotion.joy, 4.0, moodDelta: 0.08);
     _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.03);
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         _kAnnivPool,
-        _voice(v,
-            seed: _stableSeed('yıl${v.name}$years', _dayCount),
-            extra: {
-              'yıl': '$years',
-              'sevdiği': v.personality.likes.label,
-            })));
+        _voice(
+          v,
+          seed: _stableSeed('yıl${v.name}$years', _dayCount),
+          extra: {'yıl': '$years', 'sevdiği': v.personality.likes.label},
+        ),
+      ),
+    );
   }
 
   /// Çağrı tarama periyodu (sn) — yıldönümünden ayrı, daha sık (geçiş kaçmasın).
@@ -155,22 +160,25 @@ extension _ScenePersonality on _VillageSceneState {
   void _announceCalling(VillagerEntity v) {
     final prof = v.type.displayName.toLowerCase();
     final heeded = v.type == v.calling; // çağrısını dinledi mi
-    final ctx = _voice(v,
-        seed: _stableSeed('çağrı${v.name}', _dayCount),
-        extra: {
-          'iş': prof,
-          'özlem': v.calling.displayName.toLowerCase(),
-        });
+    final ctx = _voice(
+      v,
+      seed: _stableSeed('çağrı${v.name}', _dayCount),
+      extra: {'iş': prof, 'özlem': v.calling.displayName.toLowerCase()},
+    );
     if (heeded) {
       // Köyde o mesleğin ilk/tek temsilcisi mi → çağrısının öncüsü.
-      final pioneer = !_villagers.any((o) =>
-          o != v && !o.isDying && o.hasProfession && o.type == v.type);
+      final pioneer = !_villagers.any(
+        (o) => o != v && !o.isDying && o.hasProfession && o.type == v.type,
+      );
       v.feel(NpcEmotion.wonder, 4.0, moodDelta: pioneer ? 0.14 : 0.10);
       _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.02);
       if (pioneer) {
         _showNotification(Voice.say(_kCallingPioneerPool, ctx));
-        _chronicle(Voice.say(_kCallingPioneerChroniclePool, ctx),
-            icon: '🌟', milestone: true);
+        _chronicle(
+          Voice.say(_kCallingPioneerChroniclePool, ctx),
+          icon: '🌟',
+          milestone: true,
+        );
       } else {
         _showNotification(Voice.say(_kCallingHeededPool, ctx));
         _chronicle(Voice.say(_kCallingHeededChroniclePool, ctx), icon: '🌟');
@@ -198,17 +206,22 @@ extension _ScenePersonality on _VillageSceneState {
     _bondScan = 0;
     if (_villagers.length < 2) return;
     // Karışık gez — hep aynı çift öne çıkmasın.
-    final order = List<int>.generate(_villagers.length, (i) => i)..shuffle(_rng);
+    final order = List<int>.generate(_villagers.length, (i) => i)
+      ..shuffle(_rng);
     for (final i in order) {
       final v = _villagers[i];
       if (v.isDying || v.lifeStage == LifeStage.child) continue;
       for (final e in v.memory.opinion.entries) {
         if (e.value < _kBondThreshold) continue;
         final o = e.key;
-        if (o is! VillagerEntity || o.isDying || o.lifeStage == LifeStage.child) {
+        if (o is! VillagerEntity ||
+            o.isDying ||
+            o.lifeStage == LifeStage.child) {
           continue;
         }
-        if (o.memory.opinionOf(v) < _kBondThreshold) continue; // KARŞILIKLI şart
+      if (o.memory.opinionOf(v) < _kBondThreshold) {
+        continue; // KARŞILIKLI şart
+      }
         final key = _bondKey(v, o);
         if (_bondSeen.contains(key)) continue;
         _bondSeen.add(key);
@@ -227,8 +240,11 @@ extension _ScenePersonality on _VillageSceneState {
   void _celebrateBond(VillagerEntity a, VillagerEntity b) {
     a.feel(NpcEmotion.love, 3.5, moodDelta: 0.06);
     b.feel(NpcEmotion.love, 3.5, moodDelta: 0.06);
-    final ctx = _voice(a,
-        other: b, seed: _stableSeed('dost${a.name}${b.name}', _dayCount));
+    final ctx = _voice(
+      a,
+      other: b,
+      seed: _stableSeed('dost${a.name}${b.name}', _dayCount),
+    );
     _showNotification(Voice.say(_kBondPool, ctx));
     _chronicle(Voice.say(_kBondChroniclePool, ctx), icon: '🤝');
   }

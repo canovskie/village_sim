@@ -50,6 +50,14 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
       if (!widget.hidden.contains(s)) s,
   ];
 
+  Color _tone(LedgerSection section) => switch (section) {
+    LedgerSection.divan => AppUi.accent,
+    LedgerSection.kanun => AppUi.gold,
+    LedgerSection.nufus => AppUi.sage,
+    LedgerSection.tuzuk => AppUi.rust,
+    LedgerSection.kronik => const Color(0xFFB079D4),
+  };
+
   @override
   void didUpdateWidget(_LedgerBoardShell old) {
     super.didUpdateWidget(old);
@@ -72,41 +80,53 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
               BoardRailItem(
                 icon: s.icon,
                 label: s.short,
+                color: _tone(s),
                 badge: widget.badges[s] ?? 0,
                 selected: _sec == s,
-                guideId:
-                    s == LedgerSection.kanun ? GuideAnchors.sectionKanun : null,
+                guideId: s == LedgerSection.kanun
+                    ? GuideAnchors.sectionKanun
+                    : null,
                 onTap: () => setState(() => _sec = s),
               ),
           ],
         ),
         Expanded(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 170),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            // Varsayılan layout Stack'i ORTALAR ve çocuğu gevşek sınırlarla
-            // ölçer; tahtanın her sütunu SINIRLI yükseklik istediği için
-            // (BoardPager kaç satır sığdığını oradan hesaplar) expand şart.
-            layoutBuilder: (current, previous) => Stack(
-              fit: StackFit.expand,
-              children: [...previous, ?current],
-            ),
-            transitionBuilder: (child, anim) => FadeTransition(
-              opacity: anim,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.03, 0),
-                  end: Offset.zero,
-                ).animate(anim),
-                child: child,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _tone(_sec).withValues(alpha: 0.075),
+                  Colors.transparent,
+                  Colors.transparent,
+                ],
               ),
             ),
-            child: KeyedSubtree(
-              key: ValueKey(_sec),
-              child: Padding(
-                padding: const EdgeInsets.all(LedgerBoard.pad),
-                child: widget.boardFor(_sec),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 170),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              layoutBuilder: (current, previous) => Stack(
+                fit: StackFit.expand,
+                children: [...previous, ?current],
+              ),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.03, 0),
+                    end: Offset.zero,
+                  ).animate(anim),
+                  child: child,
+                ),
+              ),
+              child: KeyedSubtree(
+                key: ValueKey(_sec),
+                child: Padding(
+                  padding: const EdgeInsets.all(LedgerBoard.pad),
+                  child: widget.boardFor(_sec),
+                ),
               ),
             ),
           ),
@@ -167,7 +187,6 @@ extension LedgerMobileBoards on VillageLedger {
     );
   }
 
-
   // ── DİVAN ─────────────────────────────────────────────────────────────────
   //
   // İki sütun. Solda GÜNDEM (defterin işi: yanıt bekleyen meseleler), sağda
@@ -214,15 +233,17 @@ extension LedgerMobileBoards on VillageLedger {
               const minCouncil = 92.0;
               // Kart tahtada SABİT boylu (bkz. [_MassSeizureCard.compact]);
               // rezerv tahmin değil, kartın gerçek boyu.
-              final seizureH =
-                  massSeizure != null ? _MassSeizureCard.boardHeight + 8 : 0.0;
+              final seizureH = massSeizure != null
+                  ? _MassSeizureCard.boardHeight + 8
+                  : 0.0;
               final reserved =
                   seizureH + (seats.isNotEmpty ? minCouncil + 8 : 0.0);
               final rows = houses.isEmpty
                   ? 0
-                  : ((c.maxHeight - reserved - 8) / rowH)
-                        .floor()
-                        .clamp(0, houses.length < 4 ? houses.length : 4);
+                  : ((c.maxHeight - reserved - 8) / rowH).floor().clamp(
+                      0,
+                      houses.length < 4 ? houses.length : 4,
+                    );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -304,13 +325,22 @@ extension LedgerMobileBoards on VillageLedger {
         BoardCol(
           flex: 48,
           head: 'KÖYÜN KADEMESİ',
-          headTrailing: BoardCount('${charterTier + 1}/${QuestBook.tiers.length}'),
+          headTrailing: BoardCount(
+            '${charterTier + 1}/${QuestBook.tiers.length}',
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (int i = 0; i < QuestBook.tiers.length; i++) ...[
                 if (i > 0) const SizedBox(height: 5),
-                Expanded(child: _MiniTier(index: i, tier: QuestBook.tiers[i], doneCount: done.length, ledger: this)),
+                Expanded(
+                  child: _MiniTier(
+                    index: i,
+                    tier: QuestBook.tiers[i],
+                    doneCount: done.length,
+                    ledger: this,
+                  ),
+                ),
               ],
             ],
           ),
@@ -350,8 +380,11 @@ extension LedgerMobileBoards on VillageLedger {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const GameIcon(GameIconData.chevron,
-                          size: 11, color: AppUi.accentSoft),
+                      const GameIcon(
+                        GameIconData.chevron,
+                        size: 11,
+                        color: AppUi.accentSoft,
+                      ),
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
@@ -450,8 +483,12 @@ class _MiniMatter extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
       child: Row(
         children: [
-          SemanticIcon(m.icon,
-              size: 14, color: c, fallback: GameIconData.scroll),
+          SemanticIcon(
+            m.icon,
+            size: 14,
+            color: c,
+            fallback: GameIconData.scroll,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -621,8 +658,12 @@ class _MiniTier extends StatelessWidget {
         children: [
           Opacity(
             opacity: passed || current ? 1 : 0.45,
-            child: SemanticIcon(tier.icon,
-                size: 13, color: c, fallback: GameIconData.crown),
+            child: SemanticIcon(
+              tier.icon,
+              size: 13,
+              color: c,
+              fallback: GameIconData.crown,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -660,8 +701,11 @@ class _MiniTier extends StatelessWidget {
           if (current)
             Text('ŞİMDİ', style: AppUi.label.copyWith(fontSize: 8, color: c))
           else
-            GameIcon(passed ? GameIconData.star : GameIconData.door,
-                size: 10, color: c),
+            GameIcon(
+              passed ? GameIconData.star : GameIconData.door,
+              size: 10,
+              color: c,
+            ),
         ],
       ),
     );
@@ -682,8 +726,11 @@ class _MiniQuest extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       child: Row(
         children: [
-          GameIcon(questGlyph(state.quest.id),
-              size: 12, color: on ? AppUi.accent : AppUi.textLo),
+          GameIcon(
+            questGlyph(state.quest.id),
+            size: 12,
+            color: on ? AppUi.accent : AppUi.textLo,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -699,7 +746,10 @@ class _MiniQuest extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               'SIRADAKİ',
-              style: AppUi.label.copyWith(fontSize: 7.5, color: AppUi.accentSoft),
+              style: AppUi.label.copyWith(
+                fontSize: 7.5,
+                color: AppUi.accentSoft,
+              ),
             ),
           ],
         ],
@@ -726,8 +776,12 @@ class _MiniChronicle extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: SemanticIcon(e.icon,
-                size: 13, color: AppUi.textLo, fallback: GameIconData.scroll),
+            child: SemanticIcon(
+              e.icon,
+              size: 13,
+              color: AppUi.textLo,
+              fallback: GameIconData.scroll,
+            ),
           ),
           const SizedBox(width: 7),
           Expanded(

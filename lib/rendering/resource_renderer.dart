@@ -30,6 +30,7 @@ class ResourceRenderer {
     await _load('stonebox', 'assets/tools/stonebox.png');
     await _load('ironbox', 'assets/tools/ironbox.png');
     await _load('coalbox', 'assets/tools/coalbox.png');
+    await _load('foodbasket', 'assets/tools/prop_basket.png');
     await _load('hay', 'assets/tools/hay.png');
     await _load('baleofstraw', 'assets/tools/baleofstraw.png');
     await _load('torch', 'assets/tools/torch.png');

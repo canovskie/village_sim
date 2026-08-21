@@ -2,28 +2,13 @@ import 'package:flutter/material.dart';
 import 'app_ui.dart';
 import 'mobile_ui.dart';
 
-/// Oyun hakkında bilgi, sürüm ve kontroller listesini gösteren panel.
+/// Oyunun kısa kimlik ve yapım bilgisi.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({super.key});
 
   static const _version = '0.1.0 — alpha';
 
-  static const _credits = [
-    ('Oyun Tasarımı', 'Can Kaynar'),
-    ('Programlama', 'Can Kaynar + Claude'),
-    ('Pixel Art', 'Can Kaynar'),
-    ('Müzik / SFX', 'Ortam & efekt sesleri'),
-  ];
-
-  static const _controls = [
-    ('🖱  Sürükle', 'Haritayı kaydır'),
-    ('🖱  Tekerlek', 'Yakınlaş / uzaklaş'),
-    ('🖱  Tık', 'Bina seç / yerleştir'),
-    ('🌾  Tarla modu', 'Sürükleyerek tarla seç'),
-    ('🪓  Kes modu', 'Sürükleyerek ağaç işaretle'),
-    ('⛏  Kaz modu', 'Sürükleyerek maden işaretle'),
-    ('⚡  GOD', 'Sınırsız altın + anlık inşa'),
-  ];
+  static const _credits = [('Yapım', 'Can Kaynar'), ('Kod desteği', 'Claude')];
 
   @override
   Widget build(BuildContext context) {
@@ -79,12 +64,6 @@ class AboutScreen extends StatelessWidget {
                       ),
 
                       const SizedBox(height: 18),
-                      const AppSectionLabel('Kontroller'),
-                      const SizedBox(height: 2),
-                      for (final (key, desc) in _controls)
-                        _Row(left: key, right: desc),
-
-                      const SizedBox(height: 14),
                       const AppSectionLabel('Krediler'),
                       const SizedBox(height: 2),
                       for (final (role, name) in _credits)
@@ -109,9 +88,7 @@ class AboutScreen extends StatelessWidget {
     );
   }
 
-  /// iPhone 11 yatay: kimlik solda, kontroller ve krediler sağda. Masaüstünün
-  /// uzun tek sütununu telefona küçültmek yerine yatay alanı kullanır; pencere
-  /// 360pt yüksekliği geçmez ve kapatma düğmesi başlıkta hep erişilebilirdir.
+  /// iPhone 11 yatay: kimlik solda, iki satırlık yapım bilgisi sağda.
   Widget _compact(BuildContext context) {
     final window = MobileUi.windowSize(context, maxWidth: 720);
     return Scaffold(
@@ -149,19 +126,7 @@ class AboutScreen extends StatelessWidget {
                           const SizedBox(width: 14),
                           Container(width: 1, color: AppUi.line),
                           const SizedBox(width: 14),
-                          Expanded(
-                            flex: 5,
-                            child: SingleChildScrollView(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(child: _compactControls()),
-                                  const SizedBox(width: 14),
-                                  Expanded(child: _compactCredits()),
-                                ],
-                              ),
-                            ),
-                          ),
+                          Expanded(flex: 4, child: _compactCredits()),
                         ],
                       ),
                     ),
@@ -199,17 +164,8 @@ class AboutScreen extends StatelessWidget {
     ],
   );
 
-  Widget _compactControls() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      const AppSectionLabel('Kontroller'),
-      const SizedBox(height: 3),
-      for (final (key, desc) in _controls)
-        _Row(left: key, right: desc, compact: true),
-    ],
-  );
-
   Widget _compactCredits() => Column(
+    mainAxisAlignment: MainAxisAlignment.center,
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       const AppSectionLabel('Krediler'),

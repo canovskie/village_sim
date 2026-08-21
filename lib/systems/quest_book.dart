@@ -57,9 +57,8 @@ enum QuestPointer {
 /// Adımın istediği ARAYÜZ KAPISI — ne dünyada bir yer, ne bir inşa kartı.
 ///
 /// Bugün tek kullanıcısı yönetişim ve sebebi tam olarak bu: berat bir bina
-/// değil, Köy Defteri'nin içindeki bir hüküm. Kuruluş öğreticisi uzun süre
-/// yalnız bina diktirdi ve oyunun ASIL konusuna (mühür, hane, divan) hiç
-/// değmedi — oyuncu köyü kurup "eee, şimdi?" diye kaldı.
+/// değil, Köy Defteri'nin içindeki bir hüküm. Bu hedef kuruluşta görünmez;
+/// Belediye kurulduktan sonra yazılı yönetime geçişi öğretir.
 enum QuestUi {
   none,
 
@@ -110,11 +109,10 @@ class Quest {
   /// açılıyordu ve oyuncu köyü kurarken sürekli birinin parmağını izliyordu.
   /// Öğretici öğretmiyor, EŞLİK EDİYORDU.
   ///
-  /// Artık yalnız DÖRT adım rehberli ve dördü de kendi başına bulunamayacak
-  /// şeyler: bir yapıyı haritaya kurmak (ocak), barınağın ayrı bir karar
-  /// olduğu (çadır), işin binaya bağlı olduğu (oduncu kulübesi) ve köyün asıl
-  /// işinin defterde döndüğü (berat). Gerisi bu dördünün tekrarı — orada spot
-  /// öğretmez, dırdır eder.
+  /// Kuruluşta yalnız ÜÇ adım rehberli: bir yapıyı haritaya kurmak (ocak),
+  /// barınağın ayrı bir karar olduğu (çadır) ve işin binaya bağlı olduğu
+  /// (oduncu kulübesi). Dördüncü rehber çok sonra, Belediye kurulunca yazılı
+  /// yönetimin başladığını göstermek için gelir.
   final bool guided;
 
   /// KURUCUNUN AĞZINDAN — adım açılınca [speaker] bunu dünyada söyler.
@@ -268,7 +266,7 @@ class QuestBook {
   /// kademelerde açılan toplam görev sayısını AŞAMAZ (üst kademe görevleri
   /// ancak o kademeye geçilince açılır — aşarsa merdiven kilitlenir).
   /// Bugünkü dağılım: t0:8 t1:4 t2:7 t3:4 t4:6 t5:6 → kümülatif
-  /// 8/12/19/23/29/35. (Kuruluş 5→12→9→8: bkz. tier 0 başlığı.)
+  /// 7/12/19/23/29/35. (Kuruluş 5→12→9→8→7: bkz. tier 0 başlığı.)
   ///
   /// Eşik ayrıca NEFES payı bırakmalı. Tavana "bir görev hariç hepsi" diye
   /// oturursa, kovan/çiçekçi gibi isteğe bağlı bir görevi atlayan oyuncu
@@ -337,19 +335,19 @@ class QuestBook {
   // ── Görev havuzu ──────────────────────────────────────────────────────────
   static const List<Quest> all = [
     // ── Tier 0 — Yeni Ocak (KURULUŞ) ─────────────────────────────────────
-    // Sekiz adım. Bu liste iki kez küçüldü ve her seferinde aynı sebeple:
+    // Yedi adım. Bu liste üç kez küçüldü ve her seferinde aynı sebeple:
     //
     // (1) Beş "şu binayı dik" görevinden ibaretti; arada dakikalarca hiçbir şey
     //     olmuyordu → on iki mikro adıma bölündü.
     // (2) On iki adımın üçü "şu köylüye şu işi ver"di. Kâğıtta karar, oyunda
     //     MİKRO KONTROL: köy artık kendi açlığına bakıyor (bkz. scene_jobs
     //     `_foragerTarget`/`_cookTarget`), oyuncu sepet dağıtmıyor. O üç adım
-    //     düştü, yerine köyün ASIL işi geldi: ilk berat.
+    //     düştü. İlk berat da Belediye öncesi yazılı kanun olmayacağı için
+    //     kuruluşun dışına, Belediye adımının hemen arkasına taşındı.
     //
-    // İlk DÖRT adım rehberli ([Quest.guided]) ve sırası bilinçli: ocak (bir
+    // İlk ÜÇ adım rehberli ([Quest.guided]) ve sırası bilinçli: ocak (bir
     // yapıyı haritaya kur) → çadır (barınak ayrı bir karar) → oduncu kulübesi
-    // (iş binaya bağlı, kadroya değil) → berat (köy defterden yönetilir).
-    // Beşinciden sonra öğretici susar; kalan dört adım aynı fiillerin tekrarı.
+    // (iş binaya bağlı, kadroya değil). Kuruluş boyunca Kanunname anlatılmaz.
     Quest(
       id: 'firepit',
       icon: '🔥',
@@ -400,25 +398,6 @@ class QuestBook {
       guided: true,
       voice: 'Odunsuz ne ev olur ne ateş. Baltayı ormana sok.',
       thanks: 'Balta işliyor. Odun artık ayağımıza geliyor.',
-    ),
-    // YÖNETİŞİM KURULUŞA GİRDİ. Berat eskiden tier 1'deydi: oyuncu köyü
-    // kuruyor, öğretici susuyor ve oyunun asıl konusuna (mühür/divan/hane)
-    // kendi başına çarpması bekleniyordu. Berat bir bina istemez — Defter ilk
-    // günden açık, o yüzden bu adım kuruluşun içinde durabiliyor.
-    Quest(
-      id: 'firstPolicy',
-      icon: '📜',
-      label: 'İlk beratı yaz',
-      hint: 'Köy Defterini aç, Kanunname rafından bir hüküm seç ve mühürle.',
-      category: QuestCategory.governance,
-      tier: 0,
-      speaker: VillagerType.priest,
-      reward: VisualReward.festival,
-      check: _firstPolicy,
-      uiTarget: QuestUi.lawBook,
-      guided: true,
-      voice: 'Ateş yandı, dam çatıldı. Sıra bu köyün usulünde.',
-      thanks: 'Mühür basıldı. Artık burada yazılı bir söz var.',
     ),
     Quest(
       id: 'well',
@@ -489,11 +468,33 @@ class QuestBook {
       icon: '🏛',
       label: 'Belediyeyi kur',
       hint:
-          'Belediye binasını dik. Köyün mührü orada durur; berat oradan çıkar.',
+          'Belediye binasını dik. Köyün mührü orada durur; Kanunname ancak '
+          'Belediye kurulunca açılır.',
       category: QuestCategory.governance,
       tier: 1,
       reward: VisualReward.bloom,
       check: _townhall,
+    ),
+    // YAZILI YÖNETİMİN İLK DERSİ. Belediye kurulmadan önce köyün kararları
+    // Ocak Sözü'dür; Kanunname'yi kuruluş öğreticisine sokmak oyunun kendi
+    // ilerlemesiyle çelişiyordu. Belediye görevi listede bunun hemen önünde:
+    // bina yükselir, ardından Defter → Kanunname rehberi bir kez açılır.
+    Quest(
+      id: 'firstPolicy',
+      icon: '📜',
+      label: 'İlk hükmü yazıya geçir',
+      hint:
+          'Belediye ayakta. Köy Defterini aç, Kanunname rafından bir hüküm '
+          'seç ve mühürle.',
+      category: QuestCategory.governance,
+      tier: 1,
+      speaker: VillagerType.priest,
+      reward: VisualReward.festival,
+      check: _firstPolicy,
+      uiTarget: QuestUi.lawBook,
+      guided: true,
+      voice: 'Mühür artık yerini buldu. Ocak sözünü deftere geçirebiliriz.',
+      thanks: 'Söz yazıya geçti. Köyün ilk hükmü defterde.',
     ),
     Quest(
       id: 'tavern',
@@ -644,7 +645,7 @@ class QuestBook {
       icon: '🚪',
       label: 'Misafirperverlik beratı',
       hint:
-          'Misafirperverlik politikasını aç. Yoldan geçen gezgin köyde kalır.',
+          'Misafirperverlik politikasını aç. Kervanla gelen yolcu köyde kalır.',
       category: QuestCategory.governance,
       tier: 3,
       reward: VisualReward.bloom,

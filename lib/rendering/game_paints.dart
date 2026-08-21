@@ -63,19 +63,6 @@ final _pScaffBorder = Paint()
 // Lighting pass paint havuzu (lokal ışık + halo).
 // saveLayer içine karanlık + vignette → bu paint normal blend.
 final _pLighting = Paint()..isAntiAlias = false;
-// Light mask buffer — her ışık BlendMode.lighten ile birleştirilir.
-// lighten RGB için MAX alır (premul beyaz: R=G=B=a → max RGB = max alpha) ama
-// alpha kanalı srcOver-stacked olur. dstOut erasure alpha'yı kullandığı için
-// outer Paint'e ColorFilter (alpha = R) konur → gerçek MAX alpha bypass.
-final _pLightMask = Paint()
-  ..blendMode = BlendMode.lighten
-  ..isAntiAlias = true;
-// Sıcak halo paint — saveLayer içinde lighten ile birleştirilir, dış
-// saveLayer plus blend ile sahneye uygulanır. Premul-warm RGB'ler için
-// lighten zaten MAX verir; plus dst.RGB ekler → overlap'te ekstra parlaklık yok.
-final _pWarmHalo = Paint()
-  ..blendMode = BlendMode.lighten
-  ..isAntiAlias = true;
 
 // Ambient color grade — fullscreen modulate (= multiply). Sahnenin "günün
 // içinde bulunduğu ışık tonu" (mehtap mavi, altın saat amber, ...). Strength=0
@@ -90,13 +77,6 @@ final _pDayGrade = Paint()..isAntiAlias = false;
 final _pHighlightRing = Paint()
   ..style = PaintingStyle.stroke
   ..strokeWidth = 2.5
-  ..isAntiAlias = true;
-// Per-light warm wash — sprite'ı ışık alanında ısıtır. BlendMode.plus
-// radial gradient, dış halo'dan dar ve daha düşük alfa: hedef sprite hue
-// değişimi, parlama patlaması değil. (Layer paint inline yapılıyor —
-// imageFilter.blur sigma'sı pass'e özel.)
-final _pWarmWash = Paint()
-  ..blendMode = BlendMode.lighten
   ..isAntiAlias = true;
 // Mehtap dolgusu — gece ışıksız alanlarda hafif soğuk-mavi plus
 // (saveLayer'ın DIŞINA, dstOut tarafından korunmadan). Karanlığı

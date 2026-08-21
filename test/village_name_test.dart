@@ -25,16 +25,22 @@ void main() {
           randomVillagerSurname(Random(i)).toLowerCase(),
       };
       for (final idea in kVillageNameIdeas) {
-        expect(surnames.contains(idea.name.toLowerCase()), isFalse,
-            reason: '${idea.name} hem köy hem hane adı olabiliyor');
+        expect(
+          surnames.contains(idea.name.toLowerCase()),
+          isFalse,
+          reason: '${idea.name} hem köy hem hane adı olabiliyor',
+        );
       }
     });
 
     test('her adın bir gerekçesi var ve gerekçe cümle gibi okunur', () {
       for (final idea in kVillageNameIdeas) {
         expect(idea.name.trim(), isNotEmpty);
-        expect(idea.meaning.trim().length, greaterThan(20),
-            reason: '${idea.name}: gerekçe tek kelimeye düşmüş');
+        expect(
+          idea.meaning.trim().length,
+          greaterThan(20),
+          reason: '${idea.name}: gerekçe tek kelimeye düşmüş',
+        );
         expect(idea.meaning.trim(), endsWith('.'));
       }
     });
@@ -71,8 +77,11 @@ void main() {
       expect(withSuffix('Yenice', Suffix.ablative), "Yenice'den");
       for (final idea in kVillageNameIdeas) {
         for (final s in Suffix.values) {
-          expect(withSuffix(idea.name, s), contains("'"),
-              reason: '${idea.name} ek almıyor');
+          expect(
+            withSuffix(idea.name, s),
+            contains("'"),
+            reason: '${idea.name} ek almıyor',
+          );
         }
       }
     });
@@ -106,36 +115,31 @@ void main() {
           ),
         ),
       );
-      await pumpUntil(
-          tester, find.byKey(const ValueKey('village_name_field')));
+      await pumpUntil(tester, find.byKey(const ValueKey('village_name_field')));
     }
 
-    testWidgets('masaüstünde öneriye dokunmak kutuyu doldurur ve gerekçe çıkar',
-        (tester) async {
+    testWidgets('masaüstünde öneriye dokunmak köy adı kutusunu doldurur', (
+      tester,
+    ) async {
       await openGate(tester, const Size(1600, 1000));
 
-      // Havuzdan gelen bir öneri ekranda olmalı — kutu boş bırakılmıyor.
-      final chip = find.byWidgetPredicate((w) =>
-          w is Text &&
-          kVillageNameIdeas.any((i) => i.name == w.data));
-      expect(chip, findsWidgets, reason: 'hiç ad önerisi çizilmemiş');
-
-      final picked = tester.widget<Text>(chip.first).data!;
-      final meaning = meaningOfVillageName(picked)!;
-      expect(find.text(meaning), findsNothing, reason: 'gerekçe erken çıkmış');
-
-      await tester.tap(chip.first);
+      // Masaüstü ve mobil aynı tek-dokunuş öneri davranışını kullanır: düğme
+      // havuzdan sıradaki adı doğrudan girişe yazar.
+      final button = find.text('🎲 ÖNER');
+      expect(button, findsOneWidget);
+      await tester.tap(button);
       await tester.pump();
 
       final field = tester.widget<TextField>(
-          find.byKey(const ValueKey('village_name_field')));
-      expect(field.controller!.text, picked);
-      expect(find.text(meaning), findsOneWidget,
-          reason: 'ad seçildi ama nereden geldiği söylenmedi');
+        find.byKey(const ValueKey('village_name_field')),
+      );
+      final picked = field.controller!.text;
+      expect(kVillageNameIdeas.any((i) => i.name == picked), isTrue);
     });
 
-    testWidgets('telefonda tek dokunuş hem köy hem hane adını doldurur',
-        (tester) async {
+    testWidgets('telefonda tek dokunuş hem köy hem hane adını doldurur', (
+      tester,
+    ) async {
       await openGate(tester, const Size(896, 414));
 
       final button = find.byKey(const ValueKey('mobile_name_idea_button'));
@@ -144,13 +148,21 @@ void main() {
       await tester.pump();
 
       final village = tester.widget<TextField>(
-          find.byKey(const ValueKey('village_name_field')));
+        find.byKey(const ValueKey('village_name_field')),
+      );
       final house = tester.widget<TextField>(
-          find.byKey(const ValueKey('house_name_field')));
-      expect(meaningOfVillageName(village.controller!.text), isNotNull,
-          reason: 'öneri havuzdan gelmedi');
-      expect(house.controller!.text.trim(), isNotEmpty,
-          reason: 'boş hane kutusu doldurulmadı');
+        find.byKey(const ValueKey('house_name_field')),
+      );
+      expect(
+        meaningOfVillageName(village.controller!.text),
+        isNotNull,
+        reason: 'öneri havuzdan gelmedi',
+      );
+      expect(
+        house.controller!.text.trim(),
+        isNotEmpty,
+        reason: 'boş hane kutusu doldurulmadı',
+      );
 
       // İkinci dokunuş SIRADAKİ adı verir (aynı adı tekrar dayatmaz) ve
       // oyuncunun yazdığı hane adını EZMEZ.

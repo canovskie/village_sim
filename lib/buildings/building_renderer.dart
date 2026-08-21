@@ -1,4 +1,4 @@
-import 'dart:math' show sin;
+import 'dart:math' show pi, sin;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -267,14 +267,17 @@ class BuildingRenderer {
     bool perfMode = false,
     double fireFuel = 1.0,
     double millRotorAngle = 0.0,
+    double deliveryPulse = 0.0,
+    int deliveryTally = 0,
     Season season = Season.spring,
+
     /// Pencere/fener ışığının kısılma çarpanı (bkz. [BuildingEntity.windowGlow]).
     /// Konutta sakinler uyudukça 0'a iner → evin camı söner. Konut olmayan
     /// binalar 1.0 geçer, davranışları değişmez.
     double windowGlow = 1.0,
   }) {
-    final img = (season == Season.winter ? _winterCache[type] : null) ??
-        _cache[type];
+    final img =
+        (season == Season.winter ? _winterCache[type] : null) ?? _cache[type];
     final meta = kBuildingMeta[type];
     // Genel güvenlik fallback'i: PNG yüklenememiş / bilinmeyen bina → basit
     // izometrik kutu placeholder (footprint'e oturur, türe göre renk + harf).
@@ -383,6 +386,20 @@ class BuildingRenderer {
       if (isActive && type == BuildingType.mill) {
         _drawMillFlourDust(canvas, img, left, right, front, meta, time, seed);
       }
+      if (isActive || deliveryPulse > 0 || deliveryTally > 0) {
+        _drawWorkYard(
+          canvas,
+          type,
+          left,
+          right,
+          front,
+          time,
+          seed,
+          isActive: isActive,
+          deliveryPulse: deliveryPulse,
+          deliveryTally: deliveryTally,
+        );
+      }
     }
 
     // Firepit alev — perf mode'da bile çizilir (köy odak noktası, atlamayalım).
@@ -401,6 +418,114 @@ class BuildingRenderer {
       final fuelFactor = (fireFuel * 3.0).clamp(0.0, 1.0);
       final intensity = rainFactor < fuelFactor ? rainFactor : fuelFactor;
       FlameRenderer.draw(canvas, cx, cy, s, time, seed, intensity: intensity);
+    }
+  }
+
+  /// Üretimin binaya değdiği avlu katmanı. Sprite'ı değiştirmez; kapının
+  /// önünde biriken 1-3 somut nesne ve kısa teslim oturuşu üretimin dünyada
+  /// iz bırakmasını sağlar.
+  static void _drawWorkYard(
+    Canvas canvas,
+    BuildingType type,
+    Offset left,
+    Offset right,
+    Offset front,
+    double time,
+    int seed, {
+    required bool isActive,
+    required double deliveryPulse,
+    required int deliveryTally,
+  }) {
+    final tileW = (right.dx - left.dx).abs();
+    final p = (1.0 - deliveryPulse).clamp(0.0, 1.0);
+    final settle = deliveryPulse > 0
+        ? sin(p * pi * 3) * deliveryPulse * 2.2
+        : 0.0;
+    final cx = front.dx + tileW * 0.12;
+    final cy = front.dy - 2 + settle;
+    final outline = Paint()
+      ..color = const Color(0xFF2A1A10)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..isAntiAlias = false;
+    final fill = Paint()..isAntiAlias = false;
+
+    void crate(double x, double y, Color color) {
+      fill.color = color;
+      final r = Rect.fromLTWH(x - 5, y - 5, 10, 6);
+      canvas.drawRect(r, fill);
+      canvas.drawRect(r, outline);
+      canvas.drawLine(Offset(x, y - 5), Offset(x, y + 1), outline);
+    }
+
+    final count = deliveryTally.clamp(0, 3);
+    switch (type) {
+      case BuildingType.warehouse:
+        for (var i = 0; i < count; i++) {
+          crate(
+            cx + (i - 1) * 8.0,
+            cy - (i.isOdd ? 3 : 0),
+            const Color(0xFF9B6A38),
+          );
+        }
+      case BuildingType.lumberCamp:
+        if (isActive) {
+          fill.color = const Color(0xFF875128);
+          for (var i = 0; i < 3; i++) {
+            final y = cy - i * 3.0;
+            canvas.drawRRect(
+              RRect.fromRectAndRadius(
+                Rect.fromLTWH(cx - 11 + i * 2, y - 3, 22, 5),
+                const Radius.circular(2),
+              ),
+              fill,
+            );
+          }
+        }
+      case BuildingType.mineBuilding:
+        if (isActive) {
+          fill.color = const Color(0xFF8F8A82);
+          for (var i = 0; i < 5; i++) {
+            final j = ((seed + i * 7) % 5).toDouble();
+            canvas.drawCircle(Offset(cx - 8 + i * 4, cy - j), 2.2, fill);
+          }
+        }
+      case BuildingType.fisherCabin:
+        if (isActive || count > 0) {
+          fill.color = const Color(0xFF8A673C);
+          canvas.drawOval(
+            Rect.fromCenter(center: Offset(cx, cy - 2), width: 16, height: 8),
+            fill,
+          );
+          canvas.drawOval(
+            Rect.fromCenter(center: Offset(cx, cy - 2), width: 16, height: 8),
+            outline,
+          );
+        }
+      case BuildingType.barn:
+        if (isActive || count > 0) {
+          fill.color = const Color(0xFF9B835D);
+          canvas.drawRect(Rect.fromLTWH(cx - 5, cy - 7, 10, 8), fill);
+          canvas.drawRect(Rect.fromLTWH(cx - 5, cy - 7, 10, 8), outline);
+        }
+      case BuildingType.firepit:
+        if (isActive || deliveryPulse > 0) {
+          fill.color = const Color(0xFF3C3430);
+          canvas.drawOval(
+            Rect.fromCenter(center: Offset(cx, cy - 3), width: 16, height: 7),
+            fill,
+          );
+          final steam = (sin(time * 3.2 + seed) + 1) * 0.5;
+          fill.color = Color.fromARGB((80 + steam * 70).round(), 220, 214, 195);
+          canvas.drawCircle(Offset(cx - 2, cy - 12 - steam * 3), 2.0, fill);
+        }
+      case BuildingType.mill:
+        if (isActive) {
+          crate(cx - 5, cy, const Color(0xFFC9B47D));
+          crate(cx + 6, cy - 2, const Color(0xFFD8C897));
+        }
+      default:
+        break;
     }
   }
 

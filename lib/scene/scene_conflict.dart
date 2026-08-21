@@ -1,5 +1,36 @@
 part of '../main.dart';
 
+enum _NpcBrawlOutcome { none, injury, fatal }
+
+/// Tek bir görünür NPC düellosu. Toplumsal karar başlangıçta verilir, fiziksel
+/// sonucu ise ilk güçlü temas karesine kadar burada bekler.
+class _NpcBrawl {
+  final VillagerEntity a;
+  final VillagerEntity b;
+  final double ax, ay, bx, by;
+  final double duration;
+  final bool feud;
+  final bool aStarts;
+  final _NpcBrawlOutcome outcome;
+  final double intensity;
+  double elapsed = 0;
+  bool outcomeApplied = false;
+
+  _NpcBrawl({
+    required this.a,
+    required this.b,
+    required this.ax,
+    required this.ay,
+    required this.bx,
+    required this.by,
+    required this.duration,
+    required this.feud,
+    required this.aStarts,
+    required this.outcome,
+    required this.intensity,
+  });
+}
+
 /// Çekişmeler — köyde NADİREN patlayan ağız dalaşı / yumruklaşma / küsme.
 /// Tasarım ([[feedback_event_animation]] + [[feedback_chill_gameplay]]):
 ///  - Tamamen GÖVDE DİLİ: öfke postürü (mevcut emotion render) + yumruklaşmada
@@ -14,9 +45,11 @@ part of '../main.dart';
 extension _SceneConflict on _VillageSceneState {
   /// Tarama aralığı (sn). Sık taranır ama çıkış olasılığı düşük → nadir.
   static const double _kConflictPoll = 3.0;
+
   /// Taban kavga olasılığı (poll başına, tek aday çift için). Faktörler bunu
   /// ölçekler; sakin köyde neredeyse hiç, gergin köyde ara sıra.
   static const double _kConflictBase = 0.06;
+
   /// Küslük süresi (oyun günü) aralığı.
   static const double _kGrudgeMinDays = 2.0;
   static const double _kGrudgeMaxDays = 5.0;
@@ -25,9 +58,11 @@ extension _SceneConflict on _VillageSceneState {
   /// İlk kan: kriz anındaki sıradan bir yumruklaşmanın ölümle bitme ihtimali
   /// (çok düşük — kan davası NADİR başlasın).
   static const double _kFirstBloodFatal = 0.05;
+
   /// İntikam: zaten kan davalı iki kişinin kavgasının ölümle bitme ihtimali
   /// (daha yüksek — kan davası kan ister, döngü kendini besler).
   static const double _kFeudRevengeFatal = 0.13;
+
   /// Sıradan (kan davasız) ağır yumruklaşmanın ölümle bitme TABAN riski —
   /// şiddetle ölçeklenir, [_kFirstBloodFatal] ile sınırlı. Kavgayı ciddileştirir
   /// (artık her yumruklaşma küçük bir ölüm riski taşır).
@@ -37,7 +72,11 @@ extension _SceneConflict on _VillageSceneState {
   // Her satır bir HAVUZ; seed'e göre biri seçilir. Ekler ({ad-i}, {öteki-in})
   // ünlü uyumuyla üretilir — elle yapıştırılmaz.
 
-  static const _kTensionCauses = ['Aç karınlar', 'Sönük yüzler', 'Soğuk geceler'];
+  static const _kTensionCauses = [
+    'Aç karınlar',
+    'Sönük yüzler',
+    'Soğuk geceler',
+  ];
   static const _kTensionPool = [
     '⚠️ {sebep} sabırları inceltti. Bugün laf lafı çabuk açıyor.',
     '⚠️ Kuyu başında sesler yükseldi. {sebep} kimseyi rahat bırakmıyor.',
@@ -84,7 +123,7 @@ extension _SceneConflict on _VillageSceneState {
   ];
   static const _kSeparatedPool = [
     '✋ Köylüler koşup kavganın ortasına girdi.',
-    '✋ İki komşu kavgaya atıldı, kolları tuttular.',
+    '✋ İki köylü kavgaya atıldı, kolları tuttular.',
     '✋ Kimse seyretmedi, araya girip ayırdılar.',
   ];
   static const _kJoinedFeudPool = [
@@ -193,6 +232,7 @@ extension _SceneConflict on _VillageSceneState {
   ];
 
   void _tickConflicts(double dt) {
+    _tickNpcBrawls(dt);
     _recoverInjuries(dt); // yaralılar her tick iyileşir (poll'dan bağımsız)
     _conflictPollSec -= dt;
     if (_conflictPollSec > 0) return;
@@ -215,11 +255,16 @@ extension _SceneConflict on _VillageSceneState {
           ? _kTensionCauses[0]
           : (_stats.morale < 0.4 ? _kTensionCauses[1] : _kTensionCauses[2]);
       addCameraShake(2.0, dur: 0.3);
-      _showNotification(Voice.say(
+      _showNotification(
+        Voice.say(
           _kTensionPool,
-          _voice(null,
-              seed: _stableSeed('tension$cause', _dayCount),
-              extra: {'sebep': cause})));
+          _voice(
+            null,
+            seed: _stableSeed('tension$cause', _dayCount),
+            extra: {'sebep': cause},
+          ),
+        ),
+      );
     }
 
     // Uygun (uyanık, dışarıda, boşta, yetişkin, cooldown'suz) köylüler + öfke yükü.
@@ -252,13 +297,17 @@ extension _SceneConflict on _VillageSceneState {
     // hoşlanmayan iki köylü daha kolay tutuşur. Kavga artık yalnız mizaç ve
     // köy gerginliğinden değil, ARALARINDA GEÇENLERDEN de doğuyor: suçunu
     // gördüğün adamla aynı meydanda durmak zor.
-    final mutual = (-instigator.memory.opinionOf(other)).clamp(0.0, 1.0) +
+    final mutual =
+        (-instigator.memory.opinionOf(other)).clamp(0.0, 1.0) +
         (-other.memory.opinionOf(instigator)).clamp(0.0, 1.0);
     if (mutual > 0.2) p *= 1.0 + mutual * 1.6;
     if (_rng.nextDouble() >= p.clamp(0.0, 0.9)) return;
 
-    logDev('Kavga tetiği: ${instigator.name} ↔ ${other.name}',
-        tag: '⚔', color: AppUi.rust);
+    logDev(
+      'Kavga tetiği: ${instigator.name} ↔ ${other.name}',
+      tag: '⚔',
+      color: AppUi.rust,
+    );
     _startConflict(instigator, other, glob);
   }
 
@@ -297,8 +346,9 @@ extension _SceneConflict on _VillageSceneState {
       if (v.injuryDays <= 0) {
         v.injuryDays = 0;
         v.feel(NpcEmotion.content, 3.0, moodDelta: 0.06);
-        _showNotification(Voice.say(
-            v.disabled ? _kHealedLamePool : _kHealedPool, _voice(v)));
+        _showNotification(
+          Voice.say(v.disabled ? _kHealedLamePool : _kHealedPool, _voice(v)),
+        );
       }
     }
   }
@@ -307,8 +357,8 @@ extension _SceneConflict on _VillageSceneState {
   double _irritability(VillagerEntity v) {
     double s = 0;
     s += (0.62 - v.morale).clamp(0.0, 1.0) * 0.9; // mutsuzluk en büyük etken
-    s += (-v.mood).clamp(0.0, 1.0) * 0.3;         // kötü ruh hali ekler
-    s += _traitAggro(v);                          // mizaç
+    s += (-v.mood).clamp(0.0, 1.0) * 0.3; // kötü ruh hali ekler
+    s += _traitAggro(v); // mizaç
     if (v.callingFound && v.type != v.calling) s += 0.25; // çağrı kırgınlığı
     // Küskün HANE üyesi daha çabuk parlar.
     if (v.surname.isNotEmpty && _houses.moodOf(v.surname) < 0.4) s += 0.25;
@@ -338,7 +388,9 @@ extension _SceneConflict on _VillageSceneState {
 
   /// Öfke yüküyle ağırlıklı rastgele köylü seçimi (gergin olan daha olası).
   VillagerEntity? _weightedPick(
-      List<VillagerEntity> pool, Map<VillagerEntity, double> weight) {
+    List<VillagerEntity> pool,
+    Map<VillagerEntity, double> weight,
+  ) {
     double total = 0;
     for (final v in pool) {
       total += weight[v]!.clamp(0.05, 1.4); // herkese küçük taban şans
@@ -355,7 +407,9 @@ extension _SceneConflict on _VillageSceneState {
   /// [v]'ye en yakın uygun kavga komşusu (1.9 tile içinde) — kan düşmanı varsa
   /// onu önceler (husumet diğer her şeyden güçlü çeker). Yoksa null.
   VillagerEntity? _nearestConflictPartner(
-      VillagerEntity v, List<VillagerEntity> pool) {
+    VillagerEntity v,
+    List<VillagerEntity> pool,
+  ) {
     VillagerEntity? best;
     double bestD = 1.9 * 1.9;
     VillagerEntity? bestEnemy;
@@ -385,8 +439,8 @@ extension _SceneConflict on _VillageSceneState {
     _faceAndHold(a, b);
     _faceAndHold(b, a);
 
-    final intensity =
-        ((_irritability(a) + _irritability(b)) * 0.5 * glob).clamp(0.0, 1.5);
+    final intensity = ((_irritability(a) + _irritability(b)) * 0.5 * glob)
+        .clamp(0.0, 1.5);
 
     // Kan davalı çift mi — husumet kavgayı her zaman yumruklaşmaya çevirir ve
     // sulh olmadıkça hiçbir komşu yatıştıramaz.
@@ -397,13 +451,16 @@ extension _SceneConflict on _VillageSceneState {
     final peace = feudPair ? null : _findPeacemaker(a, b);
 
     // Yumruklaşma olasılığı: tırmanış + saldırgan mizaç; yatıştırıcı varsa düşük.
-    double fist = (intensity - 0.45).clamp(0.0, 1.0) * 0.55 +
+    double fist =
+        (intensity - 0.45).clamp(0.0, 1.0) * 0.55 +
         _traitAggro(a).clamp(0.0, 1.0) * 0.3 +
         _traitAggro(b).clamp(0.0, 1.0) * 0.3;
     if (peace != null) fist *= 0.25;
     final brawl = feudPair || _rng.nextDouble() < fist;
 
-    final dur = (brawl ? 4.5 : 3.0) + _rng.nextDouble() * 1.8;
+    // Oyuncunun köy ölçeğinde okuyabileceği kadar sürsün. Eski 3-6 saniyelik
+    // pencere, kamera olay yerine gelmeden kavgayı bitiriyordu.
+    final dur = (brawl ? 8.0 : 5.5) + _rng.nextDouble() * 2.0;
     const shout = '💢';
     for (final v in [a, b]) {
       v.activity = brawl ? VillagerActivity.brawling : VillagerActivity.arguing;
@@ -417,16 +474,27 @@ extension _SceneConflict on _VillageSceneState {
     // dalaşında merak); gövde dili, hafif tedirginlik.
     final mx = (a.gridX + b.gridX) * 0.5;
     final my = (a.gridY + b.gridY) * 0.5;
-    _reactNearby(mx, my, brawl ? 5.0 : 4.0,
-        brawl ? NpcEmotion.fear : NpcEmotion.wonder, 2.5,
-        moodDelta: -0.02);
+    _reactNearby(
+      mx,
+      my,
+      brawl ? 5.0 : 4.0,
+      brawl ? NpcEmotion.fear : NpcEmotion.wonder,
+      2.5,
+      moodDelta: -0.02,
+    );
     // TANIKLIK — yumruklaşma gürültülüdür, bakmayan da duyar. Ağız dalaşı
     // sessizdir: yalnız o yöne bakan görür. Gören, kavgacılara dair kanaatini
     // günlerce taşır (bkz. scene_perception).
     if (brawl) {
-      _witnessEvent(Notion.brawl,
-          x: mx, y: my, subject: a, subjectName: a.name,
-          loud: true, exclude: [a, b]);
+      _witnessEvent(
+        Notion.brawl,
+        x: mx,
+        y: my,
+        subject: a,
+        subjectName: a.name,
+        loud: true,
+        exclude: [a, b],
+      );
     }
 
     if (brawl) addCameraShake(4.0, dur: 0.4);
@@ -435,44 +503,65 @@ extension _SceneConflict on _VillageSceneState {
     // Yalnız yumruklaşma; intikam (kan davalı) en ölümcül, kriz anı ilk kanı
     // dökebilir, ayrıca HER ağır yumruklaşma ufak bir ölüm riski taşır
     // (şiddetle ölçekli). Favoriler maktul olmaz.
+    var fatalPlanned = false;
     if (brawl) {
       final double fatal = feudPair
           ? _kFeudRevengeFatal
           : (intensity > 1.0 && glob > 1.3)
-              ? _kFirstBloodFatal
-              : (_kBrawlFatalBase * intensity).clamp(0.0, _kFirstBloodFatal);
-      if (fatal > 0 &&
+          ? _kFirstBloodFatal
+          : (_kBrawlFatalBase * intensity).clamp(0.0, _kFirstBloodFatal);
+      fatalPlanned =
+          fatal > 0 &&
           _rng.nextDouble() < fatal &&
-          _resolveFatalBrawl(a, b, feudPair)) {
-        return; // ölüm + (kan davası): normal küslük/kronik akışı atlanır
-      }
+          [a, b].any((v) => !v.isFavorite);
+    }
+    if (fatalPlanned) {
+      _stageConflictCrowd(a, b, dur, brawl: true);
+      _beginNpcBrawl(
+        a,
+        b,
+        duration: dur,
+        feud: feudPair,
+        outcome: _NpcBrawlOutcome.fatal,
+        intensity: intensity,
+      );
+      AudioManager.instance.playSfx(Sfx.fightScuffle);
+      return; // ölüm ve kan davası ilk güçlü temas karesinde çözülecek
     }
 
     // Yatıştırıcı araya girerse: kavga sönimler, o köylü huzur duyar.
     if (peace != null) {
       peace.lookToward(mx, my);
       peace.feel(NpcEmotion.content, 2.5, moodDelta: 0.03);
-      _showNotification(Voice.say(
+      _showNotification(
+        Voice.say(
           _kPeacePool,
-          _voice(a,
-              other: b,
-              seed: _stableSeed('peace${a.name}${b.name}', _dayCount),
-              extra: {'barışçı': peace.name})));
+          _voice(
+            a,
+            other: b,
+            seed: _stableSeed('peace${a.name}${b.name}', _dayCount),
+            extra: {'barışçı': peace.name},
+          ),
+        ),
+      );
       return; // yatıştırıldı: küslük/kronik yok
     }
 
     // SÜRPRİZ TIRMANMA — yalnız yumruklaşma: beklenmedik katılanlar + ayıranlar.
     final escalated = brawl && _escalateBrawl(a, b, dur, feud: feudPair);
+    _stageConflictCrowd(a, b, dur, brawl: brawl);
 
     // ── SAKATLIK/YARALANMA — ölümden çok daha sık; kaybeden yaralanır, ağırsa
     // kalıcı sakatlık. Escalation'dan SONRA çağrılır ki yaralanma bildirimi
     // (daha önemli) en son görünsün (_showNotification son çağrıyı gösterir).
-    bool injured = false;
+    var injuryPlanned = false;
     if (brawl) {
-      final injChance =
-          ((feudPair ? 0.30 : 0.14) + intensity * 0.10).clamp(0.0, 0.6);
+      final injChance = ((feudPair ? 0.30 : 0.14) + intensity * 0.10).clamp(
+        0.0,
+        0.6,
+      );
       if (_rng.nextDouble() < injChance) {
-        injured = _injureLoser(a, b, feud: feudPair, intensity: intensity);
+        injuryPlanned = [a, b].any((v) => !v.isFavorite);
       }
     }
 
@@ -482,15 +571,32 @@ extension _SceneConflict on _VillageSceneState {
       _formGrudge(a, b);
     }
 
-    final ctx = _voice(a,
-        other: b, seed: _stableSeed('fight${a.name}${b.name}', _dayCount));
+    final ctx = _voice(
+      a,
+      other: b,
+      seed: _stableSeed('fight${a.name}${b.name}', _dayCount),
+    );
     if (brawl) {
+      _beginNpcBrawl(
+        a,
+        b,
+        duration: min(dur, max(a.chatBubbleTime, b.chatBubbleTime)),
+        feud: feudPair,
+        outcome: injuryPlanned
+            ? _NpcBrawlOutcome.injury
+            : _NpcBrawlOutcome.none,
+        intensity: intensity,
+      );
       // Yalnız YUMRUKLAŞMADA ses var: atışma sık, sesli olsaydı köy sürekli
       // gürültülü olurdu (ve gerçek kavganın ağırlığı kaybolurdu).
       AudioManager.instance.playSfx(Sfx.fightScuffle);
-      _chronicle(Voice.say(_kBrawlChroniclePool, ctx), icon: '💢', kind: ChronicleKind.crisis);
+      _chronicle(
+        Voice.say(_kBrawlChroniclePool, ctx),
+        icon: '💢',
+        kind: ChronicleKind.crisis,
+      );
       // Escalation/yaralanma kendi bildirimini verdiyse base'i tekrarlama.
-      if (!escalated && !injured) {
+      if (!escalated && !injuryPlanned) {
         _showNotification(Voice.say(_kBrawlPool, ctx));
       }
     } else {
@@ -506,6 +612,225 @@ extension _SceneConflict on _VillageSceneState {
     v.targetCol = v.gridX;
     v.targetRow = v.gridY;
     v.idleTimer = 5.0;
+  }
+
+  /// Kavga yalnız iki sprite'ın animasyonu olarak kalmaz: yakın köylüler
+  /// işlerini bırakıp halka olur; yumruklaşmada bazıları ürküp geriye açılır.
+  /// [watchingConflict] + quarrel/flee niyeti, normal rutinin bu hareketi bir
+  /// sonraki düşünme turunda ezmesini önler.
+  void _stageConflictCrowd(
+    VillagerEntity a,
+    VillagerEntity b,
+    double dur, {
+    required bool brawl,
+  }) {
+    final mx = (a.gridX + b.gridX) * 0.5;
+    final my = (a.gridY + b.gridY) * 0.5;
+    final near =
+        _villagers
+            .where((v) {
+              if (identical(v, a) || identical(v, b)) return false;
+              if (v.isDying ||
+                  v.isLeaving ||
+                  v.isSleeping ||
+                  v.isInsideBuilding) {
+                return false;
+              }
+              if (!v.hasProfession || v.isCarrying || v.injuryDays > 0) {
+                return false;
+              }
+              if (v.conflictCooldown > 0) {
+                return false; // katılan/ayıran rolünü koru
+              }
+              if (v.mind.intent.priority >= IntentPriority.committed) {
+                return false;
+              }
+              return v.activity == VillagerActivity.none ||
+                  v.activity == VillagerActivity.chat ||
+                  v.activity == VillagerActivity.warm ||
+                  v.activity == VillagerActivity.listening;
+            })
+            .where((v) => _dist2(v, mx, my) <= 9.0 * 9.0)
+            .toList()
+          ..sort((x, y) => _dist2(x, mx, my).compareTo(_dist2(y, mx, my)));
+
+    if (near.isEmpty) return;
+    var target = (near.length * (brawl ? 0.65 : 0.45)).ceil();
+    if (target < 3) target = 3;
+    if (target > 8) target = 8;
+    if (target > near.length) target = near.length;
+    for (var i = 0; i < target; i++) {
+      final v = near[i];
+      _prepForScene(v);
+      final retreat = brawl && i.isOdd;
+      final angle = atan2(v.gridY - my, v.gridX - mx);
+      final radius = retreat ? 5.0 + (i % 3) * 0.7 : 2.8 + (i % 2) * 0.7;
+      final tx = (mx + cos(angle) * radius).clamp(1.0, kCols - 2.0);
+      final ty = (my + sin(angle) * radius).clamp(1.0, kRows - 2.0);
+      v.mind.impose(
+        retreat ? IntentKind.flee : IntentKind.quarrel,
+        retreat ? 'kavgadan uzak duruyorum' : 'kavgaya bakmaya koştum',
+      );
+      v.activity = VillagerActivity.watchingConflict;
+      v.chatBubbleIcon = '';
+      v.chatBubbleTime = dur + 6.0;
+      v.act = Act(retreat ? 'kavgadan geri çekiliyor' : 'kavgayı izliyor', [
+        ActStep.goTo(tx, ty),
+        ActStep.face(mx, my),
+        ActStep.work(dur, pose: ActPose.stand),
+      ]);
+      v.feel(
+        brawl ? NpcEmotion.fear : NpcEmotion.wonder,
+        dur + 4.0,
+        moodDelta: brawl ? -0.035 : -0.01,
+      );
+      v.conflictCooldown = dur + 12.0;
+    }
+  }
+
+  /// İki ana dövüşçüyü sabit bir eksende birbirine bağlar. Yakınlık çok bozuksa
+  /// orta noktalarının çevresinde okunur bir temas aralığı kurulur; böylece
+  /// yumruklar uzaktan savrulmaz ve üst üste binmezler.
+  void _beginNpcBrawl(
+    VillagerEntity a,
+    VillagerEntity b, {
+    required double duration,
+    required bool feud,
+    required _NpcBrawlOutcome outcome,
+    required double intensity,
+  }) {
+    _cancelNpcBrawls(a, b);
+    var dx = b.gridX - a.gridX;
+    var dy = b.gridY - a.gridY;
+    var len = sqrt(dx * dx + dy * dy);
+    if (len < 0.001) {
+      dx = 1;
+      dy = 0;
+      len = 1;
+    }
+    final ux = dx / len, uy = dy / len;
+    final mx = (a.gridX + b.gridX) * .5;
+    final my = (a.gridY + b.gridY) * .5;
+    final gap = len.clamp(1.25, 1.75).toDouble();
+    final ax = mx - ux * gap * .5;
+    final ay = my - uy * gap * .5;
+    final bx = mx + ux * gap * .5;
+    final by = my + uy * gap * .5;
+    final loser = [a, b].where((v) => !v.isFavorite).toList()
+      ..sort((x, y) => x.morale.compareTo(y.morale));
+    final aStarts = outcome != _NpcBrawlOutcome.none && loser.isNotEmpty
+        ? identical(loser.first, b)
+        : _traitAggro(a) == _traitAggro(b)
+        ? _rng.nextBool()
+        : _traitAggro(a) > _traitAggro(b);
+    for (final v in [a, b]) {
+      v.npcDueling = true;
+      v.imperialAttacking = false;
+      v.imperialHit = false;
+    }
+    _activeNpcBrawls.add(
+      _NpcBrawl(
+        a: a,
+        b: b,
+        ax: ax,
+        ay: ay,
+        bx: bx,
+        by: by,
+        duration: max(.8, duration),
+        feud: feud,
+        aStarts: aStarts,
+        outcome: outcome,
+        intensity: intensity,
+      ),
+    );
+    kProbeNpcCombatPairs = _activeNpcBrawls.length;
+  }
+
+  void _tickNpcBrawls(double dt) {
+    for (var i = _activeNpcBrawls.length - 1; i >= 0; i--) {
+      final duel = _activeNpcBrawls[i];
+      final a = duel.a, b = duel.b;
+      if (!_villagers.contains(a) ||
+          !_villagers.contains(b) ||
+          a.isDying ||
+          b.isDying ||
+          a.activity != VillagerActivity.brawling ||
+          b.activity != VillagerActivity.brawling) {
+        _finishNpcBrawlAt(i);
+        continue;
+      }
+      duel.elapsed += dt;
+      final motion = npcCombatMotion(
+        elapsed: duel.elapsed,
+        duration: duel.duration,
+        feud: duel.feud,
+        aStarts: duel.aStarts,
+      );
+      final dx = duel.bx - duel.ax, dy = duel.by - duel.ay;
+      final len = sqrt(dx * dx + dy * dy);
+      final ux = len < .001 ? 1.0 : dx / len;
+      final uy = len < .001 ? 0.0 : dy / len;
+      _stepNpcCombatant(
+        a,
+        duel.ax + ux * motion.aAdvance,
+        duel.ay + uy * motion.aAdvance,
+        dt,
+      );
+      _stepNpcCombatant(
+        b,
+        duel.bx - ux * motion.bAdvance,
+        duel.by - uy * motion.bAdvance,
+        dt,
+      );
+      a.lookToward(b.gridX, b.gridY);
+      b.lookToward(a.gridX, a.gridY);
+      a.imperialAttacking = motion.aStriking;
+      b.imperialAttacking = motion.bStriking;
+      a.imperialHit = motion.aHit;
+      b.imperialHit = motion.bHit;
+      if (motion.impact) kProbeNpcCombatContactSeen = true;
+
+      if (motion.impact && !duel.outcomeApplied) {
+        duel.outcomeApplied = true;
+        switch (duel.outcome) {
+          case _NpcBrawlOutcome.none:
+            break;
+          case _NpcBrawlOutcome.injury:
+            _injureLoser(a, b, feud: duel.feud, intensity: duel.intensity);
+          case _NpcBrawlOutcome.fatal:
+            _resolveFatalBrawl(a, b, duel.feud);
+        }
+      }
+      if (duel.elapsed >= duel.duration) _finishNpcBrawlAt(i);
+    }
+  }
+
+  void _stepNpcCombatant(VillagerEntity v, double tx, double ty, double dt) {
+    v.isWalking = true;
+    final arrived = v.moveTowards(tx, ty, dt, arriveD: .02, speedScale: 2.8);
+    if (arrived) v.isWalking = false;
+    v.smoothMotion(dt);
+  }
+
+  void _finishNpcBrawlAt(int index) {
+    final duel = _activeNpcBrawls.removeAt(index);
+    for (final v in [duel.a, duel.b]) {
+      v.npcDueling = false;
+      v.imperialAttacking = false;
+      v.imperialHit = false;
+    }
+    kProbeNpcCombatPairs = _activeNpcBrawls.length;
+  }
+
+  void _cancelNpcBrawls(VillagerEntity a, [VillagerEntity? b]) {
+    for (var i = _activeNpcBrawls.length - 1; i >= 0; i--) {
+      final duel = _activeNpcBrawls[i];
+      if (identical(duel.a, a) ||
+          identical(duel.b, a) ||
+          (b != null && (identical(duel.a, b) || identical(duel.b, b)))) {
+        _finishNpcBrawlAt(i);
+      }
+    }
   }
 
   /// Çiftin yakınında (3 tile) kavgada olmayan yumuşak/neşeli mizaçlı bir
@@ -568,15 +893,23 @@ extension _SceneConflict on _VillageSceneState {
   /// katılır (kan akrabalığı/husumet/öfke), (2) sakin komşular araya girmeye
   /// koşar ve kavgayı kısaltır. Kan davasında daha kalabalık + kırmızı flaş.
   /// Tamamen gövde dili + goTo koşuşma. Bir bildirim üretirse true döner.
-  bool _escalateBrawl(VillagerEntity a, VillagerEntity b, double dur,
-      {required bool feud}) {
+  bool _escalateBrawl(
+    VillagerEntity a,
+    VillagerEntity b,
+    double dur, {
+    required bool feud,
+  }) {
     final mx = (a.gridX + b.gridX) * 0.5;
     final my = (a.gridY + b.gridY) * 0.5;
 
     // Kan davası kıvılcımı — kısa kırmızı flaş + güçlü sarsıntı (sürpriz an).
     if (feud) {
-      _activeFx.add(ActiveFx(
-          const EventEffect(screenTint: Color(0x33AA1414), duration: 1.4), 1.4));
+      _activeFx.add(
+        ActiveFx(
+          const EventEffect(screenTint: Color(0x33AA1414), duration: 1.4),
+          1.4,
+        ),
+      );
       addCameraShake(7.0, dur: 0.6);
     }
 
@@ -586,13 +919,16 @@ extension _SceneConflict on _VillageSceneState {
     final maxJoin = feud ? 4 : 2;
     final joinBase = feud ? 0.9 : 0.35;
     int joined = 0;
-    final near = _villagers
-        .where((v) =>
-            !fighters.contains(v) &&
-            _conflictEligible(v) &&
-            _dist2(v, mx, my) <= 6.5 * 6.5)
-        .toList()
-      ..sort((x, y) => _dist2(x, mx, my).compareTo(_dist2(y, mx, my)));
+    final near =
+        _villagers
+            .where(
+              (v) =>
+                  !fighters.contains(v) &&
+                  _conflictEligible(v) &&
+                  _dist2(v, mx, my) <= 6.5 * 6.5,
+            )
+            .toList()
+          ..sort((x, y) => _dist2(x, mx, my).compareTo(_dist2(y, mx, my)));
     for (final v in near) {
       if (joined >= maxJoin) break;
       double pull = 0;
@@ -604,8 +940,11 @@ extension _SceneConflict on _VillageSceneState {
       pull += (0.55 - v.morale).clamp(0.0, 0.55); // mutsuz kapılır
       if (_rng.nextDouble() >= (joinBase * pull).clamp(0.0, 0.95)) continue;
       // Katıl: kavgaya koş + öfke postürü.
-      v.goTo((mx + (_rng.nextDouble() - 0.5) * 1.4).clamp(1.0, kCols - 2.0),
-          (my + (_rng.nextDouble() - 0.5) * 1.4).clamp(1.0, kRows - 2.0), dur);
+      v.goTo(
+        (mx + (_rng.nextDouble() - 0.5) * 1.4).clamp(1.0, kCols - 2.0),
+        (my + (_rng.nextDouble() - 0.5) * 1.4).clamp(1.0, kRows - 2.0),
+        dur,
+      );
       v.activity = VillagerActivity.brawling;
       v.chatBubbleIcon = '💢';
       v.chatBubbleTime = dur;
@@ -618,28 +957,34 @@ extension _SceneConflict on _VillageSceneState {
     // ── AYIRANLAR — başkaları araya girip ayırmaya koşar ────────────────────
     final maxSep = (fighters.length >= 3 || feud) ? 2 : 1;
     int sep = 0;
-    final calm = _villagers
-        .where((v) =>
-            !fighters.contains(v) &&
-            !v.isDying &&
-            !v.isSleeping &&
-            !v.isInsideBuilding &&
-            v.hasProfession &&
-            v.activity != VillagerActivity.brawling &&
-            v.activity != VillagerActivity.arguing &&
-            _separatorScore(v) > 0 &&
-            _dist2(v, mx, my) <= 7.0 * 7.0)
-        .toList()
-      ..sort((x, y) {
-        final px = _separatorScore(x), py = _separatorScore(y);
-        if (px != py) return py.compareTo(px);
-        return _dist2(x, mx, my).compareTo(_dist2(y, mx, my));
-      });
+    final calm =
+        _villagers
+            .where(
+              (v) =>
+                  !fighters.contains(v) &&
+                  !v.isDying &&
+                  !v.isSleeping &&
+                  !v.isInsideBuilding &&
+                  v.hasProfession &&
+                  v.activity != VillagerActivity.brawling &&
+                  v.activity != VillagerActivity.arguing &&
+                  _separatorScore(v) > 0 &&
+                  _dist2(v, mx, my) <= 7.0 * 7.0,
+            )
+            .toList()
+          ..sort((x, y) {
+            final px = _separatorScore(x), py = _separatorScore(y);
+            if (px != py) return py.compareTo(px);
+            return _dist2(x, mx, my).compareTo(_dist2(y, mx, my));
+          });
     for (final v in calm) {
       if (sep >= maxSep) break;
       // Koşup araya girme (goTo + feel) ayırmayı anlatır — baş-üstü ✋ ikonu YOK.
-      v.goTo((mx + (_rng.nextDouble() - 0.5) * 1.2).clamp(1.0, kCols - 2.0),
-          (my + (_rng.nextDouble() - 0.5) * 1.2).clamp(1.0, kRows - 2.0), 3.0);
+      v.goTo(
+        (mx + (_rng.nextDouble() - 0.5) * 1.2).clamp(1.0, kCols - 2.0),
+        (my + (_rng.nextDouble() - 0.5) * 1.2).clamp(1.0, kRows - 2.0),
+        3.0,
+      );
       v.feel(NpcEmotion.wonder, 3.0, moodDelta: 0.02);
       v.conflictCooldown = 30.0;
       sep++;
@@ -650,21 +995,31 @@ extension _SceneConflict on _VillageSceneState {
       for (final f in fighters) {
         if (f.chatBubbleTime > 3.0) f.chatBubbleTime = 3.0;
       }
-      _showNotification(Voice.say(
+      _showNotification(
+        Voice.say(
           feud ? _kSeparatedFeudPool : _kSeparatedPool,
-          _voice(a,
-              other: b,
-              seed: _stableSeed('sep${a.name}${fighters.length}', _dayCount),
-              extra: {'sayı': '${fighters.length}'})));
+          _voice(
+            a,
+            other: b,
+            seed: _stableSeed('sep${a.name}${fighters.length}', _dayCount),
+            extra: {'sayı': '${fighters.length}'},
+          ),
+        ),
+      );
       return true;
     }
     if (joined > 0) {
-      _showNotification(Voice.say(
+      _showNotification(
+        Voice.say(
           feud ? _kJoinedFeudPool : _kJoinedPool,
-          _voice(a,
-              other: b,
-              seed: _stableSeed('join${a.name}$joined', _dayCount),
-              extra: {'sayı': '$joined'})));
+          _voice(
+            a,
+            other: b,
+            seed: _stableSeed('join${a.name}$joined', _dayCount),
+            extra: {'sayı': '$joined'},
+          ),
+        ),
+      );
       return true;
     }
     return false;
@@ -680,6 +1035,36 @@ extension _SceneConflict on _VillageSceneState {
         _startConflict(v, o, 1.4); // yüksek gerginlik → yumruklaşmaya yatkın
         return true;
       }
+    }
+    return false;
+  }
+
+  /// PROVA: olasılık ve toplumsal sonuç üretmeden iki uygun yetişkini gerçek
+  /// düello motoruna bağlar. Birim testinin göremediği sahne bağlantısını ölçer.
+  bool _devStageNpcBrawl() {
+    final pool = _villagers.where(_conflictEligible).toList();
+    for (final a in pool) {
+      final b = _nearestConflictPartner(a, pool);
+      if (b == null) continue;
+      const dur = 4.0;
+      _faceAndHold(a, b);
+      _faceAndHold(b, a);
+      for (final v in [a, b]) {
+        v.activity = VillagerActivity.brawling;
+        v.chatBubbleIcon = '💢';
+        v.chatBubbleTime = dur;
+        v.feel(NpcEmotion.anger, dur);
+      }
+      kProbeNpcCombatContactSeen = false;
+      _beginNpcBrawl(
+        a,
+        b,
+        duration: dur,
+        feud: false,
+        outcome: _NpcBrawlOutcome.none,
+        intensity: 1,
+      );
+      return true;
     }
     return false;
   }
@@ -706,6 +1091,7 @@ extension _SceneConflict on _VillageSceneState {
         other = o;
       }
     }
+    _cancelNpcBrawls(v, other);
     setStateHere(() {
       for (final p in [v, ?other]) {
         p.activity = VillagerActivity.none;
@@ -728,16 +1114,22 @@ extension _SceneConflict on _VillageSceneState {
       _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.03, swayGain: 0.02);
     });
     addCameraShake(2.0, dur: 0.25); // hafif "araya girme" dokunuşu
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         other != null ? _kIntervenePairPool : _kInterveneSoloPool,
-        _voice(v,
-            other: other,
-            seed: _stableSeed('sulh${v.name}', _dayCount + _villagers.length))));
+        _voice(
+          v,
+          other: other,
+          seed: _stableSeed('sulh${v.name}', _dayCount + _villagers.length),
+        ),
+      ),
+    );
   }
 
   /// İki köylü arasında karşılıklı küslük kurar (süresi rastgele).
   void _formGrudge(VillagerEntity a, VillagerEntity b) {
-    final until = _time +
+    final until =
+        _time +
         (_kGrudgeMinDays +
                 _rng.nextDouble() * (_kGrudgeMaxDays - _kGrudgeMinDays)) *
             kGameDaySeconds;
@@ -751,8 +1143,12 @@ extension _SceneConflict on _VillageSceneState {
 
   /// Kavganın kaybedenini (favori değil, en düşük moralli) yaralar. İkisi de
   /// favoriyse kimse yaralanmaz (cozy koruma). Yaralandıysa true.
-  bool _injureLoser(VillagerEntity a, VillagerEntity b,
-      {required bool feud, required double intensity}) {
+  bool _injureLoser(
+    VillagerEntity a,
+    VillagerEntity b, {
+    required bool feud,
+    required double intensity,
+  }) {
     final nonFav = [a, b].where((v) => !v.isFavorite).toList();
     if (nonFav.isEmpty) return false;
     nonFav.sort((x, y) => x.morale.compareTo(y.morale));
@@ -763,12 +1159,17 @@ extension _SceneConflict on _VillageSceneState {
   /// Bir köylüyü yaralar — şiddet/kan davası ciddiyeti artırır. Ağır + (zaten
   /// yaralı/sakat | yaşlı | şans) → KALICI SAKATLIK. Yaralı kavgadan düşer,
   /// günlerce yavaş kalır (injuryDays), morali düşer; kalıcıysa ömür boyu aksar.
-  void _injureVillager(VillagerEntity v,
-      {required bool feud, required double intensity}) {
-    final severe = _rng.nextDouble() <
+  void _injureVillager(
+    VillagerEntity v, {
+    required bool feud,
+    required double intensity,
+  }) {
+    final severe =
+        _rng.nextDouble() <
         (0.18 + intensity * 0.12 + (feud ? 0.15 : 0.0)).clamp(0.0, 0.6);
     final alreadyHurt = v.injuryDays > 0 || v.disabled;
-    final permanent = !v.disabled &&
+    final permanent =
+        !v.disabled &&
         severe &&
         (alreadyHurt ||
             v.lifeStage == LifeStage.elder ||
@@ -786,26 +1187,34 @@ extension _SceneConflict on _VillageSceneState {
     final church = _churchBuilding;
     if (church != null) {
       final (tx, ty) = _nearestLand(
-          church.col + church.cols / 2.0, church.row + church.rows + 0.5);
+        church.col + church.cols / 2.0,
+        church.row + church.rows + 0.5,
+      );
       v.goTo(tx, ty, 8.0);
     }
 
-    final ctx =
-        _voice(v, seed: _stableSeed('hurt${v.name}', _dayCount + v.hashCode));
+    final ctx = _voice(
+      v,
+      seed: _stableSeed('hurt${v.name}', _dayCount + v.hashCode),
+    );
     if (permanent) {
       v.disabled = true;
       v.injuryDays = 1.5 + _rng.nextDouble() * 1.5; // başta ağrılı dönem de var
       v.feel(NpcEmotion.grief, 5.0, moodDelta: -0.18);
-      _chronicle(Voice.say(_kCrippledChroniclePool, ctx),
-          icon: '🩼', milestone: true, kind: ChronicleKind.crisis);
+      _chronicle(
+        Voice.say(_kCrippledChroniclePool, ctx),
+        icon: '🩼',
+        milestone: true,
+        kind: ChronicleKind.crisis,
+      );
       _showNotification(Voice.say(_kCrippledPool, ctx));
     } else {
-      final days =
-          severe ? (2.0 + _rng.nextDouble() * 2.0) : (0.8 + _rng.nextDouble() * 1.2);
+      final days = severe
+          ? (2.0 + _rng.nextDouble() * 2.0)
+          : (0.8 + _rng.nextDouble() * 1.2);
       if (days > v.injuryDays) v.injuryDays = days;
       v.feel(NpcEmotion.grief, 4.0, moodDelta: severe ? -0.12 : -0.07);
-      _showNotification(
-          Voice.say(severe ? _kHurtSeverePool : _kHurtPool, ctx));
+      _showNotification(Voice.say(severe ? _kHurtSeverePool : _kHurtPool, ctx));
     }
   }
 
@@ -839,7 +1248,8 @@ extension _SceneConflict on _VillageSceneState {
     // ancak sulh/sürgün/idam ile biter (bkz. _pacifyFeudOf).
     final feudPossible = side1.isNotEmpty && side2.isNotEmpty;
     final bloodPriceLaw = _policies.sealed.contains('nizam.bloodPrice');
-    final canPayBlood = bloodPriceLaw &&
+    final canPayBlood =
+        bloodPriceLaw &&
         feudPossible &&
         !feudPair &&
         _stockpile.gold >= _kBloodPrice;
@@ -887,49 +1297,78 @@ extension _SceneConflict on _VillageSceneState {
 
     // SÜRPRİZ ANİMASYON — kan kıvılcımı: kırmızı flaş + iki klan UZAKTAN irkilir
     // (haritanın öbür ucundan bile başlarını çevirir; husumet/yas gövde dili).
-    _activeFx.add(ActiveFx(
-        const EventEffect(screenTint: Color(0x4DAA1414), duration: 1.8), 1.8));
+    _activeFx.add(
+      ActiveFx(
+        const EventEffect(screenTint: Color(0x4DAA1414), duration: 1.8),
+        1.8,
+      ),
+    );
     for (final k in side1) {
       if (k.isDying) continue;
       k.lookToward(victim.gridX, victim.gridY);
       // Diyet ödendiyse katil tarafı savunmaya geçmez, utanır: öç beklemiyorlar
       // çünkü hesap kapandı. Fermanın gövde dilindeki karşılığı bu.
-      k.feel(canPayBlood ? NpcEmotion.grief : NpcEmotion.anger, 5.0,
-          moodDelta: -0.05);
+      k.feel(
+        canPayBlood ? NpcEmotion.grief : NpcEmotion.anger,
+        5.0,
+        moodDelta: -0.05,
+      );
     }
     for (final k in side2) {
       if (k.isDying) continue;
       k.lookToward(killer.gridX, killer.gridY);
-      k.feel(NpcEmotion.grief, 6.0, moodDelta: -0.10); // ölen tarafı yasa boğulur
+      k.feel(
+        NpcEmotion.grief,
+        6.0,
+        moodDelta: -0.10,
+      ); // ölen tarafı yasa boğulur
     }
 
-    final ctx = _voice(killer,
-        other: victim,
-        seed: _stableSeed('kill${killer.name}${victim.name}', _dayCount));
+    final ctx = _voice(
+      killer,
+      other: victim,
+      seed: _stableSeed('kill${killer.name}${victim.name}', _dayCount),
+    );
     if (canPayBlood) {
       _chronicle(
-          Voice.say(const [
-            '{ad} kan döktü; bedeli keseden ödendi, husumet kurulmadı.',
-            '{öteki} toprağa verildi. Diyet {öteki-in} hanesine sayıldı; kimse '
-                'bıçak çekmedi.',
-          ], ctx),
-          icon: '🩸',
-          milestone: true, kind: ChronicleKind.crisis);
-      _showNotification(Voice.say(const [
-        '🩸 {ad} kan döktü. Diyet ödendi — kan davası doğmadı.',
-        '🩸 Bedel kesildi, öç elden alınmadı. {öteki-in} hanesi keseyi aldı.',
-      ], ctx));
+        Voice.say(const [
+          '{ad} kan döktü; bedeli keseden ödendi, husumet kurulmadı.',
+          '{öteki} toprağa verildi. Diyet {öteki-in} hanesine sayıldı; kimse '
+              'bıçak çekmedi.',
+        ], ctx),
+        icon: '🩸',
+        milestone: true,
+        kind: ChronicleKind.crisis,
+      );
+      _showNotification(
+        Voice.say(const [
+          '🩸 {ad} kan döktü. Diyet ödendi — kan davası doğmadı.',
+          '🩸 Bedel kesildi, öç elden alınmadı. {öteki-in} hanesi keseyi aldı.',
+        ], ctx),
+      );
     } else if (feudPair) {
-      _chronicle(Voice.say(_kRevengeChroniclePool, ctx),
-          icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
+      _chronicle(
+        Voice.say(_kRevengeChroniclePool, ctx),
+        icon: '🩸',
+        milestone: true,
+        kind: ChronicleKind.crisis,
+      );
       _showNotification(Voice.say(_kRevengePool, ctx));
     } else if (feudFormed) {
-      _chronicle(Voice.say(_kFeudStartChroniclePool, ctx),
-          icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
+      _chronicle(
+        Voice.say(_kFeudStartChroniclePool, ctx),
+        icon: '🩸',
+        milestone: true,
+        kind: ChronicleKind.crisis,
+      );
       _showNotification(Voice.say(_kFeudStartPool, ctx));
     } else {
-      _chronicle(Voice.say(_kKillChroniclePool, ctx),
-          icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
+      _chronicle(
+        Voice.say(_kKillChroniclePool, ctx),
+        icon: '🩸',
+        milestone: true,
+        kind: ChronicleKind.crisis,
+      );
       _showNotification(Voice.say(_kKillPool, ctx));
     }
     return true;
@@ -965,7 +1404,10 @@ extension _SceneConflict on _VillageSceneState {
       k.feel(NpcEmotion.grief, 6.0, moodDelta: -0.08);
     }
     // Diyet ödenmiş bir ölüm köyü yine de sarsar, ama husumetsiz sarsar.
-    pushPolicyMorale(0.04, 4.0); // kanın durdurulduğu görüldü (net etki hâlâ eksi)
+    pushPolicyMorale(
+      0.04,
+      4.0,
+    ); // kanın durdurulduğu görüldü (net etki hâlâ eksi)
   }
 
   /// Bir köylünün yaşayan kan akrabaları (kendisi dahil) — ebeveyn/çocuk graf'ı
@@ -1031,12 +1473,21 @@ extension _SceneConflict on _VillageSceneState {
     final wasFeud = v.inFeud;
     if (wasFeud) _pacifyFeudOf(v);
     // Çevre tedirgin — uzaklaşan kişiye bakar (gövde dili).
-    _reactNearby(v.gridX, v.gridY, 6.0, NpcEmotion.fear, 3.0,
-        moodDelta: -0.03, alarm: 0.22);
+    _reactNearby(
+      v.gridX,
+      v.gridY,
+      6.0,
+      NpcEmotion.fear,
+      3.0,
+      moodDelta: -0.03,
+      alarm: 0.22,
+    );
     // SÜRGÜN FERMANI (NİZAM) — yürürlükteyse köy sürgüne alışmıştır; yola
     // vurmanın moral cezası yarıya iner (kapı çoktan aralanmış). Ferman sürgünü
     // bir travma olmaktan çıkarıp bir prosedüre çevirir — kılıç yolunun bedeli.
-    final exileMorale = _policies.sealed.contains('nizam.exile') ? -0.025 : -0.05;
+    final exileMorale = _policies.sealed.contains('nizam.exile')
+        ? -0.025
+        : -0.05;
     pushPolicyMorale(exileMorale, 3.0);
     if (v.surname.isNotEmpty) _houses.nudge(v.surname, moodDelta: -0.05);
     final ctx = _voice(v, seed: _stableSeed('exile${v.name}', _dayCount));
@@ -1064,9 +1515,11 @@ extension _SceneConflict on _VillageSceneState {
     }
     v.startLeaving(ex, ey);
     _chronicle(
-        Voice.say(
-            wasFeud ? _kExileFeudChroniclePool : _kExileChroniclePool, ctx),
-        icon: '🚷', milestone: wasFeud, kind: ChronicleKind.decision);
+      Voice.say(wasFeud ? _kExileFeudChroniclePool : _kExileChroniclePool, ctx),
+      icon: '🚷',
+      milestone: wasFeud,
+      kind: ChronicleKind.decision,
+    );
     _showNotification(Voice.say(_kExilePool, ctx));
   }
 
@@ -1080,8 +1533,12 @@ extension _SceneConflict on _VillageSceneState {
     // Halk toplanır — infaz tanığı (diz çökmüş saygı/dehşet duruşu).
     const dur = kGameDaySeconds * 0.5;
     _gatherAtFire(dur, max: 8, pose: FirePose.kneel);
-    _activeFx.add(ActiveFx(
-        const EventEffect(screenTint: Color(0x55AA1414), duration: 2.2), 2.2));
+    _activeFx.add(
+      ActiveFx(
+        const EventEffect(screenTint: Color(0x55AA1414), duration: 2.2),
+        2.2,
+      ),
+    );
 
     // Mahkûmu infaz et — aile bağı kopar, görünür çöküş + mezar.
     for (final p in v.parents) {
@@ -1102,9 +1559,14 @@ extension _SceneConflict on _VillageSceneState {
 
     final ctx = _voice(v, seed: _stableSeed('idam${v.name}', _dayCount));
     _chronicle(
-        Voice.say(
-            wasFeud ? _kExecuteFeudChroniclePool : _kExecuteChroniclePool, ctx),
-        icon: '⚖️', milestone: true, kind: ChronicleKind.decision);
+      Voice.say(
+        wasFeud ? _kExecuteFeudChroniclePool : _kExecuteChroniclePool,
+        ctx,
+      ),
+      icon: '⚖️',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
     _showNotification(Voice.say(_kExecutePool, ctx));
   }
 
@@ -1119,8 +1581,9 @@ extension _SceneConflict on _VillageSceneState {
     final a = pool.first;
     final kin = _bloodKin(a);
     final b = pool.firstWhere(
-        (v) => !identical(v, a) && !kin.contains(v),
-        orElse: () => pool[1]);
+      (v) => !identical(v, a) && !kin.contains(v),
+      orElse: () => pool[1],
+    );
     return _resolveFatalBrawl(a, b, false);
   }
 }

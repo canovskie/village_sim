@@ -50,6 +50,12 @@ extension _ScenePlacement on _VillageSceneState {
         row + meta.rows > kRows) {
       return 'Harita sınırının dışında';
     }
+    if (type == BuildingType.firepit &&
+        !_hasFire &&
+        _firstFirePending &&
+        !isFoundingHearthTile(col, row)) {
+      return 'İlk ateş kafilenin beklediği merkez açıklığa kurulmalı';
+    }
     bool overlaps(
       int c1,
       int r1,
@@ -88,6 +94,9 @@ extension _ScenePlacement on _VillageSceneState {
           if (mineSet.contains((c, r))) {
             return 'Maden damarının üzerine kurulamaz';
           }
+          if (_landmarks.any((s) => s.col == c && s.row == r)) {
+            return 'Eski kalıntının üzerine kurulamaz';
+          }
         }
       }
       return null;
@@ -114,7 +123,9 @@ extension _ScenePlacement on _VillageSceneState {
       const radius = kLumberTerritoryRadius;
       bool hasTree = false;
       for (final t in _trees) {
-        if (t.isFelled) continue;
+        // Kuruluş kontrolü ilk kütüğü bekler; yalnız fidan bulunan bir
+        // yere izin vermek oyuncuyu büyüme süresi boyunca kilitlerdi.
+        if (t.isFelled || t.isGrowing) continue;
         final dx = t.col + 0.5 - cx;
         final dy = t.row + 0.5 - cy;
         if (dx * dx + dy * dy <= radius * radius) {
@@ -404,7 +415,8 @@ extension _ScenePlacement on _VillageSceneState {
         for (int r = r1; r <= r2; r++) {
           if (!existing.contains((c, r)) &&
               !_waterTiles.contains((c, r)) &&
-              !_isWilderness(c, r)) {
+              !_isWilderness(c, r) &&
+              !_landmarks.any((s) => s.col == c && s.row == r)) {
             _farmTiles.add(FarmTile(c, r));
           }
         }
@@ -412,6 +424,7 @@ extension _ScenePlacement on _VillageSceneState {
       _farmMode = false;
       _farmStart = null;
       _farmEnd = null;
+      _farmTapAnchor = null;
     });
     // Tarla çizmek ARTIK çiftçi doğurmaz — saha eli sayısı köyün çiftçi
     // kadrosundan + işgücü politikasından türer (_syncFarmerWorkforce, tick).
@@ -464,8 +477,12 @@ extension _ScenePlacement on _VillageSceneState {
       return false;
     }
     final isFirepit = _placing == BuildingType.firepit;
-    // Godmode'da tüm binalar inşaatçısız anında kurulur.
-    final instant = isFirepit || _godMode;
+    final foundingInstant = _isFoundingBootstrapBuilding(_placing!);
+    // Kuruluşta oyuncunun kararı YERDİR; çadır/kulübeyi koyduktan sonra
+    // ustanın yürüyüşünü bekletmek yeni bir karar eklemez. Bu iki yapı
+    // kuruluş ekibiyle anında kalkar. Normal oyunda inşaat simülasyonu aynen
+    // korunur; godmode da mevcut anında kurulum yolunu kullanır.
+    final instant = isFirepit || foundingInstant || _godMode;
     setStateHere(() {
       _stockpile.spend(cost);
 
@@ -497,7 +514,9 @@ extension _ScenePlacement on _VillageSceneState {
       _showNotification(
         isFirepit
             ? 'Ateş yakıldı!'
-            : (_godMode
+            : (foundingInstant
+                  ? '⚒ Kuruluş ekibi yapıyı hemen tamamladı.'
+                  : _godMode
                   ? 'Bina anında kuruldu (godmode)'
                   : 'Şantiye kuruldu. Ustalar gelince inşaat başlayacak.'),
       );
@@ -546,6 +565,7 @@ extension _ScenePlacement on _VillageSceneState {
       }
       // Binayı kaldır + seçimi temizle.
       _buildings.remove(b);
+      _lawCtxCache = null;
       if (identical(_firepitBuilding, b)) _firepitBuilding = null;
       _selectedBuilding = null;
       // Global yeniden kurma — yerleştirmedeki gibi (anchor/arı/pathfinding).
@@ -596,6 +616,9 @@ extension _ScenePlacement on _VillageSceneState {
           tiles.add((bc, br));
         }
       }
+    }
+    for (final site in _landmarks) {
+      tiles.add((site.col, site.row));
     }
     return tiles;
   }
@@ -726,6 +749,7 @@ extension _ScenePlacement on _VillageSceneState {
   void _clearRoadDrag() {
     _roadDragStart = null;
     _roadDragEnd = null;
+    _roadTapAnchor = null;
     _roadPreview.clear();
     _roadPreviewV++;
   }

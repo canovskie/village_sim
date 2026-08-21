@@ -18,43 +18,43 @@ part 'petition_catalog_trees.dart';
 /// (sadece istatistik değil: köy gözle görülür biçimde tepki verir).
 enum PetitionFx {
   none,
-  festival,    // BESPOKE: flama+konfeti+fener + köylüler ateşe toplanıp dans
-  cropBlight,  // BESPOKE: tarlalarda yayılan mantar + ürün çürür (farm growth ↓)
-  vigil,       // BESPOKE: bir köylü kaybı + mum töreni (köy toplanır, matem)
-  mourn,       // bir köylü kaybı + sessiz uğurlama (animasyon yok, moral ↓↓)
-  cult,        // BESPOKE: ayin çemberi + köylüler toplanır (yeni inanç)
-  templeRaised,// BESPOKE: köyün ortasına GERÇEK bir mabet dikilir + ayin çemberi
+  festival, // BESPOKE: flama+konfeti+fener + köylüler ateşe toplanıp dans
+  cropBlight, // BESPOKE: tarlalarda yayılan mantar + ürün çürür (farm growth ↓)
+  vigil, // BESPOKE: bir köylü kaybı + mum töreni (köy toplanır, matem)
+  mourn, // bir köylü kaybı + sessiz uğurlama (animasyon yok, moral ↓↓)
+  cult, // BESPOKE: ayin çemberi + köylüler toplanır (yeni inanç)
+  templeRaised, // BESPOKE: köyün ortasına GERÇEK bir mabet dikilir + ayin çemberi
   remembrance, // BESPOKE: anma günü — köy toplanır + mum töreni (KİMSE ölmez)
-  wedding,     // BESPOKE: sade düğün — gerçek çift ateş başında, kalp/yaprak yağmuru
-  weddingGrand,// BESPOKE: coşkulu düğün — önce tam ekran 2B sinematik, sonra alay/şenlik
+  wedding, // BESPOKE: sade düğün — gerçek çift ateş başında, kalp/yaprak yağmuru
+  weddingGrand, // BESPOKE: coşkulu düğün — önce tam ekran 2B sinematik, sonra alay/şenlik
   harvestBounty, // BESPOKE: tarlalar altın ışıltıyla olgunlaşır + bereket zerresi yükselir
-  callingGranted,// BESPOKE: dilekçe sahibi mesleğini bırakıp çağrısının peşinden gider
-  feudPeace,     // BESPOKE: iki aile barışır — kan davası sona erer (husumet silinir)
-  feudExile,     // BESPOKE: kan davasının suçlusu köyden sürülür → husumet kapanır
-  feudExecute,   // BESPOKE: suçlu 2B sahnede idam edilir → kan davası kanla kapanır
+  callingGranted, // BESPOKE: dilekçe sahibi mesleğini bırakıp çağrısının peşinden gider
+  feudPeace, // BESPOKE: iki aile barışır — kan davası sona erer (husumet silinir)
+  feudExile, // BESPOKE: kan davasının suçlusu köyden sürülür → husumet kapanır
+  feudExecute, // BESPOKE: suçlu 2B sahnede idam edilir → kan davası kanla kapanır
   // ── SUÇ hükümleri (scene_crime) ───────────────────────────────────────────
-  crimePardon,   // BESPOKE: suçüstü yakalanan fail bağışlanır (merhametin bedeli var)
-  crimePunish,   // BESPOKE: fail meydanda teşhir edilir — köy düzeni görür
-  crimeExile,    // BESPOKE: fail köyden sürülür
-  crimeExecute,  // BESPOKE: fail halkın önünde idam edilir
-  crimeLabor,    // BESPOKE (NİZAM): mahkûm sürülmez, taş ocağına koşulur (kürek cezası)
-  crimePenance,  // BESPOKE (DERGÂH): fail meydanda günahını söyler, ceza yerine utanç
-  crimeWatch,    // asayiş kararı — şüphe defteri kapanır (gece nöbeti/kayıtsızlık)
-  ransomPaid,    // BESPOKE: fidye ödenir, kaçırılan köylü köye döner
+  crimePardon, // BESPOKE: suçüstü yakalanan fail bağışlanır (merhametin bedeli var)
+  crimePunish, // BESPOKE: fail meydanda teşhir edilir — köy düzeni görür
+  crimeExile, // BESPOKE: fail köyden sürülür
+  crimeExecute, // BESPOKE: fail halkın önünde idam edilir
+  crimeLabor, // BESPOKE (NİZAM): mahkûm sürülmez, taş ocağına koşulur (kürek cezası)
+  crimePenance, // BESPOKE (DERGÂH): fail meydanda günahını söyler, ceza yerine utanç
+  crimeWatch, // asayiş kararı — şüphe defteri kapanır (gece nöbeti/kayıtsızlık)
+  ransomPaid, // BESPOKE: fidye ödenir, kaçırılan köylü köye döner
   ransomRefused, // BESPOKE: fidye reddedilir, rehin bir daha dönmez
   // ── HANE KARŞILIĞI (scene_house_stance) ───────────────────────────────────
   // Esirgeyen haneyi iki yoldan biriyle çözersin: GÖNLÜNÜ alırsın (hâl yükselir,
   // merdivenden iner) ya da BELİNİ kırarsın (nüfuz düşer, esirgeyecek kozu
   // kalmaz). İkisi de işe yarar; bedelleri farklıdır.
   houseAppeased, // hanenin gönlü alınır — esirgeme çözülür, ambarını açar
-  houseRebuked,  // hanenin nüfuzu kırılır — küskün kalır ama kozu kalmaz
+  houseRebuked, // hanenin nüfuzu kırılır — küskün kalır ama kozu kalmaz
 }
 
 /// Dilekçenin duygu tonu — modal/mühür vurgu rengini ve havasını belirler.
 /// UI bağlamı: oyuncu daha açmadan kararın ağırlığını sezsin (sıcak mı, kara mı).
 enum PetitionTone {
-  warm,    // kutlama/şefkat — sage/ember sıcaklığı
-  solemn,  // hüzün/anma — soluk, ağırbaşlı
+  warm, // kutlama/şefkat — sage/ember sıcaklığı
+  solemn, // hüzün/anma — soluk, ağırbaşlı
   ominous, // tehdit/kriz — rust, tedirgin
   neutral, // sıradan rica
 }
@@ -66,8 +66,10 @@ enum PetitionTone {
 class PetitionOption {
   /// Buton başlığı (ör. "Kabul et").
   final String label;
+
   /// Alt açıklama — kararın ne yapacağı.
   final String detail;
+
   /// Köye duyurulacak çözüm metni — VARYANT HAVUZU. Sunum anında seed'e göre
   /// biri seçilir ve bağlamla dokunur (bkz. [Petition.spoken]).
   final List<String> resolutionPool;
@@ -106,12 +108,14 @@ class PetitionOption {
   /// Zincir: bu seçenek seçilince ileride tetiklenecek takip dilekçesi (id).
   /// null = zincir yok. Köyün "hafızası" — ret → ısrar, onay → takip.
   final String? followUpId;
+
   /// Takip dilekçesinin kaç oyun günü sonra geleceği.
   final double followUpDelayDays;
 
   /// Köy hafızasına yazılacak kalıcı bayraklar (ör. 'cult.active'). Sonraki
   /// dilekçeler bunları `canFire` ile okur → kararlar uzun vadede hatırlanır.
   final List<String> setsFlags;
+
   /// Köy hafızasından silinecek bayraklar (ör. bir yolu kapatınca).
   final List<String> clearsFlags;
 
@@ -143,28 +147,28 @@ class PetitionOption {
 
   /// Bu seçeneğin metinlerini bağlamla doldurur (bkz. [Petition.spoken]).
   PetitionOption spoken(VoiceCtx c) => PetitionOption(
-        label: Voice.weave(label, c),
-        detail: Voice.weave(detail, c),
-        resolutionPool: [Voice.say(resolutionPool, c)],
-        // Annal da bağlamla dokunur ama KENDİ tohumundan varyant seçer: çözüm
-        // metniyle aynı kalıba düşüp cümleyi ikizlemesin.
-        annalPool: annalPool.isEmpty
-            ? const <String>[]
-            : [Voice.say(annalPool, c.copyWith(seed: c.seed + 7717))],
-        foodDelta: foodDelta,
-        woodDelta: woodDelta,
-        stoneDelta: stoneDelta,
-        ironDelta: ironDelta,
-        goldDelta: goldDelta,
-        moraleAmount: moraleAmount,
-        moraleDays: moraleDays,
-        fx: fx,
-        followUpId: followUpId,
-        followUpDelayDays: followUpDelayDays,
-        setsFlags: setsFlags,
-        clearsFlags: clearsFlags,
-        estateMood: estateMood,
-      );
+    label: Voice.weave(label, c),
+    detail: Voice.weave(detail, c),
+    resolutionPool: [Voice.say(resolutionPool, c)],
+    // Annal da bağlamla dokunur ama KENDİ tohumundan varyant seçer: çözüm
+    // metniyle aynı kalıba düşüp cümleyi ikizlemesin.
+    annalPool: annalPool.isEmpty
+        ? const <String>[]
+        : [Voice.say(annalPool, c.copyWith(seed: c.seed + 7717))],
+    foodDelta: foodDelta,
+    woodDelta: woodDelta,
+    stoneDelta: stoneDelta,
+    ironDelta: ironDelta,
+    goldDelta: goldDelta,
+    moraleAmount: moraleAmount,
+    moraleDays: moraleDays,
+    fx: fx,
+    followUpId: followUpId,
+    followUpDelayDays: followUpDelayDays,
+    setsFlags: setsFlags,
+    clearsFlags: clearsFlags,
+    estateMood: estateMood,
+  );
 
   /// UI etki chip'leri — (ikon, etiket) çiftleri.
   List<(String, String)> get effectChips {
@@ -172,6 +176,7 @@ class PetitionOption {
     void res(String icon, int v) {
       if (v != 0) out.add((icon, '${v > 0 ? '+' : ''}$v'));
     }
+
     res('🌾', foodDelta);
     res('🪵', woodDelta);
     res('🪨', stoneDelta);
@@ -193,10 +198,12 @@ class PetitionOption {
 /// Köyden gelen bir dilekçe — kim, ne istiyor, hangi seçenekler.
 class Petition {
   final String id;
+
   /// Dilekçeyi sunan ("Köyün yaşlıları", "Çiftçiler", ...).
   final String petitioner;
   final String icon;
   final String title;
+
   /// Dilekçe gövdesi — VARYANT HAVUZU. Köylü kendi ağzından konuşur; aynı
   /// dilekçe ikinci kez geldiğinde başka kelimelerle okunsun diye havuzdur.
   /// İçinde `{ad}`, `{ad-in}`, `{meslek}`, `{hane}` yer tutucuları geçebilir.
@@ -204,14 +211,18 @@ class Petition {
 
   /// Seçili gövde metni ([spoken] sonrası: bu köye, bu köylüye dokunmuş hâli).
   String get body => bodyPool.isEmpty ? '' : bodyPool.first;
+
   /// Takip dilekçelerinde küçük bağlam rozeti (ör. "↩ Geçen sefer ertelemiştin").
   /// null = normal dilekçe.
   final String? note;
+
   /// Kararın özünü tek satırda özetleyen "ne pahasına" ipucu (UI'da gösterilir).
   /// null = gösterme.
   final String? stakes;
+
   /// Duygu tonu — modal/mühür vurgu rengi + havası.
   final PetitionTone tone;
+
   /// Bu dilekçeyi getiren ZÜMRE — sözcü o zümreden seçilir, sahneye o köylü
   /// yürür (diegetik). null = belirli bir zümre adına değil (genel köy).
   final Estate? estate;
@@ -235,17 +246,17 @@ class Petition {
   /// dilekçeyi kopyalamadan bir şık daha ekler. [spoken]'dan ÖNCE çağrılmalı ki
   /// eklenen seçenek de bağlamla dokunsun.
   Petition withExtraOption(PetitionOption extra) => Petition(
-        id: id,
-        petitioner: petitioner,
-        icon: icon,
-        title: title,
-        bodyPool: bodyPool,
-        options: [...options, extra],
-        note: note,
-        stakes: stakes,
-        tone: tone,
-        estate: estate,
-      );
+    id: id,
+    petitioner: petitioner,
+    icon: icon,
+    title: title,
+    bodyPool: bodyPool,
+    options: [...options, extra],
+    note: note,
+    stakes: stakes,
+    tone: tone,
+    estate: estate,
+  );
 
   /// Aynı dilekçe, belirli bir etkiye sahip seçenekler çıkarılmış hâli. Bir
   /// hüküm ancak fermanı mühürlüyse verilebiliyorsa ([PetitionFx.crimeExile] ↔
@@ -253,7 +264,10 @@ class Petition {
   ///
   /// Son seçeneği asla düşürmez: seçeneksiz dilekçe oyuncuyu kilitler.
   Petition without(Set<PetitionFx> drop) {
-    final kept = [for (final o in options) if (!drop.contains(o.fx)) o];
+    final kept = [
+      for (final o in options)
+        if (!drop.contains(o.fx)) o,
+    ];
     if (kept.isEmpty || kept.length == options.length) return this;
     return Petition(
       id: id,
@@ -277,23 +291,28 @@ class Petition {
   /// Sunum anında BİR KEZ çağrılır; böylece oyuncu modalı kapatıp yeniden
   /// açtığında metin değişmez ve kayıt/yükleme sonrası da aynı kalır.
   Petition spoken(VoiceCtx c) => Petition(
-        id: id,
-        petitioner: Voice.weave(petitioner, c),
-        icon: icon,
-        title: Voice.weave(title, c),
-        bodyPool: [Voice.say(bodyPool, c)],
-        note: note == null ? null : Voice.weave(note!, c),
-        stakes: stakes == null ? null : Voice.weave(stakes!, c),
-        tone: tone,
-        estate: estate,
-        // Seçeneklerin çözüm metinleri de aynı bağlamdan beslenir; her seçenek
-        // kendi tohumuyla seçsin ki dört şık aynı kalıba düşmesin.
-        options: [
-          for (var i = 0; i < options.length; i++)
-            options[i].spoken(c.copyWith(seed: c.seed + 101 * (i + 1))),
-        ],
-      );
+    id: id,
+    petitioner: Voice.weave(petitioner, c),
+    icon: icon,
+    title: Voice.weave(title, c),
+    bodyPool: [Voice.say(bodyPool, c)],
+    note: note == null ? null : Voice.weave(note!, c),
+    stakes: stakes == null ? null : Voice.weave(stakes!, c),
+    tone: tone,
+    estate: estate,
+    // Seçeneklerin çözüm metinleri de aynı bağlamdan beslenir; her seçenek
+    // kendi tohumuyla seçsin ki dört şık aynı kalıba düşmesin.
+    options: [
+      for (var i = 0; i < options.length; i++)
+        options[i].spoken(c.copyWith(seed: c.seed + 101 * (i + 1))),
+    ],
+  );
 }
+
+/// Kuruluşun ilk kaynak krizi oyuncuya karar vermeyi öğretir. Normal dilekçe
+/// gibi mühürde bekleyip rejim/meclis tarafından çözülemez; hüküm oyuncunundur.
+bool petitionRequiresPlayerVerdict(String petitionId, int charterTier) =>
+    petitionId == 'woodLow' && charterTier == 0;
 
 /// Dilekçe üretimi için köyün anlık durumu (koşul kapıları okur).
 class PetitionContext {
@@ -302,29 +321,39 @@ class PetitionContext {
   final int food;
   final int gold;
   final double morale;
+
   /// Köyde tamamlanmış bir kilise var mı — anma dilekçelerini açar.
   final bool hasChurch;
+
   /// Köyün kalıcı hafızası — geçmiş kararların bıraktığı bayraklar. Dilekçeler
   /// bunu okuyup dallanır (ör. 'cult.active' varsa farklı dilekçeler açılır).
   final Set<String> memory;
+
   /// Şu an gerçekten KÜSKÜN (sullen eşiği altı) zümre — yoksa null. Küskünlük
   /// "dişi": o zümre ısrarla dilekçe gönderir (canFire kapısı + roll ağırlığı).
   final Estate? aggrievedEstate;
+
   /// Köyün baskın zümresi (kimlik) — yoksa null. Kimliğe özel ödül dilekçeleri
   /// (şenlik/hikâye) bunun üzerinden de açılabilir (memory bayrağına ek).
   final Estate? ascendant;
+
   /// Ağıl/kümesteki canlı hayvan sayısı — sürü dilekçelerinin kapısı.
   final int herdSize;
+
   /// Sürü ortalama açlığı yüksek mi (bakımsız ahır) — yem sıkıntısı dilekçesi.
   final bool herdHungry;
+
   /// Aktif mevsim — mevsime özel dilekçelerin kapısı (yaz kuraklığı vb).
   final Season season;
+
   /// Köyde işlenen (büyüyen/hasada hazır) tarla var mı — tarım dilekçelerinin
   /// kapısı (tarla yoksa kuraklık/hasat dilekçesi anlamsız).
   final bool hasCrops;
+
   /// Mesleği içindeki çağrıya uymayan (kırgın) en az bir köylü var mı — meslek
   /// değiştirme dilekçesinin kapısı.
   final bool hasResentful;
+
   /// Köyde aktif bir kan davası var mı — sulh (barışma) dilekçesinin kapısı.
   final bool hasFeud;
 
@@ -341,8 +370,10 @@ class PetitionContext {
   // zümre teşekkür/şölen ister, aleyhte olan zümre geri adım talep eder.
   /// Dönemli ekim yürürlükte mi — çiftçi takvim şöleni dilekçesinin kapısı.
   final bool cropRotation;
+
   /// Misafirperverlik yürürlükte mi — gezgin yerleşme dilekçesinin kapısı.
   final bool hospitality;
+
   /// Köyde boş yatak (yerleşilecek hane) var mı — yerleşme dilekçesinin kapısı.
   final bool hasHousing;
 
@@ -449,8 +480,11 @@ abstract final class PetitionSystem {
   /// Uygun dilekçeleri toplar, ağırlıkla rastgele birini döner. Hiçbiri
   /// uygun değilse null (o turda dilekçe yok). [blocked] = yakında çözülmüş
   /// (cooldown'daki) dilekçe id'leri — tekrar random çıkmasınlar.
-  static Petition? roll(PetitionContext ctx, Random rng,
-      {Set<String> blocked = const {}}) {
+  static Petition? roll(
+    PetitionContext ctx,
+    Random rng, {
+    Set<String> blocked = const {},
+  }) {
     final eligible = _defs
         .where((d) => d.canFire(ctx) && !blocked.contains(d.petition.id))
         .toList(growable: false);
@@ -472,8 +506,7 @@ abstract final class PetitionSystem {
   /// DEBUG: koşulları yok sayıp rastgele bir dilekçe döner (DevPanel testi).
   /// Takip-yalnızca dilekçeler (canFire=false) hariç tutulur.
   static Petition debugRandom(Random rng) {
-    final rollable =
-        _defs.where((d) => d.weight > 0).toList(growable: false);
+    final rollable = _defs.where((d) => d.weight > 0).toList(growable: false);
     return rollable[rng.nextInt(rollable.length)].petition;
   }
 
@@ -491,18 +524,19 @@ abstract final class PetitionSystem {
 
   /// Test kancası: metin gövdesinin tamamı (havuzlar ham hâliyle) — prose
   /// testi her dilekçeyi konuşturup ham yer tutucu kalmadığını doğrular.
-  static List<Petition> get allForTest =>
-      [for (final d in _defs) d.petition];
+  static List<Petition> get allForTest => [for (final d in _defs) d.petition];
 
   /// Test kancası: dilekçenin KAPISI ve ağırlığı. Bütünlük testi yalnız
   /// dilekçenin kendisine bakamaz — "bu dilekçe hiçbir köyde tetiklenmiyor"
   /// ve "bu takip halkası hiçbir şıktan çağrılmıyor" hataları ancak kapı
   /// görünürse yakalanır.
-  static List<({double weight, bool Function(PetitionContext) canFire, Petition petition})>
-      get gatesForTest => [
-            for (final d in _defs)
-              (weight: d.weight, canFire: d.canFire, petition: d.petition),
-          ];
+  static List<
+    ({double weight, bool Function(PetitionContext) canFire, Petition petition})
+  >
+  get gatesForTest => [
+    for (final d in _defs)
+      (weight: d.weight, canFire: d.canFire, petition: d.petition),
+  ];
 
   /// Dilekçe KATALOĞU ayrı dosyada (petition_catalog.dart) — motor ile
   /// içerik aynı dosyada durunca ikisi de okunmaz oluyordu.

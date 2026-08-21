@@ -47,6 +47,11 @@ extension _SceneProbe on _VillageSceneState {
       _devSummonImperial();
     }
 
+    if (kProbeStartNpcBrawl) {
+      kProbeStartNpcBrawl = false;
+      _devStageNpcBrawl();
+    }
+
     // KARAR İZİ — güncedeki karar satırları. En sinsi hata "kod var ama hiç
     // tetiklenmiyor": dilekçe kararının kroniğe düşmesi ancak GERÇEK sahnede,
     // gerçek bir kararla görülür (bkz. test/decision_trace_probe_test.dart).
@@ -66,8 +71,11 @@ extension _SceneProbe on _VillageSceneState {
       try {
         final encoded = jsonEncode(captureWorld());
         kProbeWorldJson = encoded;
-        restoreWorld(Map<String, dynamic>.from(
-            jsonDecode(encoded) as Map<String, dynamic>));
+        restoreWorld(
+          Map<String, dynamic>.from(
+            jsonDecode(encoded) as Map<String, dynamic>,
+          ),
+        );
         kProbeSaveError = '';
       } catch (e) {
         kProbeSaveError = '$e';
@@ -80,8 +88,9 @@ extension _SceneProbe on _VillageSceneState {
       final raw = kProbeRestoreJson;
       kProbeRestoreJson = '';
       try {
-        restoreWorld(Map<String, dynamic>.from(
-            jsonDecode(raw) as Map<String, dynamic>));
+        restoreWorld(
+          Map<String, dynamic>.from(jsonDecode(raw) as Map<String, dynamic>),
+        );
         kProbeSaveError = '';
       } catch (e) {
         kProbeSaveError = '$e';
@@ -144,10 +153,12 @@ extension _SceneProbe on _VillageSceneState {
     final phase = _cycle.dayLight < 0.35
         ? 'gece'
         : _cycle.dayLight < 0.6
-            ? 'alacakaranlık'
-            : 'gündüz';
-    sb.writeln('─── GÜN $day · saat ~$tod ($phase) · ${_season.label} · '
-        '${_regimeIdentity.title} ───');
+        ? 'alacakaranlık'
+        : 'gündüz';
+    sb.writeln(
+      '─── GÜN $day · saat ~$tod ($phase) · ${_season.label} · '
+      '${_regimeIdentity.title} ───',
+    );
 
     // ── NİYET DAĞILIMI — kim ne yapıyor (Faz 1) ────────────────────────────
     final intents = <IntentKind, int>{};
@@ -167,9 +178,10 @@ extension _SceneProbe on _VillageSceneState {
       }
     }
     final n = _villagers.length;
-    sb.writeln('nüfus $n · yürüyen $walking · uyuyan $asleep · sahnede $acting');
-    final intentCounts =
-        intents.map((k, v) => MapEntry(intentLabel(k), v));
+    sb.writeln(
+      'nüfus $n · yürüyen $walking · uyuyan $asleep · sahnede $acting',
+    );
+    final intentCounts = intents.map((k, v) => MapEntry(intentLabel(k), v));
     sb.writeln('NİYET: ${_fmtCounts(intentCounts)}');
 
     // ── ELDE NE VAR (Faz 3) ────────────────────────────────────────────────
@@ -183,7 +195,9 @@ extension _SceneProbe on _VillageSceneState {
         final avg = driveSum[d]! / n;
         if (avg >= 0.12) parts.add('${driveLabel(d)} ${(avg * 100).round()}');
       }
-      sb.writeln('DÜRTÜ (ort): ${parts.isEmpty ? 'hepsi düşük' : parts.join(' · ')}');
+      sb.writeln(
+        'DÜRTÜ (ort): ${parts.isEmpty ? 'hepsi düşük' : parts.join(' · ')}',
+      );
     }
 
     // ── ALGI / HAFIZA / DEDİKODU / İHBAR (Faz 2) ───────────────────────────
@@ -199,12 +213,16 @@ extension _SceneProbe on _VillageSceneState {
         }
       }
     }
-    sb.writeln('HAFIZA: $withMemory köylü bir şey hatırlıyor '
-        '($totalRecoll anı) · $withOpinion köylünün kanaati var · '
-        '$suspecting köylü birinden şüpheleniyor');
-    sb.writeln('SAYAÇ (kümülatif): tanıklık $_probeWitnessed · '
-        'dedikodu $_probeGossip · ihbar $_probeInformed · '
-        'işlenen suç $_crimesSeen · meçhul şüphe $_crimeSuspicion');
+    sb.writeln(
+      'HAFIZA: $withMemory köylü bir şey hatırlıyor '
+      '($totalRecoll anı) · $withOpinion köylünün kanaati var · '
+      '$suspecting köylü birinden şüpheleniyor',
+    );
+    sb.writeln(
+      'SAYAÇ (kümülatif): tanıklık $_probeWitnessed · '
+      'dedikodu $_probeGossip · ihbar $_probeInformed · '
+      'işlenen suç $_crimesSeen · meçhul şüphe $_crimeSuspicion',
+    );
 
     // ── KÖYÜN HÂLİ (Faz 0) ─────────────────────────────────────────────────
     final pr = _pressure.readout;
@@ -224,14 +242,16 @@ extension _SceneProbe on _VillageSceneState {
       final beat = c.kind != CrimeKind.theft
           ? ''
           : c.inside
-              ? ' [İÇERİDE]'
-              : c.buried
-                  ? ' [GÖMDÜ]'
-                  : c.lootAmount > 0
-                      ? ' [ÇUVALLA: ${c.lootAmount} ${c.lootKind?.label ?? ''}]'
-                      : '';
-      sb.writeln('⚠ SUÇ YÜRÜYOR: ${c.culprit.name} — '
-          '${c.def.label} (${c.phase.name})$beat @ ${c.place}');
+          ? ' [İÇERİDE]'
+          : c.buried
+          ? ' [GÖMDÜ]'
+          : c.lootAmount > 0
+          ? ' [ÇUVALLA: ${c.lootAmount} ${c.lootKind?.label ?? ''}]'
+          : '';
+      sb.writeln(
+        '⚠ SUÇ YÜRÜYOR: ${c.culprit.name} — '
+        '${c.def.label} (${c.phase.name})$beat @ ${c.place}',
+      );
     }
     if (_lootCaches.isNotEmpty) {
       final total = _lootCaches.fold<int>(0, (a, l) => a + l.amount);

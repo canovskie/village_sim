@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../systems/village_collapse.dart';
 import 'app_ui.dart';
+import 'gameplay_dioramas.dart';
 
 /// KÖY DAĞILDI — koşunun kapanış ekranı.
 ///
@@ -35,11 +36,10 @@ class CollapseScreen extends StatelessWidget {
   });
 
   String get _causeLine => switch (cause) {
-        CollapseCause.emptied =>
-          'Son can da çekip gitti. Geriye kimse kalmadı.',
-        CollapseCause.noHands =>
-          'Köyü döndürecek el kalmadı. Kalanlar ocağı taşıyamadı.',
-      };
+    CollapseCause.emptied => 'Son can da çekip gitti. Geriye kimse kalmadı.',
+    CollapseCause.noHands =>
+      'Köyü döndürecek el kalmadı. Kalanlar ocağı taşıyamadı.',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -54,24 +54,12 @@ class CollapseScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Sönmüş köz — tek sıcak nokta, o da sönük.
-                Center(
-                  child: Container(
-                    width: 54,
-                    height: 54,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(colors: [
-                        Color(0x33FF9A4D),
-                        Color(0x00000000),
-                      ]),
-                    ),
-                    child: const Center(
-                      child: Text('☠', style: TextStyle(fontSize: 24)),
-                    ),
-                  ),
+                VillageOutcomeDiorama(
+                  thriving: false,
+                  accent: AppUi.rust,
+                  population: peakAdults,
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
                 Text(
                   'KÖY DAĞILDI',
                   textAlign: TextAlign.center,
@@ -92,7 +80,10 @@ class CollapseScreen extends StatelessWidget {
                   _causeLine,
                   textAlign: TextAlign.center,
                   style: AppUi.body.copyWith(
-                      fontSize: 12.5, color: AppUi.textMid, height: 1.5),
+                    fontSize: 12.5,
+                    color: AppUi.textMid,
+                    height: 1.5,
+                  ),
                 ),
                 const SizedBox(height: 26),
                 Row(
@@ -106,15 +97,19 @@ class CollapseScreen extends StatelessWidget {
                 Center(
                   child: Text(
                     identity,
-                    style:
-                        AppUi.label.copyWith(fontSize: 10, color: AppUi.textLo),
+                    style: AppUi.label.copyWith(
+                      fontSize: 10,
+                      color: AppUi.textLo,
+                    ),
                   ),
                 ),
                 if (epitaph.isNotEmpty) ...[
                   const SizedBox(height: 26),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: AppUi.surface0,
                       borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -123,19 +118,25 @@ class CollapseScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('SON SATIRLAR',
-                            style: AppUi.label
-                                .copyWith(fontSize: 9, color: AppUi.textLo)),
+                        Text(
+                          'SON SATIRLAR',
+                          style: AppUi.label.copyWith(
+                            fontSize: 9,
+                            color: AppUi.textLo,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        for (final line in epitaph)
+                        for (final line
+                            in epitaph.reversed.take(2).toList().reversed)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 5),
                             child: Text(
                               '· $line',
                               style: AppUi.body.copyWith(
-                                  fontSize: 11.5,
-                                  color: AppUi.textMid,
-                                  height: 1.45),
+                                fontSize: 11.5,
+                                color: AppUi.textMid,
+                                height: 1.45,
+                              ),
                             ),
                           ),
                       ],
@@ -144,18 +145,17 @@ class CollapseScreen extends StatelessWidget {
                 ],
                 const SizedBox(height: 14),
                 Text(
-                  'Bu köyün defteri kapandı. Kaydı menüde duruyor — '
-                  'okuyabilirsin ama devam edemezsin.',
+                  'Sönmüş ocağın izi kayıtlarda kaldı.',
                   textAlign: TextAlign.center,
                   style: AppUi.body.copyWith(
-                      fontSize: 11, color: AppUi.textLo, height: 1.45),
+                    fontSize: 11,
+                    color: AppUi.textLo,
+                    height: 1.45,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Center(
-                  child: AppButton(
-                    label: 'Ana Menü',
-                    onTap: onExit,
-                  ),
+                  child: AppButton(label: 'Ana Menü', onTap: onExit),
                 ),
               ],
             ),
@@ -166,12 +166,16 @@ class CollapseScreen extends StatelessWidget {
   }
 
   Widget _stat(String value, String label) => Column(
-        children: [
-          Text(value,
-              style: AppUi.number.copyWith(fontSize: 24, color: AppUi.textHi)),
-          const SizedBox(height: 2),
-          Text(label,
-              style: AppUi.label.copyWith(fontSize: 9.5, color: AppUi.textLo)),
-        ],
-      );
+    children: [
+      Text(
+        value,
+        style: AppUi.number.copyWith(fontSize: 24, color: AppUi.textHi),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        label,
+        style: AppUi.label.copyWith(fontSize: 9.5, color: AppUi.textLo),
+      ),
+    ],
+  );
 }

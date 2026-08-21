@@ -510,7 +510,7 @@ extension _SceneWork on _VillageSceneState {
     BuildingEntity? best;
     double bestD = 1e9;
     for (final b in _buildings) {
-      if (b.type != type) continue;
+      if (b.type != type || b.userPaused) continue;
       final (bx, by) = _centerOf(b);
       final d = _wdist(bx, by, v.gridX, v.gridY);
       if (d < bestD) {

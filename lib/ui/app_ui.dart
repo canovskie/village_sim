@@ -246,13 +246,19 @@ class AppPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = borderRadius ?? BorderRadius.circular(AppUi.radius);
+    final top = accent == null
+        ? AppUi.surface2
+        : Color.alphaBlend(accent!.withValues(alpha: 0.11), AppUi.surface2);
+    final bottom = accent == null
+        ? AppUi.surface1
+        : Color.alphaBlend(accent!.withValues(alpha: 0.045), AppUi.surface1);
     return Container(
       width: width,
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [AppUi.surface2, AppUi.surface1],
+          colors: [top, bottom],
         ),
         borderRadius: r,
         border: Border.all(color: AppUi.line, width: 1),
@@ -676,6 +682,9 @@ class AppChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.sizeOf(context).width - 24,
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: solid
@@ -692,12 +701,16 @@ class AppChip extends StatelessWidget {
             GameIcon(icon!, size: 11, color: solid ? AppUi.ink : color),
             const SizedBox(width: 5),
           ],
-          Text(
-            label,
-            style: AppUi.button.copyWith(
-              fontSize: 9.5,
-              letterSpacing: 1.0,
-              color: solid ? AppUi.ink : AppUi.textHi,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppUi.button.copyWith(
+                fontSize: 9.5,
+                letterSpacing: 1.0,
+                color: solid ? AppUi.ink : AppUi.textHi,
+              ),
             ),
           ),
         ],

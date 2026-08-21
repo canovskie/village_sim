@@ -40,7 +40,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
     kProbeOn = false;
     kProbeImperialArmed = false;
     kProbeSummonImperial = false;
@@ -48,6 +50,8 @@ void main() {
     kProbeNoImperial = false;
     kProbeVignetteId = '';
     kProbeVignetteCast = 0;
+    kProbeImperialCombatPairs = 0;
+    kProbeImperialCombatContactSeen = false;
     kDevSpeedBoostOverride = 0;
     kCaptureMode = false;
   });
@@ -66,18 +70,23 @@ void main() {
     kCaptureSceneReady = false;
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'threshold'),
-      ));
-      for (var i = 0; i < 160 && !kCaptureSceneReady; i++) {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'threshold'),
+        ),
+      );
+      for (var i = 0; i < 400 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
     });
     await tester.pump();
   }
 
-  Future<bool> waitUntil(WidgetTester tester, bool Function() ok,
-      {int maxSteps = 4000}) async {
+  Future<bool> waitUntil(
+    WidgetTester tester,
+    bool Function() ok, {
+    int maxSteps = 4000,
+  }) async {
     for (var i = 0; i < maxSteps; i++) {
       if (ok()) return true;
       await tester.pump(const Duration(milliseconds: 16));
@@ -93,8 +102,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   }
 
-  testWidgets('kazanılan direniş eşikte bir hat kurar ve hattı salıverir',
-      (tester) async {
+  testWidgets('kazanılan direniş eşikte bir hat kurar ve hattı salıverir', (
+    tester,
+  ) async {
     await boot(tester);
     expect(kCaptureSceneReady, isTrue, reason: 'referans köy kurulamadı');
 
@@ -110,25 +120,62 @@ void main() {
 
     // Pazarlık açılınca sim durur — telemetri bunu 'imparatorluk' diye yazar.
     final parley = await waitUntil(tester, () => kProbePause == 'imparatorluk');
-    expect(parley, isTrue,
-        reason: 'heyet eşiğe hiç varmadı (pazarlık açılmadı) — '
-            'pause=$kProbePause çağrı-tüketildi=${!kProbeSummonImperial}');
+    expect(
+      parley,
+      isTrue,
+      reason:
+          'heyet eşiğe hiç varmadı (pazarlık açılmadı) — '
+          'pause=$kProbePause çağrı-tüketildi=${!kProbeSummonImperial}',
+    );
 
     // 1. Savunma düğmesi ekranda mı? Direniş şansı 0 ise düğme HİÇ çizilmez —
     // o durumda sahne de kurulamaz, testin geri kalanı anlamsızdır.
     final resistBtn = find.textContaining('Savunmayı seç');
-    expect(resistBtn, findsOneWidget,
-        reason: 'referans köyde savunma seçeneği çizilmedi — direniş şansı 0');
+    expect(
+      resistBtn,
+      findsOneWidget,
+      reason: 'referans köyde savunma seçeneği çizilmedi — direniş şansı 0',
+    );
 
     await tester.tap(resistBtn);
     await tester.pump();
 
+    final planBtn = find.textContaining('Kalkan hattı');
+    expect(
+      planBtn,
+      findsOneWidget,
+      reason: 'savunma seçildi ama doktrin seçenekleri açılmadı',
+    );
+    await tester.tap(planBtn);
+    await tester.pump();
+
     // 2. Sahne kuruldu mu? Telemetri `_imperialResist` içinde SENKRON yazılır,
     // yani tıklamadan hemen sonra okunur.
-    expect(kProbeVignetteId, kThresholdVignetteId,
-        reason: 'direniş kazanıldı ama eşik sahnesi hiç kurulmadı');
-    expect(kProbeVignetteCast, greaterThan(1),
-        reason: 'hat tek kişilik — kadro bulunamıyor (bkz. _castNear yarıçapı)');
+    expect(
+      kProbeVignetteId,
+      kThresholdVignetteId,
+      reason: 'direniş kazanıldı ama eşik sahnesi hiç kurulmadı',
+    );
+    expect(
+      kProbeVignetteCast,
+      greaterThan(1),
+      reason: 'hat tek kişilik — kadro bulunamıyor (bkz. _castNear yarıçapı)',
+    );
+    expect(
+      kProbeImperialCombatPairs,
+      greaterThan(1),
+      reason: 'hat kuruldu ama askerler savunmacılarla bire bir eşleşmedi',
+    );
+
+    final madeContact = await waitUntil(
+      tester,
+      () => kProbeImperialCombatContactSeen,
+    );
+    expect(
+      madeContact,
+      isTrue,
+      reason: 'eşleşmeler kuruldu ama hiçbir bireysel darbe/tepki oynanmadı',
+    );
 
     // 3. Kapanış: ömür dolunca ya da kadro işini bitirince salıverilmeli.
     final closed = await waitUntil(tester, () => kProbeVignetteId.isEmpty);
@@ -137,9 +184,13 @@ void main() {
     for (var i = 0; i < 60; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
-    expect(kProbeCeremonyLocked, 0,
-        reason: '$kProbeCeremonyLocked köylü ceremony niyetinde DONDU — '
-            'eşik kadrosu salıverilmiyor');
+    expect(
+      kProbeCeremonyLocked,
+      0,
+      reason:
+          '$kProbeCeremonyLocked köylü ceremony niyetinde DONDU — '
+          'eşik kadrosu salıverilmiyor',
+    );
 
     await shutdown(tester);
   });

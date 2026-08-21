@@ -194,6 +194,7 @@ class _CutscenePainter extends CustomPainter {
     canvas.clipRect(Offset.zero & size);
 
     _paintBackground(canvas, size, cam);
+    _paintSetPiece(canvas, size, cam);
     _paintActors(canvas, size, cam);
     _paintForeground(canvas, size, cam);
 
@@ -201,6 +202,7 @@ class _CutscenePainter extends CustomPainter {
 
     // Köşe kararması — dikkat sahnenin ortasında toplanır.
     _vignette(canvas, size);
+    _filmTexture(canvas, size);
 
     // Sinematik letterbox bantları — sinematiğin başında iner (anlık siyah
     // çubuk yerine perde açılışı).
@@ -226,6 +228,332 @@ class _CutscenePainter extends CustomPainter {
           Paint()..color = Color.fromRGBO(0, 0, 0, (1.0 - fade) * fadeDepth),
         );
       }
+    }
+  }
+
+  // ── Plan dekoru / görsel hikâye ───────────────────────────────────────────
+
+  void _paintSetPiece(Canvas canvas, Size size, _Cam cam) {
+    if (shot.setPiece == CutsceneSetPiece.none) return;
+    _layer(canvas, size, cam, _dGround * 0.96, () {
+      switch (shot.setPiece) {
+        case CutsceneSetPiece.none:
+          break;
+        case CutsceneSetPiece.caravan:
+          _wagon(canvas, size, Offset(size.width * 0.76, size.height * 0.79));
+          _travelDust(canvas, size, 0.70);
+        case CutsceneSetPiece.camp:
+          _camp(canvas, size);
+        case CutsceneSetPiece.village:
+          _village(canvas, size);
+        case CutsceneSetPiece.market:
+          _market(canvas, size);
+        case CutsceneSetPiece.famine:
+          _famine(canvas, size);
+        case CutsceneSetPiece.wedding:
+          _weddingRing(canvas, size);
+        case CutsceneSetPiece.imperial:
+          _imperialStandards(canvas, size);
+          _travelDust(canvas, size, 0.58);
+        case CutsceneSetPiece.monument:
+          _monument(canvas, size);
+      }
+    });
+  }
+
+  void _wagon(Canvas c, Size size, Offset p) {
+    final s = size.height / 430;
+    final wood = Paint()..color = const Color(0xFF65432B);
+    final dark = Paint()..color = const Color(0xFF35271E);
+    final cloth = Paint()..color = const Color(0xFFB69A73);
+    c.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(p.dx - 54 * s, p.dy - 31 * s, 108 * s, 35 * s),
+        Radius.circular(4 * s),
+      ),
+      wood,
+    );
+    final hood = Path()
+      ..moveTo(p.dx - 45 * s, p.dy - 31 * s)
+      ..quadraticBezierTo(p.dx, p.dy - 82 * s, p.dx + 45 * s, p.dy - 31 * s)
+      ..close();
+    c.drawPath(hood, cloth);
+    for (final dx in [-37.0, 37.0]) {
+      c.drawCircle(p.translate(dx * s, 7 * s), 17 * s, dark);
+      c.drawCircle(p.translate(dx * s, 7 * s), 10 * s, wood);
+      c.drawLine(
+        p.translate(dx * s - 12 * s, 7 * s),
+        p.translate(dx * s + 12 * s, 7 * s),
+        dark..strokeWidth = 2 * s,
+      );
+    }
+    c.drawLine(
+      p.translate(-54 * s, -3 * s),
+      p.translate(-94 * s, 9 * s),
+      wood..strokeWidth = 5 * s,
+    );
+  }
+
+  void _travelDust(Canvas c, Size size, double centerX) {
+    for (var i = 0; i < 13; i++) {
+      final life = (time * 0.10 + _h(i, 91)) % 1.0;
+      final x = size.width * centerX + (_h(i, 92) - 0.5) * size.width * 0.34;
+      final y = size.height * (0.79 - life * 0.055);
+      final r = size.height * (0.012 + _h(i, 93) * 0.025) * (0.5 + life);
+      c.drawOval(
+        Rect.fromCenter(center: Offset(x, y), width: r * 2.8, height: r),
+        Paint()..color = Color.fromRGBO(174, 142, 93, (1 - life) * 0.13),
+      );
+    }
+  }
+
+  void _camp(Canvas c, Size size) {
+    final ground = size.height * 0.79;
+    const xs = [0.12, 0.29, 0.88];
+    for (var i = 0; i < 3; i++) {
+      // Orta alan aktör/ateş için boş: çadır kadrajın başrolünü kapatmaz.
+      final x = size.width * xs[i];
+      final w = size.width * (0.09 + i * 0.008);
+      final h = size.height * (0.10 + i * 0.012);
+      final tent = Path()
+        ..moveTo(x - w, ground)
+        ..lineTo(x, ground - h)
+        ..lineTo(x + w, ground)
+        ..close();
+      c.drawPath(tent, Paint()..color = const Color(0xFF7B654C));
+      c.drawLine(
+        Offset(x, ground - h - 3),
+        Offset(x, ground + 2),
+        Paint()
+          ..color = const Color(0xFF3F3024)
+          ..strokeWidth = 2,
+      );
+    }
+    _smokeWisp(c, size, const Offset(0.49, 0.76), 0);
+  }
+
+  void _village(Canvas c, Size size) {
+    final base = size.height * 0.79;
+    for (var i = 0; i < 6; i++) {
+      final x = size.width * (0.06 + i * 0.18);
+      final w = size.width * (0.065 + _h(i, 101) * 0.025);
+      final h = size.height * (0.075 + _h(i, 102) * 0.045);
+      final wall = Paint()..color = const Color(0xFF514536);
+      final roof = Paint()..color = const Color(0xFF302B28);
+      c.drawRect(Rect.fromLTWH(x - w / 2, base - h, w, h), wall);
+      c.drawPath(
+        Path()
+          ..moveTo(x - w * 0.65, base - h)
+          ..lineTo(x, base - h - h * 0.55)
+          ..lineTo(x + w * 0.65, base - h)
+          ..close(),
+        roof,
+      );
+      if (i.isEven) {
+        _smokeWisp(
+          c,
+          size,
+          Offset(x / size.width, (base - h) / size.height),
+          i,
+        );
+      }
+    }
+    final fence = Paint()
+      ..color = const Color(0xFF3E3328)
+      ..strokeWidth = 3;
+    c.drawLine(Offset(0, base + 2), Offset(size.width, base + 2), fence);
+    for (var i = 0; i < 13; i++) {
+      final x = size.width * i / 12;
+      c.drawLine(Offset(x, base - 9), Offset(x, base + 9), fence);
+    }
+  }
+
+  void _smokeWisp(Canvas c, Size size, Offset n, int seed) {
+    final base = Offset(n.dx * size.width, n.dy * size.height);
+    final p = Paint()
+      ..color = const Color(0x386D6A67)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.height * 0.008
+      ..strokeCap = StrokeCap.round;
+    final drift = sin(time * 0.45 + seed) * size.width * 0.012;
+    c.drawPath(
+      Path()
+        ..moveTo(base.dx, base.dy)
+        ..cubicTo(
+          base.dx - 8 + drift,
+          base.dy - size.height * 0.055,
+          base.dx + 12 + drift,
+          base.dy - size.height * 0.095,
+          base.dx + drift,
+          base.dy - size.height * 0.145,
+        ),
+      p,
+    );
+  }
+
+  void _market(Canvas c, Size size) {
+    _village(c, size);
+    final base = size.height * 0.80;
+    for (var i = 0; i < 3; i++) {
+      final x = size.width * (0.18 + i * 0.31);
+      final w = size.width * 0.16;
+      c.drawRect(
+        Rect.fromLTWH(
+          x - w / 2,
+          base - size.height * 0.06,
+          w,
+          size.height * 0.06,
+        ),
+        Paint()..color = const Color(0xFF5A3A29),
+      );
+      c.drawPath(
+        Path()
+          ..moveTo(x - w * 0.60, base - size.height * 0.06)
+          ..lineTo(x - w * 0.45, base - size.height * 0.13)
+          ..lineTo(x + w * 0.45, base - size.height * 0.13)
+          ..lineTo(x + w * 0.60, base - size.height * 0.06)
+          ..close(),
+        Paint()
+          ..color = i.isEven
+              ? const Color(0xFF9B5E43)
+              : const Color(0xFF8B7B43),
+      );
+    }
+    _bunting(c, size, 0.48);
+  }
+
+  void _famine(Canvas c, Size size) {
+    final base = size.height * 0.81;
+    final dry = Paint()
+      ..color = const Color(0xFF6E5430)
+      ..strokeWidth = 2;
+    for (var i = 0; i < 28; i++) {
+      final x = size.width * _h(i, 111);
+      final h = size.height * (0.025 + _h(i, 112) * 0.075);
+      final lean = (_h(i, 113) - 0.5) * 10;
+      c.drawLine(Offset(x, base), Offset(x + lean, base - h), dry);
+    }
+    final barrel = Offset(size.width * 0.17, base - 5);
+    c.drawOval(
+      Rect.fromCenter(center: barrel, width: 52, height: 20),
+      Paint()..color = const Color(0xFF33281F),
+    );
+    c.drawRect(
+      Rect.fromLTWH(barrel.dx - 26, barrel.dy - 34, 52, 33),
+      Paint()..color = const Color(0xFF59412A),
+    );
+  }
+
+  void _weddingRing(Canvas c, Size size) {
+    _bunting(c, size, 0.34);
+    final body = Paint()..color = const Color(0xA9080B13);
+    for (var i = 0; i < 12; i++) {
+      final side = i < 6 ? 0 : 1;
+      final j = i % 6;
+      final x = size.width * (side == 0 ? 0.04 + j * 0.055 : 0.96 - j * 0.055);
+      final y = size.height * (0.75 + (j.isEven ? 0.025 : 0));
+      final bob = sin(time * 2.2 + i) * size.height * 0.009;
+      c.drawOval(
+        Rect.fromCenter(center: Offset(x, y + 20 + bob), width: 32, height: 46),
+        body,
+      );
+      c.drawCircle(Offset(x, y + bob), 10, body);
+    }
+  }
+
+  void _bunting(Canvas c, Size size, double y) {
+    final rope = Paint()
+      ..color = const Color(0x99E5C483)
+      ..strokeWidth = 1.5;
+    final path = Path()
+      ..moveTo(0, size.height * y)
+      ..quadraticBezierTo(
+        size.width * 0.5,
+        size.height * (y + 0.08),
+        size.width,
+        size.height * y,
+      );
+    c.drawPath(path, rope);
+    for (var i = 1; i < 14; i++) {
+      final t = i / 14;
+      final x = size.width * t;
+      final yy = size.height * (y + 0.08 * 4 * t * (1 - t));
+      final flutter = sin(time * 2 + i) * 3;
+      c.drawPath(
+        Path()
+          ..moveTo(x - 6, yy)
+          ..lineTo(x + 7, yy)
+          ..lineTo(x + flutter, yy + 14)
+          ..close(),
+        Paint()
+          ..color = i.isEven
+              ? const Color(0xFFB96D4D)
+              : const Color(0xFFD4B25F),
+      );
+    }
+  }
+
+  void _imperialStandards(Canvas c, Size size) {
+    final base = size.height * 0.80;
+    for (var i = 0; i < 5; i++) {
+      final x = size.width * (0.58 + i * 0.09);
+      final h = size.height * (0.23 + _h(i, 121) * 0.10);
+      final pole = Paint()
+        ..color = const Color(0xFF2A2020)
+        ..strokeWidth = 3;
+      c.drawLine(Offset(x, base), Offset(x, base - h), pole);
+      final flap = sin(time * 1.7 + i) * 5;
+      c.drawPath(
+        Path()
+          ..moveTo(x, base - h)
+          ..lineTo(x + 28 + flap, base - h + 7)
+          ..lineTo(x, base - h + 25)
+          ..close(),
+        Paint()..color = const Color(0xFF6E2630),
+      );
+    }
+  }
+
+  void _monument(Canvas c, Size size) {
+    final x = size.width * 0.52;
+    final base = size.height * 0.80;
+    c.drawRect(
+      Rect.fromLTWH(x - 45, base - 20, 90, 20),
+      Paint()..color = const Color(0xFF5C5B54),
+    );
+    c.drawRect(
+      Rect.fromLTWH(x - 18, base - 95, 36, 75),
+      Paint()..color = const Color(0xFF77776E),
+    );
+    c.drawLine(
+      Offset(x, base - 95),
+      Offset(x, base - size.height * 0.48),
+      Paint()
+        ..color = const Color(0xFF40352D)
+        ..strokeWidth = 4,
+    );
+    final fy = base - size.height * 0.48;
+    final flap = sin(time * 1.2) * 7;
+    c.drawPath(
+      Path()
+        ..moveTo(x, fy)
+        ..lineTo(x + 62 + flap, fy + 12)
+        ..lineTo(x, fy + 48)
+        ..close(),
+      Paint()..color = const Color(0xFF8A3F34),
+    );
+  }
+
+  /// Çok hafif hareketli doku: prosedürel yüzeylerin steril gradyan hissini
+  /// kırar. Noktalar büyük değil; yalnız düz renk bantlarında hissedilir.
+  void _filmTexture(Canvas c, Size size) {
+    final p = Paint();
+    final frame = (time * 8).floor();
+    for (var i = 0; i < 72; i++) {
+      final x = _h(i + frame * 3, 131) * size.width;
+      final y = _h(i + frame * 5, 132) * size.height;
+      p.color = Color.fromRGBO(255, 245, 220, 0.010 + _h(i, 133) * 0.018);
+      c.drawCircle(Offset(x, y), 0.5 + _h(i, 134) * 0.8, p);
     }
   }
 
@@ -1076,7 +1404,8 @@ class _CutscenePainter extends CustomPainter {
       final a = shot.actors[i];
       final dist = (a.toX - a.fromX).abs();
       final own = maxDist <= 1e-4 ? 0.0 : moveDur * (dist / maxDist);
-      final p = own <= 1e-4 ? 1.0 : (moveElapsed / own).clamp(0.0, 1.0);
+      final localMove = max(0.0, moveElapsed - a.entranceDelay);
+      final p = own <= 1e-4 ? 1.0 : (localMove / own).clamp(0.0, 1.0);
       final nx = _lerp(a.fromX, a.toX, _travel(p));
       final x = nx * size.width;
       final y = a.y * size.height;
@@ -1090,7 +1419,7 @@ class _CutscenePainter extends CustomPainter {
       final walkPhase = travelled / stride * pi;
       // Varıştan beri geçen süre. _Anim'in idle nefes/sway'i TAMAMEN faza bağlı;
       // varınca faz 0'da bırakılırsa aktör nefes bile almayan bir heykel olur.
-      final settled = max(0.0, moveElapsed - own);
+      final settled = max(0.0, localMove - own);
       final speaking = hasSpeaker && a.name == speaker;
       final phase =
           walkPhase +
@@ -1102,6 +1431,26 @@ class _CutscenePainter extends CustomPainter {
       // Yürürken GİDİLEN yöne bakar (eski kod hep sağa baktırıyordu: soldan
       // gelen heyet geri geri yürümüş gibi görünüyordu), varınca kendi yönüne.
       final flip = (a.walk && p < 1.0) ? a.toX < a.fromX : a.flip;
+      final pose = switch (a.pose) {
+        CutsceneActorPose.stand => CharPose.normal,
+        CutsceneActorPose.sit => CharPose.sit,
+        CutsceneActorPose.kneel => CharPose.kneel,
+        CutsceneActorPose.mourn => CharPose.mourn,
+      };
+      // Konuşmacı veri dosyasında ayrıca işaretlenmese de eliyle anlatır.
+      // Özel jest verilmişse konuşma dışında da yumuşak bir zarfla sürer.
+      final gesture = speaking
+          ? CharGesture.tell
+          : switch (a.gesture) {
+              CutsceneActorGesture.none => CharGesture.none,
+              CutsceneActorGesture.wave => CharGesture.wave,
+              CutsceneActorGesture.tell => CharGesture.tell,
+            };
+      final gestureAmount = speaking
+          ? (0.64 + sin(time * 2.4 + i) * 0.20).clamp(0.0, 1.0)
+          : gesture == CharGesture.none
+          ? 0.0
+          : (0.45 + sin(time * 1.8 + i) * 0.35).clamp(0.0, 1.0);
 
       // Yumuşak zemin gölgesi — sert oval yerine kenarı dağılan temas gölgesi.
       canvas.drawOval(
@@ -1131,7 +1480,10 @@ class _CutscenePainter extends CustomPainter {
       if (dim || lit) canvas.saveLayer(bounds, Paint());
 
       canvas.save();
-      canvas.translate(x, y);
+      // Konuşmada çok küçük ağırlık aktarımı; kol jesti tek başına kesik bir
+      // kukla hareketi gibi kalmasın. Ayak teması bozulmayacak kadar küçük.
+      final talkBob = speaking ? sin(time * 3.1 + i) * targetH * 0.007 : 0.0;
+      canvas.translate(x, y + talkBob);
       canvas.scale(s, s);
       CharacterRenderer.draw(
         canvas,
@@ -1139,9 +1491,12 @@ class _CutscenePainter extends CustomPainter {
         flipX: flip,
         walkPhase: phase,
         moveIntensity: mi,
+        pose: pose,
         visual: a.visual ?? NpcVisual.fromSeed(a.seed),
         time: time,
         stage: LifeStage.adult,
+        gesture: gesture,
+        gestureAmount: gestureAmount,
       );
       canvas.restore();
 

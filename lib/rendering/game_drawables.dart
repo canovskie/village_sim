@@ -291,7 +291,7 @@ class _VillagerDrawable extends _Drawable {
     // Yumruklaşma — gövde rakibe doğru ileri-geri saldırır (gerçek hareket,
     // emoji değil). Öfke postürüyle birleşince inandırıcı bir arbede olur.
     double brawlShove = 0;
-    if (e.activity == VillagerActivity.brawling) {
+    if (e.activity == VillagerActivity.brawling && !e.npcDueling) {
       final dir = e.effectiveFacingRight ? 1.0 : -1.0;
       brawlShove = sin(time * 13.0 + e.gridX * 1.3) * 2.6 * dir;
     }
@@ -466,6 +466,14 @@ class _VillagerDrawable extends _Drawable {
           bearScaleY *
           actScaleY,
     );
+    // Darbe tepkisi ayak ucundan geriye sendeleme olarak okunur. Pozisyonel
+    // geri itilmeyi combat motoru yapar; bu küçük gövde kırılması darbeyi
+    // yürüyüşten ayırır. Yön aynalaması dönüşü de doğru tarafa çevirir.
+    if (e.imperialHit) {
+      final recoil = 0.13 + sin(time * 18.0 + e.visual.blinkPhase) * 0.035;
+      canvas.rotate(-recoil);
+      canvas.scale(0.96, 0.985);
+    }
     CharacterRenderer.draw(
       canvas,
       e.type,
@@ -505,6 +513,7 @@ class _VillagerDrawable extends _Drawable {
         walkPhase: e.walkPhase,
         moveIntensity: e.moveIntensity,
         time: time,
+        combat: e.imperialAttacking,
       );
     }
     // Müzik aktivitesinde eline saz/bağlama çiz — sprite scale'inde, göğüs
@@ -863,7 +872,7 @@ class _VillagerDrawable extends _Drawable {
     // İş-özel overlay: ilerleme çubuğu + kıvılcım/talaş/splash.
     if (job.role == JobRole.builder && working) {
       _drawJobProgressBar(canvas, s, job.progress);
-      if (sin(job.phaseAnim).abs() > 0.92) {
+      if (workContactAmount(job.phaseAnim) > 0.72) {
         _drawJobSpark(canvas, s.dx, s.dy, e.facingRight);
       }
     }
@@ -880,9 +889,9 @@ class _VillagerDrawable extends _Drawable {
     }
     // Madenci kazma darbesinde taş chip'i (chopPhase döngü başı %30).
     if (job.role == JobRole.miner && working) {
-      const chipWindow = 2 * pi * 0.30;
-      if (job.phaseAnim < chipWindow) {
-        final lt = job.phaseAnim / chipWindow;
+      final impactPhase = workImpactPhase(job.phaseAnim);
+      if (impactPhase >= 0) {
+        final lt = (impactPhase / (2 * pi)).clamp(0.0, 1.0);
         final dir = e.facingRight ? 1.0 : -1.0;
         final seed = e.gridX.toInt() * 7 + e.gridY.toInt() * 13;
         ParticleRenderer.drawChip(
@@ -921,6 +930,34 @@ class _VillagerDrawable extends _Drawable {
     canvas.drawRect(Rect.fromLTWH(px + dir * 3, py - 2, 2, 2), paint);
     canvas.drawRect(Rect.fromLTWH(px - dir * 2, py + 2, 1, 1), dim);
     canvas.drawRect(Rect.fromLTWH(px + dir * 5, py + 1, 1, 1), dim);
+  }
+}
+
+/// Kervan liderinin hareket ankrajına bağlı at arabası. İnsan sprite'ından
+/// ayrı drawable olduğu için büyük silüet binalar/NPC'lerle doğru derinlikte
+/// örtüşür ve occlusion aktörü olarak da tanınır.
+class _HorseCartDrawable extends _Drawable {
+  final MerchantEntity e;
+  final double time;
+  _HorseCartDrawable(this.e, this.time);
+
+  @override
+  double get depth => e.depth;
+
+  @override
+  WorkerEntity? get actor => e;
+
+  @override
+  void draw(Canvas canvas, Size size, Offset camera) {
+    final s = gridToScreen(e.renderX, e.renderY, size, camera);
+    VehicleRenderer.drawHorseCart(
+      canvas,
+      s,
+      facingRight: e.effectiveFacingRight,
+      walkPhase: e.walkPhase,
+      isMoving: e.moveIntensity > 0.12,
+      time: time,
+    );
   }
 }
 
@@ -999,6 +1036,18 @@ class _DecorDrawable extends _Drawable {
       camera,
     );
     DecorRenderer.draw(canvas, center, d, time: time);
+  }
+}
+
+class _WorldLandmarkDrawable extends _Drawable {
+  final WorldLandmark site;
+  _WorldLandmarkDrawable(this.site);
+  @override
+  double get depth => site.depth;
+  @override
+  void draw(Canvas canvas, Size size, Offset camera) {
+    final center = gridToScreen(site.col + 0.5, site.row + 0.5, size, camera);
+    WorldLandmarkRenderer.draw(canvas, center, site);
   }
 }
 
@@ -1205,6 +1254,8 @@ class _BuildingDrawable extends _Drawable {
         perfMode: perfMode,
         fireFuel: b.fireFuel,
         millRotorAngle: b.millRotorAngle,
+        deliveryPulse: b.deliveryPulse,
+        deliveryTally: b.deliveryTally,
         season: season,
         windowGlow: b.windowGlow,
       );
@@ -1225,6 +1276,8 @@ class _BuildingDrawable extends _Drawable {
         perfMode: perfMode,
         fireFuel: b.fireFuel,
         millRotorAngle: b.millRotorAngle,
+        deliveryPulse: b.deliveryPulse,
+        deliveryTally: b.deliveryTally,
         season: season,
         windowGlow: b.windowGlow,
       );

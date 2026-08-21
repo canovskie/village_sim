@@ -61,43 +61,81 @@ const Map<String, LawVector> kLawVectors = {
   'winterFodder': LawVector(), // ihtiyat; mülkiyet hakkında bir şey söylemez
   'sharedHarvest': LawVector(economy: -3), // müşterek harman = kolektifleştirme
   'irrigation': LawVector(economy: -1), // ortak su seferi (commons emeği)
-  'farmLabor': LawVector(authority: 2, economy: -1), // seferberlik = önce ZORLAMA
-  'hospitality': LawVector(authority: -1, economy: 2), // açık kapı = özgür + pazar/emek
+  'farmLabor': LawVector(
+    authority: 2,
+    economy: -1,
+  ), // seferberlik = önce ZORLAMA
+  'hospitality': LawVector(
+    authority: -1,
+    economy: 2,
+  ), // açık kapı = özgür + pazar/emek
   'familyReunion': LawVector(), // ocak dayanışması; iktisadi hüküm değil
   'herdGrowth': LawVector(), // sürü çoğaltmak mülkiyet demek değil
   'cropRotation': LawVector(), // nadas bir tarım tekniği, bir düzen değil
-  'apprenticeship': LawVector(authority: 1, economy: 2), // zanaat mülkü + soy zorlaması
+  'apprenticeship': LawVector(
+    authority: 1,
+    economy: 2,
+  ), // zanaat mülkü + soy zorlaması
   'oneChild': LawVector(authority: 2), // beşiğe devlet eli (sert)
   'twoChild': LawVector(authority: 1), // beşiğe devlet eli (yumuşak)
   'familyEncouragement': LawVector(), // teşvik; paylaşım düzeni değil
-  'tradeGuidance': LawVector(authority: 1, economy: -1), // merkezî emek dağıtımı
+  'tradeGuidance': LawVector(
+    authority: 1,
+    economy: -1,
+  ), // merkezî emek dağıtımı
   'freeRange': LawVector(authority: -1, economy: 1), // bırakınız otlasınlar
-  'treePlanting': LawVector(authority: 1, economy: -1, faith: 1), // regülasyon+commons+saygı
+  'treePlanting': LawVector(
+    authority: 1,
+    economy: -1,
+    faith: 1,
+  ), // regülasyon+commons+saygı
   'peacefulEnd': LawVector(faith: 1), // tören onuru
   'slowMaturity': LawVector(authority: 1), // paternalist çocukluk
   'eldersExemptFromFood': LawVector(economy: -2), // yeniden dağıtım (yaşlıya)
   'greenVillage': LawVector(faith: 1), // ortak güzellik + hafif ruh
-  'quarantine': LawVector(authority: 2, economy: -1), // tecrit = zor + ortak sağlık yükü
+  'quarantine': LawVector(
+    authority: 2,
+    economy: -1,
+  ), // tecrit = zor + ortak sağlık yükü
   'hearthWatch': LawVector(authority: 1, economy: -1), // ortak ocak, ortak odun
   'outsideMarriage': LawVector(authority: -1, economy: 2), // kapıyı dışarı açar
-
   // ── NİZAM (⚔ saf Baskı) ─────────────────────────────────────────────────────
   'nizam.watch': LawVector(authority: 2), // gece nöbeti = düzen
-  'nizam.registry': LawVector(authority: 2, economy: 2), // sicil = sayım + mülk vergisi
-  'nizam.labor': LawVector(authority: 3, economy: 1), // kürek cezası = zor + emek sömürüsü
+  'nizam.registry': LawVector(
+    authority: 2,
+    economy: 2,
+  ), // sicil = sayım + mülk vergisi
+  'nizam.labor': LawVector(
+    authority: 3,
+    economy: 1,
+  ), // kürek cezası = zor + emek sömürüsü
   'nizam.exile': LawVector(authority: 3), // sürgün
   // Diyet: öcü haneden alıp devlete verir (+otorite) ve kanı paraya çevirir
   // (+mülkçü). Nizam kolunun tek "kan dökmeyen" hükmü ama en soğuk mantığı.
   'nizam.bloodPrice': LawVector(authority: 2, economy: 2),
-  'nizam.sole': LawVector(authority: 5), // tek söz = mutlak otorite (dilekçe susar)
-
+  'nizam.sole': LawVector(
+    authority: 5,
+  ), // tek söz = mutlak otorite (dilekçe susar)
   // ── DERGÂH (☾ ağır Dinî) ────────────────────────────────────────────────────
-  'dergah.holyDay': LawVector(authority: 1, economy: -1, faith: 3), // dayatılan istirahat
+  'dergah.holyDay': LawVector(
+    authority: 1,
+    economy: -1,
+    faith: 3,
+  ), // dayatılan istirahat
   'dergah.lodge': LawVector(economy: -1, faith: 3), // dergâh = commons/sığınak
-  'dergah.tithe': LawVector(authority: 1, economy: -2, faith: 3), // öşür = yeniden dağıtım
-  'dergah.penance': LawVector(authority: 2, faith: 3), // aleni tövbe = sosyal denetim
-  'dergah.oneFaith': LawVector(authority: 4, faith: 5), // tek inanç = dinî mutlakiyet
-
+  'dergah.tithe': LawVector(
+    authority: 1,
+    economy: -2,
+    faith: 3,
+  ), // öşür = yeniden dağıtım
+  'dergah.penance': LawVector(
+    authority: 2,
+    faith: 3,
+  ), // aleni tövbe = sosyal denetim
+  'dergah.oneFaith': LawVector(
+    authority: 4,
+    faith: 5,
+  ), // tek inanç = dinî mutlakiyet
   // ── REJİM FERMANLARI (yemin sonrası; köyü kendi köşesine ÇİVİLER) ──────────
   // Bilerek güçlü: yemin edip bu fermanı da mühürleyen köy artık ortada değil.
   'rejim.meclisDaimi': LawVector(authority: -4, economy: -2),
@@ -244,13 +282,16 @@ abstract final class LawCompass {
     if (v.faith >= 1) parts.add('DİNÎ');
     if (parts.isEmpty) return null;
 
-    final force = [v.authority.abs(), v.economy.abs(), v.faith]
-        .reduce((a, b) => a > b ? a : b);
+    final force = [
+      v.authority.abs(),
+      v.economy.abs(),
+      v.faith,
+    ].reduce((a, b) => a > b ? a : b);
     final verb = force >= 3
         ? 'sert biçimde iter'
         : force >= 2
-            ? 'iter'
-            : 'hafifçe iter';
+        ? 'iter'
+        : 'hafifçe iter';
     final dirs = parts.length == 1
         ? '${parts.first} tarafa'
         : '${parts.sublist(0, parts.length - 1).join(', ')} ve ${parts.last} tarafa';
@@ -273,15 +314,14 @@ abstract final class LawCompass {
     final religious = p.faith >= kFaithBand;
 
     // MERKEZ — iki eksen de belirsiz ve iman zayıf: köy henüz teşekkül etmedi.
-    if (p.authority.abs() < kBand &&
-        p.economy.abs() < kBand &&
-        !religious) {
+    if (p.authority.abs() < kBand && p.economy.abs() < kBand && !religious) {
       return const RegimeIdentity(
         regime: VillageRegime.moderate,
         icon: '⚖',
         title: 'Ilımlı Köy',
         tagline: 'Henüz bir yöne yatmadı; kimliği açık, defteri ince.',
-        agencyNote: 'Sözün geçer, kimse çok memnun ya da çok küs değil. '
+        agencyNote:
+            'Sözün geçer, kimse çok memnun ya da çok küs değil. '
             'Uçların gücüne de erişemezsin.',
         base: null,
         dissent: null,
@@ -320,7 +360,8 @@ abstract final class LawCompass {
           tagline: religious
               ? 'Herkes aynı sofrada, aynı kandilin altında; mülk de gönül de ortak.'
               : 'Kimse aç kalmaz, kimse öne geçmez; söz meydanda toplanır.',
-          agencyNote: 'Meclis gerçek oy verir — bir dilekçe sen istemesen de '
+          agencyNote:
+              'Meclis gerçek oy verir — bir dilekçe sen istemesen de '
               'geçebilir. Yavaşsın ama meşrusun.',
           base: Estate.laborers,
           dissent: Estate.artisans,
@@ -334,8 +375,9 @@ abstract final class LawCompass {
           title: religious ? 'Vakıf Kasabası' : 'Açık Pazar',
           tagline: religious
               ? 'Kervan da hayrat da akar; kese açık, kapı açık, dergâh vakıflı.'
-              : 'Kapı yabancıya, yol tüccara açık; herkes kendi kısmetinin peşinde.',
-          agencyNote: 'Az müdahale edersin; refah akar ama para konuşur, '
+              : 'Kapı kervana, pazar alışverişe açık; herkes kendi kısmetinin peşinde.',
+          agencyNote:
+              'Az müdahale edersin; refah akar ama para konuşur, '
               'zengin-fakir arası açılır.',
           base: Estate.artisans,
           dissent: Estate.hearth,
@@ -350,7 +392,8 @@ abstract final class LawCompass {
           tagline: religious
               ? 'Cemaat tek beden: herkes eşit pay alır, eşit baş eğer.'
               : 'Herkes eşit — ama eşitliği dağıtan el senin, ve o el sıkıdır.',
-          agencyNote: 'Yüksek yetkin var, "eşitlik adına" kullanırsın. Zorla '
+          agencyNote:
+              'Yüksek yetkin var, "eşitlik adına" kullanırsın. Zorla '
               'paylaşımın bedeli sinsi bir tembellik, düşen verim.',
           base: Estate.laborers,
           dissent: Estate.hearth,
@@ -365,7 +408,8 @@ abstract final class LawCompass {
           tagline: religious
               ? 'Tek inanç, tek söz, tek el: köy şeyhin avucunda döner.'
               : 'Dilekçe susar, sicil tutulur, kılıç keskindir; son söz senin.',
-          agencyNote: 'Mutlak yetki senin — ama korku moral yer, altta isyan '
+          agencyNote:
+              'Mutlak yetki senin — ama korku moral yer, altta isyan '
               'kaynar, favorilerin bile güvende değil.',
           base: Estate.artisans,
           dissent: Estate.hearth,

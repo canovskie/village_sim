@@ -12,7 +12,14 @@ import '../systems/villager_mind.dart';
 import 'villager_job.dart';
 import 'worker_entity.dart';
 
-enum VillagerState { moving, idle, sleeping, walkingToSleep, walkingToPickup, carrying }
+enum VillagerState {
+  moving,
+  idle,
+  sleeping,
+  walkingToSleep,
+  walkingToPickup,
+  carrying,
+}
 
 /// NPC'nin boş zaman hareket kişiliği — "otlayan inek" tekdüzeliğini kırar.
 /// Tipe göre atanır (bkz. [VillagerEntity._behaviorFor]); her davranışın
@@ -50,12 +57,13 @@ enum VillagerActivity {
   listening,
   arguing,
   brawling,
+  watchingConflict, // kavgaya koşup bakan / ürküp geri çekilen çevre halkası
   prowling,
   committing,
   fleeing,
   chasing,
   abducted,
-  playing,     // çocuk oyunu — kovalamaca/birlikte zıplama (scene_tick _tickChildPlay)
+  playing, // çocuk oyunu — kovalamaca/birlikte zıplama (scene_tick _tickChildPlay)
 }
 
 /// NPC'nin anlık duygusu — "canlılık" altyapısı. Geçici tepki olarak tetiklenir
@@ -110,8 +118,7 @@ class VillagerEntity extends WorkerEntity {
   final int personalitySeed;
 
   /// Köylünün kişiliği (mizaç + sevdiği şey + künye). Seed'den lazy üretilir.
-  late final Personality personality =
-      Personality.fromSeed(personalitySeed);
+  late final Personality personality = Personality.fromSeed(personalitySeed);
 
   /// Kutlanan yıldönümü sayısı — yaş kilometre taşı geçince artar (kişisel an).
   int annivCount = 0;
@@ -143,7 +150,7 @@ class VillagerEntity extends WorkerEntity {
   /// Aile bağları — bebek doğduğunda evdeki yetişkin sakinler ebeveyn olur
   /// (max 2). Kurucu NPC'lerde boş. Ölüm anında karşı taraf listesinden
   /// referansı kaldırılır.
-  final List<VillagerEntity> parents  = [];
+  final List<VillagerEntity> parents = [];
   final List<VillagerEntity> children = [];
 
   double targetCol;
@@ -158,7 +165,6 @@ class VillagerEntity extends WorkerEntity {
 
   /// Aktif (none olmayan) bir işi üstlenmiş mi — iş döngüsü/rutin kapısı.
   bool get hasActiveJob => job != null && job!.role != JobRole.none;
-
 
   /// İş bırakıldıktan sonra kısa süre tekrar işe atanmama süresi (sn) — ör.
   /// erişilemez hedefte takılıp iş bırakınca aynı köylü hemen yeniden aynı işe
@@ -199,9 +205,17 @@ class VillagerEntity extends WorkerEntity {
   /// sorguç + pelerin (heyetin lideri görünür biçimde ayrışır).
   bool imperialCommander = false;
 
-  /// İmparatorluk askeri SALDIRI modunda mı (yağma dalışı) — true ise mızrak
-  /// ileri dürtme (jab) pozu + öne saldırgan eğilme (statik mızrak yerine).
+  /// İmparatorluk çatışmasında saldırı modunda mı. Askerde mızrak dürtüsü,
+  /// köylüde muhafız mızrağı / eldeki balta-tırpan savruluşu üretir.
   bool imperialAttacking = false;
+
+  /// Eşik muharebesinde darbe tepkisi. Hareket motoru geri itilmeyi, renderer
+  /// kısa gövde sendelemesini çizer; ziyaret bitince temizlenir.
+  bool imperialHit = false;
+
+  /// NPC kavgasının yönlendirilmiş düello motorunda mı? Eski sinüs tabanlı
+  /// yerinde sallanmayı susturur; konum ve vuruşu scene_conflict yönetir.
+  bool npcDueling = false;
 
   VillagerState state = VillagerState.idle;
   double idleTimer = 0;
@@ -211,8 +225,8 @@ class VillagerEntity extends WorkerEntity {
   /// (pazar/taverna/kuyu/ev...) atamalı. Atanınca [goTo] ile false olur.
   bool needsErrand = false;
   bool _onErrand = false;
-  double _errandDwell = 0;   // hedefe varınca kaç sn oyalanacak
-  double _errandWait = 0;    // atanmayı kaç sn bekledi (fallback için)
+  double _errandDwell = 0; // hedefe varınca kaç sn oyalanacak
+  double _errandWait = 0; // atanmayı kaç sn bekledi (fallback için)
 
   /// Errand/iş koşturması yapabilir mi — çocuk değil, yaralı/hasta değil VE
   /// kürek cezasında değil (yaralı/hasta dinlenir, mahkûm ocakta; hepsi köyün
@@ -312,13 +326,26 @@ class VillagerEntity extends WorkerEntity {
   /// çuvalla kaçan hırsız yakalanabilir olmalı.
   double get propFactor => propSpeedFactor(prop);
 
+  /// İŞE GİDİŞ PAYI — gündelik gezintiyi değil, yalnız görünür bir iş hedefine
+  /// yürüyen köylüyü hızlandırır. Eski tempoda 10-12 tile uzaktaki işyeri bir
+  /// gerçek dakika boyunca yalnız yürüyüş gösteriyordu; oyuncunun gördüğü
+  /// vardiya iş değil yoldu. Yük taşırken uygulanmaz: ağır nesnenin okunur
+  /// yavaşlığı ve suç kovalamacasının dengesi korunur.
+  double get workTravelFactor {
+    if (state != VillagerState.moving || isCarrying) return 1.0;
+    final purposefulWork = hasActiveJob || mind.owns(IntentKind.work);
+    return purposefulWork ? 1.40 : 1.0;
+  }
+
   @override
-  double get speed => _speedFor(type) *
+  double get speed =>
+      _speedFor(type) *
       injuryFactor *
       hasteFactor *
       propFactor *
       paceFactor *
-      groundFactor;
+      groundFactor *
+      workTravelFactor;
 
   /// ZEMİN ÇARPANI — kışın kar (bkz. winter.kSnowSpeedMultiplier). Mevsim
   /// döndükçe sahne yazar; transient (kaydedilmez, ilk tick'te yeniden kurulur).
@@ -350,15 +377,17 @@ class VillagerEntity extends WorkerEntity {
   double _lookTimer = 0;
 
   // ── Devriye (patrol) durumu — iki uç nokta arası mekik ────────────────────
-  bool _patInit = false;   // uçlar spawn'a göre bir kez hesaplanır
-  bool _patToB  = true;    // sıradaki hedef B mi (değilse A)
+  bool _patInit = false; // uçlar spawn'a göre bir kez hesaplanır
+  bool _patToB = true; // sıradaki hedef B mi (değilse A)
   double _patAx = 0, _patAy = 0, _patBx = 0, _patBy = 0;
 
   // Uyku sistemi
   bool _wasSleeping = false;
+
   /// Şafakta kademeli uyanış için kişisel gecikme (sn) — köy dalga dalga
   /// uyansın, herkes aynı karede kapıdan fırlamasın. <0 = henüz kurulmadı.
   double _wakeDelay = -1.0;
+
   /// UYKUSUZ KALAN SÜRE (sn) — soğuktan kalkan köylü bu süre boyunca uyku
   /// akışına dönmez. Olmasaydı gece uyanmak imkânsızdı: `isNight` bir sonraki
   /// karede köylüyü yeniden yatağa yollardı (bkz. [rouseShivering]).
@@ -366,20 +395,24 @@ class VillagerEntity extends WorkerEntity {
 
   /// Nereye gidip uyuyacak (main.dart tarafından her gece atanır)
   (double, double)? sleepTarget;
+
   /// true → eve girmiş sayılır (render edilmez)
   bool sleepIsHome = false;
+
   /// Şu an bina içinde mi (gizlenir)
   bool isInsideBuilding = false;
+
   /// Atanan ev binası (null = evsiz)
-  Object? homeBuilding; // BuildingEntity türü, döngüsel import önlemek için Object
+  Object?
+  homeBuilding; // BuildingEntity türü, döngüsel import önlemek için Object
 
   /// Geçici vurgu (sn) — HUD'dan "evsizleri göster" gibi tetiklenir; painter
   /// bu süre boyunca köylünün etrafına nabız atan bir halka çizer.
   double highlightTimer = 0;
 
   // Porter/carry sistemi
-  Object? _pickupItem;           // ResourceBox veya HayEntity
-  Object? carriedItem;           // aktif taşıma sırasında görünür
+  Object? _pickupItem; // ResourceBox veya HayEntity
+  Object? carriedItem; // aktif taşıma sırasında görünür
   double _pickupX = 0, _pickupY = 0;
   double _deliverX = 0, _deliverY = 0;
   void Function()? _onDelivered;
@@ -403,6 +436,7 @@ class VillagerEntity extends WorkerEntity {
   /// Yetişkin kadın bir eve yerleşince initialize edilir, eligibility kaybolunca
   /// NaN'a döner. chill-gameplay: doğum food consume etmez.
   double fertilityDays = double.nan;
+
   /// Bu köylünün hayatta yaptığı doğum sayısı — istatistik / panel.
   int birthCount = 0;
 
@@ -438,9 +472,8 @@ class VillagerEntity extends WorkerEntity {
   /// Yaralı/sakat/hasta hız çarpanı — akut yaralı çok yavaş (0.55), hasta düşkün
   /// (0.7), kalıcı sakat hafif aksak (0.8), sağlam 1.0. [speed] bununla ölçeklenir
   /// → gövde dili (aksama/ağırlaşma).
-  double get injuryFactor => injuryDays > 0
-      ? 0.55
-      : (sickDays > 0 ? 0.7 : (disabled ? 0.8 : 1.0));
+  double get injuryFactor =>
+      injuryDays > 0 ? 0.55 : (sickDays > 0 ? 0.7 : (disabled ? 0.8 : 1.0));
 
   /// Küslükler — bu köylünün dargın olduğu kişiler → küslüğün biteceği sim zamanı
   /// ([_time]). Kavga sonrası kurulur; süresi dolunca lazy temizlenir. Küs çiftler
@@ -499,6 +532,7 @@ class VillagerEntity extends WorkerEntity {
   /// Transient: kayda YAZILMAZ (1,6 sn'lik bir jest kaydı hak etmez).
   double waveTime = 0;
   static const double kWaveDuration = 1.6;
+
   /// Bu NPC'nin son aktiviteden sonraki kişisel cooldown'u (sn). Her NPC
   /// kendi başına değerlendirilir → global cap yok, nüfus arttıkça toplam
   /// aktivite doğal artar. 60-180 sn.
@@ -512,11 +546,14 @@ class VillagerEntity extends WorkerEntity {
   // ── Sohbet konuşması — karşılıklı + konuya bağlı baloncuk ───────────────────
   /// Sohbette karşıdaki kişi (yüz dönme + sıra için). null = solo/yok.
   VillagerEntity? convoPartner;
+
   /// Konuşmanın replik ikonları — konuya göre seçilmiş sıralı emoji dizisi
   /// (ör. çiftçi sohbeti 🌾💧☀️). Rastgele tek emoji yerine "konu".
   List<String> convoIcons = const [];
+
   /// Konuşmanın toplam süresi — sıra hesabı (elapsed = total - chatBubbleTime).
   double convoTotal = 0;
+
   /// Çiftte "başlatan" mı — replikleri sırayla bölüşmek için (0,2.. vs 1,3..).
   bool convoStarter = false;
 
@@ -547,6 +584,7 @@ class VillagerEntity extends WorkerEntity {
   /// SADECE GÖRSEL: duruş/yüz ifadesini besler — davranışın NEDENİ değildir
   /// (rutin/sosyal seçim artık mood'a bakmaz; sayı davranışı yönetmez).
   double mood = 0.0;
+
   /// Enerji 0..1 — gündüz/iş tüketir, uyku/ısınma doldurur.
   /// SADECE GÖSTERİM (panelde bar) — hiçbir mantık bunu okumaz/gate'lemez.
   double energy = 1.0;
@@ -559,9 +597,11 @@ class VillagerEntity extends WorkerEntity {
   /// kalıcı çöker (mood tabanı), uzun süre çok düşükse köyü terk eder; ayrıca
   /// zümre + köy moraline beslenir. [VillagerMorale] formülü hesaplar.
   double morale = 0.6;
+
   /// Moral kritik eşik altındayken geçen süre (sn) — göç kararı için birikir,
   /// toparlayınca hızla erir. Sahne okur.
   double lowMoraleTime = 0.0;
+
   /// Panelde gösterilecek baskın sebep ("evsiz", "aç", "huzurlu" …). Sahne yazar.
   String moraleReason = 'huzurlu';
 
@@ -575,6 +615,7 @@ class VillagerEntity extends WorkerEntity {
   /// (bkz. scene_crime). Günlük gelir scene_estates'te işlenir ([wealthDailyIncome]),
   /// kayıtta saklanır.
   double wealth = 0;
+
   /// Zanaat ustalığı — bu köylünün her zanaatta biriktirdiği deneyim (birikim
   /// kanalı, bkz. buildings/craft.dart). Yalnız YAPI zanaatları (marangozluk/taş
   /// ustalığı) buradan doğar: odun/taş taşıdıkça artar, eşiği geçen köylü o
@@ -583,6 +624,7 @@ class VillagerEntity extends WorkerEntity {
   final Map<String, double> mastery = {};
   void gainMastery(String craft, double amount) =>
       mastery[craft] = (mastery[craft] ?? 0) + amount;
+
   /// Anlık duygu (geçici tepki). [emotionTime] > 0 iken aktif → renderer bunu
   /// GÖVDE DİLİNE çevirir (emoji DEĞİL): yas çöküşü, sevinç zıplaması, korku
   /// geri çekilmesi vb. Solunca [NpcEmotion.none]'a döner.
@@ -602,7 +644,8 @@ class VillagerEntity extends WorkerEntity {
   /// Anlık bir duygu tetikler: geçici görsel tepki ([dur] sn) + kalıcı mood
   /// kayması ([moodDelta]). Daha güçlü duygu zayıfı ezmez — süre uzar.
   void feel(NpcEmotion e, double dur, {double moodDelta = 0}) {
-    if (e != NpcEmotion.none && (emotion == NpcEmotion.none || dur >= emotionTime)) {
+    if (e != NpcEmotion.none &&
+        (emotion == NpcEmotion.none || dur >= emotionTime)) {
       emotion = e;
       emotionTime = dur;
       _emotionDur = dur;
@@ -620,6 +663,7 @@ class VillagerEntity extends WorkerEntity {
   /// sonra sahneden kaldırılır. Hem doğal ölüm hem olay ölümleri buradan geçer.
   bool isDying = false;
   double _deathT = 0.0, _deathDur = 1.6;
+
   /// Animasyon bitince doğal-ölüm cenazesi düzenlensin mi (olay ölümlerinde
   /// kendi töreni var → false).
   bool deathHoldsFuneral = false;
@@ -627,6 +671,7 @@ class VillagerEntity extends WorkerEntity {
   /// Ölüm animasyonu ilerlemesi 0..1 (renderer çöküş/solma için kullanır).
   double get dyingProgress =>
       _deathDur <= 0 ? 1.0 : (1.0 - _deathT / _deathDur).clamp(0.0, 1.0);
+
   /// Animasyon tamamlandı → sahne bu köylüyü kaldırabilir.
   bool get deathFinished => isDying && _deathT <= 0;
 
@@ -649,6 +694,7 @@ class VillagerEntity extends WorkerEntity {
   /// AI donar (update erken döner), yalnız kenara yürüme sürer.
   bool isLeaving = false;
   double _leaveX = 0, _leaveY = 0;
+
   /// Kenara vardı → sahne bir sonraki geçişte listeden çıkarabilir.
   bool leftVillage = false;
 
@@ -722,12 +768,16 @@ class VillagerEntity extends WorkerEntity {
   /// olunca normal idle/moving döngüsüne döner. [sitArriveX,Y]'ye varınca
   /// "oturuyor", [warmthTimer] tükenince [_releaseSit] çağrılır.
   bool sitClaimed = false;
+
   /// Hedef slot tile koordinatı.
   double sitArriveX = 0, sitArriveY = 0;
+
   /// Ateş merkezinin koordinatı — oturunca yüz ona dönsün.
   double sitFaceX = 0, sitFaceY = 0;
+
   /// Oturma süresi (sn). Yürürken de azalmaz; varınca tikleyince azalır.
   double warmthTimer = 0;
+
   /// Slot'u serbest bırakan callback — scene_firepit_gather verir.
   void Function()? _releaseSit;
 
@@ -744,17 +794,23 @@ class VillagerEntity extends WorkerEntity {
 
   /// Scene tarafından çağrılır. Slot rezerve edildikten sonra NPC'yi
   /// "ateş başına git, otur" durumuna sokar.
-  void assignSit(double slotX, double slotY, double centerX, double centerY,
-      double duration, void Function() release) {
-    sitArriveX  = slotX;
-    sitArriveY  = slotY;
-    sitFaceX    = centerX;
-    sitFaceY    = centerY;
+  void assignSit(
+    double slotX,
+    double slotY,
+    double centerX,
+    double centerY,
+    double duration,
+    void Function() release,
+  ) {
+    sitArriveX = slotX;
+    sitArriveY = slotY;
+    sitFaceX = centerX;
+    sitFaceY = centerY;
     warmthTimer = duration;
     _releaseSit = release;
-    sitClaimed  = true;
-    activity    = VillagerActivity.warm;
-    firePose    = FirePose.sit; // varsayılan; reaksiyon sonradan değiştirebilir
+    sitClaimed = true;
+    activity = VillagerActivity.warm;
+    firePose = FirePose.sit; // varsayılan; reaksiyon sonradan değiştirebilir
     chatBubbleIcon = '';
     chatBubbleTime = 0;
   }
@@ -769,7 +825,7 @@ class VillagerEntity extends WorkerEntity {
   void _cancelSit() {
     _releaseSit?.call();
     _releaseSit = null;
-    sitClaimed  = false;
+    sitClaimed = false;
     warmthTimer = 0;
     if (activity == VillagerActivity.warm ||
         activity == VillagerActivity.storytelling ||
@@ -790,23 +846,25 @@ class VillagerEntity extends WorkerEntity {
     int? personalitySeed,
     this.ageDays = 0,
     this.lifespanDays = double.infinity,
-  })  : personalitySeed = personalitySeed ?? _autoPersonalitySeed(),
-        // Yetişkin/yaşlı yaşıyla doğan (kurucu/göçmen) çağrısını "köyde büyürken"
-        // bulmadı → an tetiklenmesin. Bebek (ageDays≈0) büyüyünce keşfeder.
-        callingFound = ageDays >= kAdultStartDay,
-        // Genç ve üstü yaşla doğan köylü çocukluğunu köyde yaşamadı → "büyüdü"
-        // anı tetiklenmesin.
-        grewUpMoment = ageDays >= kYouthStartDay,
-        targetCol = startCol,
-        targetRow = startRow,
-        // [visual] verilirse (kayıttan yükleme) birebir o görsel kimlik korunur;
-        // yoksa seed'ten üretilir. Cinsiyet dışarıdan zorlanır → name ile uyumlu.
-        super(
-          visual: visual ??
-              NpcVisual.fromSeed(
-                  visualSeed ?? _autoSeed(type, startCol, startRow),
-                  forceMale: male),
-        ) {
+  }) : personalitySeed = personalitySeed ?? _autoPersonalitySeed(),
+       // Yetişkin/yaşlı yaşıyla doğan (kurucu/göçmen) çağrısını "köyde büyürken"
+       // bulmadı → an tetiklenmesin. Bebek (ageDays≈0) büyüyünce keşfeder.
+       callingFound = ageDays >= kAdultStartDay,
+       // Genç ve üstü yaşla doğan köylü çocukluğunu köyde yaşamadı → "büyüdü"
+       // anı tetiklenmesin.
+       grewUpMoment = ageDays >= kYouthStartDay,
+       targetCol = startCol,
+       targetRow = startRow,
+       // [visual] verilirse (kayıttan yükleme) birebir o görsel kimlik korunur;
+       // yoksa seed'ten üretilir. Cinsiyet dışarıdan zorlanır → name ile uyumlu.
+       super(
+         visual:
+             visual ??
+             NpcVisual.fromSeed(
+               visualSeed ?? _autoSeed(type, startCol, startRow),
+               forceMale: male,
+             ),
+       ) {
     // Yetişkin/yaşlı doğanlar (kurucu/göçmen) köye zaten birikmiş bir varlıkla
     // gelir → Nüfus Defteri ilk günden çeşitli görünsün (seed'ten deterministik).
     // Bebekler 0'dan başlar, büyüyüp meslek edinince kazanmaya başlar.
@@ -828,10 +886,10 @@ class VillagerEntity extends WorkerEntity {
   static int _autoPersonalitySeed() => Random().nextInt(0x7FFFFFFF);
 
   static int _autoSeed(VillagerType t, double c, double r) =>
-      t.index * 7919
-      ^ (c * 1009).toInt() * 13
-      ^ (r * 1031).toInt() * 31
-      ^ DateTime.now().microsecondsSinceEpoch & 0xFFFF;
+      t.index * 7919 ^
+      (c * 1009).toInt() * 13 ^
+      (r * 1031).toInt() * 31 ^
+      DateTime.now().microsecondsSinceEpoch & 0xFFFF;
 
   bool get isSleeping => state == VillagerState.sleeping;
 
@@ -846,16 +904,18 @@ class VillagerEntity extends WorkerEntity {
   /// [restlessFor] süresince uyku akışı kapalı kalır; sonra köylü — hâlâ geceyse
   /// — yatağına döner. Zaten uyanıksa hiçbir şey yapmaz.
   void rouseShivering({double restlessFor = 95.0}) {
-    if (state != VillagerState.sleeping && state != VillagerState.walkingToSleep) {
+    if (state != VillagerState.sleeping &&
+        state != VillagerState.walkingToSleep) {
       return;
     }
-    state            = VillagerState.idle;
-    idleTimer        = 0.3 + (personalitySeed % 7) * 0.1; // herkes aynı anda doğrulmasın
+    state = VillagerState.idle;
+    idleTimer =
+        0.3 + (personalitySeed % 7) * 0.1; // herkes aynı anda doğrulmasın
     isInsideBuilding = false;
-    isWalking        = false;
-    _wasSleeping     = false;
-    _wakeDelay       = -1.0;
-    sleepRestless    = restlessFor;
+    isWalking = false;
+    _wasSleeping = false;
+    _wakeDelay = -1.0;
+    sleepRestless = restlessFor;
   }
 
   /// Villager torch eligibility: yetişkin/yaşlı, dışarıda, uyumuyor, ateşte
@@ -871,7 +931,8 @@ class VillagerEntity extends WorkerEntity {
       state != VillagerState.sleeping &&
       !isSeatedAtFire &&
       (hasProfession || lanternMandate);
-  bool get isCarrying => state == VillagerState.carrying || state == VillagerState.walkingToPickup;
+  bool get isCarrying =>
+      state == VillagerState.carrying || state == VillagerState.walkingToPickup;
 
   /// Güncel yaşam evresi (yaştan türer).
   LifeStage get lifeStage => lifeStageForDays(ageDays);
@@ -894,107 +955,155 @@ class VillagerEntity extends WorkerEntity {
   WanderBehavior get _activeBehavior =>
       isChild ? WanderBehavior.playful : behavior;
 
-  void assignCarryTask(Object item, double pickX, double pickY,
-      double destX, double destY, {void Function()? onDelivered}) {
-    _pickupItem  = item;
-    _pickupX     = pickX;
-    _pickupY     = pickY;
-    _deliverX    = destX;
-    _deliverY    = destY;
+  void assignCarryTask(
+    Object item,
+    double pickX,
+    double pickY,
+    double destX,
+    double destY, {
+    void Function()? onDelivered,
+  }) {
+    _pickupItem = item;
+    _pickupX = pickX;
+    _pickupY = pickY;
+    _deliverX = destX;
+    _deliverY = destY;
     _onDelivered = onDelivered;
-    state        = VillagerState.walkingToPickup;
-    isWalking    = true;
+    state = VillagerState.walkingToPickup;
+    isWalking = true;
+  }
+
+  /// Taşıma zincirinin kalan gerçek süresi. Panel koordinatları bilmez; modelin
+  /// yürüdüğü pickup/teslim hedefini ve aynı [speed] değerini okuyarak ETA'yı
+  /// tek kapıdan verir. null = şu an taşıma işi yok.
+  double? get deliveryEtaSeconds {
+    final double tx, ty;
+    if (state == VillagerState.walkingToPickup) {
+      tx = _pickupX;
+      ty = _pickupY;
+    } else if (state == VillagerState.carrying) {
+      tx = _deliverX;
+      ty = _deliverY;
+    } else {
+      return null;
+    }
+    final dx = tx - gridX;
+    final dy = ty - gridY;
+    final pace = speed * carrySpeedMultiplier;
+    return pace <= 0.01 ? null : sqrt(dx * dx + dy * dy) / pace;
   }
 
   static double _speedFor(VillagerType t) {
     switch (t) {
-      case VillagerType.farmer:     return 1.2;
-      case VillagerType.merchant:   return 0.9;
-      case VillagerType.blacksmith: return 0.8;
-      case VillagerType.guard:      return 1.6;
-      case VillagerType.priest:     return 0.7; // ağır, ölçülü adım
-      case VillagerType.miner:      return 0.85;
-      case VillagerType.fisher:     return 1.1;
-      case VillagerType.shepherd:   return 1.0;  // sürünün temposu
-      case VillagerType.hunter:     return 1.45; // sessiz ve çevik
-      case VillagerType.miller:     return 0.9;
-      case VillagerType.innkeeper:  return 0.95;
+      case VillagerType.farmer:
+        return 1.2;
+      case VillagerType.merchant:
+        return 0.9;
+      case VillagerType.blacksmith:
+        return 0.8;
+      case VillagerType.guard:
+        return 1.6;
+      case VillagerType.priest:
+        return 0.7; // ağır, ölçülü adım
+      case VillagerType.miner:
+        return 0.85;
+      case VillagerType.fisher:
+        return 1.1;
+      case VillagerType.shepherd:
+        return 1.0; // sürünün temposu
+      case VillagerType.hunter:
+        return 1.45; // sessiz ve çevik
+      case VillagerType.miller:
+        return 0.9;
+      case VillagerType.innkeeper:
+        return 0.95;
     }
   }
 
   static WanderBehavior _behaviorFor(VillagerType t) => switch (t) {
-        VillagerType.guard      => WanderBehavior.patrol,
-        VillagerType.priest     => WanderBehavior.ponder,
-        VillagerType.merchant   => WanderBehavior.stroll,
-        VillagerType.farmer     => WanderBehavior.stroll,
-        VillagerType.blacksmith => WanderBehavior.homebody,
-        VillagerType.miner      => WanderBehavior.homebody,
-        VillagerType.fisher     => WanderBehavior.waterside,
-        // Çoban + avcı köyün dışına açılır (geniş roam) — sürü/orman peşinde.
-        VillagerType.shepherd   => WanderBehavior.stroll,
-        VillagerType.hunter     => WanderBehavior.patrol,
-        // Değirmenci + hancı işinin başında durur.
-        VillagerType.miller     => WanderBehavior.homebody,
-        VillagerType.innkeeper  => WanderBehavior.homebody,
-      };
+    VillagerType.guard => WanderBehavior.patrol,
+    VillagerType.priest => WanderBehavior.ponder,
+    VillagerType.merchant => WanderBehavior.stroll,
+    VillagerType.farmer => WanderBehavior.stroll,
+    VillagerType.blacksmith => WanderBehavior.homebody,
+    VillagerType.miner => WanderBehavior.homebody,
+    VillagerType.fisher => WanderBehavior.waterside,
+    // Çoban + avcı köyün dışına açılır (geniş roam) — sürü/orman peşinde.
+    VillagerType.shepherd => WanderBehavior.stroll,
+    VillagerType.hunter => WanderBehavior.patrol,
+    // Değirmenci + hancı işinin başında durur.
+    VillagerType.miller => WanderBehavior.homebody,
+    VillagerType.innkeeper => WanderBehavior.homebody,
+  };
 
   // ── Kişilik parametreleri (etkin davranışa göre) ───────────────────────────
   /// Spawn çevresinde dolaşma yarıçapı (tile).
   double get _roamRadius => switch (_activeBehavior) {
-        WanderBehavior.patrol    => 3.0,
-        WanderBehavior.ponder    => 1.5,
-        WanderBehavior.stroll    => 3.5,
-        WanderBehavior.homebody  => 1.8,
-        WanderBehavior.waterside => 4.0,
-        WanderBehavior.playful   => 3.0, // yuva çevresinde koşuşturur
-      };
+    WanderBehavior.patrol => 3.0,
+    WanderBehavior.ponder => 1.5,
+    WanderBehavior.stroll => 3.5,
+    WanderBehavior.homebody => 1.8,
+    WanderBehavior.waterside => 4.0,
+    WanderBehavior.playful => 3.0, // yuva çevresinde koşuşturur
+  };
 
   /// Hedefe varınca duraklama süresi aralığı (saniye).
   (double, double) get _dwellRange => switch (_activeBehavior) {
-        WanderBehavior.patrol    => (2.0, 4.0),
-        WanderBehavior.ponder    => (4.0, 9.0),
-        WanderBehavior.stroll    => (1.5, 4.5),
-        WanderBehavior.homebody  => (1.0, 3.0),
-        WanderBehavior.waterside => (2.0, 5.0),
-        WanderBehavior.playful   => (0.2, 1.2), // hiç durmaz, hep hareket halinde
-      };
+    WanderBehavior.patrol => (2.0, 4.0),
+    WanderBehavior.ponder => (4.0, 9.0),
+    WanderBehavior.stroll => (1.5, 4.5),
+    WanderBehavior.homebody => (1.0, 3.0),
+    WanderBehavior.waterside => (2.0, 5.0),
+    WanderBehavior.playful => (0.2, 1.2), // hiç durmaz, hep hareket halinde
+  };
 
   /// Yürürken ana hıza uygulanan çarpan — kişiliğe göre tempo.
-  double get _tripSpeed => switch (_activeBehavior) {
-        WanderBehavior.patrol    => 1.0,
-        WanderBehavior.ponder    => 0.55,
-        WanderBehavior.stroll    => 0.7,
-        WanderBehavior.homebody  => 0.65,
-        WanderBehavior.waterside => 0.85,
-        WanderBehavior.playful   => 1.35, // kısa hızlı koşuşturmalar
-      };
+  double get _tripSpeed {
+    // Mesleğin boş-zaman yürüyüş kişiliği işe gidişi yavaşlatmaz. Değirmenci
+    // homebody olduğu için eski çarpan 0.65'ti; ekranın öbür ucundaki değirmene
+    // bir gerçek dakika boyunca yürüyordu. İş hedefinde tam adım, gezintide
+    // kişisel tempo korunur.
+    if (hasActiveJob || mind.owns(IntentKind.work)) return 1.0;
+    return switch (_activeBehavior) {
+      WanderBehavior.patrol => 1.0,
+      WanderBehavior.ponder => 0.55,
+      WanderBehavior.stroll => 0.7,
+      WanderBehavior.homebody => 0.65,
+      WanderBehavior.waterside => 0.85,
+      WanderBehavior.playful => 1.35, // kısa hızlı koşuşturmalar
+    };
+  }
 
   /// Boştayken bir "bakınma anında" yön değiştirme olasılığı.
   double get _lookChance => switch (_activeBehavior) {
-        WanderBehavior.patrol    => 0.7,
-        WanderBehavior.ponder    => 0.5,
-        WanderBehavior.stroll    => 0.4,
-        WanderBehavior.homebody  => 0.55,
-        WanderBehavior.waterside => 0.35,
-        WanderBehavior.playful   => 0.85, // meraklı, sürekli etrafa bakar
-      };
+    WanderBehavior.patrol => 0.7,
+    WanderBehavior.ponder => 0.5,
+    WanderBehavior.stroll => 0.4,
+    WanderBehavior.homebody => 0.55,
+    WanderBehavior.waterside => 0.35,
+    WanderBehavior.playful => 0.85, // meraklı, sürekli etrafa bakar
+  };
 
   /// Yeni hedef seçerken bazen hiç gitmeyip olduğu yerde oyalanma olasılığı.
   double get _stayChance => switch (_activeBehavior) {
-        WanderBehavior.patrol    => 0.0,
-        WanderBehavior.ponder    => 0.45,
-        WanderBehavior.stroll    => 0.12,
-        WanderBehavior.homebody  => 0.22,
-        WanderBehavior.waterside => 0.10,
-        WanderBehavior.playful   => 0.05, // nadiren durur
-      };
+    WanderBehavior.patrol => 0.0,
+    WanderBehavior.ponder => 0.45,
+    WanderBehavior.stroll => 0.12,
+    WanderBehavior.homebody => 0.22,
+    WanderBehavior.waterside => 0.10,
+    WanderBehavior.playful => 0.05, // nadiren durur
+  };
 
-  void update(double dt, int gridCols, int gridRows, Random rng,
-      {Set<(int, int)> waterTiles  = const {},
-       Set<(int, int)> softObstacles = const {},
-       double dayLight = 1.0,
-       double rainIntensity = 0.0}) {
-
+  void update(
+    double dt,
+    int gridCols,
+    int gridRows,
+    Random rng, {
+    Set<(int, int)> waterTiles = const {},
+    Set<(int, int)> softObstacles = const {},
+    double dayLight = 1.0,
+    double rainIntensity = 0.0,
+  }) {
     // Ölüyor — AI/hareket donar (renderer çöküşü çizer, scene timer'ı sayar).
     if (isDying) return;
 
@@ -1049,22 +1158,28 @@ class VillagerEntity extends WorkerEntity {
     // sabah da onunla birlikte kayar: yasak şafakla kalkar.
     final nightAt = kNightThreshold + curfewBias;
     final isNight = dayLight < nightAt;
-    final isDawn  = dayLight >= (kDawnThreshold > nightAt + 0.02
-        ? kDawnThreshold
-        : nightAt + 0.02);
+    final isDawn =
+        dayLight >=
+        (kDawnThreshold > nightAt + 0.02 ? kDawnThreshold : nightAt + 0.02);
 
     // ── Porter: finish delivery first even at night ──────────────────────────
     // dt * carrySpeedMultiplier → step = speed * carrySpeedMult * dt (matematik
     // birebir aynı, ama moveTowards path-aware: uzak pickup yolları A* ile takip).
     if (state == VillagerState.walkingToPickup) {
-      if (moveTowards(_pickupX, _pickupY, dt, arriveD: 0.25, speedScale: carrySpeedMultiplier)) {
-        gridX       = _pickupX;
-        gridY       = _pickupY;
+      if (moveTowards(
+        _pickupX,
+        _pickupY,
+        dt,
+        arriveD: 0.25,
+        speedScale: carrySpeedMultiplier,
+      )) {
+        gridX = _pickupX;
+        gridY = _pickupY;
         loco.reset();
         carriedItem = _pickupItem;
         _pickupItem = null;
-        state       = VillagerState.carrying;
-        isWalking   = false;
+        state = VillagerState.carrying;
+        isWalking = false;
       } else {
         isWalking = true;
       }
@@ -1074,16 +1189,22 @@ class VillagerEntity extends WorkerEntity {
     }
 
     if (state == VillagerState.carrying) {
-      if (moveTowards(_deliverX, _deliverY, dt, arriveD: 0.25, speedScale: carrySpeedMultiplier)) {
+      if (moveTowards(
+        _deliverX,
+        _deliverY,
+        dt,
+        arriveD: 0.25,
+        speedScale: carrySpeedMultiplier,
+      )) {
         gridX = _deliverX;
         gridY = _deliverY;
         loco.reset();
         _onDelivered?.call();
         _onDelivered = null;
-        carriedItem  = null;
-        state        = VillagerState.idle;
-        idleTimer    = 0.4 + rng.nextDouble() * 1.5;
-        isWalking    = false;
+        carriedItem = null;
+        state = VillagerState.idle;
+        idleTimer = 0.4 + rng.nextDouble() * 1.5;
+        isWalking = false;
       } else {
         isWalking = true;
       }
@@ -1105,8 +1226,8 @@ class VillagerEntity extends WorkerEntity {
           // Slot'a yürü
           isWalking = true;
           if (moveTowards(sitArriveX, sitArriveY, dt, arriveD: 0.18)) {
-            gridX     = sitArriveX;
-            gridY     = sitArriveY;
+            gridX = sitArriveX;
+            gridY = sitArriveY;
             loco.reset();
             isWalking = false;
             facingRight = sitFaceX > gridX;
@@ -1114,11 +1235,11 @@ class VillagerEntity extends WorkerEntity {
         } else {
           // Oturmuş — süre tüket, yüzü ateşe dön.
           facingRight = sitFaceX > gridX;
-          isWalking   = false;
+          isWalking = false;
           warmthTimer -= dt;
           if (warmthTimer <= 0) {
             _cancelSit();
-            state     = VillagerState.idle;
+            state = VillagerState.idle;
             idleTimer = 0.4 + rng.nextDouble() * 0.8;
           }
         }
@@ -1141,7 +1262,8 @@ class VillagerEntity extends WorkerEntity {
     // OLMAMALI ve tören/oturma altında olmamalı. Şafak şartı histerezisi
     // korur: yatma ve kalkma eşikleri çakışırsa köylü şafakta yat-kalk
     // titrerdi (bkz. test/curfew_test.dart flip sayacı).
-    final canReturnToBed = _wasSleeping &&
+    final canReturnToBed =
+        _wasSleeping &&
         !isDawn &&
         state == VillagerState.idle &&
         activity == VillagerActivity.none &&
@@ -1154,10 +1276,10 @@ class VillagerEntity extends WorkerEntity {
         sleepRestless <= 0) {
       _wasSleeping = true;
       if (sleepTarget != null) {
-        state     = VillagerState.walkingToSleep;
+        state = VillagerState.walkingToSleep;
         isWalking = true;
       } else {
-        state     = VillagerState.sleeping;
+        state = VillagerState.sleeping;
         isWalking = false;
       }
     } else if (isDawn && _wasSleeping) {
@@ -1168,12 +1290,12 @@ class VillagerEntity extends WorkerEntity {
       if (_wakeDelay < 0) _wakeDelay = 0.5 + rng.nextDouble() * 6.0;
       _wakeDelay -= dt;
       if (_wakeDelay <= 0) {
-        state               = VillagerState.idle;
-        idleTimer           = 1.0 + rng.nextDouble() * 2.0;
-        _wasSleeping        = false;
-        _wakeDelay          = -1.0; // bir sonraki gece için sıfırla
-        isInsideBuilding    = false;
-        facingRight         = rng.nextBool();
+        state = VillagerState.idle;
+        idleTimer = 1.0 + rng.nextDouble() * 2.0;
+        _wasSleeping = false;
+        _wakeDelay = -1.0; // bir sonraki gece için sıfırla
+        isInsideBuilding = false;
+        facingRight = rng.nextBool();
         feel(NpcEmotion.content, 1.6, moodDelta: 0.02); // gerinme/esneme
       }
     }
@@ -1181,7 +1303,8 @@ class VillagerEntity extends WorkerEntity {
     if (state == VillagerState.walkingToSleep) {
       final (tx, ty) = sleepTarget!;
       if (moveTowards(tx, ty, dt, arriveD: 0.55)) {
-        gridX = tx; gridY = ty;
+        gridX = tx;
+        gridY = ty;
         loco.reset();
         state = VillagerState.sleeping;
         isWalking = false;
@@ -1203,7 +1326,7 @@ class VillagerEntity extends WorkerEntity {
     // ── Normal gündüz davranışı ───────────────────────────────────────────
     switch (state) {
       case VillagerState.idle:
-        idleTimer  -= dt;
+        idleTimer -= dt;
         _lookTimer -= dt;
         // Boştayken ara sıra etrafa bakınma — donuk durmak yerine canlı durur.
         if (_lookTimer <= 0) {
@@ -1222,14 +1345,20 @@ class VillagerEntity extends WorkerEntity {
             // Kısa bekleme — iş loop'u (~0.6 sn) devralana dek yerinde dur.
             idleTimer = 0.5;
           } else if (canRunErrands) {
-          // Oyalanma bitti → amaçlı hedef akışı. Sahne rutin sistemi
-          // (needsErrand) zamana/ihtiyaca göre bir POI atar; o gelene kadar
-          // köylü "ne yapsam" diye kısa bekler. Atanamazsa (POI yok / çocuk)
-          // eski kişisel dolaşmaya düşer — donuk kalmaz.
+            // Oyalanma bitti → amaçlı hedef akışı. Sahne rutin sistemi
+            // (needsErrand) zamana/ihtiyaca göre bir POI atar; o gelene kadar
+            // köylü "ne yapsam" diye kısa bekler. Atanamazsa (POI yok / çocuk)
+            // eski kişisel dolaşmaya düşer — donuk kalmaz.
             needsErrand = true;
             _errandWait += dt;
             if (_errandWait > 4.0) {
-              _pickNewTarget(gridCols, gridRows, rng, waterTiles, softObstacles);
+              _pickNewTarget(
+                gridCols,
+                gridRows,
+                rng,
+                waterTiles,
+                softObstacles,
+              );
               _errandWait = 0;
             }
           } else {
@@ -1245,7 +1374,13 @@ class VillagerEntity extends WorkerEntity {
         // mikro-salınım yapıyor, her salınımda ışınlanıyordu. Artık varış
         // yarıçapı gerçekçi (0.32) ve snap yok — lokomosyon zaten frenleyerek
         // geliyor, kalan farkı render lerp'i yutuyor.
-        if (moveTowards(targetCol, targetRow, dt, arriveD: 0.32, speedScale: _tripSpeed)) {
+        if (moveTowards(
+          targetCol,
+          targetRow,
+          dt,
+          arriveD: 0.32,
+          speedScale: _tripSpeed,
+        )) {
           // Devriyede vardığında sıradaki uca dön.
           if (_activeBehavior == WanderBehavior.patrol) _patToB = !_patToB;
           state = VillagerState.idle;
@@ -1262,10 +1397,10 @@ class VillagerEntity extends WorkerEntity {
         } else if (waterTiles.contains((gridX.round(), gridY.round()))) {
           // Kısa hop (< 3 tile) için A* skip edilir; düz adım suya saplanırsa
           // pushback ile geri al + idle'a düş, hedefi yeniden seçsin.
-          gridX     = prevX;
-          gridY     = prevY;
+          gridX = prevX;
+          gridY = prevY;
           loco.reset();
-          state     = VillagerState.idle;
+          state = VillagerState.idle;
           idleTimer = 0.1;
         }
 
@@ -1276,22 +1411,28 @@ class VillagerEntity extends WorkerEntity {
         break; // yukarıda ele alındı
     }
 
-    isWalking  = state == VillagerState.moving;
+    isWalking = state == VillagerState.moving;
     walkPhase += dt * (isWalking ? speed * 5.5 : 1.2);
     walkPhase %= pi * 2;
   }
 
   /// Kişiliğe göre yeni dolaşma hedefi seçer.  Hedefler artık spawn noktasına
   /// demirlenir (haritada başıboş sürüklenme yerine kendi bölgesinde kalır).
-  void _pickNewTarget(int cols, int rows, Random rng,
-      Set<(int, int)> waterTiles, Set<(int, int)> softObstacles) {
-    const pad  = 1;
+  void _pickNewTarget(
+    int cols,
+    int rows,
+    Random rng,
+    Set<(int, int)> waterTiles,
+    Set<(int, int)> softObstacles,
+  ) {
+    const pad = 1;
     final minC = pad.toDouble(), minR = pad.toDouble();
     final maxC = (cols - 1 - pad).toDouble();
     final maxR = (rows - 1 - pad).toDouble();
 
     // Bazı kişilikler bazen hiç hareket etmeden olduğu yerde oyalanır.
-    if (_activeBehavior != WanderBehavior.patrol && rng.nextDouble() < _stayChance) {
+    if (_activeBehavior != WanderBehavior.patrol &&
+        rng.nextDouble() < _stayChance) {
       final (lo, hi) = _dwellRange;
       idleTimer = lo + rng.nextDouble() * (hi - lo);
       return;
@@ -1302,7 +1443,7 @@ class VillagerEntity extends WorkerEntity {
       if (!_patInit) _initPatrol(rng, minC, minR, maxC, maxR, waterTiles);
       targetCol = _patToB ? _patBx : _patAx;
       targetRow = _patToB ? _patBy : _patAy;
-      state     = VillagerState.moving;
+      state = VillagerState.moving;
       return;
     }
 
@@ -1312,7 +1453,15 @@ class VillagerEntity extends WorkerEntity {
     (double, double)? result;
     if (_activeBehavior == WanderBehavior.waterside) {
       result = _waterEdgeTarget(
-          rng, radius, waterTiles, softObstacles, minC, minR, maxC, maxR);
+        rng,
+        radius,
+        waterTiles,
+        softObstacles,
+        minC,
+        minR,
+        maxC,
+        maxR,
+      );
     }
     // YÖN SÜREKLİLİĞİ — yeni hedef, mevcut gidişin devamı olmaya çalışır.
     // Bu olmadan ardışık iki hedef yarı yarıya zıt yönde çıkıyor ve köylü
@@ -1324,11 +1473,18 @@ class VillagerEntity extends WorkerEntity {
       hy = 0.0;
     }
     result ??= pickWanderTarget(
-      spawnCol, spawnRow, radius, rng,
-      waterTiles:    waterTiles,
+      spawnCol,
+      spawnRow,
+      radius,
+      rng,
+      waterTiles: waterTiles,
       softObstacles: softObstacles,
-      minC: minC, minR: minR, maxC: maxC, maxR: maxR,
-      headX: hx, headY: hy,
+      minC: minC,
+      minR: minR,
+      maxC: maxC,
+      maxR: maxR,
+      headX: hx,
+      headY: hy,
       // Yarım tile'lık "hedefler" varış yarıçapının içinde kalıp anlık
       // titremeye dönüşüyordu — gerçek bir yolculuk en az bu kadar olsun.
       minDist: 1.4,
@@ -1337,18 +1493,24 @@ class VillagerEntity extends WorkerEntity {
     if (result != null) {
       targetCol = result.$1;
       targetRow = result.$2;
-      state     = VillagerState.moving;
+      state = VillagerState.moving;
     } else {
       idleTimer = 0.3 + rng.nextDouble();
     }
   }
 
   /// Devriye uçlarını spawn'dan geçen rastgele bir eksen boyunca bir kez kurar.
-  void _initPatrol(Random rng, double minC, double minR, double maxC,
-      double maxR, Set<(int, int)> waterTiles) {
+  void _initPatrol(
+    Random rng,
+    double minC,
+    double minR,
+    double maxC,
+    double maxR,
+    Set<(int, int)> waterTiles,
+  ) {
     _patInit = true;
-    final ang  = rng.nextDouble() * pi;          // 0..π → eksen yönü
-    final half = 2.5 + rng.nextDouble() * 2.0;   // yarı uzunluk
+    final ang = rng.nextDouble() * pi; // 0..π → eksen yönü
+    final half = 2.5 + rng.nextDouble() * 2.0; // yarı uzunluk
     final dx = cos(ang) * half, dy = sin(ang) * half;
     _patAx = (spawnCol - dx).clamp(minC, maxC);
     _patAy = (spawnRow - dy).clamp(minR, maxR);
@@ -1356,27 +1518,41 @@ class VillagerEntity extends WorkerEntity {
     _patBy = (spawnRow + dy).clamp(minR, maxR);
     // Bir uç su üstüne denk gelirse spawn'a çek.
     if (waterTiles.contains((_patAx.round(), _patAy.round()))) {
-      _patAx = spawnCol; _patAy = spawnRow;
+      _patAx = spawnCol;
+      _patAy = spawnRow;
     }
     if (waterTiles.contains((_patBx.round(), _patBy.round()))) {
-      _patBx = spawnCol; _patBy = spawnRow;
+      _patBx = spawnCol;
+      _patBy = spawnRow;
     }
   }
 
   /// Su kenarı hedefi — suya komşu ama su olmayan bir tile tercih eder.
   /// Bulunamazsa null döner (çağıran normal dolaşmaya düşer).
-  (double, double)? _waterEdgeTarget(Random rng, double radius,
-      Set<(int, int)> waterTiles, Set<(int, int)> softObstacles,
-      double minC, double minR, double maxC, double maxR) {
+  (double, double)? _waterEdgeTarget(
+    Random rng,
+    double radius,
+    Set<(int, int)> waterTiles,
+    Set<(int, int)> softObstacles,
+    double minC,
+    double minR,
+    double maxC,
+    double maxR,
+  ) {
     for (int i = 0; i < 10; i++) {
-      final tx = (spawnCol + rng.nextDouble() * radius * 2 - radius)
-          .clamp(minC, maxC);
-      final ty = (spawnRow + rng.nextDouble() * radius * 2 - radius)
-          .clamp(minR, maxR);
+      final tx = (spawnCol + rng.nextDouble() * radius * 2 - radius).clamp(
+        minC,
+        maxC,
+      );
+      final ty = (spawnRow + rng.nextDouble() * radius * 2 - radius).clamp(
+        minR,
+        maxR,
+      );
       final c = tx.round(), r = ty.round();
       if (waterTiles.contains((c, r))) continue;
       if (softObstacles.contains((c, r))) continue;
-      final nearWater = waterTiles.contains((c + 1, r)) ||
+      final nearWater =
+          waterTiles.contains((c + 1, r)) ||
           waterTiles.contains((c - 1, r)) ||
           waterTiles.contains((c, r + 1)) ||
           waterTiles.contains((c, r - 1));

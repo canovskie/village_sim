@@ -2,8 +2,8 @@
 //
 // Taze bir köy kurar (kurucu kadro + hiçbir bina yok), birkaç saniye sim
 // akıtır ve kareyi PNG'ye çeker. Bakılacak şey: oyuncu ekrana ilk baktığında
-// NE YAPACAĞINI anlıyor mu — HUD şeridindeki cümle ile dünyadaki işaret aynı
-// şeyi mi gösteriyor.
+// NE YAPACAĞINI anlıyor mu — sağdaki tek görev kartı ile bir kerelik rehber
+// aynı hedefe mi bakıyor; kalıcı tekrar eden panel var mı.
 //
 // Çalıştır:  OUT=/tmp/onboard.png flutter run -d macos -t lib/tools/onboarding_capture_main.dart
 import 'dart:io';
@@ -33,14 +33,13 @@ Future<void> main() async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     waited++;
   }
-  // Akış taraması (0.5 sn) birkaç kez dönsün ki adım + işaret otursun.
+  // Akış taraması (0.5 sn) birkaç kez dönsün ki adım + rehber otursun.
   // 8 sn: kuruluş açılışı SIRALI — önce kurucunun repliği (~5 sn), sonra
   // öğretici spot. 4 sn'de kare çekmek spotu hiç görmeden "yok" demekti.
   await Future<void>.delayed(const Duration(seconds: 8));
-  // TEŞHİS: kare çekilmeden önce akışın nabzını bas. "Şerit bazen yok"
-  // şikâyetinde tek soru bu — tarama koştu mu, koştuysa ne buldu?
+  // TEŞHİS: kare çekilmeden önce akışın nabzını bas. Rehber bazen
+  // yoksa tek soru bu — tarama koştu mu, koştuysa ne buldu?
   stdout.writeln('FLOW: $kFlowDebug');
   await captureBoundary(_boundaryKey, Platform.environment['OUT'] ?? '/tmp/onboard.png', pixelRatio: 1.5);
   exit(0);
 }
-

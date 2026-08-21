@@ -90,11 +90,6 @@ class _LoadingScreenState extends State<LoadingScreen>
                   color: AppUi.textHi,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'asset yükleniyor',
-                style: AppUi.label.copyWith(letterSpacing: 1.6),
-              ),
             ],
           ),
         ),

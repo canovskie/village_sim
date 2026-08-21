@@ -6,6 +6,18 @@ part of '../main.dart';
 extension _SceneFlow on _VillageSceneState {
   static const double _kFlowScan = 0.5;
 
+  /// OCAK → ÇADIR → ODUNCU zinciri gerçekten dönene kadar oyun kuruluş
+  /// modundadır. Bu bir save bayrağı değil, dünyanın gerçek durumundan
+  /// türetilir; eski kayıtlar ve yarıda kapatılan oyunlar doğru yerden devam eder.
+  bool get _foundingModeActive =>
+      _charterTier == 0 && !_completedQuests.contains('lumber');
+
+  /// Kuruluş modunda oyuncunun yerini seçtiği, aradaki usta bekleyişinin
+  /// otomatik geçileceği iki ilk yapı.
+  bool _isFoundingBootstrapBuilding(BuildingType type) =>
+      _foundingModeActive &&
+      (type == BuildingType.tent || type == BuildingType.lumberCamp);
+
   /// QuestContext'i mevcut state'ten kurar.
   QuestContext _questContext() => QuestContext(
     buildings: _buildings,
@@ -144,6 +156,19 @@ extension _SceneFlow on _VillageSceneState {
       } else {
         _showNotification('✓ ${q.label}');
       }
+      if (q.id == 'lumber') {
+        // İlk üretim gerçekten çalıştı: kısıtlı katalog ve kapalı
+        // yönetim kapıları aynı karede açılır. Ayrı bir modal yok;
+        // kontrol devri dünyanın akmayı sürdürdüğü tek bir cümledir.
+        _chronicle(
+          'Kuruluş tamamlandı; ilk odun indi ve köy kendi işini çevirmeye başladı.',
+          icon: '🌿',
+          milestone: true,
+        );
+        _showNotification(
+          '🌿 Köy kendi kendine dönüyor — yönetim artık sende.',
+        );
+      }
       break; // bir scan'de bir ödül → sürekli, sakin akış
     }
 
@@ -189,22 +214,20 @@ extension _SceneFlow on _VillageSceneState {
   void _refreshCurrentStep(QuestContext ctx) {
     final open = QuestBook.activeQuests(ctx, _completedQuests);
     _stepCache = open.isEmpty ? null : open.first;
-    _refreshStepBeacon();
+    _refreshStepTarget();
   }
 
-  /// ADIMIN HEDEFİNİ DÜNYADA İŞARETLE — "nereye bakacağım"ın cevabı.
+  /// ADIMIN DÜNYA HEDEFİ — yalnız "Göster" kamerasının gideceği yer.
   ///
-  /// Kuruluş adımları metin olarak doğruydu ama ekranda hiçbir yeri
-  /// göstermiyordu: oyuncu "ağaçların dibi"ni kendisi aramak zorundaydı.
-  /// Yönlendirmenin yetersiz kalmasının asıl sebebi cümlelerin kötü olması
-  /// değil, hiçbir cümlenin bir YERİ göstermemesiydi.
-  ///
-  /// Yer hedefi `_stepBeacon`'a (ızgara koordinatı) yazılır; çizim oraya sakin
-  /// bir işaret koyar.
+  /// Eskiden bu koordinat dünyada sürekli nefes alan bir ok da çiziyordu.
+  /// "Köy merkezi" kesin bir yerleştirme hedefi olmadığı için ok, oyuncuya
+  /// anlamlı bir eylem söylemeden ortalıkta geziyordu. Artık koordinat yalnız
+  /// oyuncu karttaki "Göster"i isterse kamerayı taşır; hedefin açıklaması da
+  /// o anda açılan [GuideSpotlight] kartında kalır.
   ///
   /// Tarama başına bir kez çalışır (0.5 sn) — her karede en yakın ağacı
   /// aramak boşuna tarama olurdu.
-  void _refreshStepBeacon() {
+  void _refreshStepTarget() {
     final q = _stepCache?.quest;
     if (q == null) {
       _stepBeacon = null;
@@ -216,7 +239,7 @@ extension _SceneFlow on _VillageSceneState {
     // zorlanmasına yol açıyordu.
     if (q.buildTarget == BuildingType.firepit &&
         _placing == BuildingType.firepit) {
-      _stepBeacon = null;
+      _stepBeacon = foundingHearthCenter();
       return;
     }
     switch (q.pointer) {
@@ -237,6 +260,42 @@ extension _SceneFlow on _VillageSceneState {
       case QuestPointer.villageCenter:
         _stepBeacon = _villageHeart();
     }
+  }
+
+  /// Kuruluş görevinin yerleştirilmiş ama henüz bitmemiş şantiyesi.
+  ///
+  /// Oyuncu binayı seçip yerini koyduğunda öğretilecek eylemi zaten yaptı.
+  /// Bundan sonrası inşaatçının yürümesini izlemek; takipçi bu değer
+  /// doluyken "Beklemeyi geç" kaçışını gösterir.
+  BuildOrder? get _foundingWaitOrder {
+    if (_charterTier != 0) return null;
+    final target = _currentStep?.quest.buildTarget;
+    if (target == null) return null;
+    for (final o in _orders) {
+      if (!o.completed && o.type == target) return o;
+    }
+    return null;
+  }
+
+  /// Kuruluşta yer seçimi yapılmış bir şantiyenin yalnız BEKLEME kısmını atla.
+  /// Kaynak/yerleştirme kararı korunur; bina normal tamamlanma hattına girer.
+  void _skipFoundingBuildWait() {
+    final o = _foundingWaitOrder;
+    if (o == null) return;
+    setStateHere(() {
+      final exists = _buildings.any(
+        (b) => b.type == o.type && b.col == o.col && b.row == o.row,
+      );
+      if (!exists) {
+        _buildings.add(BuildingEntity(type: o.type, col: o.col, row: o.row));
+      }
+      o.progress = 1.0;
+      o.completed = true;
+      o.startAnnounced = true;
+    });
+    AudioManager.instance.playSfx(Sfx.buildDone);
+    final label = kBuildingMeta[o.type]?.label ?? 'Yapı';
+    _showNotification('⏩ $label tamamlandı — inşaat bekleyişi geçildi.');
   }
 
   /// Verilen noktalardan köyün kalbine EN YAKIN olanı. "En yakın çalı" değil
@@ -270,18 +329,13 @@ extension _SceneFlow on _VillageSceneState {
     return t;
   }
 
-  /// Köyün kalbi — ocak varsa orası, yoksa köylülerin ortalama konumu
-  /// (kuruluşun ilk saniyesinde henüz hiçbir bina yok, ama insanlar var).
+  /// Köyün kalbi — ocak varsa orası, kuruluş sırasında kuru merkez açıklık.
   (double, double)? _villageHeart() {
     final fp = _firepitBuilding;
     if (fp != null) return (fp.col + fp.cols / 2.0, fp.row + fp.rows / 2.0);
-    if (_villagers.isEmpty) return null;
-    var sx = 0.0, sy = 0.0;
-    for (final v in _villagers) {
-      sx += v.gridX;
-      sy += v.gridY;
-    }
-    return (sx / _villagers.length, sy / _villagers.length);
+    // Kuruluş kafilesi harita merkezine YÜRÜYOR. Kafile girişinin ortalamasını
+    // kalp sayarsak kamera rastgele giriş kıyısına (bazen göle) kilitlenir.
+    return foundingHearthCenter();
   }
 
   /// Bu görevi isteyen yaşayan köylü — yoksa null (kurucu ölmüş olabilir).

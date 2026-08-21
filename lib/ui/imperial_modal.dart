@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../systems/imperial.dart';
+import '../systems/imperial_raid.dart';
 import '../systems/regime.dart';
-import '../text/voice.dart';
 import 'app_ui.dart';
+import 'gameplay_dioramas.dart';
 import 'mobile_ui.dart';
 
 /// İmparatorluk vergi heyetiyle pazarlık modalı. Karar ZORUNLU (boşluğa
@@ -16,6 +17,10 @@ class ImperialModal extends StatefulWidget {
   final bool canRansom; // fidye karşılanabiliyor mu
   final double resistChance; // heyeti kovma başarı şansı (0 = denenemez)
   final ImperialDefensePreview defensePreview;
+  final int wood;
+  final String raidTitle;
+  final String raidIntel;
+  final ImperialRaidScenario? raidScenario;
 
   // ── REJİM (bkz. systems/regime.dart) ────────────────────────────────────────
   /// Pazarlık eşiğinden düşülen — tüccar köy daha ucuza anlaşır (görüntü sahne
@@ -35,6 +40,7 @@ class ImperialModal extends StatefulWidget {
   final VoidCallback onRansom;
   final void Function(double offerFraction) onHaggle;
   final VoidCallback onResist;
+  final void Function(ImperialDefensePlan plan)? onDefensePlan;
 
   const ImperialModal({
     super.key,
@@ -51,6 +57,10 @@ class ImperialModal extends StatefulWidget {
       chance: 0,
       note: 'Savunma bilgisi hazır değil.',
     ),
+    this.wood = 0,
+    this.raidTitle = 'Sınır Baskısı',
+    this.raidIntel = '',
+    this.raidScenario,
     this.haggleEase = 0,
     this.postureNote = '',
     this.councilVerdict,
@@ -60,6 +70,7 @@ class ImperialModal extends StatefulWidget {
     required this.onRansom,
     required this.onHaggle,
     required this.onResist,
+    this.onDefensePlan,
   });
 
   @override
@@ -68,51 +79,7 @@ class ImperialModal extends StatefulWidget {
 
 class _ImperialModalState extends State<ImperialModal> {
   bool _haggling = false;
-
-  /// Metin tohumu — TALEBE bağlı, rebuild'e değil. setState (pazarlık sekmesi)
-  /// cümleyi değiştirmesin diye Random değil, sabit bir tohum kullanılır.
-  int get _seed =>
-      (widget.demand.amount * 131 + widget.demand.kind.index * 17) & 0x7fffffff;
-
-  /// Komutanın masadaki sözü. İtibar merdiveni: yüksekte neredeyse nazik bir
-  /// memur, düşükte sıkılmış bir cellat. Sesini hiçbir kademede yükseltmez.
-  String get _commanderLine {
-    final f = widget.favor;
-    final d = widget.demand;
-    if (_haggling) {
-      return Voice.pick([
-        'Komutan kalemi bıraktı. "Söyle. Ama önce şunu bil: rakamı ben koymadım, '
-            'ben yalnız eksiğini tamamlarım."',
-        'Komutan sana ilk kez doğrudan baktı. "Dinliyorum. Kısa tut, atlar ayakta."',
-        'Komutan defteri parmağıyla tuttu. "Bir sayı söyle köylü. Yanlış sayı da '
-            'bir cevaptır, unutma."',
-      ], _seed);
-    }
-    final opener = Voice.pick(
-      f >= 0.7
-          ? const [
-              'Komutan atından indi, eldivenini çıkardı. Defteri açtı:',
-              'Komutan seni adınla selamladı, sonra defteri açtı:',
-            ]
-          : f >= 0.25
-          ? const [
-              'Bölük meydanda dizildi. Komutan defterini açtı, satırı buldu:',
-              'Komutan inmedi bile. Eyerden okudu:',
-            ]
-          : const [
-              'Askerler sıraya girdi, mızraklar indi. Komutan defteri sıkıntıyla açtı:',
-              'Komutan bugün konuşmak istemiyor. Satırı buldu, parmağını üstüne koydu:',
-            ],
-      _seed,
-    );
-    final close = f >= 0.7
-        ? 'Bugün de kolay geçsin.'
-        : f >= 0.25
-        ? 'Akşama kadar vaktin var.'
-        : 'Bu satır bir şekilde kapanacak. Nasıl kapanacağı senin elinde değil, '
-              'ne kadar acıyacağı senin elinde.';
-    return '$opener\n"${d.label}." ${d.bite} $close';
-  }
+  bool _planningDefense = false;
 
   String get _favorWord {
     final f = widget.favor;
@@ -142,11 +109,11 @@ class _ImperialModalState extends State<ImperialModal> {
   }
 
   /// Anlatı bloğu — heyetin künyesi, komutanın satırı, itibar, rejim bandı.
-  List<Widget> _narrative() => [
+  List<Widget> _narrative(ImperialDemand demand, {bool compact = false}) => [
     Row(
       children: [
-        const GameIcon(GameIconData.bow, size: 22, color: AppUi.rust),
-        const SizedBox(width: 10),
+        GameIcon(GameIconData.bow, size: compact ? 18 : 22, color: AppUi.rust),
+        SizedBox(width: compact ? 7 : 10),
         Flexible(
           child: Text(
             'İMPARATORLUK HEYETİ',
@@ -155,21 +122,49 @@ class _ImperialModalState extends State<ImperialModal> {
         ),
       ],
     ),
-    const SizedBox(height: 8),
+    SizedBox(height: compact ? 4 : 8),
     Text(
-      _haggling ? 'Pazarlık masası' : 'Defter açıldı',
-      style: AppUi.title.copyWith(fontSize: 18),
+      _haggling ? 'Pazarlık masası' : widget.raidTitle,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: AppUi.title.copyWith(fontSize: compact ? 16 : 18),
     ),
-    const SizedBox(height: 10),
+    if (!_haggling && widget.raidIntel.isNotEmpty) ...[
+      SizedBox(height: compact ? 3 : 5),
+      Text(
+        widget.raidIntel,
+        maxLines: compact ? 1 : 3,
+        overflow: TextOverflow.ellipsis,
+        style: AppUi.body.copyWith(
+          fontSize: compact ? 9.5 : 10.5,
+          height: compact ? 1.2 : 1.35,
+          color: AppUi.rust,
+        ),
+      ),
+    ],
+    SizedBox(height: compact ? 5 : 9),
+    ImperialDemandDiorama(
+      demand: demand,
+      fraction: 1,
+      favor: widget.favor,
+      guards: widget.defensePreview.guards,
+      height: compact ? 96 : 154,
+    ),
+    SizedBox(height: compact ? 5 : 9),
     Text(
-      _commanderLine,
-      style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
+      _haggling ? 'Komutan kalemi bıraktı. Teklifini bekliyor.' : demand.bite,
+      maxLines: compact ? 2 : 3,
+      overflow: TextOverflow.ellipsis,
+      style: AppUi.body.copyWith(
+        fontSize: compact ? 10.5 : 11.5,
+        height: compact ? 1.25 : 1.4,
+      ),
     ),
-    const SizedBox(height: 12),
-    _favorBar(),
+    SizedBox(height: compact ? 5 : 9),
+    _favorBar(compact: compact),
     if (widget.postureNote.isNotEmpty || widget.councilVerdict != null) ...[
-      const SizedBox(height: 10),
-      _regimeBanner(),
+      SizedBox(height: compact ? 5 : 10),
+      _regimeBanner(compact: compact),
     ],
   ];
 
@@ -196,12 +191,10 @@ class _ImperialModalState extends State<ImperialModal> {
                     children: [
                       Expanded(
                         flex: 5,
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: _narrative(),
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _narrative(d, compact: true),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -209,17 +202,17 @@ class _ImperialModalState extends State<ImperialModal> {
                       const SizedBox(width: 10),
                       Expanded(
                         flex: 4,
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (_haggling)
-                                ..._haggleOptions(d)
-                              else
-                                ..._mainOptions(d),
-                            ],
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (_haggling)
+                              ..._haggleOptions(d)
+                            else if (_planningDefense)
+                              ..._defensePlanOptions()
+                            else
+                              ..._mainOptions(d),
+                          ],
                         ),
                       ),
                     ],
@@ -236,19 +229,37 @@ class _ImperialModalState extends State<ImperialModal> {
   Widget _wideBody(ImperialDemand d) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: 760),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(26),
           child: AppReveal(
             child: AppPanel(
               accent: AppUi.rust,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ..._narrative(),
-                  const AppDivider(),
-                  if (_haggling) ..._haggleOptions(d) else ..._mainOptions(d),
+                  SizedBox(
+                    width: 300,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _narrative(d),
+                    ),
+                  ),
+                  const SizedBox(width: 18),
+                  Container(width: 1, height: 330, color: AppUi.line),
+                  const SizedBox(width: 18),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: _haggling
+                          ? _haggleOptions(d)
+                          : _planningDefense
+                          ? _defensePlanOptions()
+                          : _mainOptions(d),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -258,26 +269,49 @@ class _ImperialModalState extends State<ImperialModal> {
     );
   }
 
-  Widget _favorBar() {
+  Widget _favorBar({bool compact = false}) {
+    final lit = (widget.favor.clamp(0.0, 1.0) * 5).round();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Etiket ÜSTTE, kendi satırında. AppStatBar'ın yan etiket yuvası 72dp;
-        // "İMPARATORLUK İTİBARIN" oraya sığmayıp üç satıra ve kelime ORTASINDAN
-        // bölünüyordu ("İMPARAT / ORLUK / İTİBARIN").
-        const Text('İMPARATORLUK İTİBARIN', style: AppUi.label),
-        const SizedBox(height: 6),
-        AppStatBar(
-          label: '',
-          labelWidth: 0,
-          value: widget.favor.clamp(0.0, 1.0),
-          trailing: '${(widget.favor * 100).round()}%',
-          color: _favorColor,
+        Row(
+          children: [
+            for (var i = 0; i < 5; i++) ...[
+              Container(
+                width: compact ? 12 : 15,
+                height: compact ? 12 : 15,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: i < lit ? _favorColor : AppUi.surface1,
+                  border: Border.all(color: i < lit ? _favorColor : AppUi.line),
+                ),
+                child: i < lit
+                    ? const Center(
+                        child: Text('•', style: TextStyle(fontSize: 8)),
+                      )
+                    : null,
+              ),
+              if (i != 4) SizedBox(width: compact ? 3 : 5),
+            ],
+            SizedBox(width: compact ? 6 : 9),
+            Text(
+              'İTİBAR',
+              style: AppUi.label.copyWith(
+                color: _favorColor,
+                fontSize: compact ? 8 : null,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
+        SizedBox(height: compact ? 2 : 4),
         Text(
-          'İmparatorluğun defterinde $_favorWord.',
-          style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+          _favorWord,
+          maxLines: compact ? 1 : null,
+          overflow: compact ? TextOverflow.ellipsis : null,
+          style: AppUi.body.copyWith(
+            fontSize: compact ? 9.5 : 10.5,
+            color: AppUi.textLo,
+          ),
         ),
       ],
     );
@@ -287,10 +321,12 @@ class _ImperialModalState extends State<ImperialModal> {
   /// Bu, imparatorluk masasının iç yönetişimle kesiştiği yer: baskı köyünde
   /// söz tek elden senindir, hür köyde meclis bir duruş gösterir ve dışına
   /// çıkmak meşruiyet yer.
-  Widget _regimeBanner() {
+  Widget _regimeBanner({bool compact = false}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 11),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(8, 6, 8, 6)
+          : const EdgeInsets.fromLTRB(12, 10, 12, 11),
       decoration: BoxDecoration(
         color: AppUi.surface0,
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -303,32 +339,39 @@ class _ImperialModalState extends State<ImperialModal> {
           if (widget.postureNote.isNotEmpty)
             Text(
               '⚑ ${widget.postureNote}',
+              maxLines: compact ? 1 : null,
+              overflow: compact ? TextOverflow.ellipsis : null,
               style: AppUi.body.copyWith(
-                fontSize: 11,
-                height: 1.4,
+                fontSize: compact ? 9.5 : 11,
+                height: compact ? 1.2 : 1.4,
                 color: AppUi.textMid,
               ),
             ),
           if (widget.councilVerdict != null) ...[
-            if (widget.postureNote.isNotEmpty) const SizedBox(height: 7),
+            if (widget.postureNote.isNotEmpty)
+              SizedBox(height: compact ? 3 : 7),
             Text(
               '🏛 ${widget.councilLine}',
+              maxLines: compact ? 1 : null,
+              overflow: compact ? TextOverflow.ellipsis : null,
               style: AppUi.bodyHi.copyWith(
-                fontSize: 11.5,
-                height: 1.4,
+                fontSize: compact ? 9.5 : 11.5,
+                height: compact ? 1.2 : 1.4,
                 color: AppUi.accent,
               ),
             ),
-            const SizedBox(height: 3),
-            Text(
-              'Başka türlü seçersen meclise rağmen karar vermiş olursun — '
-              'moral ve huzur bunun bedelini öder.',
-              style: AppUi.body.copyWith(
-                fontSize: 9.5,
-                height: 1.35,
-                color: AppUi.textLo,
+            if (!compact) ...[
+              const SizedBox(height: 3),
+              Text(
+                'Başka türlü seçersen meclise rağmen karar vermiş olursun — '
+                'moral ve huzur bunun bedelini öder.',
+                style: AppUi.body.copyWith(
+                  fontSize: 9.5,
+                  height: 1.35,
+                  color: AppUi.textLo,
+                ),
               ),
-            ),
+            ],
           ],
         ],
       ),
@@ -382,12 +425,14 @@ class _ImperialModalState extends State<ImperialModal> {
       // Direniş — yalnız köy yeterince güçlüyse (muhafız/kalabalık). Başarı
       // şansı AÇIKÇA gösterilir (#7 saydamlık): körlemesine kumar değil.
       if (widget.resistChance > 0) ...[
-        _defensePanel(),
+        if (!useCompactGameUi(context)) _defensePanel(),
         _opt(
           'Savunmayı seç  ·  %${(widget.resistChance * 100).round()} başarı',
-          'Sonuç otomatik hesaplanır; çatışmayı sen yönetmezsin.',
+          'Köyün eşikte nasıl dövüşeceğini belirle.',
           AppUi.accent,
-          widget.onResist,
+          widget.onDefensePlan == null
+              ? widget.onResist
+              : () => setState(() => _planningDefense = true),
           defies: _defies(ImperialVerdict.resist),
         ),
       ],
@@ -399,6 +444,51 @@ class _ImperialModalState extends State<ImperialModal> {
         defies: _refuseDefies,
       ),
     ];
+  }
+
+  List<Widget> _defensePlanOptions() {
+    final plans = [
+      for (final plan in ImperialDefensePlan.values)
+        imperialPlanPreview(
+          plan: plan,
+          defense: widget.defensePreview,
+          wood: widget.wood,
+        ),
+    ];
+    return [
+      Text('SAVUNMA DÜZENİ', style: AppUi.label.copyWith(color: AppUi.accent)),
+      const SizedBox(height: 3),
+      Text(
+        'Seçtiğin düzen yalnız oranı değil, yenilginin can bedelini de değiştirir.',
+        style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+      ),
+      for (final p in plans)
+        _opt(
+          '${p.plan.title}  ·  %${(_scenarioChance(p) * 100).round()}',
+          '${p.plan.detail}${p.woodCost > 0 ? '  Bedel: ${p.woodCost}🪵.' : ''}',
+          p.available ? AppUi.accent : AppUi.textLo,
+          p.available ? () => widget.onDefensePlan!(p.plan) : null,
+          defies: _defies(ImperialVerdict.resist),
+        ),
+      const SizedBox(height: 8),
+      _opt(
+        'Geri dön',
+        'Henüz mızraklar inmedi.',
+        AppUi.textLo,
+        () => setState(() => _planningDefense = false),
+      ),
+    ];
+  }
+
+  double _scenarioChance(ImperialPlanPreview preview) {
+    final raid = widget.raidScenario;
+    if (raid == null) return preview.chance;
+    final planBonus = switch (preview.plan) {
+      ImperialDefensePlan.holdLine => raid.holdBonus,
+      ImperialDefensePlan.barricade => raid.barricadeBonus,
+      ImperialDefensePlan.counterCharge => raid.chargeBonus,
+    };
+    return (preview.chance + planBonus - raid.attackDelta).clamp(.02, .95);
   }
 
   Widget _defensePanel() {
@@ -454,8 +544,11 @@ class _ImperialModalState extends State<ImperialModal> {
                       style: AppUi.bodyHi.copyWith(fontSize: 11),
                     ),
                     const SizedBox(width: 10),
-                    const GameIcon(GameIconData.axe,
-                        size: 16, color: AppUi.accentSoft),
+                    const GameIcon(
+                      GameIconData.axe,
+                      size: 16,
+                      color: AppUi.accentSoft,
+                    ),
                     const SizedBox(width: 3),
                     Text(
                       '${p.tools}',
@@ -514,14 +607,18 @@ class _ImperialModalState extends State<ImperialModal> {
     bool defies = false,
   }) {
     final disabled = onTap == null;
+    final compact = useCompactGameUi(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.only(top: compact ? 5 : 8),
       child: GestureDetector(
         onTap: onTap,
         child: Opacity(
           opacity: disabled ? 0.5 : 1.0,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 14,
+              vertical: compact ? 7 : 11,
+            ),
             decoration: BoxDecoration(
               color: AppUi.surface0,
               borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -535,7 +632,11 @@ class _ImperialModalState extends State<ImperialModal> {
                     Expanded(
                       child: Text(
                         label,
-                        style: AppUi.bodyHi.copyWith(fontSize: 13.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.bodyHi.copyWith(
+                          fontSize: compact ? 12 : 13.5,
+                        ),
                       ),
                     ),
                     // Meclise rağmen seçim: küçük kırmızı uyarı rozeti.
@@ -567,8 +668,10 @@ class _ImperialModalState extends State<ImperialModal> {
                 const SizedBox(height: 2),
                 Text(
                   detail,
+                  maxLines: compact ? 1 : null,
+                  overflow: compact ? TextOverflow.ellipsis : null,
                   style: AppUi.body.copyWith(
-                    fontSize: 10.5,
+                    fontSize: compact ? 9.5 : 10.5,
                     color: AppUi.textLo,
                   ),
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../systems/estate_system.dart';
 import '../systems/law_book.dart';
 import '../systems/law_compass.dart';
+import '../systems/oral_tradition.dart';
 import '../systems/regime.dart';
 import '../text/voice.dart';
 import 'app_ui.dart';
@@ -30,13 +31,13 @@ enum _NodeState { sealed, open, next, locked, foreclosed }
 
 /// Tema rengi — petek yapraklarını ayırır (kol renklerinden türer/genişler).
 Color themeColor(LawTheme t) => switch (t) {
-      LawTheme.toprak => AppUi.sage,
-      LawTheme.suru => const Color(0xFFC9A24B),
-      LawTheme.aile => const Color(0xFFC97B94),
-      LawTheme.koy => AppUi.accent,
-      LawTheme.asayis => AppUi.rust,
-      LawTheme.inanc => AppUi.info,
-    };
+  LawTheme.toprak => AppUi.sage,
+  LawTheme.suru => const Color(0xFFC9A24B),
+  LawTheme.aile => const Color(0xFFC97B94),
+  LawTheme.koy => AppUi.accent,
+  LawTheme.asayis => AppUi.rust,
+  LawTheme.inanc => AppUi.info,
+};
 
 class LawBookView extends StatefulWidget {
   final Set<String> sealed;
@@ -147,10 +148,10 @@ class _LawBookViewState extends State<LawBookView>
   }
 
   _NodeState _nodeOf(_LawState s) => switch (s) {
-        _LawState.enacted => _NodeState.sealed,
-        _LawState.available => _NodeState.open,
-        _ => _NodeState.locked,
-      };
+    _LawState.enacted => _NodeState.sealed,
+    _LawState.available => _NodeState.open,
+    _ => _NodeState.locked,
+  };
 
   int _enactedInTheme(LawTheme t) =>
       LawBook.ofTheme(t).where((l) => widget.sealed.contains(l.id)).length;
@@ -355,8 +356,9 @@ class _LawBookViewState extends State<LawBookView>
                     animation: Listenable.merge([_bloom, _pulse]),
                     builder: (_, _) {
                       final spot = _spotlight;
-                      final voiceTheme =
-                          spot == null ? null : LawBook.themeOf(spot);
+                      final voiceTheme = spot == null
+                          ? null
+                          : LawBook.themeOf(spot);
                       return Stack(
                         clipBehavior: Clip.none,
                         children: [
@@ -395,9 +397,10 @@ class _LawBookViewState extends State<LawBookView>
           children: [
             Icon(Icons.arrow_back_rounded, size: 15, color: color),
             const SizedBox(width: 6),
-            Text('TEMALAR',
-                style: AppUi.label
-                    .copyWith(fontSize: 9, color: AppUi.textHi)),
+            Text(
+              'TEMALAR',
+              style: AppUi.label.copyWith(fontSize: 9, color: AppUi.textHi),
+            ),
           ],
         ),
       ),
@@ -414,7 +417,14 @@ class _LawBookViewState extends State<LawBookView>
     final color = branchColor(l.branch);
     final tappable = st == _LawState.available && !_inkWet;
     final spotlight = l.id == widget.spotlightId && st == _LawState.available;
-    final (tag, tagColor) = _tagFor(st, color, spotlight, day: widget.sealedOn[l.id]);
+    final customary = OralTradition.supports(l, widget.ctx.memory);
+    final (tag, tagColor) = _tagFor(
+      st,
+      color,
+      spotlight,
+      customary: customary,
+      day: widget.sealedOn[l.id],
+    );
     return AnimatedBuilder(
       animation: _pulse,
       builder: (_, _) => BoardTile(
@@ -439,50 +449,62 @@ class _LawBookViewState extends State<LawBookView>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [
-                    Expanded(
-                      child: Text(_shortTitle(l.title),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _shortTitle(l.title),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppUi.bodyHi.copyWith(
-                              fontSize: 12,
-                              height: 1.1,
-                              color: st == _LawState.graveLocked
-                                  ? AppUi.textLo
-                                  : AppUi.textHi)),
-                    ),
-                    if (showTheme) ...[
-                      const SizedBox(width: 5),
-                      SemanticIcon(LawBook.themeOf(l).icon,
+                            fontSize: 12,
+                            height: 1.1,
+                            color: st == _LawState.graveLocked
+                                ? AppUi.textLo
+                                : AppUi.textHi,
+                          ),
+                        ),
+                      ),
+                      if (showTheme) ...[
+                        const SizedBox(width: 5),
+                        SemanticIcon(
+                          LawBook.themeOf(l).icon,
                           size: 10,
                           color: AppUi.textLo,
-                          fallback: GameIconData.scroll),
+                          fallback: GameIconData.scroll,
+                        ),
+                      ],
+                      const SizedBox(width: 5),
+                      _stateDot(st, color),
                     ],
-                    const SizedBox(width: 5),
-                    _stateDot(st, color),
-                  ]),
+                  ),
                   const SizedBox(height: 2),
-                  Row(children: [
-                    Expanded(
-                      child: Text(tag,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          tag,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: AppUi.label.copyWith(
-                              fontSize: 7.5,
-                              color: tagColor,
-                              letterSpacing: 0.5)),
-                    ),
-                    if (upkeepLabel(l) != null) ...[
-                      const SizedBox(width: 5),
-                      _upkeepChip(l),
+                            fontSize: 7.5,
+                            color: tagColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      if (upkeepLabel(l) != null) ...[
+                        const SizedBox(width: 5),
+                        _upkeepChip(l),
+                      ],
+                      if (st == _LawState.enacted &&
+                          widget.onRepeal != null &&
+                          LawBook.repealable(l)) ...[
+                        const SizedBox(width: 5),
+                        _repealChip(l),
+                      ],
                     ],
-                    if (st == _LawState.enacted &&
-                        widget.onRepeal != null &&
-                        LawBook.repealable(l)) ...[
-                      const SizedBox(width: 5),
-                      _repealChip(l),
-                    ],
-                  ]),
+                  ),
                 ],
               ),
             ),
@@ -518,28 +540,46 @@ class _LawBookViewState extends State<LawBookView>
           border: Border.all(color: c.withValues(alpha: 0.28)),
         ),
         child: Row(
-            // Expanded yalnız tam-genişlik hâlinde kullanılabilir; satır içi
-            // hâlde Row kendi içeriği kadar dar kalmalı.
-            mainAxisSize: inline ? MainAxisSize.min : MainAxisSize.max,
-            children: [
-          Icon(drain ? Icons.trending_down : Icons.trending_up,
-              size: 14, color: c),
-          const SizedBox(width: 8),
-          if (inline)
-            Text(label,
-                style: AppUi.bodyHi.copyWith(
-                    fontSize: 12, color: c, fontWeight: FontWeight.w700))
-          else ...[
-            Expanded(
-              child: Text('Defterin günlük idamesi',
-                  style:
-                      AppUi.body.copyWith(fontSize: 11.5, color: AppUi.textMid)),
+          // Expanded yalnız tam-genişlik hâlinde kullanılabilir; satır içi
+          // hâlde Row kendi içeriği kadar dar kalmalı.
+          mainAxisSize: inline ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            Icon(
+              drain ? Icons.trending_down : Icons.trending_up,
+              size: 14,
+              color: c,
             ),
-            Text(label,
+            const SizedBox(width: 8),
+            if (inline)
+              Text(
+                label,
                 style: AppUi.bodyHi.copyWith(
-                    fontSize: 12, color: c, fontWeight: FontWeight.w700)),
+                  fontSize: 12,
+                  color: c,
+                  fontWeight: FontWeight.w700,
+                ),
+              )
+            else ...[
+              Expanded(
+                child: Text(
+                  'Defterin günlük idamesi',
+                  style: AppUi.body.copyWith(
+                    fontSize: 11.5,
+                    color: AppUi.textMid,
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: AppUi.bodyHi.copyWith(
+                  fontSize: 12,
+                  color: c,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
     );
   }
@@ -553,33 +593,37 @@ class _LawBookViewState extends State<LawBookView>
         borderRadius: BorderRadius.circular(AppUi.radiusSm),
         border: Border.all(color: AppUi.line),
       ),
-      child: Row(children: [
-        const Icon(Icons.search, size: 16, color: AppUi.textLo),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: _search,
-            onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
-            cursorColor: AppUi.accent,
-            style: AppUi.body.copyWith(fontSize: 12.5, color: AppUi.textHi),
-            decoration: InputDecoration(
-              isCollapsed: true,
-              border: InputBorder.none,
-              hintText: 'Ferman ara…',
-              hintStyle:
-                  AppUi.body.copyWith(fontSize: 12.5, color: AppUi.textLo),
+      child: Row(
+        children: [
+          const Icon(Icons.search, size: 16, color: AppUi.textLo),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _search,
+              onChanged: (v) => setState(() => _query = v.trim().toLowerCase()),
+              cursorColor: AppUi.accent,
+              style: AppUi.body.copyWith(fontSize: 12.5, color: AppUi.textHi),
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: 'Ferman ara…',
+                hintStyle: AppUi.body.copyWith(
+                  fontSize: 12.5,
+                  color: AppUi.textLo,
+                ),
+              ),
             ),
           ),
-        ),
-        if (_query.isNotEmpty)
-          GestureDetector(
-            onTap: () => setState(() {
-              _query = '';
-              _search.clear();
-            }),
-            child: const Icon(Icons.close, size: 15, color: AppUi.textLo),
-          ),
-      ]),
+          if (_query.isNotEmpty)
+            GestureDetector(
+              onTap: () => setState(() {
+                _query = '';
+                _search.clear();
+              }),
+              child: const Icon(Icons.close, size: 15, color: AppUi.textLo),
+            ),
+        ],
+      ),
     );
   }
 
@@ -657,25 +701,32 @@ class _LawBookViewState extends State<LawBookView>
           ),
         ),
         const SizedBox(height: 12),
-        Text('Bir temaya dokun — o konunun hükümleri açılır.',
-            textAlign: TextAlign.center,
-            style: AppUi.body.copyWith(
-                fontSize: 11.5,
-                color: AppUi.textLo,
-                fontStyle: FontStyle.italic)),
+        Text(
+          'Bir temaya dokun — o konunun hükümleri açılır.',
+          textAlign: TextAlign.center,
+          style: AppUi.body.copyWith(
+            fontSize: 11.5,
+            color: AppUi.textLo,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
       ],
     );
   }
 
-  Widget _hexAt(String pos, {bool isHub = false, LawTheme? theme, bool voice = false}) {
+  Widget _hexAt(
+    String pos, {
+    bool isHub = false,
+    LawTheme? theme,
+    bool voice = false,
+  }) {
     final off = _off[pos]!;
     final start = _bloomOrder[pos]! * 0.09;
     final raw = ((_bloom.value - start) / 0.55).clamp(0.0, 1.0);
     final t = Curves.easeOutBack.transform(raw);
     final color = isHub ? AppUi.gold : themeColor(theme!);
     final total = isHub ? kLawBook.length : LawBook.ofTheme(theme!).length;
-    final done =
-        isHub ? widget.sealed.length : _enactedInTheme(theme!);
+    final done = isHub ? widget.sealed.length : _enactedInTheme(theme!);
 
     return Positioned(
       left: _cx + off[0] - _hw / 2,
@@ -706,26 +757,38 @@ class _LawBookViewState extends State<LawBookView>
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppUi.gold.withValues(alpha: 0.3)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Text('◆', style: TextStyle(fontSize: 8, color: AppUi.gold)),
-        const SizedBox(width: 7),
-        Flexible(
-          child: Text.rich(
-            TextSpan(children: [
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('◆', style: TextStyle(fontSize: 8, color: AppUi.gold)),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text.rich(
               TextSpan(
-                  text: 'KÖYÜN SESİ  ',
-                  style: AppUi.label.copyWith(
-                      fontSize: 8.5, color: AppUi.gold, letterSpacing: 1.2)),
-              TextSpan(
-                  text: l.title,
-                  style: AppUi.body
-                      .copyWith(fontSize: 11, color: AppUi.textMid)),
-            ]),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+                children: [
+                  TextSpan(
+                    text: 'KÖYÜN SESİ  ',
+                    style: AppUi.label.copyWith(
+                      fontSize: 8.5,
+                      color: AppUi.gold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  TextSpan(
+                    text: l.title,
+                    style: AppUi.body.copyWith(
+                      fontSize: 11,
+                      color: AppUi.textMid,
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
@@ -734,7 +797,8 @@ class _LawBookViewState extends State<LawBookView>
   Widget _themeDrill(LawTheme t) {
     final color = themeColor(t);
     final laws = [
-      for (final l in LawBook.ofTheme(t)) if (_stOf(l) != _LawState.hidden) l
+      for (final l in LawBook.ofTheme(t))
+        if (_stOf(l) != _LawState.hidden) l,
     ];
     final done = _enactedInTheme(t);
     return Column(
@@ -752,39 +816,58 @@ class _LawBookViewState extends State<LawBookView>
               borderRadius: BorderRadius.circular(22),
               border: Border.all(color: color.withValues(alpha: 0.4)),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.arrow_back_rounded, size: 17, color: color),
-              const SizedBox(width: 7),
-              Text('TÜM TEMALAR',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.arrow_back_rounded, size: 17, color: color),
+                const SizedBox(width: 7),
+                Text(
+                  'TÜM TEMALAR',
                   style: AppUi.label.copyWith(
-                      fontSize: 11, color: AppUi.textHi, letterSpacing: 1.4)),
-            ]),
+                    fontSize: 11,
+                    color: AppUi.textHi,
+                    letterSpacing: 1.4,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
-        Row(children: [
-          _themeBadge(t, color),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(t.label,
-                  style: AppUi.title.copyWith(fontSize: 18, height: 1.1)),
-              const SizedBox(height: 2),
-              Text('$done / ${LawBook.ofTheme(t).length} hüküm deftere girdi',
-                  style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
-            ],
-          ),
-        ]),
+        Row(
+          children: [
+            _themeBadge(t, color),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  t.label,
+                  style: AppUi.title.copyWith(fontSize: 18, height: 1.1),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '$done / ${LawBook.ofTheme(t).length} hüküm deftere girdi',
+                  style: AppUi.body.copyWith(
+                    fontSize: 10.5,
+                    color: AppUi.textLo,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         Container(
           height: 1,
           decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [
-              color.withValues(alpha: 0.45),
-              color.withValues(alpha: 0),
-            ]),
+            gradient: LinearGradient(
+              colors: [
+                color.withValues(alpha: 0.45),
+                color.withValues(alpha: 0),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -808,13 +891,13 @@ class _LawBookViewState extends State<LawBookView>
             !LawBook.groupTaken(l, widget.sealed) &&
             LawBook.gateLocked(l, widget.ctx) &&
             !l.grave)
-          l
+          l,
     ];
     if (dormant.isEmpty) return const SizedBox.shrink();
 
     final reasons = <String>{
       for (final l in dormant)
-        if (l.gateReason.isNotEmpty) l.gateReason
+        if (l.gateReason.isNotEmpty) l.gateReason,
     }.take(themeEmpty ? 2 : 0).toList();
 
     return Padding(
@@ -836,16 +919,22 @@ class _LawBookViewState extends State<LawBookView>
                   ? '🔒 Bu sayfa henüz yazılmadı — ${dormant.length} hüküm köyün hâlini bekliyor.'
                   : '🔒 ${dormant.length} hüküm daha var; köyün hâli değişince deftere düşer.',
               style: AppUi.body.copyWith(
-                  fontSize: 11, color: AppUi.textLo, height: 1.35),
+                fontSize: 11,
+                color: AppUi.textLo,
+                height: 1.35,
+              ),
             ),
             for (final r in reasons) ...[
               const SizedBox(height: 7),
-              Text('“$r”',
-                  style: AppUi.body.copyWith(
-                      fontSize: 10.5,
-                      color: AppUi.textLo.withValues(alpha: 0.85),
-                      fontStyle: FontStyle.italic,
-                      height: 1.35)),
+              Text(
+                '“$r”',
+                style: AppUi.body.copyWith(
+                  fontSize: 10.5,
+                  color: AppUi.textLo.withValues(alpha: 0.85),
+                  fontStyle: FontStyle.italic,
+                  height: 1.35,
+                ),
+              ),
             ],
           ],
         ),
@@ -854,27 +943,31 @@ class _LawBookViewState extends State<LawBookView>
   }
 
   Widget _themeBadge(LawTheme t, Color color) => SizedBox(
-        width: 46,
-        height: 40,
-        child: ClipPath(
-          clipper: _HexClipper(),
-          child: Container(
-            color: color.withValues(alpha: 0.18),
-            alignment: Alignment.center,
-            child: SemanticIcon(t.icon,
-                size: 20, color: color, fallback: GameIconData.scroll),
-          ),
+    width: 46,
+    height: 40,
+    child: ClipPath(
+      clipper: _HexClipper(),
+      child: Container(
+        color: color.withValues(alpha: 0.18),
+        alignment: Alignment.center,
+        child: SemanticIcon(
+          t.icon,
+          size: 20,
+          color: color,
+          fallback: GameIconData.scroll,
         ),
-      );
+      ),
+    ),
+  );
 
   // ── ARAMA ──────────────────────────────────────────────────────────────────
 
   /// Aramanın vurduğu fermanlar — hem masaüstü listesi hem tahta sayfalayıcısı
   /// aynı sonucu okusun diye ayrı.
   List<LawDef> _searchHits() => [
-        for (final l in kLawBook)
-          if (_stOf(l) != _LawState.hidden && _matches(l)) l
-      ];
+    for (final l in kLawBook)
+      if (_stOf(l) != _LawState.hidden && _matches(l)) l,
+  ];
 
   Widget _searchResults() {
     final hits = _searchHits();
@@ -882,11 +975,14 @@ class _LawBookViewState extends State<LawBookView>
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 26),
         child: Center(
-          child: Text('“$_query” ile eşleşen ferman yok.',
-              style: AppUi.body.copyWith(
-                  fontSize: 11.5,
-                  color: AppUi.textLo,
-                  fontStyle: FontStyle.italic)),
+          child: Text(
+            '“$_query” ile eşleşen ferman yok.',
+            style: AppUi.body.copyWith(
+              fontSize: 11.5,
+              color: AppUi.textLo,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
         ),
       );
     }
@@ -894,9 +990,14 @@ class _LawBookViewState extends State<LawBookView>
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text('${hits.length} sonuç',
-            style: AppUi.label
-                .copyWith(fontSize: 9, color: AppUi.textLo, letterSpacing: 1.4)),
+        Text(
+          '${hits.length} sonuç',
+          style: AppUi.label.copyWith(
+            fontSize: 9,
+            color: AppUi.textLo,
+            letterSpacing: 1.4,
+          ),
+        ),
         const SizedBox(height: 8),
         for (var i = 0; i < hits.length; i++) ...[
           _lawTile(hits[i], entrance: i, showTheme: true),
@@ -913,7 +1014,14 @@ class _LawBookViewState extends State<LawBookView>
     final color = branchColor(l.branch);
     final tappable = st == _LawState.available && !_inkWet;
     final spotlight = l.id == widget.spotlightId && st == _LawState.available;
-    final (tag, tagColor) = _tagFor(st, color, spotlight, day: widget.sealedOn[l.id]);
+    final customary = OralTradition.supports(l, widget.ctx.memory);
+    final (tag, tagColor) = _tagFor(
+      st,
+      color,
+      spotlight,
+      customary: customary,
+      day: widget.sealedOn[l.id],
+    );
 
     return GestureDetector(
       onTap: tappable ? () => widget.onOpenLaw(l) : null,
@@ -930,83 +1038,101 @@ class _LawBookViewState extends State<LawBookView>
               color: spotlight
                   ? color.withValues(alpha: 0.55)
                   : st == _LawState.enacted
-                      ? color.withValues(alpha: 0.28)
-                      : AppUi.line,
+                  ? color.withValues(alpha: 0.28)
+                  : AppUi.line,
             ),
           ),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _Medallion(
-              state: _nodeOf(st),
-              color: color,
-              icon: l.icon,
-              size: 32,
-              pulse: tappable ? _pulse.value : 0,
-              pop: 0,
-              selected: false,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(children: [
-                    Expanded(
-                      child: Text(_shortTitle(l.title),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppUi.bodyHi.copyWith(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _Medallion(
+                state: _nodeOf(st),
+                color: color,
+                icon: l.icon,
+                size: 32,
+                pulse: tappable ? _pulse.value : 0,
+                pop: 0,
+                selected: false,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _shortTitle(l.title),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppUi.bodyHi.copyWith(
                               fontSize: 12.5,
                               height: 1.1,
                               color: st == _LawState.graveLocked
                                   ? AppUi.textLo
                                   : AppUi.textHi,
-                              fontWeight: FontWeight.w700)),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (showTheme) ...[
+                          const SizedBox(width: 6),
+                          SemanticIcon(
+                            LawBook.themeOf(l).icon,
+                            size: 10,
+                            color: AppUi.textLo,
+                            fallback: GameIconData.scroll,
+                          ),
+                        ],
+                        const SizedBox(width: 6),
+                        _stateDot(st, color),
+                      ],
                     ),
-                    if (showTheme) ...[
-                      const SizedBox(width: 6),
-                      SemanticIcon(LawBook.themeOf(l).icon,
-                          size: 10,
-                          color: AppUi.textLo,
-                          fallback: GameIconData.scroll),
-                    ],
-                    const SizedBox(width: 6),
-                    _stateDot(st, color),
-                  ]),
-                  const SizedBox(height: 3),
-                  Text(LawBook.summary(l.id),
+                    const SizedBox(height: 3),
+                    Text(
+                      LawBook.summary(l.id),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                       style: AppUi.body.copyWith(
-                          fontSize: 10,
-                          height: 1.3,
-                          color: st == _LawState.graveLocked
-                              ? AppUi.textLo.withValues(alpha: 0.7)
-                              : AppUi.textMid)),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Expanded(
-                      child: Text(tag,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppUi.label.copyWith(
+                        fontSize: 10,
+                        height: 1.3,
+                        color: st == _LawState.graveLocked
+                            ? AppUi.textLo.withValues(alpha: 0.7)
+                            : AppUi.textMid,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            tag,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppUi.label.copyWith(
                               fontSize: 7.5,
                               color: tagColor,
-                              letterSpacing: 0.5)),
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        if (upkeepLabel(l) != null) ...[
+                          _upkeepChip(l),
+                          const SizedBox(width: 6),
+                        ],
+                        if (st == _LawState.enacted &&
+                            widget.onRepeal != null &&
+                            LawBook.repealable(l))
+                          _repealChip(l),
+                      ],
                     ),
-                    if (upkeepLabel(l) != null) ...[
-                      _upkeepChip(l),
-                      const SizedBox(width: 6),
-                    ],
-                    if (st == _LawState.enacted &&
-                        widget.onRepeal != null &&
-                        LawBook.repealable(l))
-                      _repealChip(l),
-                  ]),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
         ),
       ),
     );
@@ -1027,9 +1153,14 @@ class _LawBookViewState extends State<LawBookView>
         color: c.withValues(alpha: 0.10),
         border: Border.all(color: c.withValues(alpha: 0.35)),
       ),
-      child: Text(label,
-          style: AppUi.label.copyWith(
-              fontSize: 7.5, letterSpacing: 0.4, color: c)),
+      child: Text(
+        label,
+        style: AppUi.label.copyWith(
+          fontSize: 7.5,
+          letterSpacing: 0.4,
+          color: c,
+        ),
+      ),
     );
   }
 
@@ -1037,42 +1168,51 @@ class _LawBookViewState extends State<LawBookView>
   /// hükümleri bozulabilir. Bedava değil (mürekkep uzun kurur, moral iz
   /// bırakır) ve kimliği yazan hükümlerde hiç görünmez.
   Widget _repealChip(LawDef l) => GestureDetector(
-        onTap: _inkWet ? null : () => widget.onRepeal!(l),
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-                color: AppUi.rust.withValues(alpha: _inkWet ? 0.18 : 0.45)),
-          ),
-          child: Text('feshet',
-              style: AppUi.label.copyWith(
-                  fontSize: 7.5,
-                  letterSpacing: 0.8,
-                  color: _inkWet
-                      ? AppUi.textLo.withValues(alpha: 0.5)
-                      : AppUi.rust)),
+    onTap: _inkWet ? null : () => widget.onRepeal!(l),
+    behavior: HitTestBehavior.opaque,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: AppUi.rust.withValues(alpha: _inkWet ? 0.18 : 0.45),
         ),
-      );
+      ),
+      child: Text(
+        'feshet',
+        style: AppUi.label.copyWith(
+          fontSize: 7.5,
+          letterSpacing: 0.8,
+          color: _inkWet ? AppUi.textLo.withValues(alpha: 0.5) : AppUi.rust,
+        ),
+      ),
+    ),
+  );
 
   /// Hükmün altındaki tek satırlık künye. Mühürlü fermanda GÜN de yazar:
   /// "hangi kışın ortasında imzalamıştım?" sorusunun cevabı kararın yanında
   /// dursun (damgasız eski kayıtlar sade hâline döner).
-  (String, Color) _tagFor(_LawState st, Color color, bool spotlight,
-          {int? day}) =>
-      switch (st) {
-        _LawState.enacted => (
-            day != null && day > 0 ? '$day. gün mühürlendi' : 'deftere girdi',
-            AppUi.gold
-          ),
-        _LawState.graveLocked => ('kilitli — köy büyüyünce', AppUi.textLo),
-        _ => _inkWet
-            ? ('müzakere bekliyor', AppUi.textLo)
-            : (spotlight
-                ? ('köyün sesi · şimdi gerek', color)
-                : ('çıkarılabilir', color)),
-      };
+  (String, Color) _tagFor(
+    _LawState st,
+    Color color,
+    bool spotlight, {
+    required bool customary,
+    int? day,
+  }) => switch (st) {
+    _LawState.enacted => (
+      day != null && day > 0 ? '$day. gün mühürlendi' : 'deftere girdi',
+      AppUi.gold,
+    ),
+    _LawState.graveLocked => ('kilitli — köy büyüyünce', AppUi.textLo),
+    _ =>
+      _inkWet
+          ? ('müzakere bekliyor', AppUi.textLo)
+          : customary
+          ? ('yerleşmiş töre · yazıya geçir', AppUi.gold)
+          : spotlight
+          ? ('köyün sesi · şimdi gerek', color)
+          : ('çıkarılabilir', color),
+  };
 
   String _shortTitle(String t) {
     for (final suf in const [' Fermanı', ' Beratı']) {
@@ -1153,10 +1293,14 @@ class _Hex extends StatelessWidget {
                   clipper: _HexClipper(),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: RadialGradient(colors: [
-                        AppUi.gold.withValues(alpha: 0.15 + voicePulse * 0.22),
-                        AppUi.gold.withValues(alpha: 0.0),
-                      ]),
+                      gradient: RadialGradient(
+                        colors: [
+                          AppUi.gold.withValues(
+                            alpha: 0.15 + voicePulse * 0.22,
+                          ),
+                          AppUi.gold.withValues(alpha: 0.0),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1178,7 +1322,11 @@ class _Hex extends StatelessWidget {
                         center: const Alignment(-0.3, -0.45),
                         radius: 0.9,
                         colors: [
-                          Color.lerp(AppUi.surface2, color, isHub ? 0.16 : 0.22)!,
+                          Color.lerp(
+                            AppUi.surface2,
+                            color,
+                            isHub ? 0.16 : 0.22,
+                          )!,
                           AppUi.surface1,
                         ],
                       ),
@@ -1191,21 +1339,27 @@ class _Hex extends StatelessWidget {
                           const SizedBox(height: 3),
                           SizedBox(
                             width: 96,
-                            child: Text(label,
-                                textAlign: TextAlign.center,
-                                style: AppUi.title.copyWith(
-                                    fontSize: isHub ? 11.5 : 11,
-                                    height: 1.1,
-                                    letterSpacing: isHub ? 1.4 : 0.3,
-                                    color: isHub ? AppUi.gold : AppUi.textHi)),
+                            child: Text(
+                              label,
+                              textAlign: TextAlign.center,
+                              style: AppUi.title.copyWith(
+                                fontSize: isHub ? 11.5 : 11,
+                                height: 1.1,
+                                letterSpacing: isHub ? 1.4 : 0.3,
+                                color: isHub ? AppUi.gold : AppUi.textHi,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 2),
-                          Text(progress,
-                              style: AppUi.number.copyWith(
-                                  fontSize: 10,
-                                  color: isHub
-                                      ? AppUi.gold.withValues(alpha: 0.8)
-                                      : color.withValues(alpha: 0.85))),
+                          Text(
+                            progress,
+                            style: AppUi.number.copyWith(
+                              fontSize: 10,
+                              color: isHub
+                                  ? AppUi.gold.withValues(alpha: 0.8)
+                                  : color.withValues(alpha: 0.85),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1229,7 +1383,8 @@ class _EmberPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const n = 16;
-    final p = Paint()..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+    final p = Paint()
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
     for (var i = 0; i < n; i++) {
       final seed = (i * 0.61803398875) % 1.0;
       final baseX = seed * size.width;
@@ -1276,7 +1431,11 @@ class _Medallion extends StatelessWidget {
         ? 0.18 + pulse * 0.4
         : (state == _NodeState.sealed ? 0.12 : (pop > 0 ? (1 - pop) : 0.0));
 
-    final (Color ringColor, double ringWidth, double iconAlpha) = switch (state) {
+    final (
+      Color ringColor,
+      double ringWidth,
+      double iconAlpha,
+    ) = switch (state) {
       _NodeState.sealed => (Color.lerp(color, AppUi.gold, 0.25)!, 1.8, 1.0),
       _NodeState.open => (color, 2.0, 1.0),
       _NodeState.next => (color.withValues(alpha: 0.4), 1.4, 0.42),
@@ -1301,9 +1460,13 @@ class _Medallion extends StatelessWidget {
 
     Widget content;
     if (state == _NodeState.foreclosed) {
-      content = Text('✕',
-          style: TextStyle(
-              fontSize: size * 0.36, color: AppUi.rust.withValues(alpha: 0.55)));
+      content = Text(
+        '✕',
+        style: TextStyle(
+          fontSize: size * 0.36,
+          color: AppUi.rust.withValues(alpha: 0.55),
+        ),
+      );
     } else {
       content = Opacity(
         opacity: iconAlpha,
@@ -1330,7 +1493,7 @@ class _Medallion extends StatelessWidget {
                     color: color.withValues(alpha: glow * 0.5),
                     blurRadius: 8 + glow * 7,
                     spreadRadius: glow * 1.2,
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -1347,9 +1510,10 @@ class _Medallion extends StatelessWidget {
                 border: Border.all(color: ringColor, width: ringWidth),
                 boxShadow: const [
                   BoxShadow(
-                      color: Color(0x55000000),
-                      blurRadius: 2,
-                      offset: Offset(0, 1)),
+                    color: Color(0x55000000),
+                    blurRadius: 2,
+                    offset: Offset(0, 1),
+                  ),
                 ],
               ),
               alignment: Alignment.center,
@@ -1368,8 +1532,11 @@ class _Medallion extends StatelessWidget {
                     border: Border.all(color: AppUi.surface0, width: 1.4),
                   ),
                   alignment: Alignment.center,
-                  child: GameIcon(GameIconData.star,
-                      size: badge * 0.52, color: AppUi.ink),
+                  child: GameIcon(
+                    GameIconData.star,
+                    size: badge * 0.52,
+                    color: AppUi.ink,
+                  ),
                 ),
               ),
           ],
@@ -1381,10 +1548,10 @@ class _Medallion extends StatelessWidget {
 
 /// Kol rengi — nizam kızıl (kılıç), dergâh teal (kandil), geçim adaçayı (toprak).
 Color branchColor(LawBranch b) => switch (b) {
-      LawBranch.gecim => AppUi.sage,
-      LawBranch.nizam => AppUi.rust,
-      LawBranch.dergah => AppUi.info,
-    };
+  LawBranch.gecim => AppUi.sage,
+  LawBranch.nizam => AppUi.rust,
+  LawBranch.dergah => AppUi.info,
+};
 
 /// Bir fermanın GÜNLÜK idamesi, okunur tek satır — yoksa null.
 /// "her gün" bilerek yazılı: tek seferlik bedelle karışmasın.
@@ -1421,6 +1588,7 @@ class LawSealRitual extends StatefulWidget {
 
   final VoidCallback onSeal;
   final VoidCallback onDismiss;
+  final String traditionLine;
 
   const LawSealRitual({
     super.key,
@@ -1429,6 +1597,7 @@ class LawSealRitual extends StatefulWidget {
     required this.onDismiss,
     this.sealed = const {},
     this.seed = 0,
+    this.traditionLine = '',
   });
 
   @override
@@ -1437,12 +1606,13 @@ class LawSealRitual extends StatefulWidget {
 
 class _LawSealRitualState extends State<LawSealRitual>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _press = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1100),
-  )..addStatusListener((s) {
-      if (s == AnimationStatus.completed) widget.onSeal();
-    });
+  late final AnimationController _press =
+      AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 1100),
+      )..addStatusListener((s) {
+        if (s == AnimationStatus.completed) widget.onSeal();
+      });
 
   @override
   void dispose() {
@@ -1494,6 +1664,10 @@ class _LawSealRitualState extends State<LawSealRitual>
                           _kicker(),
                           const SizedBox(height: 10),
                           _effectLine(),
+                          if (widget.traditionLine.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _traditionLine(),
+                          ],
                           // GÜNLÜK İDAME — kararın verildiği yerde dursun.
                           // Tek seferlik bedel `_council`/özet içinde geçiyor;
                           // bu satır "her sabah" olanı söyler.
@@ -1502,8 +1676,7 @@ class _LawSealRitualState extends State<LawSealRitual>
                           // basmadan önce oyuncu ibrenin nereye kayacağını
                           // görür (kimlik değişecekse eski → yeni).
                           const SizedBox(height: 10),
-                          LawCompassNudge(
-                              sealed: widget.sealed, lawId: law.id),
+                          LawCompassNudge(sealed: widget.sealed, lawId: law.id),
                           const SizedBox(height: 12),
                           _decree(),
                           const SizedBox(height: 14),
@@ -1532,27 +1705,38 @@ class _LawSealRitualState extends State<LawSealRitual>
   }
 
   Widget _kicker() => Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SemanticIcon(law.icon,
-              size: 26, color: accent, fallback: GameIconData.scales),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('MECLİS TOPLANDI',
-                    style: AppUi.label.copyWith(
-                        fontSize: 8.5, color: accent, letterSpacing: 1.6)),
-                const SizedBox(height: 3),
-                Text(law.title,
-                    style: AppUi.title.copyWith(fontSize: 17, height: 1.15)),
-              ],
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      SemanticIcon(
+        law.icon,
+        size: 26,
+        color: accent,
+        fallback: GameIconData.scales,
+      ),
+      const SizedBox(width: 11),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'MECLİS TOPLANDI',
+              style: AppUi.label.copyWith(
+                fontSize: 8.5,
+                color: accent,
+                letterSpacing: 1.6,
+              ),
             ),
-          ),
-        ],
-      );
+            const SizedBox(height: 3),
+            Text(
+              law.title,
+              style: AppUi.title.copyWith(fontSize: 17, height: 1.15),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
 
   /// NE YAPAR — meclisin başında, şiirsel buyruktan önce düz bir cümle.
   Widget _effectLine() {
@@ -1564,13 +1748,36 @@ class _LawSealRitualState extends State<LawSealRitual>
         Icon(Icons.info_outline, size: 13, color: accent),
         const SizedBox(width: 7),
         Expanded(
-          child: Text(s,
-              style: AppUi.body.copyWith(
-                  fontSize: 11.5, height: 1.35, color: AppUi.textMid)),
+          child: Text(
+            s,
+            style: AppUi.body.copyWith(
+              fontSize: 11.5,
+              height: 1.35,
+              color: AppUi.textMid,
+            ),
+          ),
         ),
       ],
     );
   }
+
+  Widget _traditionLine() => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text('🔥', style: TextStyle(fontSize: 12)),
+      const SizedBox(width: 7),
+      Expanded(
+        child: Text(
+          widget.traditionLine,
+          style: AppUi.body.copyWith(
+            fontSize: 11.5,
+            height: 1.35,
+            color: AppUi.gold,
+          ),
+        ),
+      ),
+    ],
+  );
 
   /// HER SABAH NE OLUR — mühürlü kaldığı sürece keseden/ambardan akan.
   /// Yoksa hiç yer kaplamaz.
@@ -1584,13 +1791,21 @@ class _LawSealRitualState extends State<LawSealRitual>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(drain ? Icons.trending_down : Icons.trending_up,
-              size: 13, color: c),
+          Icon(
+            drain ? Icons.trending_down : Icons.trending_up,
+            size: 13,
+            color: c,
+          ),
           const SizedBox(width: 7),
           Expanded(
-            child: Text('Günlük idame: $label',
-                style: AppUi.body.copyWith(
-                    fontSize: 11.5, height: 1.35, color: c)),
+            child: Text(
+              'Günlük idame: $label',
+              style: AppUi.body.copyWith(
+                fontSize: 11.5,
+                height: 1.35,
+                color: c,
+              ),
+            ),
           ),
         ],
       ),
@@ -1598,44 +1813,42 @@ class _LawSealRitualState extends State<LawSealRitual>
   }
 
   Widget _decree() => ClipRRect(
-        borderRadius: BorderRadius.circular(AppUi.radiusSm),
-        child: Stack(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 12, 13, 12),
-              decoration: BoxDecoration(
-                color: AppUi.surface0,
-                borderRadius: BorderRadius.circular(AppUi.radiusSm),
-                border: Border.all(color: AppUi.line),
-              ),
-              child: Text(
-                law.decree,
-                style: AppUi.body.copyWith(
-                    fontSize: 13,
-                    height: 1.55,
-                    color: AppUi.textHi,
-                    fontStyle: FontStyle.italic),
-              ),
+    borderRadius: BorderRadius.circular(AppUi.radiusSm),
+    child: Stack(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 12, 13, 12),
+          decoration: BoxDecoration(
+            color: AppUi.surface0,
+            borderRadius: BorderRadius.circular(AppUi.radiusSm),
+            border: Border.all(color: AppUi.line),
+          ),
+          child: Text(
+            law.decree,
+            style: AppUi.body.copyWith(
+              fontSize: 13,
+              height: 1.55,
+              color: AppUi.textHi,
+              fontStyle: FontStyle.italic,
             ),
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              child: Container(
-                  width: 2.5, color: accent.withValues(alpha: 0.75)),
-            ),
-          ],
+          ),
         ),
-      );
+        Positioned(
+          left: 0,
+          top: 0,
+          bottom: 0,
+          child: Container(width: 2.5, color: accent.withValues(alpha: 0.75)),
+        ),
+      ],
+    ),
+  );
 
   Widget _council() {
     final moods = {for (final (e, d) in law.seal.estateMood) e: d};
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final e in Estate.values) _estateRow(e, moods[e] ?? 0.0),
-      ],
+      children: [for (final e in Estate.values) _estateRow(e, moods[e] ?? 0.0)],
     );
   }
 
@@ -1645,8 +1858,8 @@ class _LawSealRitualState extends State<LawSealRitual>
     final color = silent
         ? AppUi.textLo
         : delta > 0
-            ? AppUi.sage
-            : AppUi.rust;
+        ? AppUi.sage
+        : AppUi.rust;
     final line = silent
         ? '${e.label} ses çıkarmadı.'
         : Voice.pick(stanceLines(e, stance), widget.seed + e.index);
@@ -1657,14 +1870,23 @@ class _LawSealRitualState extends State<LawSealRitual>
         children: [
           SizedBox(
             width: 20,
-            child: SemanticIcon(e.icon,
-                size: 13, color: color, fallback: GameIconData.people),
+            child: SemanticIcon(
+              e.icon,
+              size: 13,
+              color: color,
+              fallback: GameIconData.people,
+            ),
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: Text(line,
-                style: AppUi.body.copyWith(
-                    fontSize: 10.5, height: 1.35, color: color)),
+            child: Text(
+              line,
+              style: AppUi.body.copyWith(
+                fontSize: 10.5,
+                height: 1.35,
+                color: color,
+              ),
+            ),
           ),
         ],
       ),
@@ -1687,10 +1909,14 @@ class _LawSealRitualState extends State<LawSealRitual>
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-                'Bu, köyün ne olduğunu ilan eden ağır bir hüküm. Basılınca '
-                'köyün ruhunda kalıcı bir iz bırakır.',
-                style: AppUi.body.copyWith(
-                    fontSize: 10.5, height: 1.35, color: AppUi.rust)),
+              'Bu, köyün ne olduğunu ilan eden ağır bir hüküm. Basılınca '
+              'köyün ruhunda kalıcı bir iz bırakır.',
+              style: AppUi.body.copyWith(
+                fontSize: 10.5,
+                height: 1.35,
+                color: AppUi.rust,
+              ),
+            ),
           ),
         ],
       ),
@@ -1712,8 +1938,9 @@ class _LawSealRitualState extends State<LawSealRitual>
               color: AppUi.surface0,
               borderRadius: BorderRadius.circular(AppUi.radiusSm),
               border: Border.all(
-                  color: Color.lerp(accent.withValues(alpha: 0.5), accent, t)!,
-                  width: 1 + t),
+                color: Color.lerp(accent.withValues(alpha: 0.5), accent, t)!,
+                width: 1 + t,
+              ),
             ),
             child: Stack(
               children: [
@@ -1732,17 +1959,20 @@ class _LawSealRitualState extends State<LawSealRitual>
                     children: [
                       Transform.scale(
                         scale: 1 + t * 0.25,
-                        child: GameIcon(GameIconData.scales,
-                            size: 15,
-                            color: Color.lerp(accent, AppUi.textHi, t)!),
+                        child: GameIcon(
+                          GameIconData.scales,
+                          size: 15,
+                          color: Color.lerp(accent, AppUi.textHi, t)!,
+                        ),
                       ),
                       const SizedBox(width: 9),
                       Text(
                         t > 0.02 ? 'BASILI TUT…' : law.seal.label.toUpperCase(),
                         style: AppUi.button.copyWith(
-                            fontSize: 11.5,
-                            color: Color.lerp(AppUi.textMid, AppUi.textHi, t),
-                            letterSpacing: 1.4),
+                          fontSize: 11.5,
+                          color: Color.lerp(AppUi.textMid, AppUi.textHi, t),
+                          letterSpacing: 1.4,
+                        ),
                       ),
                     ],
                   ),
@@ -1756,15 +1986,15 @@ class _LawSealRitualState extends State<LawSealRitual>
   }
 
   Widget _dismissRow() => Center(
-        child: GestureDetector(
-          onTap: widget.onDismiss,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              'defteri kapat — bu ferman yazılmadı',
-              style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo),
-            ),
-          ),
+    child: GestureDetector(
+      onTap: widget.onDismiss,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(
+          'defteri kapat — bu ferman yazılmadı',
+          style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo),
         ),
-      );
+      ),
+    ),
+  );
 }

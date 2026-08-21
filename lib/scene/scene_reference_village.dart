@@ -92,8 +92,11 @@ extension _SceneReferenceVillage on _VillageSceneState {
       // kaldırılır (yoksa plan araziye takılıp binaları sessizce düşürür),
       // kutunun hemen batısına oduncunun ormanı deterministik olarak dikilir.
       _trees.removeWhere((t) => _inRefBox(t.col, t.row, pad: 1));
-      _reeds.removeWhere((r) =>
-          _inRefBox(r.col, r.row, pad: 1) || _inRefBox(r.col2, r.row2, pad: 1));
+      _reeds.removeWhere(
+        (r) =>
+            _inRefBox(r.col, r.row, pad: 1) ||
+            _inRefBox(r.col2, r.row2, pad: 1),
+      );
       _plantReferenceGrove();
 
       // ── 2. Köyün bildikleri + ambarı ───────────────────────────────────────
@@ -195,20 +198,32 @@ extension _SceneReferenceVillage on _VillageSceneState {
       _storyLog.clear();
       _storyLog.addAll(const [
         ChronicleEntry(
-            day: 1, icon: '🔥', text: 'Köyün kuruluşu', milestone: true),
+          day: 1,
+          icon: '🔥',
+          text: 'Köyün kuruluşu',
+          milestone: true,
+        ),
         ChronicleEntry(
-            day: 6, icon: '🌾', text: 'İlk ambar doldu; kış korkusu geçti.'),
+          day: 6,
+          icon: '🌾',
+          text: 'İlk ambar doldu; kış korkusu geçti.',
+        ),
         ChronicleEntry(
-            day: 11, icon: '🧳', text: 'Dışarıdan bir hane geldi, köye yerleşti.'),
+          day: 11,
+          icon: '🧳',
+          text: 'Dışarıdan bir hane geldi, köye yerleşti.',
+        ),
         ChronicleEntry(
-            day: 15,
-            icon: '⚖',
-            text: 'Kanunname açıldı: komşuluk ve gece nöbeti mühürlendi.',
-            milestone: true),
+          day: 15,
+          icon: '⚖',
+          text: 'Kanunname açıldı: komşuluk ve gece nöbeti mühürlendi.',
+          milestone: true,
+        ),
         ChronicleEntry(
-            day: 20,
-            icon: '🌀',
-            text: 'Değirmen döndü; un köyün kendi eliyle çıkıyor.'),
+          day: 20,
+          icon: '🌀',
+          text: 'Değirmen döndü; un köyün kendi eliyle çıkıyor.',
+        ),
       ]);
 
       // Başarımlar: oturmuş köyün geçmişinde geçilmiş eşikler (nüfus/ilk bina/
@@ -217,16 +232,33 @@ extension _SceneReferenceVillage on _VillageSceneState {
       _backfillAchievements();
 
       _fixNpcSpawns();
+
+      // Görsel etkileşim provası: normal referans köyüne dokunmaz. Kamera
+      // merkezindeki ilk yetişkin tek tıklanmış gibi konuşur; capture doğrudan
+      // gerçek WorldSpeech katmanını ve aynı durum cümlesini kaydeder.
+      if (kCaptureNpcInteraction && _villagers.isNotEmpty) {
+        final speaker = _villagers.firstWhere(
+          (v) => !v.isChild && !v.isInsideBuilding,
+          orElse: () => _villagers.first,
+        );
+        _selectedVillager = speaker;
+        _detailExpanded = kCaptureNpcCard;
+        if (!kCaptureNpcCard) {
+          _npcSpeak(speaker, villagerSpokenStatus(speaker), life: 30);
+        }
+      }
     });
 
     // Defterin "köyün hâli" tablosu mühürlerden türer — kurulum sonrası tazele.
     _recomputePressure();
 
-    _showNotification(_refSkipped.isEmpty
-        ? '📐 Referans köy kuruldu — ${_villagers.length} kişi, '
-            '${_buildings.length} yapı'
-        : '📐 Referans köy kuruldu — ARAZİ YÜZÜNDEN KURULAMADI: '
-            '${_refSkipped.join(", ")}');
+    _showNotification(
+      _refSkipped.isEmpty
+          ? '📐 Referans köy kuruldu — ${_villagers.length} kişi, '
+                '${_buildings.length} yapı'
+          : '📐 Referans köy kuruldu — ARAZİ YÜZÜNDEN KURULAMADI: '
+                '${_refSkipped.join(", ")}',
+    );
   }
 
   // ── Yardımcılar ────────────────────────────────────────────────────────────
@@ -271,12 +303,24 @@ extension _SceneReferenceVillage on _VillageSceneState {
     for (int i = 0; i < 12 && settlerLine == founderLine; i++) {
       settlerLine = randomVillagerSurname(_rng);
     }
-    final father = _refSettler(settlerLine,
-        type: VillagerType.miller, male: true, ageDays: 9.2);
-    final mother = _refSettler(settlerLine,
-        type: VillagerType.innkeeper, male: false, ageDays: 8.4);
-    final son = _refSettler(settlerLine,
-        type: VillagerType.shepherd, male: true, ageDays: 4.0);
+    final father = _refSettler(
+      settlerLine,
+      type: VillagerType.miller,
+      male: true,
+      ageDays: 9.2,
+    );
+    final mother = _refSettler(
+      settlerLine,
+      type: VillagerType.innkeeper,
+      male: false,
+      ageDays: 8.4,
+    );
+    final son = _refSettler(
+      settlerLine,
+      type: VillagerType.shepherd,
+      male: true,
+      ageDays: 4.0,
+    );
     if (father != null && mother != null && son != null) {
       son.parents.addAll([father, mother]);
       father.children.add(son);
@@ -313,12 +357,13 @@ extension _SceneReferenceVillage on _VillageSceneState {
       VillagerType.farmer,
       VillagerType.guard,
     ];
-    final fixed = <VillagerEntity?>{father, mother, son}
-        .whereType<VillagerEntity>()
-        .toSet();
+    final fixed = <VillagerEntity?>{
+      father,
+      mother,
+      son,
+    }.whereType<VillagerEntity>().toSet();
     final free = _villagers
-        .where((v) =>
-            v.hasProfession && !v.isDying && !fixed.contains(v))
+        .where((v) => v.hasProfession && !v.isDying && !fixed.contains(v))
         .skip(5) // ilk 5 = kurucular, meslekleri sabit kalsın
         .toList();
     for (int i = 0; i < wanted.length && i < free.length; i++) {
@@ -379,7 +424,9 @@ extension _SceneReferenceVillage on _VillageSceneState {
   /// Ağıla ortalama bir sürü koyar — 3 koyun + 2 inek, karışık cinsiyet, hepsi
   /// yetişkin (üreme/yaşlanma döngüsü ilk günden dönebilsin).
   void _stockReferenceBarn() {
-    final barn = _buildings.where((b) => b.type == BuildingType.barn).firstOrNull;
+    final barn = _buildings
+        .where((b) => b.type == BuildingType.barn)
+        .firstOrNull;
     if (barn == null) return;
     const kinds = <AnimalKind>[
       AnimalKind.cow,
@@ -390,17 +437,21 @@ extension _SceneReferenceVillage on _VillageSceneState {
     ];
     for (int i = 0; i < kinds.length; i++) {
       final (sx, sy) = _nearestLand(
-          barn.col + barn.cols / 2.0, barn.row + barn.rows.toDouble());
-      _cows.add(AnimalEntity(
-        kind: kinds[i],
-        barnCol: barn.col,
-        barnRow: barn.row,
-        startCol: sx + (i - 2) * 0.7,
-        startRow: sy + (i.isEven ? 0.5 : -0.5),
-        isMale: i.isEven,
-        ageDays: AnimalEntity.kAnimalAdultDay + 1.0 + i * 0.8,
-        lifespanDays: AnimalEntity.kAnimalElderDay + 10.0 + i * 2.0,
-      ));
+        barn.col + barn.cols / 2.0,
+        barn.row + barn.rows.toDouble(),
+      );
+      _cows.add(
+        AnimalEntity(
+          kind: kinds[i],
+          barnCol: barn.col,
+          barnRow: barn.row,
+          startCol: sx + (i - 2) * 0.7,
+          startRow: sy + (i.isEven ? 0.5 : -0.5),
+          isMale: i.isEven,
+          ageDays: AnimalEntity.kAnimalAdultDay + 1.0 + i * 0.8,
+          lifespanDays: AnimalEntity.kAnimalElderDay + 10.0 + i * 2.0,
+        ),
+      );
     }
   }
 }

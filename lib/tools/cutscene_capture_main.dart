@@ -42,6 +42,7 @@ class Frame {
 const Cutscene _reelWalk = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.road,
+    setPiece: CutsceneSetPiece.caravan,
     panFrom: 0.0,
     panTo: 0.05,
     tiltFrom: -0.10,
@@ -66,6 +67,7 @@ const Cutscene _reelWalk = Cutscene([
 const Cutscene _reelDawn = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
+    setPiece: CutsceneSetPiece.camp,
     zoomFrom: 1.0,
     zoomTo: 1.05,
     panFrom: 0.0,
@@ -83,6 +85,7 @@ const Cutscene _reelDawn = Cutscene([
 const Cutscene _reelImperial = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.valleyDusk,
+    setPiece: CutsceneSetPiece.imperial,
     panFrom: 0.04,
     panTo: 0.0,
     zoomFrom: 1.02,
@@ -103,6 +106,7 @@ const Cutscene _reelImperial = Cutscene([
 const Cutscene _reelFire = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.fireNight,
+    setPiece: CutsceneSetPiece.wedding,
     zoomFrom: 1.10,
     zoomTo: 1.0,
     actors: [
@@ -120,6 +124,7 @@ const Cutscene _reelFire = Cutscene([
 const Cutscene _reelPov = Cutscene([
   CutsceneShot(
     bg: CutsceneBg.fireNight,
+    setPiece: CutsceneSetPiece.camp,
     pov: true,
     tiltFrom: 0.06,
     tiltTo: -0.02,

@@ -6,10 +6,11 @@ import 'app_ui.dart';
 ///
 /// Tasarım kuralı: kutu/çerçeve YOK. Sahnenin üstünde yüzen bir panel değil,
 /// sahneye ait bir yazıt gibi durur; okunurluk gölgeden gelir (scrim/kart
-/// arkaplanı göz yorar ve altındaki köyü saklar). Üç satır sabittir:
+/// arkaplanı göz yorar ve altındaki köyü saklar). İlk üç satır kimliktir:
 ///   1) ad (oyma kapital)
 ///   2) meslek · hane
 ///   3) ne yapıyor · ruh hâli
+/// NPC hover'ında isteğe bağlı dördüncü satır etkileşim kısayolunu öğretir.
 /// Altında uçlara doğru sönen ince ember çizgi künyeyi hedefe bağlar.
 ///
 /// PERF: konumlandırma [FractionalTranslation] + [Transform.translate] ile
@@ -24,6 +25,7 @@ class WorldTag extends StatelessWidget {
     required this.line3,
     required this.opacity,
     this.accent = AppUi.accent,
+    this.hint = '',
   });
 
   /// Künyenin ALT-ORTA noktası (ekran uzayı) — hedefin başının biraz üstü.
@@ -31,6 +33,9 @@ class WorldTag extends StatelessWidget {
   final String title;
   final String line2;
   final String line3;
+
+  /// Yalnız etkileşimli hedeflerde gösterilen kısa kullanım ipucu.
+  final String hint;
 
   /// 0→1 beliriş. Yükseliş kayması da bundan türer.
   final double opacity;
@@ -98,6 +103,20 @@ class WorldTag extends StatelessWidget {
                     ),
                   ),
                 ),
+              if (hint.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    hint,
+                    textAlign: TextAlign.center,
+                    style: AppUi.label.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 0.35,
+                      color: AppUi.accentSoft,
+                      shadows: _shadows,
+                    ),
+                  ),
+                ),
               // Künyeyi hedefe bağlayan ince ember çizgi — uçlara doğru söner
               // ki kesik bir çubuk gibi durmasın.
               Padding(
@@ -106,11 +125,13 @@ class WorldTag extends StatelessWidget {
                   width: 54,
                   height: 1,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(colors: [
-                      accent.withValues(alpha: 0.0),
-                      accent.withValues(alpha: 0.75),
-                      accent.withValues(alpha: 0.0),
-                    ]),
+                    gradient: LinearGradient(
+                      colors: [
+                        accent.withValues(alpha: 0.0),
+                        accent.withValues(alpha: 0.75),
+                        accent.withValues(alpha: 0.0),
+                      ],
+                    ),
                   ),
                 ),
               ),

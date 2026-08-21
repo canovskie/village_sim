@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app_ui.dart';
+import 'mobile_ui.dart';
 import 'semantic_icon.dart';
 
 /// HUD altındaki mod butonu (Tarla / Kes / Kaz). Koyu rafine sekme —
@@ -33,16 +34,19 @@ class _ModeButtonState extends State<ModeButton> {
     final active = widget.active;
     final hot = _hover || active;
 
-    final fg = active
-        ? tint
-        : (_hover ? AppUi.textHi : AppUi.textMid);
+    final fg = active ? tint : (_hover ? AppUi.textHi : AppUi.textMid);
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          widget.onTap();
+          if (useCompactGameUi(context)) {
+            const MobileCatalogCloseNotification().dispatch(context);
+          }
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
@@ -57,21 +61,32 @@ class _ModeButtonState extends State<ModeButton> {
               width: active ? 1.5 : 1,
             ),
             boxShadow: active
-                ? [BoxShadow(color: tint.withValues(alpha: 0.4), blurRadius: 10)]
+                ? [
+                    BoxShadow(
+                      color: tint.withValues(alpha: 0.4),
+                      blurRadius: 10,
+                    ),
+                  ]
                 : null,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              SemanticIcon(widget.icon,
-                  size: 18, color: fg, fallback: GameIconData.hammer),
+              SemanticIcon(
+                widget.icon,
+                size: 18,
+                color: fg,
+                fallback: GameIconData.hammer,
+              ),
               const SizedBox(height: 2),
-              Text(widget.label.toUpperCase(),
-                  style: AppUi.label.copyWith(
-                    fontSize: 9,
-                    letterSpacing: 1.0,
-                    color: fg,
-                  )),
+              Text(
+                widget.label.toUpperCase(),
+                style: AppUi.label.copyWith(
+                  fontSize: 9,
+                  letterSpacing: 1.0,
+                  color: fg,
+                ),
+              ),
             ],
           ),
         ),

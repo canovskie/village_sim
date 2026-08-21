@@ -101,6 +101,15 @@ class BuildingEntity {
   /// Kayıtta tutulur ki yükleme sırasında X pozuna sıçramasın.
   double millRotorAngle = 0.0;
 
+  /// Ambara/ocağa somut bir ürün indiğinde başlayan kısa dünya tepkisi. Panel
+  /// bildirimi değil: bina avlusundaki kasa/çuval yerleşmesi ve küçük oturma
+  /// darbesi bunu okur. Türetilmiş/geçici olduğu için kayda girmez.
+  double deliveryPulse = 0.0;
+
+  /// Bu oturumda binaya inen ürün sayısı. Ekonominin kendisi değildir; yalnız
+  /// avludaki 1-3 parçalık görsel yığının yoğunluğunu belirler.
+  int deliveryTally = 0;
+
   BuildingEntity({required this.type, required this.col, required this.row});
 
   int get cols => kBuildingMeta[type]!.cols;

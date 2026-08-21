@@ -38,7 +38,7 @@ extension _SceneFuneral on _VillageSceneState {
   static const _kOrphanDeathPool = [
     '🕯️ {ad} öldü. Ardında {sayı} çocuk kaldı.',
     '🕯️ {ad-i} kaybettik. {sayı} çocuğunun sofrasında bir sandalye boş.',
-    '🕯️ {ad} gitti. {sayı} çocuğu bu geceyi komşularda geçirecek.',
+    '🕯️ {ad} gitti. {sayı} çocuğu bu geceyi köylülerin yanında geçirecek.',
   ];
   static const _kDeathPool = [
     '🕯️ {ad} bu sabah uyanmadı.',
@@ -61,9 +61,11 @@ extension _SceneFuneral on _VillageSceneState {
     _award('first_death', 'Köy ilk kez yas tuttu', '🕯️');
     // Yaşam öyküsü — geride kalanların kaybı (dul eş + yetim çocuklar). v'nin
     // çocuk/ebeveyn listeleri tören anında hâlâ dolu (karşı taraf koparılmıştı).
-    final ctx = _voice(v,
-        seed: _stableSeed('ölüm${v.name}', _dayCount),
-        extra: {'sayı': '$orphans'});
+    final ctx = _voice(
+      v,
+      seed: _stableSeed('ölüm${v.name}', _dayCount),
+      extra: {'sayı': '$orphans'},
+    );
     final partners = <VillagerEntity>{};
     for (final c in v.children) {
       if (!c.isDying) {
@@ -93,13 +95,16 @@ extension _SceneFuneral on _VillageSceneState {
     }
 
     // Kilise yok — sade uğurlama (peacefulEnd / yetim varyantı).
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         _policies.peacefulEnd
             ? _kPeacefulEndPool
             : orphans > 0
-                ? _kOrphanDeathPool
-                : _kDeathPool,
-        ctx));
+            ? _kOrphanDeathPool
+            : _kDeathPool,
+        ctx,
+      ),
+    );
   }
 
   /// Kilise yakınında boş bir tile'a mezar yerleştirir — iç halkadan dışa

@@ -89,6 +89,8 @@ extension _SceneUiPanels on _VillageSceneState {
         _showNotification('🎥 Takip bırakıldı');
       } else {
         _followedVillager = v;
+        final readable = _viewSize.shortestSide < 500 ? 1.20 : 1.14;
+        if (_zoom < readable) _zoom = readable;
         // "İzle" kilidi varsa düşür — iki kamera kanalı aynı kareyi
         // çekiştirirse ikisi de titrer (bkz. _tickWatchCamera).
         _watchLeft = 0;
@@ -401,7 +403,7 @@ extension _SceneUiPanels on _VillageSceneState {
 
   // Hover künyesi — DÜNYA-uzayı: imleci değil hedefi takip eder, köylü
   // yürüdükçe onunla gider. _frame'e bağlı (60fps) olduğu için hover olayının
-  // kendisi hiçbir şey tetiklemez; input yalnız _hoverVillager/_hoverBuilding
+  // kendisi hiçbir şey tetiklemez; input yalnız köylü/bina/iş yeri/mezar hover
   // alanlarını yazar. IgnorePointer: hover olaylarını yemez.
   Widget buildHoverLabel() {
     return Positioned.fill(
@@ -413,8 +415,9 @@ extension _SceneUiPanels on _VillageSceneState {
             if (_draggedVillager != null) return const SizedBox.shrink();
             final v = _hoverVillager;
             final b = _hoverBuilding;
+            final site = _hoverSiteId == null ? null : _siteById(_hoverSiteId!);
             final g = _hoverGrave;
-            if (v == null && b == null && g == null) {
+            if (v == null && b == null && site == null && g == null) {
               return const SizedBox.shrink();
             }
             // 140ms beliriş — anlık pat diye çıkmasın, gecikmeli de hissetmesin.
@@ -462,6 +465,12 @@ extension _SceneUiPanels on _VillageSceneState {
                     title: v.name,
                     line2: _tagIdentity(v),
                     line3: '${_tagDoing(v)} · ${_tagMood(v)}',
+                    hint: npcInteractionGuide(
+                      isCriminalInAct: _isCriminalInAct(v),
+                      isInConflict:
+                          v.activity == VillagerActivity.brawling ||
+                          v.activity == VillagerActivity.arguing,
+                    ),
                     opacity: fade,
                   ),
                 ],
@@ -485,6 +494,25 @@ extension _SceneUiPanels on _VillageSceneState {
                     title: kBuildingMeta[b.type]?.label ?? '—',
                     line2: _buildingHoverSub(b),
                     line3: '',
+                    hint: 'Tıkla: işleyişi gör',
+                    opacity: fade,
+                  ),
+                ],
+              );
+            }
+            if (site != null) {
+              final feet = toScreen(site.cx, site.cy);
+              return Stack(
+                children: [
+                  WorldTag(
+                    anchor: Offset(
+                      _tagX(feet.dx),
+                      (feet.dy - 34 * _zoom).clamp(46.0, _viewSize.height),
+                    ),
+                    title: site.label,
+                    line2: _siteSubtitle(site) ?? '',
+                    line3: '',
+                    hint: workSiteInteractionGuide(site.kind),
                     opacity: fade,
                   ),
                 ],
@@ -501,6 +529,7 @@ extension _SceneUiPanels on _VillageSceneState {
                   title: g.name,
                   line2: 'huzur içinde yatıyor',
                   line3: '',
+                  hint: 'Tıkla: an',
                   opacity: fade,
                   accent: const Color(0xFF7E86A0),
                 ),
@@ -548,6 +577,8 @@ extension _SceneUiPanels on _VillageSceneState {
         return 'atışıyor';
       case VillagerActivity.brawling:
         return 'kavgada';
+      case VillagerActivity.watchingConflict:
+        return 'kavgayı izliyor';
       case VillagerActivity.prowling:
         return 'sinsice dolaşıyor';
       case VillagerActivity.committing:

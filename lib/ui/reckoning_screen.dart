@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../systems/reckoning.dart';
 import 'app_ui.dart';
+import 'gameplay_dioramas.dart';
 import 'semantic_icon.dart';
 
 /// HESAPLAŞMA EKRANI — koşunun kapanışı.
@@ -52,13 +53,17 @@ class ReckoningScreen extends StatelessWidget {
 
   /// Kararın vurgu rengi. İlhakta sıcak nokta yok: ekran soğur.
   Color get _accent => switch (verdict) {
-        ReckoningVerdict.sancak => const Color(0xFFF0A95C),
-        ReckoningVerdict.berat => AppUi.gold,
-        ReckoningVerdict.ilhak => const Color(0xFF8892A0),
-      };
+    ReckoningVerdict.sancak => const Color(0xFFF0A95C),
+    ReckoningVerdict.berat => AppUi.gold,
+    ReckoningVerdict.ilhak => const Color(0xFF8892A0),
+  };
 
   @override
   Widget build(BuildContext context) {
+    final ranked = [...rows]..sort((a, b) => a.value.compareTo(b.value));
+    final insightRows = ranked.length <= 2
+        ? ranked
+        : <ReckoningLedgerRow>[ranked.first, ranked.last];
     return Material(
       color: const Color(0xFF07090C),
       child: Center(
@@ -70,24 +75,22 @@ class ReckoningScreen extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                VillageOutcomeDiorama(
+                  thriving: verdict.favorable,
+                  accent: _accent,
+                  population: population,
+                  pillars: [for (final row in rows) row.value],
+                ),
+                const SizedBox(height: 16),
                 Center(
-                  child: Container(
-                    width: 58,
-                    height: 58,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(colors: [
-                        _accent.withValues(alpha: verdict.favorable ? 0.26 : 0.10),
-                        const Color(0x00000000),
-                      ]),
-                    ),
-                    child: Center(
-                      child: SemanticIcon(verdict.icon,
-                          size: 25, color: _accent, fallback: GameIconData.crown),
-                    ),
+                  child: SemanticIcon(
+                    verdict.icon,
+                    size: 22,
+                    color: _accent,
+                    fallback: GameIconData.crown,
                   ),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 8),
                 Text(
                   verdict.title,
                   textAlign: TextAlign.center,
@@ -108,7 +111,10 @@ class ReckoningScreen extends StatelessWidget {
                   epilogue,
                   textAlign: TextAlign.center,
                   style: AppUi.body.copyWith(
-                      fontSize: 12.5, color: AppUi.textMid, height: 1.55),
+                    fontSize: 12.5,
+                    color: AppUi.textMid,
+                    height: 1.55,
+                  ),
                 ),
                 const SizedBox(height: 26),
                 Row(
@@ -123,8 +129,10 @@ class ReckoningScreen extends StatelessWidget {
                 Center(
                   child: Text(
                     identity,
-                    style:
-                        AppUi.label.copyWith(fontSize: 10, color: AppUi.textLo),
+                    style: AppUi.label.copyWith(
+                      fontSize: 10,
+                      color: AppUi.textLo,
+                    ),
                   ),
                 ),
 
@@ -133,7 +141,9 @@ class ReckoningScreen extends StatelessWidget {
                   const SizedBox(height: 26),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 13),
+                      horizontal: 14,
+                      vertical: 13,
+                    ),
                     decoration: BoxDecoration(
                       color: AppUi.surface0,
                       borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -142,11 +152,17 @@ class ReckoningScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('DEFTERDE NE YAZIYORDU',
-                            style: AppUi.label
-                                .copyWith(fontSize: 9, color: AppUi.textLo)),
+                        Text(
+                          'DEFTERDE NE YAZIYORDU',
+                          style: AppUi.label.copyWith(
+                            fontSize: 9,
+                            color: AppUi.textLo,
+                          ),
+                        ),
                         const SizedBox(height: 10),
-                        for (final r in rows) _row(r),
+                        // Dioramadaki beş işaret bütün sütunları gösterir;
+                        // metin yalnız en zayıf ve en güçlü izi açıklar.
+                        for (final r in insightRows) _row(r),
                       ],
                     ),
                   ),
@@ -156,7 +172,9 @@ class ReckoningScreen extends StatelessWidget {
                   const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: AppUi.surface0,
                       borderRadius: BorderRadius.circular(AppUi.radiusSm),
@@ -165,19 +183,24 @@ class ReckoningScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('SON SATIRLAR',
-                            style: AppUi.label
-                                .copyWith(fontSize: 9, color: AppUi.textLo)),
+                        Text(
+                          'SON SATIRLAR',
+                          style: AppUi.label.copyWith(
+                            fontSize: 9,
+                            color: AppUi.textLo,
+                          ),
+                        ),
                         const SizedBox(height: 8),
-                        for (final line in milestones)
+                        for (final line in milestones.take(3))
                           Padding(
                             padding: const EdgeInsets.only(bottom: 5),
                             child: Text(
                               '· $line',
                               style: AppUi.body.copyWith(
-                                  fontSize: 11.5,
-                                  color: AppUi.textMid,
-                                  height: 1.45),
+                                fontSize: 11.5,
+                                color: AppUi.textMid,
+                                height: 1.45,
+                              ),
                             ),
                           ),
                       ],
@@ -187,14 +210,18 @@ class ReckoningScreen extends StatelessWidget {
 
                 const SizedBox(height: 14),
                 Text(
-                  'Bu köyün defteri kapandı. Kaydı menüde duruyor — '
-                  'okuyabilirsin ama devam edemezsin.',
+                  'Köyün izi kayıtlar arasında kaldı.',
                   textAlign: TextAlign.center,
                   style: AppUi.body.copyWith(
-                      fontSize: 11, color: AppUi.textLo, height: 1.45),
+                    fontSize: 11,
+                    color: AppUi.textLo,
+                    height: 1.45,
+                  ),
                 ),
                 const SizedBox(height: 24),
-                Center(child: AppButton(label: 'Ana Menü', onTap: onExit)),
+                Center(
+                  child: AppButton(label: 'Ana Menü', onTap: onExit),
+                ),
               ],
             ),
           ),
@@ -208,48 +235,60 @@ class ReckoningScreen extends StatelessWidget {
   /// Çubuk yüzde YAZMAZ. Bu bir istatistik ekranı değil bir defter sayfası;
   /// oyuncunun okuması gereken şey "%38" değil, "haneler yüzünü çevirmişti".
   Widget _row(ReckoningLedgerRow r) => Padding(
-        padding: const EdgeInsets.only(bottom: 11),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    padding: const EdgeInsets.only(bottom: 11),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(r.label,
-                      style: AppUi.body.copyWith(
-                          fontSize: 11.5,
-                          color: AppUi.textHi,
-                          fontWeight: FontWeight.w600)),
-                ),
-                SizedBox(
-                  width: 92,
-                  height: 5,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
-                    child: LinearProgressIndicator(
-                      value: r.value.clamp(0.0, 1.0),
-                      backgroundColor: AppUi.surface1,
-                      valueColor: AlwaysStoppedAnimation(_accent),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 3),
-            Text(r.note,
+            Expanded(
+              child: Text(
+                r.label,
                 style: AppUi.body.copyWith(
-                    fontSize: 10.5, color: AppUi.textLo, height: 1.4)),
+                  fontSize: 11.5,
+                  color: AppUi.textHi,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 92,
+              height: 5,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: r.value.clamp(0.0, 1.0),
+                  backgroundColor: AppUi.surface1,
+                  valueColor: AlwaysStoppedAnimation(_accent),
+                ),
+              ),
+            ),
           ],
         ),
-      );
+        const SizedBox(height: 3),
+        Text(
+          r.note,
+          style: AppUi.body.copyWith(
+            fontSize: 10.5,
+            color: AppUi.textLo,
+            height: 1.4,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _stat(String value, String label) => Column(
-        children: [
-          Text(value,
-              style: AppUi.number.copyWith(fontSize: 24, color: AppUi.textHi)),
-          const SizedBox(height: 2),
-          Text(label,
-              style: AppUi.label.copyWith(fontSize: 9.5, color: AppUi.textLo)),
-        ],
-      );
+    children: [
+      Text(
+        value,
+        style: AppUi.number.copyWith(fontSize: 24, color: AppUi.textHi),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        label,
+        style: AppUi.label.copyWith(fontSize: 9.5, color: AppUi.textLo),
+      ),
+    ],
+  );
 }

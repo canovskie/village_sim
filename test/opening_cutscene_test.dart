@@ -54,13 +54,13 @@ void main() {
     );
 
     // 1. KAPI — kafilenin yükü. Üç kart çıkar, biri seçilir.
-    final card = find.text(
-      '${FoundingChoice.all[1].icon}  ${FoundingChoice.all[1].title}',
+    final card = find.byKey(
+      ValueKey('founding_choice_${FoundingChoice.all[1].id}'),
     );
     await pumpUntil(tester, card);
     for (final c in FoundingChoice.all) {
       expect(
-        find.text('${c.icon}  ${c.title}'),
+        find.text(c.title),
         findsOneWidget,
         reason: 'seçenek ekranda yok: ${c.id}',
       );
@@ -70,13 +70,12 @@ void main() {
         reason: 'bedeli görünmeyen seçim karar değildir: ${c.id}',
       );
     }
-    // Kapı açıldığında soruyu SON HARFİNE kadar okuyabilmeliyiz. Kapılı
-    // çekimde sahne saati daktilonun bitiş anına kırpılır; kayan nokta bir tık
-    // aşağı düşerse floor() son karakteri yutar ve Maple soruyu yarım sorar.
+    // Karar yüzeyi açıldığında önceki diyalog tekrar edilmez; başlık soruyu
+    // devralır ve ekranda yalnız seçim için gereken bilgi kalır.
     expect(
       find.text(kOpeningCutscene.shots[1].lines.last.text),
-      findsOneWidget,
-      reason: 'kapı açılırken replik eksik yazılmış',
+      findsNothing,
+      reason: 'karar yüzeyi önceki diyaloğu üst üste bindirmemeli',
     );
 
     await tester.tap(card);
@@ -186,7 +185,8 @@ void main() {
       ),
     );
     await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.text('Atla ▸'));
+    expect(find.text('İntroyu geç ▸'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('cutscene_skip')));
     await tester.pump();
     expect(done, isTrue);
     expect(chosen, isNull);

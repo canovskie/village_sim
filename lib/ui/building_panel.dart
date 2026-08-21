@@ -8,6 +8,7 @@ import '../core/resources.dart';
 import '../rendering/asset_style.dart';
 import 'app_ui.dart';
 import 'guide_spotlight.dart';
+import 'mobile_ui.dart';
 
 /// İnşa katalogu — alt araç çubuğundaki bina seçim menüsü. Her bina temiz koyu
 /// bir kart; seçilince ember kenar+halo, karşılanamayan maliyet kırmızı.
@@ -20,6 +21,10 @@ class BuildingPanel extends StatelessWidget {
   /// Yalnız bu kategorideki binalar gösterilir (null = hepsi). Ateş yoksa
   /// kategori yok sayılır — sadece ateş yeri kartı çıkar.
   final BuildCategory? category;
+
+  /// Kuruluş modu gibi sıralı akışlarda katalogu tek anlamlı karara
+  /// indirir. null ise normal kategori filtresi kullanılır.
+  final BuildingType? onlyType;
 
   /// Köyün zanaat kilidi — false dönen bina menüde HİÇ görünmez (açılınca
   /// belirir). null = filtre yok (hepsi görünür).
@@ -37,13 +42,16 @@ class BuildingPanel extends StatelessWidget {
     required this.onSelect,
     this.hasFirepit = false,
     this.category,
+    this.onlyType,
     this.isUnlocked,
     this.hintType,
   });
 
   @override
   Widget build(BuildContext context) {
-    final types = !hasFirepit
+    final types = onlyType != null
+        ? [onlyType!]
+        : !hasFirepit
         ? [BuildingType.firepit]
         : BuildingType.values
               .where(
@@ -56,6 +64,35 @@ class BuildingPanel extends StatelessWidget {
     if (types.isEmpty) return const SizedBox.shrink();
 
     if (useCompactGameUi(context)) {
+      final expanded = MobileCatalogScope.expandedOf(context);
+      if (expanded) {
+        final height = MediaQuery.sizeOf(context).height * 0.52;
+        return SizedBox(
+          height: height,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final type in types)
+                  GuideTarget(
+                    id: GuideAnchors.build(type.name),
+                    child: _BuildingTile(
+                      hinted: type == hintType,
+                      type: type,
+                      selected: selected == type,
+                      stockpile: stockpile,
+                      compact: true,
+                      expanded: true,
+                      onTap: () => onSelect(type),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
       return SizedBox(
         height: 64,
         child: ListView.separated(
@@ -109,11 +146,13 @@ class BuildingPanel extends StatelessWidget {
 
 class _BuildingTile extends StatefulWidget {
   final BuildingType type;
+
   /// Şu anki adımın istediği kart mı — nefes alan bir halka ile işaretlenir.
   final bool hinted;
   final bool selected;
   final ResourceBundle stockpile;
   final bool compact;
+  final bool expanded;
   final VoidCallback onTap;
 
   const _BuildingTile({
@@ -122,6 +161,7 @@ class _BuildingTile extends StatefulWidget {
     required this.selected,
     required this.stockpile,
     required this.compact,
+    this.expanded = false,
     required this.onTap,
   });
 
@@ -178,22 +218,33 @@ class _BuildingTileState extends State<_BuildingTile>
     final sel = widget.selected;
     final hot = _hover || sel;
     final compact = widget.compact;
+    final expanded = widget.expanded;
 
     final tile = MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
-        onTap: widget.onTap,
+        onTap: () {
+          widget.onTap();
+          if (useCompactGameUi(context)) {
+            const MobileCatalogCloseNotification().dispatch(context);
+          }
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
           // Mobil kart 142×68'di; katalog tek başına ekranın yarısını yiyordu.
           // Yükseklik thumbnail'dan geliyordu (52px) — asıl kısılan orası.
-          width: compact ? 126 : 66,
-          height: compact ? 58 : null,
+          width: expanded ? 154 : (compact ? 126 : 66),
+          height: expanded ? 80 : (compact ? 58 : null),
           padding: compact
-              ? const EdgeInsets.fromLTRB(6, 4, 7, 4)
+              ? EdgeInsets.fromLTRB(
+                  expanded ? 9 : 6,
+                  expanded ? 7 : 4,
+                  expanded ? 9 : 7,
+                  expanded ? 7 : 4,
+                )
               : const EdgeInsets.fromLTRB(5, 6, 5, 6),
           transform: _hover && !sel
               ? Matrix4.translationValues(0, -2, 0)
@@ -221,11 +272,14 @@ class _BuildingTileState extends State<_BuildingTile>
                 ? Row(
                     children: [
                       SizedBox(
-                        width: 40,
-                        height: 42,
+                        width: expanded ? 52 : 40,
+                        height: expanded ? 58 : 42,
                         child: thumb != null
                             ? CustomPaint(
-                                size: const Size(40, 42),
+                                size: Size(
+                                  expanded ? 52 : 40,
+                                  expanded ? 58 : 42,
+                                ),
                                 painter: _ThumbPainter(thumb),
                               )
                             : Center(
@@ -249,7 +303,7 @@ class _BuildingTileState extends State<_BuildingTile>
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                               style: AppUi.body.copyWith(
-                                fontSize: 10.5,
+                                fontSize: expanded ? 12 : 10.5,
                                 height: 1.0,
                                 fontWeight: FontWeight.w700,
                                 color: sel

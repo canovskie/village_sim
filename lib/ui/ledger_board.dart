@@ -85,6 +85,7 @@ class BoardRailItem {
   final int badge;
 
   final bool selected;
+  final Color color;
   final VoidCallback onTap;
 
   /// Öğreticinin bu rafı gösterebilmesi için çapa kimliği (bkz. [GuideAnchors]).
@@ -97,6 +98,7 @@ class BoardRailItem {
     required this.label,
     required this.selected,
     required this.onTap,
+    this.color = AppUi.accent,
     this.badge = 0,
     this.guideId,
   });
@@ -145,7 +147,11 @@ class BoardRail extends StatelessWidget {
           //
           // Böylece dar ekranda 44dp'lik dokunma tabanı olabildiğince korunur:
           // önce süs, sonra hedef gider. Kademelerden İLK SIĞAN seçilir.
-          const tiers = [(headerH, 6.0, 4.0), (30.0, 4.0, 2.0), (26.0, 3.0, 1.0)];
+          const tiers = [
+            (headerH, 6.0, 4.0),
+            (30.0, 4.0, 2.0),
+            (26.0, 3.0, 1.0),
+          ];
           var (head, headGap, gap) = tiers.last;
           for (final t in tiers) {
             final (h, hg, g) = t;
@@ -205,26 +211,28 @@ class _RailButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: on
                 ? Color.alphaBlend(
-                    AppUi.accent.withValues(alpha: 0.18),
+                    item.color.withValues(alpha: 0.25),
                     AppUi.surface1,
                   )
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            // UNIFORM kenar ŞART: non-uniform renkli Border + borderRadius
-            // Flutter'da paint assert'i atar → öğe hiç çizilmez.
             border: Border.all(
-              color: on ? AppUi.accent.withValues(alpha: 0.6) : AppUi.line,
-              width: on ? 1.3 : 1,
+              color: on
+                  ? item.color.withValues(alpha: 0.72)
+                  : Colors.transparent,
+              width: 1.2,
             ),
           ),
           child: Row(
             children: [
               Opacity(
                 opacity: on ? 1 : 0.7,
-                child: SemanticIcon(item.icon,
-                    size: 14,
-                    color: on ? AppUi.accentSoft : AppUi.textMid,
-                    fallback: GameIconData.scroll),
+                child: SemanticIcon(
+                  item.icon,
+                  size: 14,
+                  color: on ? item.color : AppUi.textLo,
+                  fallback: GameIconData.scroll,
+                ),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -247,7 +255,7 @@ class _RailButton extends StatelessWidget {
                     vertical: 1,
                   ),
                   decoration: BoxDecoration(
-                    color: AppUi.accent.withValues(alpha: on ? 0.95 : 0.75),
+                    color: item.color.withValues(alpha: on ? 0.95 : 0.62),
                     borderRadius: BorderRadius.circular(9),
                   ),
                   child: Text(
@@ -277,18 +285,14 @@ class _CloseButton extends StatelessWidget {
         height: MobileUi.tap,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: AppUi.surface1,
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppUi.radiusSm),
-          border: Border.all(color: AppUi.line),
+          border: Border.all(color: AppUi.line.withValues(alpha: 0.45)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const GameIcon(
-              GameIconData.close,
-              size: 14,
-              color: AppUi.textMid,
-            ),
+            const GameIcon(GameIconData.close, size: 14, color: AppUi.textMid),
             const SizedBox(width: 6),
             Text(
               'KAPAT',
@@ -339,7 +343,10 @@ class BoardCol extends StatelessWidget {
                 children: [
                   Text(
                     head!,
-                    style: AppUi.label.copyWith(fontSize: 9, letterSpacing: 1.4),
+                    style: AppUi.label.copyWith(
+                      fontSize: 9,
+                      letterSpacing: 1.4,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(child: Container(height: 1, color: AppUi.line)),
@@ -449,8 +456,10 @@ class _BoardPagerState extends State<BoardPager> {
       builder: (context, c) {
         // Sayfa çubuğu yalnız GEREKİYORSA yer kaplar. Önce çubuksuz ölç: her
         // şey sığıyorsa çubuk hiç çizilmez ve o 26dp içeriğe kalır.
-        int rowsIn(double h) =>
-            math.max(1, ((h + widget.rowGap) / (widget.rowH + widget.rowGap)).floor());
+        int rowsIn(double h) => math.max(
+          1,
+          ((h + widget.rowGap) / (widget.rowH + widget.rowGap)).floor(),
+        );
 
         var rows = rowsIn(c.maxHeight);
         var pages = (widget.count / (rows * widget.columns)).ceil();
@@ -572,8 +581,9 @@ class _PageBar extends StatelessWidget {
                 child: GameIcon(
                   GameIconData.chevron,
                   size: 14,
-                  color:
-                      on ? AppUi.accentSoft : AppUi.textLo.withValues(alpha: 0.4),
+                  color: on
+                      ? AppUi.accentSoft
+                      : AppUi.textLo.withValues(alpha: 0.4),
                 ),
               ),
             ),
@@ -618,22 +628,22 @@ class BoardTile extends StatelessWidget {
       child: Stack(
         children: [
           Container(
-            padding: padding.add(
-              EdgeInsets.only(left: edge == null ? 0 : 4),
-            ),
+            padding: padding.add(EdgeInsets.only(left: edge == null ? 0 : 4)),
             decoration: BoxDecoration(
               color: tint == null
-                  ? AppUi.surface0
+                  ? const Color(0xFF0D1211)
                   : Color.alphaBlend(
                       tint!.withValues(alpha: 0.12),
-                      AppUi.surface1,
+                      const Color(0xFF0D1211),
                     ),
               borderRadius: BorderRadius.circular(AppUi.radiusSm),
               border: Border.all(
                 color: highlight
                     ? AppUi.accent.withValues(alpha: 0.5)
-                    : AppUi.line,
-                width: highlight ? 1.2 : 0.8,
+                    : edge != null || onTap != null
+                    ? (edge ?? tint ?? AppUi.line).withValues(alpha: 0.32)
+                    : AppUi.line.withValues(alpha: 0.34),
+                width: highlight ? 1.2 : 0.7,
               ),
             ),
             child: child,
@@ -704,9 +714,6 @@ class BoardCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     text,
-    style: AppUi.number.copyWith(
-      fontSize: 10,
-      color: color ?? AppUi.textLo,
-    ),
+    style: AppUi.number.copyWith(fontSize: 10, color: color ?? AppUi.textLo),
   );
 }

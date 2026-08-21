@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
+import 'event_artwork.dart';
 import 'semantic_icon.dart';
 
 /// Bir rastgele olay tetiklendiğinde ekranın üst-ortasında çıkan zengin
@@ -35,21 +36,22 @@ class EventBanner extends StatelessWidget {
   });
 
   Color get _accent => switch (event.category) {
-        EventCategory.positive => AppUi.sage,
-        EventCategory.negative => AppUi.rust,
-        EventCategory.neutral => AppUi.accent,
-      };
+    EventCategory.positive => AppUi.sage,
+    EventCategory.negative => AppUi.rust,
+    EventCategory.neutral => AppUi.accent,
+  };
 
   String get _categoryLabel => switch (event.category) {
-        EventCategory.positive => 'OLUMLU',
-        EventCategory.negative => 'OLUMSUZ',
-        EventCategory.neutral => 'OLAY',
-      };
+    EventCategory.positive => 'OLUMLU',
+    EventCategory.negative => 'OLUMSUZ',
+    EventCategory.neutral => 'OLAY',
+  };
 
   @override
   Widget build(BuildContext context) {
-    final progress =
-        duration <= 0 ? 0.0 : (timeLeft / duration).clamp(0.0, 1.0);
+    final progress = duration <= 0
+        ? 0.0
+        : (timeLeft / duration).clamp(0.0, 1.0);
     final deltas = event.deltaSummary();
     return AppReveal(
       child: AppPanel(
@@ -64,8 +66,7 @@ class EventBanner extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
               decoration: BoxDecoration(
                 border: const Border(
-                  bottom:
-                      BorderSide(color: AppUi.line, width: 1),
+                  bottom: BorderSide(color: AppUi.line, width: 1),
                 ),
                 gradient: LinearGradient(
                   colors: [
@@ -78,27 +79,13 @@ class EventBanner extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  // Büyük ikon kutusu
-                  Container(
-                    width: 44,
-                    height: 44,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppUi.surface0,
-                      borderRadius: BorderRadius.circular(AppUi.radiusSm),
-                      border: Border.all(color: _accent, width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                            color: _accent.withValues(alpha: 0.3),
-                            blurRadius: 8),
-                      ],
-                    ),
-                    child: SemanticIcon(
-                      event.icon,
-                      size: 24,
-                      color: _accent,
-                      fallback: GameIconData.dice,
-                      label: event.title,
+                  // Bildirim büyümeden olayı gösteren sinematik küçük kare.
+                  SizedBox(
+                    width: 104,
+                    child: EventArtwork(
+                      asset: eventArtworkAsset(event),
+                      height: 54,
+                      accent: _accent,
                     ),
                   ),
                   const SizedBox(width: 11),
@@ -106,15 +93,18 @@ class EventBanner extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(event.title,
-                            style: AppUi.bodyHi.copyWith(
-                              fontSize: 14,
-                              color: _accent,
-                            )),
+                        Text(
+                          event.title,
+                          style: AppUi.bodyHi.copyWith(
+                            fontSize: 14,
+                            color: _accent,
+                          ),
+                        ),
                         const SizedBox(height: 3),
-                        Text(_categoryLabel,
-                            style: AppUi.label
-                                .copyWith(color: AppUi.textLo)),
+                        Text(
+                          _categoryLabel,
+                          style: AppUi.label.copyWith(color: AppUi.textLo),
+                        ),
                       ],
                     ),
                   ),
@@ -130,8 +120,10 @@ class EventBanner extends StatelessWidget {
             // Mesaj gövdesi
             Padding(
               padding: const EdgeInsets.fromLTRB(13, 10, 13, 9),
-              child: Text(event.message,
-                  style: AppUi.body.copyWith(height: 1.4)),
+              child: Text(
+                event.message,
+                style: AppUi.body.copyWith(height: 1.4),
+              ),
             ),
             // İZLE — olayın dünyadaki NPC sahnesine kamerayı götürür. Banner'ın
             // en önemli düğmesi: olayı okunan bir metin olmaktan çıkarıp
@@ -157,14 +149,14 @@ class EventBanner extends StatelessWidget {
                 child: Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children:
-                      deltas.map((d) => _deltaChip(d.$1, d.$2)).toList(),
+                  children: deltas.map((d) => _deltaChip(d.$1, d.$2)).toList(),
                 ),
               ),
             // Countdown bar
             ClipRRect(
               borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(AppUi.radius - 1)),
+                bottom: Radius.circular(AppUi.radius - 1),
+              ),
               child: Container(
                 height: 3,
                 color: AppUi.surface0,
@@ -185,9 +177,7 @@ class EventBanner extends StatelessWidget {
     // Renk delta işaretine göre rust/sage; moral chip her zaman ember.
     final isMoral = icon == '😊';
     final isNeg = label.startsWith('-');
-    final color = isMoral
-        ? AppUi.accent
-        : (isNeg ? AppUi.rust : AppUi.sage);
+    final color = isMoral ? AppUi.accent : (isNeg ? AppUi.rust : AppUi.sage);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -205,12 +195,14 @@ class EventBanner extends StatelessWidget {
             fallback: isMoral ? GameIconData.heart : GameIconData.star,
           ),
           const SizedBox(width: 5),
-          Text(label,
-              style: AppUi.button.copyWith(
-                fontSize: 10,
-                letterSpacing: 0.4,
-                color: color,
-              )),
+          Text(
+            label,
+            style: AppUi.button.copyWith(
+              fontSize: 10,
+              letterSpacing: 0.4,
+              color: color,
+            ),
+          ),
         ],
       ),
     );

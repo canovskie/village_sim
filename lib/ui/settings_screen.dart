@@ -95,28 +95,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         SizedBox(height: compact ? 8 : 16),
                         const AppDivider(),
                         const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: AppButton(
-                                label: 'SIFIRLA',
-                                kind: AppButtonKind.ghost,
-                                expand: true,
-                                onTap: _model.resetToDefaults,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: AppButton(
-                                label: 'GERİ',
-                                kind: AppButtonKind.filled,
-                                icon: GameIconData.chevron,
-                                expand: true,
-                                onTap: () => Navigator.of(context).pop(),
-                              ),
-                            ),
-                          ],
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: AppButton(
+                            label: 'SIFIRLA',
+                            kind: AppButtonKind.ghost,
+                            onTap: _model.resetToDefaults,
+                          ),
                         ),
                       ],
                     ),
@@ -237,7 +222,6 @@ class _Slider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pct = (value * 100).round();
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -255,14 +239,6 @@ class _Slider extends StatelessWidget {
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
               ),
               child: Slider(value: value, onChanged: onChanged),
-            ),
-          ),
-          SizedBox(
-            width: 40,
-            child: Text(
-              '$pct%',
-              textAlign: TextAlign.right,
-              style: AppUi.number.copyWith(fontSize: 12, color: AppUi.accent),
             ),
           ),
         ],
@@ -372,26 +348,13 @@ class _LangChip extends StatelessWidget {
               ? [BoxShadow(color: tint.withValues(alpha: 0.3), blurRadius: 9)]
               : null,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              language.code,
-              style: AppUi.button.copyWith(
-                fontSize: 13,
-                letterSpacing: 1.5,
-                color: selected ? AppUi.textHi : AppUi.textMid,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              language.label,
-              style: AppUi.body.copyWith(
-                fontSize: 9.5,
-                color: selected ? AppUi.textMid : AppUi.textLo,
-              ),
-            ),
-          ],
+        child: Text(
+          language.label,
+          textAlign: TextAlign.center,
+          style: AppUi.button.copyWith(
+            fontSize: 12,
+            color: selected ? AppUi.textHi : AppUi.textMid,
+          ),
         ),
       ),
     );

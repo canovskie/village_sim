@@ -38,35 +38,39 @@ enum PropKind {
 
   /// Balta — oduncunun aleti; tırpanın yanında ikinci siluet.
   axe,
+
+  /// Meşale — kundakçının elindeki tartışmasız kanıt.
+  torch,
 }
 
 /// Nesnenin oyuncu-yüzü adı (panel/ipucu).
 String propLabel(PropKind p) => switch (p) {
-      PropKind.none => '',
-      PropKind.bucketEmpty => 'boş kova',
-      PropKind.bucketFull => 'su kovası',
-      PropKind.sack => 'çuval',
-      PropKind.bread => 'ekmek',
-      PropKind.mug => 'maşrapa',
-      PropKind.basket => 'sepet',
-      PropKind.firewood => 'odun',
-      PropKind.scythe => 'tırpan',
-      PropKind.axe => 'balta',
-    };
+  PropKind.none => '',
+  PropKind.bucketEmpty => 'boş kova',
+  PropKind.bucketFull => 'su kovası',
+  PropKind.sack => 'çuval',
+  PropKind.bread => 'ekmek',
+  PropKind.mug => 'maşrapa',
+  PropKind.basket => 'sepet',
+  PropKind.firewood => 'odun',
+  PropKind.scythe => 'tırpan',
+  PropKind.axe => 'balta',
+  PropKind.torch => 'meşale',
+};
 
 /// Nesnenin yürüyüş hızına etkisi. Dolu kova ve çuval AĞIRDIR — yüklü köylünün
 /// yavaşlaması hem inandırıcıdır hem de oynanışta işe yarar (yüklü hırsız
 /// yakalanabilir).
 double propSpeedFactor(PropKind p) => switch (p) {
-      PropKind.bucketFull => 0.78,
-      PropKind.sack => 0.72,
-      PropKind.firewood => 0.85,
-      PropKind.basket => 0.92,
-      // Tırpan ağır değil ama UZUN: sapı yere sürtmeden taşımak adımı kısaltır.
-      // Balta tek elde savrulur, hızı bozmaz.
-      PropKind.scythe => 0.90,
-      _ => 1.0,
-    };
+  PropKind.bucketFull => 0.78,
+  PropKind.sack => 0.72,
+  PropKind.firewood => 0.85,
+  PropKind.basket => 0.92,
+  // Tırpan ağır değil ama UZUN: sapı yere sürtmeden taşımak adımı kısaltır.
+  // Balta tek elde savrulur, hızı bozmaz.
+  PropKind.scythe => 0.90,
+  _ => 1.0,
+};
 
 /// Nesne iki elle mi taşınıyor — çizim ve duruş buna göre değişir.
 bool propTwoHanded(PropKind p) =>
@@ -118,8 +122,7 @@ enum ActPose {
 
 /// Duruş gövdenin TAMAMINI ele alıyor mu (uzuv açıları CharacterRenderer'a
 /// devredilir, ayakta mikro-tweak'ler devre dışı kalır)?
-bool actPoseIsFullBody(ActPose p) =>
-    p == ActPose.kneel || p == ActPose.slump;
+bool actPoseIsFullBody(ActPose p) => p == ActPose.kneel || p == ActPose.slump;
 
 /// EYLEMİN TEK ADIMI.
 class ActStep {
@@ -149,7 +152,7 @@ class ActStep {
   const ActStep.goTo(double x, double y) : this._(ActVerb.goTo, x: x, y: y);
   const ActStep.face(double x, double y) : this._(ActVerb.face, x: x, y: y);
   const ActStep.work(double seconds, {ActPose pose = ActPose.labor})
-      : this._(ActVerb.work, seconds: seconds, pose: pose);
+    : this._(ActVerb.work, seconds: seconds, pose: pose);
   const ActStep.take(PropKind prop) : this._(ActVerb.take, prop: prop);
   const ActStep.put() : this._(ActVerb.put);
 }

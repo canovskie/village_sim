@@ -34,9 +34,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   ];
   static const _kBirthLifePool = ['Çocuğu oldu: {bebek}', '{bebek} doğdu'];
   static const _kMigrantPool = [
-    '🚶 {ad} yolun tozuyla geldi, boş yatağa yerleşti. Köyün ona alışması sürer.',
-    '🚶 {ad} kapıyı çaldı ve kaldı. Yabancıya ısınmak zaman ister.',
-    '🚶 {ad} köye yerleşti. İlk günler herkes birbirini süzüyor.',
+    '🚶 {ad} kervanla geldi, boş yatağa yerleşti. Köyün ona alışması sürer.',
+    '🚶 {ad} kervandan ayrılıp kapıyı çaldı ve kaldı. Yeni gelene ısınmak zaman ister.',
+    '🚶 {ad} kervan yolculuğunu burada bitirip köye yerleşti. İlk günler herkes birbirini süzüyor.',
   ];
 
   /// Ahır/kümes panelinden hayvan satın al — bina BOŞ kurulur, sürü buradan
@@ -713,14 +713,14 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     );
     _showNotification(
       Voice.say(const [
-        '👰 {ad} dışarıdan geldi; {öteki-in} ocağına gelin/damat oldu.',
+        '👰 {ad} kervanla geldi; {öteki-in} ocağına gelin/damat oldu.',
         '👰 {öteki} artık yalnız değil — {ad} kendi adıyla köye yerleşti.',
       ], ctx),
     );
     _chronicle(
       Voice.say(const [
-        '{ad} dışarıdan gelip {öteki} ile yuva kurdu; köye yeni bir ad girdi.',
-        '{öteki-in} ocağına dışarıdan bir eş geldi: {ad}.',
+        '{ad} kervanla gelip {öteki} ile yuva kurdu; köye yeni bir ad girdi.',
+        '{öteki-in} ocağına kervanla bir eş geldi: {ad}.',
       ], ctx),
       icon: '👰',
       milestone: true,
@@ -863,6 +863,9 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       case BuildingType.lumberCamp:
         // (Oduncu artık atanmış köylü — _syncJobWorkforce kampa en yakın boş
         // köylüyü oduncu yapar; bölge yönetimi _tickLumberCampManage'de.)
+        // Kuruluşta iki saniyelik normal kadro taramasını bekletme: kulübe
+        // kalktığı anda bir sonraki tick oduncuyu seçsin.
+        if (_foundingModeActive) _jobSyncCd = 0;
         break;
 
       case BuildingType.mineBuilding:
@@ -895,6 +898,33 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       case BuildingType.chickenCoop:
         // Kümes BOŞ kurulur — tavuklar bina ile gelmez; oyuncu panelden satın
         // alır ([_buyAnimal]). Yumurta görünür entity + çatlama (scene_tick).
+        break;
+
+      case BuildingType.townhall:
+        // İlk Belediye, Kanunname'nin ilerleme eşiğidir. O ana dek yasa
+        // gündemi taranmadı; mevcut dünya şartlarını sessizce başlangıç
+        // gündemi olarak kaydet ki kilit açılır açılmaz bildirim yağmasın.
+        _lawCtxCache = null;
+        if (_villageMemory.add('institution.townhall')) {
+          final oralCount = OralTradition.decisionCount(_villageMemory);
+          _lawSeen.addAll(
+            LawBook.openAgenda(_policies.sealed, _lawContext).map((l) => l.id),
+          );
+          _lawSeeded = true;
+          _chronicle(
+            oralCount > 0
+                ? 'Belediye kuruldu. Ateş başında verilmiş $oralCount söz, '
+                      'Kanunname’ye dayanak oldu.'
+                : 'Belediye kuruldu. Köyün mührü yerini buldu; Kanunname açıldı.',
+            icon: '🏛',
+            milestone: true,
+          );
+          _showNotification(
+            oralCount > 0
+                ? '🏛 Belediye kuruldu — $oralCount ocak sözü artık yazıya geçebilir.'
+                : '🏛 Belediye kuruldu — Kanunname artık Köy Defteri’nde.',
+          );
+        }
         break;
 
       default:

@@ -47,7 +47,8 @@ extension _SceneWorkSites on _VillageSceneState {
     // roldeki EN YAKIN yere. Böylece iki madenli köyde panel doğru ocağın
     // altında doğru adamı gösterir.
     final byId = <String, List<VillagerEntity>>{};
-    final loose = <VillagerEntity>[]; // yeri belirsiz — yakınlığa göre dağıtılır
+    final loose =
+        <VillagerEntity>[]; // yeri belirsiz — yakınlığa göre dağıtılır
 
     for (final v in _villagers) {
       final role = v.job?.role ?? JobRole.none;
@@ -121,22 +122,20 @@ extension _SceneWorkSites on _VillageSceneState {
       final cy = b.row + (m?.rows ?? b.rows) / 2.0;
       final label = m?.label ?? 'Yapı';
 
-      void add(
-        JobRole role,
-        int wanted, {
-        String? idleReason,
-      }) {
+      void add(JobRole role, int wanted, {String? idleReason}) {
         out.add(
           _SiteSkeleton(
             id: _buildingSiteId(b, role),
             kind: WorkSiteKind.building,
             role: role,
             label: label,
-            wanted: wanted,
+            // Durdurulan bina el istemez. Oyuncunun buraya mühürlediği mevcut
+            // kadro listede kalır; böylece "kapatınca kararım silindi" olmaz.
+            wanted: b.userPaused ? 0 : wanted,
             cx: cx,
             cy: cy,
             source: b,
-            idleReason: idleReason,
+            idleReason: b.userPaused ? 'Oyuncu üretimi durdurdu.' : idleReason,
           ),
         );
       }
@@ -173,11 +172,7 @@ extension _SceneWorkSites on _VillageSceneState {
       // DOKUMACI tezgâhı ambarda kurulur, ambar yoksa ocağın başında
       // (bkz. `_loomSpot`) — yer hangisiyse yuva orada durur.
       if (identical(loom, b)) {
-        add(
-          JobRole.weaver,
-          _weaverWanted(),
-          idleReason: _weaverIdleReason(),
-        );
+        add(JobRole.weaver, _weaverWanted(), idleReason: _weaverIdleReason());
       }
     }
   }
@@ -245,7 +240,9 @@ extension _SceneWorkSites on _VillageSceneState {
         wanted: 1,
         cx: sx / n,
         cy: sy / n,
-        idleReason: ripe == 0 ? 'Çalılar çıplak — meyve yeniden gelecek.' : null,
+        idleReason: ripe == 0
+            ? 'Çalılar çıplak — meyve yeniden gelecek.'
+            : null,
       ),
     );
   }

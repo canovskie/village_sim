@@ -55,8 +55,11 @@ void main() {
       final kinds = {
         for (final r in VillageRegime.values) Regime.ruleOf(r).crisis,
       };
-      expect(kinds.length, VillageRegime.values.length,
-          reason: 'her rejim farklı bir kriz üretmeli: $kinds');
+      expect(
+        kinds.length,
+        VillageRegime.values.length,
+        reason: 'her rejim farklı bir kriz üretmeli: $kinds',
+      );
     });
 
     test('yemin ayrıcalığı da bedeli de derinleştirir', () {
@@ -124,6 +127,24 @@ void main() {
       expect(artisans.yes, isTrue);
       expect(laborers.line, isNotEmpty);
     });
+
+    test('ocak töresi küskün mecliste bile yazılı hükme dayanak olur', () {
+      final uncertain = {for (final e in Estate.values) e: 0.47};
+      final rootless = Regime.voteOnLaw(
+        effects: const [],
+        mood: uncertain,
+        villageMorale: 0.45,
+      );
+      final rooted = Regime.voteOnLaw(
+        effects: const [],
+        mood: uncertain,
+        villageMorale: 0.45,
+        traditionSupport: 0.12,
+      );
+      expect(rootless.passed, isFalse);
+      expect(rooted.passed, isTrue);
+      expect(rooted.voices.first.line, contains('tuttuğumuz yol'));
+    });
   });
 
   group('köyün kendi kararı', () {
@@ -159,18 +180,23 @@ void main() {
     test('aç köy yiyecek getiren şıkkı öne alır', () {
       const hungry = [
         PetitionOption(
-            label: 'kile getir',
-            detail: '',
-            resolutionPool: ['x'],
-            foodDelta: 40),
+          label: 'kile getir',
+          detail: '',
+          resolutionPool: ['x'],
+          foodDelta: 40,
+        ),
         PetitionOption(
-            label: 'moral konuşması',
-            detail: '',
-            resolutionPool: ['x'],
-            moraleAmount: 0.05),
+          label: 'moral konuşması',
+          detail: '',
+          resolutionPool: ['x'],
+          moraleAmount: 0.05,
+        ),
       ];
-      final i = Regime.pickCouncilOption(hungry,
-          mood: happy, villageMorale: 0.35);
+      final i = Regime.pickCouncilOption(
+        hungry,
+        mood: happy,
+        villageMorale: 0.35,
+      );
       expect(hungry[i].label, 'kile getir');
     });
   });
@@ -183,8 +209,12 @@ void main() {
 
     test('kökleşen köy yemin edebilir, iki kez edemez', () {
       // Aynı yöne birkaç ağır mühür — kararlılık eşiğini geçsin.
-      final p = LawCompass.positionOf(
-          {'nizam.sole', 'nizam.registry', 'nizam.exile', 'nizam.watch'});
+      final p = LawCompass.positionOf({
+        'nizam.sole',
+        'nizam.registry',
+        'nizam.exile',
+        'nizam.watch',
+      });
       expect(p.intensity, greaterThanOrEqualTo(Regime.kOathConviction));
       expect(Regime.oathAvailable(p, alreadySworn: false), isTrue);
       expect(Regime.oathAvailable(p, alreadySworn: true), isFalse);
@@ -207,17 +237,20 @@ void main() {
     test('her rejimin okunur bir yemin metni var', () {
       for (final r in VillageRegime.values) {
         final (title, decree) = Regime.oathText(
-          LawCompass.identify(CompassPosition(
-            authority: r == VillageRegime.sealedHand ||
-                    r == VillageRegime.ironTable
-                ? 0.8
-                : -0.8,
-            economy: r == VillageRegime.sealedHand || r == VillageRegime.market
-                ? 0.8
-                : -0.8,
-            faith: 0,
-            lawCount: 5,
-          )),
+          LawCompass.identify(
+            CompassPosition(
+              authority:
+                  r == VillageRegime.sealedHand || r == VillageRegime.ironTable
+                  ? 0.8
+                  : -0.8,
+              economy:
+                  r == VillageRegime.sealedHand || r == VillageRegime.market
+                  ? 0.8
+                  : -0.8,
+              faith: 0,
+              lawCount: 5,
+            ),
+          ),
         );
         if (r == VillageRegime.moderate) continue;
         expect(title, isNotEmpty);
@@ -246,10 +279,14 @@ void main() {
 void imperialTests() {
   group('rejim × imparatorluk duruşu', () {
     test('mülkçü köy göz doldurur, ortakçı köy gözden ırak', () {
-      final market = Regime.imperialPostureOf(VillageRegime.market,
-          committed: true);
-      final commune = Regime.imperialPostureOf(VillageRegime.commune,
-          committed: true);
+      final market = Regime.imperialPostureOf(
+        VillageRegime.market,
+        committed: true,
+      );
+      final commune = Regime.imperialPostureOf(
+        VillageRegime.commune,
+        committed: true,
+      );
       expect(market.attentionMul, greaterThan(1.0));
       expect(commune.attentionMul, lessThan(1.0));
       // Tüccar köy pazarlıkta usta, kavgada zayıf.
@@ -258,23 +295,32 @@ void imperialTests() {
     });
 
     test('militan köy direniş elini güçlendirir', () {
-      final tyrant = Regime.imperialPostureOf(VillageRegime.sealedHand,
-          committed: true);
+      final tyrant = Regime.imperialPostureOf(
+        VillageRegime.sealedHand,
+        committed: true,
+      );
       expect(tyrant.resistBonus, greaterThan(0.15));
     });
 
     test('yemin duruşu keskinleştirir', () {
-      final plain = Regime.imperialPostureOf(VillageRegime.sealedHand,
-          committed: true);
-      final sworn = Regime.imperialPostureOf(VillageRegime.sealedHand,
-          committed: true, oath: true);
+      final plain = Regime.imperialPostureOf(
+        VillageRegime.sealedHand,
+        committed: true,
+      );
+      final sworn = Regime.imperialPostureOf(
+        VillageRegime.sealedHand,
+        committed: true,
+        oath: true,
+      );
       expect(sworn.resistBonus, greaterThan(plain.resistBonus));
       expect(sworn.attentionMul, greaterThan(plain.attentionMul));
     });
 
     test('merkez rejim imparatorluğu hiç bükmez', () {
-      final m = Regime.imperialPostureOf(VillageRegime.moderate,
-          committed: false);
+      final m = Regime.imperialPostureOf(
+        VillageRegime.moderate,
+        committed: false,
+      );
       expect(m.resistBonus, 0);
       expect(m.haggleEase, 0);
       expect(m.attentionMul, 1.0);
@@ -383,8 +429,10 @@ void rotTests() {
     });
 
     test('kStir eşiğinin tam altında birikim yok', () {
-      expect(Regime.rotStep(unrest: Regime.kStir - 0.01, days: 1),
-          lessThanOrEqualTo(0));
+      expect(
+        Regime.rotStep(unrest: Regime.kStir - 0.01, days: 1),
+        lessThanOrEqualTo(0),
+      );
       expect(Regime.rotStep(unrest: Regime.kStir, days: 1), greaterThan(0));
     });
 
@@ -444,10 +492,10 @@ void faithTests() {
 
     test('bandın üstünde iman gerçek sonuç doğurur', () {
       final f = Regime.faithEffectOf(1.0);
-      expect(f.unrestRelief, greaterThan(0));   // sabır
-      expect(f.resistBonus, greaterThan(0));    // inanç için direnmek
-      expect(f.crimeDamp, lessThan(1.0));       // cemaat gözü
-      expect(f.moraleFloor, greaterThan(0));    // teselli
+      expect(f.unrestRelief, greaterThan(0)); // sabır
+      expect(f.resistBonus, greaterThan(0)); // inanç için direnmek
+      expect(f.crimeDamp, lessThan(1.0)); // cemaat gözü
+      expect(f.moraleFloor, greaterThan(0)); // teselli
       expect(f.conscriptSting, greaterThan(1)); // devşirme daha ağır
       expect(f.note, isNotEmpty);
     });
@@ -464,8 +512,10 @@ void faithTests() {
 
     test('not yalnız dinî bandın üstünde görünür', () {
       expect(Regime.faithEffectOf(LawCompass.kFaithBand - 0.01).note, isEmpty);
-      expect(Regime.faithEffectOf(LawCompass.kFaithBand + 0.01).note,
-          isNotEmpty);
+      expect(
+        Regime.faithEffectOf(LawCompass.kFaithBand + 0.01).note,
+        isNotEmpty,
+      );
     });
 
     test('iman dinî tiranı ayakta tutar ama kurtarmaz', () {
