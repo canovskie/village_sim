@@ -6,6 +6,7 @@ import '../core/resources.dart';
 import '../farm/farm_tile.dart';
 import '../scene/scene_data.dart';
 import 'reckoning.dart';
+import 'village_year.dart';
 
 /// Köy Akışı — bol görev + politika-odaklı Tüzük ilerlemesi (no-fail).
 ///
@@ -74,10 +75,21 @@ class Quest {
   final String hint;
   final QuestCategory category;
 
+  /// Bu iş hesaplaşmadaki hangi kefeyi besliyor.
+  ///
+  /// Her görev tam birincil eksen taşır; bileşik ana meseleler başka kefeleri
+  /// de ölçebilir ama panelde oyuncuya tek, okunaklı bir yön gösterilir.
+  final ReckoningAxis axis;
+
   /// Hangi kimlik kademesinde açılır (charterTier >= tier ise görünür).
   final int tier;
   final bool Function(QuestContext) check;
   final VisualReward reward;
+
+  /// Stratejik faz kapısı. Yılın gelmesi görevi TAMAMLAMAZ; yalnız görünür
+  /// kılar. [check] daima en az iki mevcut sistemde etkin sonuç arar.
+  final int minYear;
+  final bool capstone;
 
   /// Bu görevi KİM istiyor — kurucu kadrodan bir meslek ([VillagerType]).
   ///
@@ -139,9 +151,12 @@ class Quest {
     required this.label,
     required this.hint,
     required this.category,
+    required this.axis,
     required this.tier,
     required this.check,
     required this.reward,
+    this.minYear = 1,
+    this.capstone = false,
     this.speaker,
     this.pointer = QuestPointer.none,
     this.buildTarget,
@@ -150,6 +165,9 @@ class Quest {
     this.voice,
     this.thanks,
   });
+
+  bool isAvailable(QuestContext context) =>
+      tier <= context.charterTier && minYear <= context.year;
 }
 
 /// Görevlerin baktığı köy durumu — zengin snapshot.
@@ -183,6 +201,10 @@ class QuestContext {
   /// Kaçıncı gün — "ilk geceyi çıkar" gibi zaman adımları için.
   final int dayCount;
 
+  /// Yol ağının AYNI bağlı bileşenine komşu en yüksek üretim noktası sayısı.
+  /// Ham yol karesi değil, yolun köyde neyi birbirine bağladığını ölçer.
+  final int connectedProductionSites;
+
   // ── HANELER & HESAPLAŞMA (geç oyun) ───────────────────────────────────────
   //
   // Geç kademeler bir inşa listesine dönüşmüştü: on iki görevin sekizi "şu
@@ -199,10 +221,20 @@ class QuestContext {
   /// Köydeki hane sayısı — "bütün haneler" ölçüleri için payda.
   final int houseCount;
 
-  /// Köyün hesaplaşmadaki gücü (0..1, bkz. systems/reckoning.dart). Berat
-  /// eşiğini geçmek son kademenin görevidir: oyuncu kapanışta neyle
-  /// tartılacağını oyunun içinde öğrensin, kapanış ekranında değil.
+  /// Köyün hesaplaşmadaki dört iç kefesi (0..1). Görevler kapanışın
+  /// türetilmiş gücünü değil yalnız, onu oluşturan karar alanlarını da okur.
+  final double unity;
+  final double charter;
+  final double grit;
+  final double legacy;
+
+  /// Köyün hesaplaşmadaki bileşik gücü (0..1).
   final double standing;
+
+  /// Geride bırakılmış kış + imparatorluk baskısı sayısı. Bu sayı tek başına
+  /// hiçbir görevi bitirmez; toparlanma görevinde bugünkü rıza ve ağırlıkla
+  /// birlikte kullanılır.
+  final int pressuresWeathered;
 
   /// Kurucu meslek → yaşayan köylünün adı. Görev metnini o kişinin ağzına
   /// koymak için (bkz. [Quest.speaker]).
@@ -221,16 +253,83 @@ class QuestContext {
     this.roadCount = 0,
     this.regimeNamed = false,
     this.dayCount = 1,
+    this.connectedProductionSites = 0,
     this.loyalHouses = 0,
     this.withheldHouses = 0,
     this.houseCount = 0,
+    this.unity = 0,
+    this.charter = 0,
+    this.grit = 0,
+    this.legacy = 0,
     this.standing = 0,
+    this.pressuresWeathered = 0,
     this.speakerNames = const {},
   });
 
   int get enactedPolicies => policies.enactedCount;
+  int get year => yearOf(dayCount);
   bool has(BuildingType t) => buildings.any((b) => b.type == t);
   bool hasRole(BuildingRole r) => buildings.any((b) => b.fn?.role == r);
+}
+
+/// Aynı kesintisiz yol bileşenine değen en yüksek üretim noktası sayısı.
+///
+/// Saf tutulur: sahne kendi [RoadSystem] nesnesini taşımadan yalnız tamamlanmış
+/// yol koordinatlarını verir; görev ve test tam olarak aynı bağlantı kuralını
+/// kullanır. Toplama, işleme ve pazar üretim dolaşımıdır. Konut/süs/depo,
+/// kapısında yol olsa da üretim noktası sayılmaz.
+int connectedProductionSiteCount({
+  required List<BuildingEntity> buildings,
+  required Iterable<(int, int)> roadTiles,
+}) {
+  final sites = buildings.where((b) {
+    return switch (b.fn?.role) {
+      BuildingRole.gathering ||
+      BuildingRole.processing ||
+      BuildingRole.trade => true,
+      _ => false,
+    };
+  }).toList();
+  final unvisited = roadTiles.toSet();
+  if (sites.length < 3 || unvisited.isEmpty) return 0;
+
+  var best = 0;
+  while (unvisited.isNotEmpty) {
+    final component = <(int, int)>{};
+    final stack = <(int, int)>[unvisited.first];
+    unvisited.remove(stack.first);
+    while (stack.isNotEmpty) {
+      final tile = stack.removeLast();
+      component.add(tile);
+      final (c, r) = tile;
+      for (final next in [(c - 1, r), (c + 1, r), (c, r - 1), (c, r + 1)]) {
+        if (unvisited.remove(next)) stack.add(next);
+      }
+    }
+
+    var connected = 0;
+    for (final b in sites) {
+      if (_buildingTouchesRoad(b, component)) connected++;
+    }
+    if (connected > best) best = connected;
+  }
+  return best;
+}
+
+bool _buildingTouchesRoad(BuildingEntity building, Set<(int, int)> roads) {
+  for (var c = building.col; c < building.col + building.cols; c++) {
+    if (roads.contains((c, building.row - 1)) ||
+        roads.contains((c, building.row + building.rows))) {
+      return true;
+    }
+  }
+  for (var r = building.row; r < building.row + building.rows; r++) {
+    if (roads.contains((building.col - 1, r)) ||
+        roads.contains((building.col + building.cols, r))) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /// Bir görevin panel için durum snapshot'u.
@@ -265,8 +364,8 @@ class QuestBook {
   /// EŞİKLER ULAŞILABİLİR OLMALI: bir kademenin `minQuests`'i, ONDAN ÖNCEKİ
   /// kademelerde açılan toplam görev sayısını AŞAMAZ (üst kademe görevleri
   /// ancak o kademeye geçilince açılır — aşarsa merdiven kilitlenir).
-  /// Bugünkü dağılım: t0:8 t1:4 t2:7 t3:4 t4:6 t5:6 → kümülatif
-  /// 7/12/19/23/29/35. (Kuruluş 5→12→9→8→7: bkz. tier 0 başlığı.)
+  /// Bugünkü dağılım: t0:7 t1:5 t2:7 t3:5 t4:6 t5:6 → kümülatif
+  /// 7/12/19/24/30/36. (Kuruluş 5→12→9→8: bkz. tier 0 başlığı.)
   ///
   /// Eşik ayrıca NEFES payı bırakmalı. Tavana "bir görev hariç hepsi" diye
   /// oturursa, kovan/çiçekçi gibi isteğe bağlı bir görevi atlayan oyuncu
@@ -315,7 +414,7 @@ class QuestBook {
     final res = <QuestState>[];
     var marked = false;
     for (final q in all) {
-      if (q.tier > ctx.charterTier) continue;
+      if (!q.isAvailable(ctx)) continue;
       if (completed.contains(q.id)) continue;
       final active = !marked;
       marked = true;
@@ -354,6 +453,7 @@ class QuestBook {
       label: 'Ocağı yak',
       hint: 'Alttaki İnşa düğmesini aç, Ateş Yerini seç ve köyün ortasına kur.',
       category: QuestCategory.founding,
+      axis: ReckoningAxis.grit,
       tier: 0,
       speaker: VillagerType.priest,
       reward: VisualReward.sparkle,
@@ -371,6 +471,7 @@ class QuestBook {
       hint:
           'İnşa düğmesinden Çadırı seçip boş bir kareye kur. Bir usta işi alır.',
       category: QuestCategory.founding,
+      axis: ReckoningAxis.unity,
       tier: 0,
       speaker: VillagerType.farmer,
       reward: VisualReward.sparkle,
@@ -389,6 +490,7 @@ class QuestBook {
           'Oduncu Kulübesini ağaçların yakınına kur. Bir köylü baltayı alıp '
           'ilk kütüğü yere indirsin; ardından odun kendiliğinden gelir.',
       category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
       tier: 0,
       speaker: VillagerType.hunter,
       reward: VisualReward.bloom,
@@ -407,6 +509,7 @@ class QuestBook {
           'Bir Kuyu kaz (4 odun + 8 taş). Evler doldurur, çiftçi ekinini '
           'sular; tarla olacak yere yakın kaz.',
       category: QuestCategory.founding,
+      axis: ReckoningAxis.grit,
       tier: 0,
       reward: VisualReward.bloom,
       check: _well,
@@ -421,6 +524,7 @@ class QuestBook {
           'Bir Köy Evi dik (18 odun + 4 taş). Çadır bir geceyi kurtarır, ev '
           'bir hane kurar — doğum ancak evde olur.',
       category: QuestCategory.founding,
+      axis: ReckoningAxis.unity,
       tier: 0,
       speaker: VillagerType.farmer,
       reward: VisualReward.bloom,
@@ -438,6 +542,7 @@ class QuestBook {
           'Tarla modunu aç, düz bir alan seç. Böğürtlen köyü kurtarmaz, '
           'sadece ilk günleri kurtarır; karnı toprak doyurur.',
       category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
       tier: 0,
       speaker: VillagerType.farmer,
       reward: VisualReward.bloom,
@@ -454,6 +559,7 @@ class QuestBook {
           'Ateşi söndürme, kimseyi aç bırakma. Sabaha çıkan bir köy artık '
           'bir kamp değildir.',
       category: QuestCategory.founding,
+      axis: ReckoningAxis.unity,
       tier: 0,
       speaker: VillagerType.priest,
       reward: VisualReward.festival,
@@ -471,6 +577,7 @@ class QuestBook {
           'Belediye binasını dik. Köyün mührü orada durur; Kanunname ancak '
           'Belediye kurulunca açılır.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
       tier: 1,
       reward: VisualReward.bloom,
       check: _townhall,
@@ -487,6 +594,7 @@ class QuestBook {
           'Belediye ayakta. Köy Defterini aç, Kanunname rafından bir hüküm '
           'seç ve mühürle.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
       tier: 1,
       speaker: VillagerType.priest,
       reward: VisualReward.festival,
@@ -502,6 +610,7 @@ class QuestBook {
       label: 'Tavernayı aç',
       hint: 'Bir Taverna kur. Akşam işten çıkanın gideceği bir yer olsun.',
       category: QuestCategory.social,
+      axis: ReckoningAxis.unity,
       tier: 1,
       reward: VisualReward.bloom,
       check: _tavern,
@@ -514,6 +623,7 @@ class QuestBook {
           'Belediye ayakta, ambar dolu, ev boş olsun: nüfus kendi büyür. '
           'Onuncu köylüyü bekle.',
       category: QuestCategory.population,
+      axis: ReckoningAxis.grit,
       tier: 1,
       reward: VisualReward.festival,
       check: _pop10,
@@ -526,6 +636,7 @@ class QuestBook {
           'Bir Kilise kur. Köy hem duasını hem uğurlamasını orada yapar; '
           'yanı başında mezarlık büyür.',
       category: QuestCategory.social,
+      axis: ReckoningAxis.unity,
       tier: 1,
       reward: VisualReward.bloom,
       check: _church,
@@ -538,6 +649,7 @@ class QuestBook {
       label: 'Pazarı kur',
       hint: 'Bir Pazar aç. Fazlan altına döner, meydan sesle dolar.',
       category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
       tier: 2,
       reward: VisualReward.bloom,
       check: _market,
@@ -550,6 +662,7 @@ class QuestBook {
           'Kovanı çiçeklerin arasına koy. Menzilinde ne kadar çiçek varsa o '
           'kadar hızlı bal gelir.',
       category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
       tier: 2,
       reward: VisualReward.bloom,
       check: _beehive,
@@ -562,6 +675,7 @@ class QuestBook {
           'Çiçekçi Kulübesi kur. Kadın etrafındaki her şeyi sular, köy renk '
           'değiştirir.',
       category: QuestCategory.beauty,
+      axis: ReckoningAxis.grit,
       tier: 2,
       reward: VisualReward.bloom,
       check: _florist,
@@ -573,6 +687,7 @@ class QuestBook {
       hint:
           'Belediyeden üç beratı birden yürürlükte tut. Yazılı köyün sözü geçer.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
       tier: 2,
       reward: VisualReward.festival,
       check: _threePolicies,
@@ -585,6 +700,7 @@ class QuestBook {
           'Komşuluk politikasını aç. Karşılaşan iki köylü artık başını çevirip '
           'geçmez, selam verir.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.unity,
       tier: 2,
       reward: VisualReward.bloom,
       check: _neighborly,
@@ -597,6 +713,7 @@ class QuestBook {
           'Ev yetiştir, ambarı boş bırakma. Yirminci köylüde artık buraya köy '
           'demek zor.',
       category: QuestCategory.population,
+      axis: ReckoningAxis.grit,
       tier: 2,
       reward: VisualReward.festival,
       check: _pop20,
@@ -607,6 +724,7 @@ class QuestBook {
       label: 'Köyü güzelleştir',
       hint: 'Görev bitirdikçe köye süs düşer. Kırk süs objesine ulaş.',
       category: QuestCategory.beauty,
+      axis: ReckoningAxis.grit,
       tier: 2,
       reward: VisualReward.bloom,
       check: _bloom40,
@@ -624,6 +742,7 @@ class QuestBook {
           'Bir hane sana borçlu kalsın. Bağış, nikâh, adil karar: hangisi '
           'olursa olsun bir ocağın gözünde iyi bir yere geç.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.unity,
       tier: 3,
       reward: VisualReward.festival,
       check: _loyalHouse,
@@ -636,6 +755,7 @@ class QuestBook {
           'Beş politikayı aynı anda yürürlükte tut. Bu artık bir usul, bir '
           'heves değil.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
       tier: 3,
       reward: VisualReward.landmark,
       check: _fivePolicies,
@@ -647,19 +767,26 @@ class QuestBook {
       hint:
           'Misafirperverlik politikasını aç. Kervanla gelen yolcu köyde kalır.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.unity,
       tier: 3,
       reward: VisualReward.bloom,
       check: _hospitality,
     ),
     Quest(
-      id: 'warehouse',
-      icon: '📦',
-      label: 'Ambarı büyüt',
-      hint: 'Bir Ambar kur. Harman yerde çürümesin, stok tavanı yükselsin.',
+      id: 'roads',
+      icon: '🛣',
+      label: 'Üretimin damarını bağla',
+      hint:
+          'Aynı kesintisiz yol ağına üç üretim noktası bağla. Yolun uzunluğu '
+          'değil; oduncu, maden, değirmen ya da pazarın birbirine erişmesi '
+          'sayılır.',
       category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
       tier: 3,
-      reward: VisualReward.bloom,
-      check: _warehouse,
+      minYear: 3,
+      capstone: true,
+      reward: VisualReward.landmark,
+      check: _productionNetwork,
     ),
     Quest(
       id: 'pop30',
@@ -669,177 +796,174 @@ class QuestBook {
           'Otuz köylü. Bu kadar ağız doyuyorsa toprak da yönetim de yerinde '
           'demektir.',
       category: QuestCategory.population,
+      axis: ReckoningAxis.grit,
       tier: 3,
       reward: VisualReward.festival,
       check: _pop30,
     ),
 
     // ── Tier 4 — Adı Duyulan Kaza ────────────────────────────────────────
-    // Artık soru "yeter mi" değil, "burası nasıl bir yer". Görevler köyün
-    // kendi ihtiyacını değil, DIŞARIDAN görünüşünü inşa eder.
+    // Dört hesaplaşma kefesi ilk kez aynı kademede açıkça yan yana gelir.
     Quest(
-      id: 'fountain',
-      icon: '⛲',
-      label: 'Şadırvanı yaptır',
+      id: 'recoverPressure',
+      icon: '🌱',
+      label: 'Köyü yeniden ayağa kaldır',
       hint:
-          'Meydana bir Şadırvan koy. Kuyu suyu taşır; şadırvan suyu köyün '
-          'ortasına oturtur.',
-      category: QuestCategory.beauty,
+          'Bir kışı ya da imparatorluk baskısını geride bırak; ardından '
+          'hanelerin rızasını ve köyün ağırlığını yeniden sağlamlaştır.',
+      category: QuestCategory.governance,
+      axis: ReckoningAxis.unity,
       tier: 4,
+      minYear: 4,
+      capstone: true,
       reward: VisualReward.landmark,
-      check: _fountain,
+      check: _recoveredFromPressure,
     ),
     Quest(
-      id: 'library',
+      id: 'libraryLegacy',
       icon: '📚',
-      label: 'Kütüphaneyi kur',
+      label: 'Kararı kayda geçir',
       hint:
-          'Bir Kütüphane dik. Kronik orada tutulur; köyün hafızası artık '
-          'bir binada durur.',
+          'Kütüphaneyi kur; büyük kararların köyün hafızasında iyi bir iz '
+          'bırakmış olsun. Duvar değil, içine yazılan söz sayılır.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.legacy,
       tier: 4,
       reward: VisualReward.landmark,
-      check: _library,
-    ),
-    Quest(
-      id: 'roads',
-      icon: '🛣',
-      label: 'Yolları döşe',
-      hint:
-          'Altmış kare yol döşe. Ayak izi patikaydı; yol, kasabanın imzasıdır '
-          've köylü yolu tercih eder.',
-      category: QuestCategory.founding,
-      tier: 4,
-      reward: VisualReward.bloom,
-      check: _roads60,
-    ),
-    Quest(
-      id: 'crafts',
-      icon: '🔨',
-      label: 'Yedi zanaatı bil',
-      hint:
-          'Yedi ayrı zanaat köyde biliniyor olsun. Usta ölür, çırak kalırsa '
-          'zanaat kalır; kalmazsa geri gider.',
-      category: QuestCategory.production,
-      tier: 4,
-      reward: VisualReward.festival,
-      check: _crafts7,
-    ),
-    Quest(
-      id: 'pop40',
-      icon: '🧑‍🤝‍🧑',
-      label: 'Kırk cana ulaş',
-      hint:
-          'Kırk köylü. Bu kalabalık artık birbirini tanımıyor; işte kaza '
-          'olmak budur.',
-      category: QuestCategory.population,
-      tier: 4,
-      reward: VisualReward.festival,
-      check: _pop40,
-    ),
-    Quest(
-      id: 'sevenPolicies',
-      icon: '📜',
-      label: 'Yedi beratlık tüzük',
-      hint:
-          'Yedi hükmü aynı anda yürürlükte tut. Bu kalınlıkta bir tüzük '
-          'artık köyün huyunu belirler.',
-      category: QuestCategory.governance,
-      tier: 4,
-      reward: VisualReward.landmark,
-      check: _sevenPolicies,
-    ),
-
-    // ── Tier 5 — Sancağı Olan Şehir ──────────────────────────────────────
-    // Son kademe: köyün bir KİMLİĞİ ve uzaktan görünen bir siluetı olur.
-    Quest(
-      id: 'monument',
-      icon: '🗿',
-      label: 'Anıtı dik',
-      hint: 'Bir Anıt yaptır. Kimin adına dikildiğini torunlar tartışsın.',
-      category: QuestCategory.beauty,
-      tier: 5,
-      reward: VisualReward.landmark,
-      check: _monument,
-    ),
-    Quest(
-      id: 'belltower',
-      icon: '🔔',
-      label: 'Çan kulesini yükselt',
-      hint:
-          'Çan Kulesi köyün en uzak noktasından görünür. Sesi de oraya gider.',
-      category: QuestCategory.beauty,
-      tier: 5,
-      reward: VisualReward.landmark,
-      check: _belltower,
-    ),
-    Quest(
-      id: 'caravanserai',
-      icon: '🏨',
-      label: 'Hanı aç',
-      hint:
-          'Han kur. Yolcu geceyi köyde geçirsin; taşıyıcı yükünü hızlı '
-          'indirsin.',
-      category: QuestCategory.production,
-      tier: 5,
-      reward: VisualReward.landmark,
-      check: _caravanserai,
-    ),
-    Quest(
-      id: 'bathhouse',
-      icon: '♨️',
-      label: 'Hamamı yaptır',
-      hint:
-          'Hamam kur. Bacasından buhar çıktığı gün köy kendine bakmaya '
-          'başlamış demektir.',
-      category: QuestCategory.beauty,
-      tier: 5,
-      reward: VisualReward.bloom,
-      check: _bathhouse,
-    ),
-    Quest(
-      id: 'regime',
-      icon: '⚖️',
-      label: 'Kimliğini kazan',
-      hint:
-          'Mühürlerin toplamı köye bir duruş versin: ılımlı kalmak da bir '
-          'seçim, ama sancak dikmek için bir yön gerek.',
-      category: QuestCategory.governance,
-      tier: 5,
-      reward: VisualReward.landmark,
-      check: _regimeNamed,
-    ),
-    Quest(
-      id: 'pop50',
-      icon: '🏙',
-      label: 'Elli cana ulaş',
-      hint: 'Elli köylü. Buraya artık köy diyen kalmadı.',
-      category: QuestCategory.population,
-      tier: 5,
-      reward: VisualReward.festival,
-      check: _pop50,
+      check: _libraryLegacy,
     ),
     Quest(
       id: 'housesUnited',
       icon: '🏘',
       label: 'Haneleri bir arada tut',
       hint:
-          'Üç hane ya da daha fazlası olsun ve hiçbiri elini çekmiş '
-          'olmasın. Kalabalık köy kolay, küsmeyen köy zordur.',
+          'En az üç hane olsun ve hiçbiri elini çekmesin. Kalabalık köy '
+          'kolay; küsmeyen köy zordur.',
       category: QuestCategory.governance,
-      tier: 5,
+      axis: ReckoningAxis.unity,
+      tier: 4,
       reward: VisualReward.festival,
       check: _housesUnited,
+    ),
+    Quest(
+      id: 'crafts',
+      icon: '🔨',
+      label: 'Yedi zanaatı yaşat',
+      hint:
+          'Yedi ayrı zanaat köyde biliniyor olsun. Usta ölür, çırak kalırsa '
+          'zanaat kalır; kalmazsa geri gider.',
+      category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
+      tier: 4,
+      reward: VisualReward.festival,
+      check: _crafts7,
+    ),
+    Quest(
+      id: 'townWeight',
+      icon: '🌾',
+      label: 'Kasabanın ağırlığını duyur',
+      hint:
+          'Nüfusu tek başına şişirme. En az otuz canı, dolu ambar ve keseyle '
+          'birlikte taşı; hesaplaşmada köyün ağırlığı bunların bütünüdür.',
+      category: QuestCategory.population,
+      axis: ReckoningAxis.grit,
+      tier: 4,
+      reward: VisualReward.festival,
+      check: _townHasWeight,
+    ),
+    Quest(
+      id: 'politicalIdentity',
+      icon: '⚖️',
+      label: 'Köyün tarafını belli et',
+      hint:
+          'Birbiriyle uyumlu hükümler mühürle; pusulada ılımlı merkezden '
+          'ayrılan belirgin bir kimlik ve taşıyacak kalınlık oluşsun.',
+      category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
+      tier: 4,
+      reward: VisualReward.landmark,
+      check: _politicalIdentity,
+    ),
+
+    // ── Tier 5 — Sancağı Olan Şehir ──────────────────────────────────────
+    // Ham siluet listesi değil: yapı varsa bile ancak kararın sonucunu
+    // taşıdığı zaman sayılır. Dört hesaplaşma kefesi bu kademede de görünür.
+    Quest(
+      id: 'lastingMemory',
+      icon: '🗿',
+      label: 'Hatırayı taşa bağla',
+      hint:
+          'Bir Anıt dik ve iyi karar mirasını arkasına koy. Taş tek başına '
+          'hatıra değildir; köyün anlatacağı bir karar da olmalı.',
+      category: QuestCategory.beauty,
+      axis: ReckoningAxis.legacy,
+      tier: 5,
+      reward: VisualReward.landmark,
+      check: _lastingMemory,
+    ),
+    Quest(
+      id: 'openRoutes',
+      icon: '🏨',
+      label: 'Köyün yolunu dışarı aç',
+      hint:
+          'Hanı aç; bağlı üretim ağını ve köy ağırlığını yolcu taşıyacak '
+          'hâle getir. Boş han değil, işleyen kasaba kapısı sayılır.',
+      category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
+      tier: 5,
+      reward: VisualReward.landmark,
+      check: _openRoutes,
+    ),
+    Quest(
+      id: 'charterVoice',
+      icon: '📜',
+      label: 'Tüzüğe tek bir ses ver',
+      hint:
+          'Hükümlerin birbirini götürmesin. Belirgin siyasi kimliğini, '
+          'hesaplaşmada ağır gelecek bir tüzükle destekle.',
+      category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
+      tier: 5,
+      reward: VisualReward.landmark,
+      check: _charterVoice,
+    ),
+    Quest(
+      id: 'trustedCouncil',
+      icon: '🤝',
+      label: 'Hanelerin sözünü arkana al',
+      hint:
+          'En az üç hanenin rızasını güçlü tut; büyük kararların mirası da '
+          'bu güveni boşa çıkarmasın.',
+      category: QuestCategory.governance,
+      axis: ReckoningAxis.unity,
+      tier: 5,
+      reward: VisualReward.festival,
+      check: _trustedCouncil,
+    ),
+    Quest(
+      id: 'yearFiveMatter',
+      icon: '⚖️',
+      label: 'Beş yılın sözünü mühürle',
+      hint:
+          'Köyün siyasi kimliği belli, tüzüğü ağır, karar mirası güçlü olsun. '
+          'Bu üçü aynı sözü söylemeden son yılın meselesi kapanmaz.',
+      category: QuestCategory.governance,
+      axis: ReckoningAxis.legacy,
+      tier: 5,
+      minYear: 5,
+      capstone: true,
+      reward: VisualReward.landmark,
+      check: _yearFiveMatter,
     ),
     Quest(
       id: 'beratReady',
       icon: '📜',
       label: 'Berat gününe hazır ol',
       hint:
-          'İmparatorluk gelip defteri açtığında köy kendi ayakları üstünde '
-          'durabilsin: hanelerin rızası, tüzüğün kalınlığı ve köyün ağırlığı '
-          'birlikte tartılacak.',
+          'İmparatorluk defteri açtığında köy kendi ayakları üstünde '
+          'durabilsin. Görevde gördüğün dört kefe birlikte tartılacak.',
       category: QuestCategory.governance,
+      axis: ReckoningAxis.charter,
       tier: 5,
       reward: VisualReward.landmark,
       check: _beratReady,
@@ -870,7 +994,6 @@ class QuestBook {
   static bool _market(QuestContext c) => c.has(BuildingType.market);
   static bool _beehive(QuestContext c) => c.has(BuildingType.beehive);
   static bool _florist(QuestContext c) => c.has(BuildingType.floristCottage);
-  static bool _warehouse(QuestContext c) => c.has(BuildingType.warehouse);
   static bool _pop10(QuestContext c) => c.population >= 10;
   static bool _pop20(QuestContext c) => c.population >= 20;
   static bool _pop30(QuestContext c) => c.population >= 30;
@@ -881,18 +1004,47 @@ class QuestBook {
   static bool _hospitality(QuestContext c) => c.policies.hospitality;
   static bool _bloom40(QuestContext c) => c.decorCount >= 40;
   // ── Geç oyun ─────────────────────────────────────────────────────────────
-  static bool _fountain(QuestContext c) => c.has(BuildingType.fountain);
-  static bool _library(QuestContext c) => c.has(BuildingType.library);
-  static bool _monument(QuestContext c) => c.has(BuildingType.monument);
-  static bool _belltower(QuestContext c) => c.has(BuildingType.belltower);
-  static bool _caravanserai(QuestContext c) => c.has(BuildingType.caravanserai);
-  static bool _bathhouse(QuestContext c) => c.has(BuildingType.bathhouse);
-  static bool _roads60(QuestContext c) => c.roadCount >= 60;
   static bool _crafts7(QuestContext c) => c.craftCount >= 7;
-  static bool _pop40(QuestContext c) => c.population >= 40;
-  static bool _pop50(QuestContext c) => c.population >= 50;
-  static bool _sevenPolicies(QuestContext c) => c.enactedPolicies >= 7;
-  static bool _regimeNamed(QuestContext c) => c.regimeNamed;
+
+  /// Üç üretim noktası AYNI yol bileşenine değmeli. Böylece altmış kareyi
+  /// boş araziye döşemek değil, çalışan köyün dolaşımını kurmak ödüllenir.
+  static bool _productionNetwork(QuestContext c) =>
+      c.connectedProductionSites >= 3;
+
+  /// Baskıyı görmek tarihsel kapı; toparlanmak bugünkü iki hesaplaşma
+  /// kefesidir. Yılı beklemek bu görevi tek başına kapatamaz.
+  static bool _recoveredFromPressure(QuestContext c) =>
+      c.pressuresWeathered >= 1 && c.unity >= 0.55 && c.grit >= 0.45;
+
+  static bool _libraryLegacy(QuestContext c) =>
+      c.has(BuildingType.library) && c.legacy >= 0.55;
+
+  /// Kırk can kapısının yerine nüfus + gerçek refah bileşimi.
+  static bool _townHasWeight(QuestContext c) =>
+      c.population >= 30 && c.grit >= 0.50;
+
+  static bool _politicalIdentity(QuestContext c) =>
+      c.regimeNamed && c.charter >= 0.55;
+
+  static bool _lastingMemory(QuestContext c) =>
+      c.has(BuildingType.monument) && c.legacy >= 0.60;
+
+  static bool _openRoutes(QuestContext c) =>
+      c.has(BuildingType.caravanserai) &&
+      c.connectedProductionSites >= 3 &&
+      c.grit >= 0.58;
+
+  static bool _charterVoice(QuestContext c) =>
+      c.regimeNamed && c.charter >= 0.67;
+
+  static bool _trustedCouncil(QuestContext c) =>
+      c.houseCount >= 3 &&
+      c.withheldHouses == 0 &&
+      c.unity >= 0.67 &&
+      c.legacy >= 0.55;
+
+  static bool _yearFiveMatter(QuestContext c) =>
+      c.regimeNamed && c.charter >= 0.67 && c.legacy >= 0.67;
 
   // ── Karar ölçen adımlar ───────────────────────────────────────────────────
   static bool _loyalHouse(QuestContext c) => c.loyalHouses >= 1;

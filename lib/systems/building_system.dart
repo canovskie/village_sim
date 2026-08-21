@@ -17,7 +17,7 @@ class VillageStats {
   /// (bkz. villager_morale) sahneden buraya geçirilir. 0.5 = nötr.
   final double morale;
 
-  /// Taşıyıcı NPC hız çarpanı (ahır/han sayısına bağlı, ≥1).
+  /// Taşıyıcı NPC hız çarpanı (yük ahırı sayısına bağlı, ≥1).
   final double carrierSpeedMultiplier;
 
   /// Köydeki kuyu sayısı — evlerin su deposunu doldurur.
@@ -105,8 +105,10 @@ double marketShare(int rank) => 1.0 / (1 + rank);
 /// Köy çapı değerlerini binalardan türetir (kapasite, taşıyıcı hızı, kuyu,
 /// amenite morali). Köy morali burada HESAPLANMAZ — sahneden gelen [morale]
 /// birikim değeri olduğu gibi taşınır (pasif gösterge). Yan etkisizdir.
-VillageStats computeVillageStats(List<BuildingEntity> buildings,
-    {double morale = 0.5}) {
+VillageStats computeVillageStats(
+  List<BuildingEntity> buildings, {
+  double morale = 0.5,
+}) {
   int capacity = kBaseStockCapacity;
   double carrierBonus = 0.0;
   int wellCount = 0;
@@ -128,6 +130,10 @@ VillageStats computeVillageStats(List<BuildingEntity> buildings,
             carrierBonus += f.civicValue;
           case CivicEffect.morale:
             amenityCounts[b.type] = (amenityCounts[b.type] ?? 0) + 1;
+          case CivicEffect.recovery:
+          case CivicEffect.legacy:
+          case CivicEffect.visitorTrade:
+          case CivicEffect.alarm:
           case CivicEffect.none:
             break;
         }
@@ -189,7 +195,7 @@ VillageStats updateBuildings({
 /// Evin su deposunu bir tick ilerletir: sakinler tüketir, kuyular doldurur.
 /// Kuyu yoksa depo boşalır → moral düşer (bkz. [computeVillageStats]).
 void _tickHousing(double dt, BuildingEntity b, int wellCount) {
-  final drain  = kHouseWaterDrainPerOccupant * b.occupants * dt;
+  final drain = kHouseWaterDrainPerOccupant * b.occupants * dt;
   final refill = kWellWaterRefill * wellCount * dt;
   b.waterLevel = (b.waterLevel + refill - drain).clamp(0.0, 1.0);
 }

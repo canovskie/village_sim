@@ -315,6 +315,11 @@ extension _SceneWorld on _VillageSceneState {
     _birdFlocks.clear();
     _beeSwarms.clear();
     _pendingPetition = null;
+    _decisionPacing = DecisionPacing();
+    _pacedPetitions.clear();
+    _pacedChoices.clear();
+    _pacedImperialDemand = null;
+    _pacedImperialRequestId = null;
     _petitionModalOpen = false;
     _petitionOverdue = false;
     _petitionOverdueTimer = 0;

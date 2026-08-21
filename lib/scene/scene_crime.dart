@@ -42,6 +42,10 @@ class _ActiveCrime {
   /// yakalanma bundan önce olursa suç ÖNLENMİŞ sayılır.
   bool done = false;
 
+  /// Suç yeri bir Çan Kulesi menzilindeyse alarm bir kez çalar. Aynı suçta
+  /// her tick ses/bildirim üretmemek için olayın üstünde tutulur.
+  bool bellRung = false;
+
   // ── HIRSIZLIK: eve gir → çuvalla çık → göm (Faz 4) ────────────────────────
 
   /// Fail binanın İÇİNDE mi ve içeride kalan süre (sn).
@@ -1491,8 +1495,29 @@ extension _SceneCrime on _VillageSceneState {
     // (patrolVigilance), haber veren bir köy suçu daha uzaktan DUYURUR
     // (informUrge — gürültü tek başına değil, ağızdan ağza taşınır).
     final p = _pressure;
+    final bellCovered =
+        c.done &&
+        _buildings.any(
+          (b) =>
+              b.type == BuildingType.belltower &&
+              withinBuildingEffect(
+                type: b.type,
+                col: b.col,
+                row: b.row,
+                targetX: c.tx,
+                targetY: c.ty,
+              ),
+        );
+    if (bellCovered && !c.bellRung) {
+      c.bellRung = true;
+      AudioManager.instance.playSfx(Sfx.bellChime);
+      _showNotification('🔔 Alarm çanı çaldı — devriye suç yerine çağrılıyor.');
+    }
     final range = c.done
-        ? _kGuardResponse * (0.75 + p.informUrge * 0.9)
+        ? bellGuardResponseRange(
+            _kGuardResponse * (0.75 + p.informUrge * 0.9),
+            covered: bellCovered,
+          )
         : _kGuardSight * p.patrolVigilance;
 
     VillagerEntity? best;

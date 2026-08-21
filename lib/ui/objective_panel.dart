@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../systems/quest_book.dart';
+import '../systems/reckoning.dart';
 import 'app_ui.dart';
 import 'gameplay_dioramas.dart';
 import 'semantic_icon.dart';
@@ -200,6 +201,17 @@ class ObjectivePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          Text(
+            active.quest.capstone
+                ? 'ANA MESELE · ${active.quest.axis.label}'
+                : 'HESAPLAŞMA · ${active.quest.axis.label}',
+            style: AppUi.label.copyWith(
+              fontSize: 8.5,
+              color: active.quest.capstone ? AppUi.gold : AppUi.accentSoft,
+              letterSpacing: 0.55,
+            ),
+          ),
+          const SizedBox(height: 4),
           // GÖREVİ KİM İSTİYOR — kuruluş görevlerinin çoğu bir kurucunun
           // ağzından çıkar. İsim üstte durur ki ipucu bir sistem mesajı değil
           // birinin ricası gibi okunsun; kurucu ölmüşse satır hiç çizilmez.
@@ -294,5 +306,18 @@ GameIconData questGlyph(String id) => switch (id) {
   'hospitality' => GameIconData.door,
   'warehouse' => GameIconData.warehouse,
   'pop30' => GameIconData.star,
+  'roads' => GameIconData.map,
+  'recoverPressure' => GameIconData.reed,
+  'libraryLegacy' => GameIconData.scroll,
+  'housesUnited' => GameIconData.home,
+  'crafts' => GameIconData.hammer,
+  'townWeight' => GameIconData.wheat,
+  'politicalIdentity' => GameIconData.scales,
+  'lastingMemory' => GameIconData.star,
+  'openRoutes' => GameIconData.door,
+  'charterVoice' => GameIconData.scroll,
+  'trustedCouncil' => GameIconData.handshake,
+  'yearFiveMatter' => GameIconData.scales,
+  'beratReady' => GameIconData.crown,
   _ => GameIconData.star,
 };

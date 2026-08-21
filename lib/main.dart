@@ -129,12 +129,14 @@ import 'save/save_manager.dart';
 import 'scene/scene_data.dart';
 import 'systems/anchor_system.dart';
 import 'systems/audio_manager.dart';
+import 'systems/building_specialization.dart';
 import 'systems/building_system.dart';
 import 'systems/carrier_system.dart';
 import 'systems/chronicle.dart';
 import 'systems/combat_motion.dart';
 import 'systems/contextual_guides.dart';
 import 'systems/crime_system.dart';
+import 'systems/decision_pacing.dart';
 import 'systems/estate_system.dart';
 import 'systems/event_system.dart';
 import 'systems/founding_choice.dart';
@@ -236,6 +238,7 @@ part 'scene/scene_conflict.dart';
 part 'scene/scene_craft.dart';
 part 'scene/scene_crime.dart';
 part 'scene/scene_custom.dart';
+part 'scene/scene_decision_pacing.dart';
 part 'scene/scene_dev_console.dart';
 part 'scene/scene_divan.dart';
 part 'scene/scene_estates.dart';
@@ -828,6 +831,16 @@ class _VillageSceneState extends State<VillageScene>
   // → final değil. Normal oyunda tohumsuz Random olarak kalır.
   Random _rng = Random();
   double _time = 0;
+
+  // ── Ortak ağır-karar ritmi ────────────────────────────────────────────────
+  // Dilekçe, seçimli olay, suç hükmü ve imparatorluk aynı oyuncu dikkatini
+  // kullanır. Saf otorite zaman/öncelik/ölçümü; bu payload listeleri ise sahne
+  // nesnelerini taşır. Hepsi kayda yazılır (bkz. scene_save).
+  DecisionPacing _decisionPacing = DecisionPacing();
+  final List<_PacedPetition> _pacedPetitions = [];
+  final List<_PacedChoice> _pacedChoices = [];
+  ImperialDemand? _pacedImperialDemand;
+  String? _pacedImperialRequestId;
 
   // ── Kamera sarsıntısı (juice) — sarsıcı olaylarda kısa titreşim ─────────────
   // SettingsModel.shakeOnEvents kapalıysa hiç tetiklenmez. addCameraShake ile

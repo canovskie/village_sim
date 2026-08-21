@@ -19,30 +19,53 @@ extension _SceneFlow on _VillageSceneState {
       (type == BuildingType.tent || type == BuildingType.lumberCamp);
 
   /// QuestContext'i mevcut state'ten kurar.
-  QuestContext _questContext() => QuestContext(
+  QuestContext _questContext() {
+    // Tek snapshot, tek hesap: görev taraması dört kefeyi ayrı ayrı okusa da
+    // hane nüfuzu ve refah her seferinde yeniden hesaplanmaz.
+    final reckoning = _reckoningInput();
+    final yearsPassed = yearOf(_dayCount) - 1;
+    return QuestContext(
+      buildings: _buildings,
+      farmTiles: _farmTiles,
+      population: _villagers.length,
+      stock: _stockpile,
+      policies: _policies,
+      decorCount: _decor.length,
+      charterTier: _charterTier,
+      // GEÇ OYUN — köyün ne kurduğu kadar ne BİLDİĞİ ve ne kadar YERLEŞTİĞİ.
+      craftCount: _knownCrafts.length,
+      woodHarvested: _woodHarvested,
+      roadCount: _roadSystem.all.length,
+      connectedProductionSites: _connectedProductionSites(),
+      // Kimlik seçilmez, mühürlerin toplamından doğar (bkz. scene_regime);
+      // "ılımlı" = henüz bir duruş yok demek.
+      regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
+      dayCount: _dayCount,
+      // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
+      loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
+      withheldHouses: _houseCountWhere((s) => s.withholds),
+      houseCount: _livingHouseCount,
+      unity: reckoning.unity,
+      charter: reckoning.charter,
+      grit: reckoning.grit,
+      legacy: reckoning.legacy,
+      standing: reckoning.standing,
+      // Tamamlanmış her yıl bir kış; imparatorluk ziyareti ayrı baskı.
+      // Bu toplam yalnız tarihsel kapıdır, sonuç kefeleri ayrıca aranır.
+      pressuresWeathered: yearsPassed + _imperialVisits,
+      speakerNames: _founderNames(),
+    );
+  }
+
+  /// AYNI kesintisiz yola bağlanan üretim noktalarının en yüksek sayısı.
+  ///
+  /// Yol saymak kolayca boş araziye döşenen altmış kareye dönüşür. Burada önce
+  /// yol bileşenleri bulunur, sonra her bileşenin kapısına değdiği üretim
+  /// yapıları sayılır. Toplama/değirmen/pazar üretim dolaşımına girer; konut,
+  /// süs ve ambar sırf yola yakın diye üretim noktası sayılmaz.
+  int _connectedProductionSites() => connectedProductionSiteCount(
     buildings: _buildings,
-    farmTiles: _farmTiles,
-    population: _villagers.length,
-    stock: _stockpile,
-    policies: _policies,
-    decorCount: _decor.length,
-    charterTier: _charterTier,
-    // GEÇ OYUN — köyün ne kurduğu kadar ne BİLDİĞİ ve ne kadar YERLEŞTİĞİ.
-    craftCount: _knownCrafts.length,
-    woodHarvested: _woodHarvested,
-    roadCount: _roadSystem.all.length,
-    // Kimlik seçilmez, mühürlerin toplamından doğar (bkz. scene_regime);
-    // "ılımlı" = henüz bir duruş yok demek.
-    regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
-    dayCount: _dayCount,
-    // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
-    loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
-    withheldHouses: _houseCountWhere((s) => s.withholds),
-    houseCount: _livingHouseCount,
-    // Kapanış ölçüsünün ta kendisi (bkz. scene_reckoning) — "berat
-    // gününe hazır ol" adımı ile hesaplaşma AYNI sayıya bakar.
-    standing: _reckoningInput().standing,
-    speakerNames: _founderNames(),
+    roadTiles: [for (final road in _roadSystem.all) (road.col, road.row)],
   );
 
   /// Üyesi olan hanelerden duruşu koşulu sağlayanların sayısı.
@@ -136,7 +159,7 @@ extension _SceneFlow on _VillageSceneState {
     // Yeni tamamlanan TEK görev — akışı sakin pacele, ödül burst'ünü önle
     // (showcase köyünde aynı anda çok görev sağlanmış olabilir).
     for (final q in QuestBook.all) {
-      if (q.tier > _charterTier) continue;
+      if (!q.isAvailable(ctx)) continue;
       if (_completedQuests.contains(q.id)) continue;
       if (!q.check(ctx)) continue;
       _completedQuests.add(q.id);

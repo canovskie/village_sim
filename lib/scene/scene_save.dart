@@ -263,6 +263,14 @@ extension _SceneSave on _VillageSceneState {
     }
     int bRef(Object? b) => b is BuildingEntity ? (bIndex[b] ?? -1) : -1;
     int vRef(Object? v) => v is VillagerEntity ? (vIndex[v] ?? -1) : -1;
+    // İmparatorluk payload'u aktif modal açılınca sahne alanına taşınır. Autosave
+    // modal açıkken de çalışabildiği için aktif talebi de aynı kuyruk formatında
+    // sakla; aksi hâlde yüklemede karar sessizce kaybolurdu.
+    final savedImperialDemand = _pacedImperialDemand ?? _imperialDemand;
+    final savedImperialRequestId = _pacedImperialRequestId ??
+        (_decisionPacing.active?.kind == HeavyDecisionKind.imperial
+            ? _decisionPacing.active!.id
+            : null);
 
     return {
       // ── Skaler sim state ──
@@ -344,6 +352,30 @@ extension _SceneSave on _VillageSceneState {
           },
       ],
       'knownCrafts': _knownCrafts.toList(),
+      // Merkezi ağır-karar otoritesi + henüz yüzeye çıkmamış payload'lar.
+      // Yalnız timer'ları yazmak yetmez: kuyruk kaybolursa oyuncunun önüne
+      // gelmemiş karar sessizce buharlaşır.
+      'decisionPacing': _decisionPacing.toJson(),
+      'pacedPetitions': [
+        for (final payload in _pacedPetitions)
+          {
+            'requestId': payload.requestId,
+            'petitionId': payload.petition.id,
+            'author': vRef(payload.author),
+            'extra': payload.extra,
+          },
+      ],
+      'pacedChoices': [
+        for (final payload in _pacedChoices)
+          {'requestId': payload.requestId, 'eventId': payload.event.id},
+      ],
+      'pacedImperialRequestId': savedImperialRequestId,
+      'pacedImperialDemand': savedImperialDemand == null
+          ? null
+          : {
+              'kind': savedImperialDemand.kind.name,
+              'amount': savedImperialDemand.amount,
+            },
       // Hikâye güncesi (yapısal) + başarımlar + sinematik durumu (anılar kalıcı).
       'storyLog': [for (final e in _storyLog) e.toJson()],
       'achievedMilestones': _achievedMilestones.toList(),
@@ -536,6 +568,8 @@ extension _SceneSave on _VillageSceneState {
     'isActive': b.isActive,
     'userPaused': b.userPaused,
     'incomeTimer': b.incomeTimer,
+    'serviceTimer': b.serviceTimer,
+    if (b.inscription.isNotEmpty) 'inscription': b.inscription,
     'waterLevel': b.waterLevel,
     'occupants': b.occupants,
     'damage': b.damage,
@@ -835,6 +869,11 @@ extension _SceneSave on _VillageSceneState {
     _graves.clear();
     _petitionFollowUps.clear();
     _petitionCooldowns.clear();
+    _decisionPacing = DecisionPacing();
+    _pacedPetitions.clear();
+    _pacedChoices.clear();
+    _pacedImperialDemand = null;
+    _pacedImperialRequestId = null;
     _villageMemory.clear();
     _villagePulse = null;
     _villagePulseOpen = false;
@@ -900,6 +939,7 @@ extension _SceneSave on _VillageSceneState {
 
     // 2) Skaler state.
     _time = _d(w['time']);
+    _decisionPacing = DecisionPacing.fromJson(w['decisionPacing']);
     _worldSeed = _i(w['worldSeed']);
     _dayCount = _i(w['dayCount'], 1);
     _lastTimeOfDay = _d(w['lastTimeOfDay']);
@@ -1378,12 +1418,92 @@ extension _SceneSave on _VillageSceneState {
         }
       }
     }
+    // Merkezi kuyruk payload'ları, varlık referansları kurulduktan sonra geri
+    // bağlanır. Bilinmeyen katalog id'si eski sürüm içeriğidir ve atlanır.
+    for (final raw in (w['pacedPetitions'] as List? ?? const [])) {
+      if (raw is! Map) continue;
+      final requestId = raw['requestId'];
+      final petitionId = raw['petitionId'];
+      if (requestId is! String || petitionId is! String) continue;
+      final petition = PetitionSystem.byId(petitionId);
+      if (petition == null) continue;
+      final ai = _i(raw['author'], -1);
+      _pacedPetitions.add(
+        _PacedPetition(
+          requestId: requestId,
+          petition: petition,
+          author: ai >= 0 && ai < _villagers.length ? _villagers[ai] : null,
+          extra: {
+            for (final entry in (raw['extra'] as Map? ?? const {}).entries)
+              '${entry.key}': '${entry.value}',
+          },
+        ),
+      );
+    }
+    for (final raw in (w['pacedChoices'] as List? ?? const [])) {
+      if (raw is! Map) continue;
+      final requestId = raw['requestId'];
+      final eventId = raw['eventId'];
+      if (requestId is! String || eventId is! String) continue;
+      for (final event in EventSystem.events) {
+        if (event.id == eventId && event.needsChoice) {
+          _pacedChoices.add(_PacedChoice(requestId: requestId, event: event));
+          break;
+        }
+      }
+    }
+    final pacedDemand = w['pacedImperialDemand'];
+    final pacedRequestId = w['pacedImperialRequestId'];
+    if (pacedDemand is Map && pacedRequestId is String) {
+      final kindName = pacedDemand['kind'];
+      for (final kind in ImperialDemandKind.values) {
+        if (kind.name == kindName) {
+          _pacedImperialDemand = ImperialDemand(
+            kind,
+            _i(pacedDemand['amount'], 1),
+          );
+          _pacedImperialRequestId = pacedRequestId;
+          break;
+        }
+      }
+    }
+    // Eski kayıtta merkezi state yoksa görünür ağır kararı otoriteye devral.
+    // İki eski yüzey birden açıksa dilekçe aktif kalır, olay payload olarak
+    // sıraya alınır; böylece yükleme anında da tek-ağır-karar sözleşmesi başlar.
+    if (w['decisionPacing'] is! Map) {
+      if (_pendingPetition != null) {
+        _decisionPacing.request(
+          _pendingPetition!.id == 'crimeVerdict'
+              ? HeavyDecisionKind.crimeVerdict
+              : HeavyDecisionKind.petition,
+          atDay: _decisionDay,
+          urgency: _pendingPetition!.id == 'crimeVerdict'
+              ? DecisionUrgency.urgent
+              : DecisionUrgency.normal,
+        );
+      }
+      final oldChoice = _pendingChoice;
+      if (oldChoice != null) {
+        final admission = _decisionPacing.request(
+          HeavyDecisionKind.majorEvent,
+          atDay: _decisionDay,
+        );
+        if (!admission.activated) {
+          _pacedChoices.add(
+            _PacedChoice(requestId: admission.request.id, event: oldChoice),
+          );
+          _pendingChoice = null;
+          _choiceModalOpen = false;
+        }
+      }
+    }
     // Bekleyen düğünün çifti — kayıttaki İKİ İNDEKSTEN geri bağlanır, yeniden
     // seçilmez. Biri artık yoksa (eski kayıt / bozuk indeks) çift kurulmaz ve
     // dilekçe konusuz kalır → `_tickWedding` onu masadan kaldırır. Uydurma bir
     // çift bağlamak, oyuncunun okuduğundan başkasını evlendirmek demekti.
     _weddingCouple = null;
-    if (_pendingPetition?.id == 'villageWedding') {
+    if (_pendingPetition?.id == 'villageWedding' ||
+        _pacedPetitions.any((p) => p.petition.id == 'villageWedding')) {
       final wc = w['weddingCouple'];
       if (wc is List && wc.length == 2) {
         final bi = _i(wc[0], -1), gi = _i(wc[1], -1);
@@ -1495,6 +1615,8 @@ extension _SceneSave on _VillageSceneState {
     b.isActive = _b(j['isActive']);
     b.userPaused = _b(j['userPaused']);
     b.incomeTimer = _d(j['incomeTimer']);
+    b.serviceTimer = _d(j['serviceTimer']);
+    b.inscription = (j['inscription'] as String?) ?? '';
     b.waterLevel = _d(j['waterLevel'], 1.0);
     b.occupants = _i(j['occupants']);
     b.damage = _d(j['damage']).clamp(0.0, 1.0).toDouble();

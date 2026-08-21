@@ -142,6 +142,9 @@ extension _SceneTick on _VillageSceneState {
     // KÖY NABZI gerçek zamanla aralanır: 2× hız hikâye yağmuruna dönüşmez.
     // Sim duruyorsa buraya gelinmediği için oyuncu mola verirken fırsat kaçmaz.
     _tickVillagePulse(raw);
+    // Bütün ağır kararların ortak saati. Dünya saati ilerledikten hemen sonra
+    // sessizlik kapısını açar; bekleyen payload'lar simi durdurmadan sırada kalır.
+    _tickDecisionPacing();
     _applyGodModeRefill();
     final starvation = _tickPopulationAndHunger(dt);
     _tickEventsAndFx(dt);
@@ -1011,6 +1014,9 @@ extension _SceneTick on _VillageSceneState {
       if (v.socialCooldown > 0) v.socialCooldown -= dt;
       if (v.conflictCooldown > 0) v.conflictCooldown -= dt;
     }
+    // Hamam külhanları — bakım gereken biri varsa yakacak harcar; çatışma
+    // ve hastalıktan ÖNCE ki ikisi de aynı aktiflik durumunu okusun.
+    _tickBathhouseCare(dt);
     // Çekişme/kavga taraması — nadir, gerçekçi faktörlere bağlı.
     _tickConflicts(dt);
     // Suç — sinsi yaklaşma / eylem / kaçış + muhafız müdahalesi (aynı anda tek).

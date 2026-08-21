@@ -337,6 +337,7 @@ extension _SceneConflict on _VillageSceneState {
     for (final v in _villagers) {
       if (v.injuryDays <= 0) continue;
       double rate = 1.0;
+      rate += bathhouseRecoveryRate(_coveredByActiveBathhouse(v)) - 1.0;
       if (church != null) {
         rate += 0.8; // köyde şifa imkânı → daha hızlı iyileşme
         final dx = v.gridX - cx, dy = v.gridY - cy;

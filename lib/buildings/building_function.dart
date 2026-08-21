@@ -31,11 +31,22 @@ enum BuildingRole {
 /// Yorumu etkiye göre değişir:
 ///  • morale       → amenite moral AĞIRLIĞI (bkz. amenityMoraleFrom). Ağırlıklar
 ///    toplanıp yumuşak doyuma sokulur; bina başına birebir moral DEĞİLDİR ama
-///    büyüklükleri birbirine göre anlamlıdır (taverna 0.18 > anıt 0.06).
+///    büyüklükleri birbirine göre anlamlıdır (taverna 0.18 > kütüphane 0.10).
 ///  • carrierSpeed → taşıyıcı hız çarpanı katkısı (ör. 0.15 = +%15)
-///  • none         → civicValue okunmaz (ör. belediye: yönetişimin koltuğu,
-///    sayısal bir köy-çapı etkisi yok)
-enum CivicEffect { morale, carrierSpeed, none }
+///  • recovery     → yakacakla çalışan yerel hastalık/yaralanma bakımı
+///  • legacy       → kuruluş anındaki köy kimliğini kroniğe kazır
+///  • visitorTrade → gezgin tüccarın geliş ve konaklama temposunu değiştirir
+///  • alarm        → menzilindeki suçta muhafız örgütlenmesini genişletir
+///  • none         → civicValue okunmaz (ör. belediye: yönetişimin koltuğu)
+enum CivicEffect {
+  morale,
+  carrierSpeed,
+  recovery,
+  legacy,
+  visitorTrade,
+  alarm,
+  none,
+}
 
 /// Her bina türünün işlevsel tanımı — [kBuildingMeta]'nın ekonomik karşılığı.
 class BuildingFunction {
@@ -95,6 +106,24 @@ const int kMillBonusMaxCount = 2;
 /// değirmenci yarı katkı verir (bkz. scene_work._millerYieldMul).
 const double kMillerYieldBonus = 0.25;
 
+/// Hamam külhanının bir oyun günlük bakım için aldığı odun.
+const int kBathhouseFuelWood = 1;
+
+/// Aktif Hamamın yakın hastalık/yaralanma iyileşmesine ek hızı (+%100).
+const double kBathhouseRecoveryBonus = 1.0;
+
+/// Aktif Hamam kapsamındaki birinin hastalığa yakalanma riski çarpanı.
+const double kBathhouseIllnessRiskMultiplier = 0.45;
+
+/// Çan Kulesi alarmını duyan muhafızın müdahale menzili çarpanı.
+const double kBellGuardResponseMultiplier = 1.60;
+
+/// Han varken iki gezgin tüccar ziyareti arasındaki sürenin çarpanı.
+const double kCaravanseraiVisitGapMultiplier = 0.65;
+
+/// Han varken gezgin tüccarın köyde kalma süresinin çarpanı.
+const double kCaravanseraiVisitDurationMultiplier = 1.55;
+
 /// Pazarda manuel satış: kaynak türü → (satılan parti, kazanılan altın).
 const Map<ResourceKind, (int batch, int gold)> kMarketSellRates = {
   ResourceKind.wood: (10, 2),
@@ -149,7 +178,8 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     role: BuildingRole.housing,
     summary:
         'Kalın taş duvar, kışın içeri sızmaz. Köy Evi\'nden geniş: üç kişi '
-        'sıkışmadan yaşar, sabah dinlenmiş kalkar (moral).',
+        'sıkışmadan yaşar, sabah dinlenmiş kalkar (moral). Mavi ve '
+        'yeşil çatı aynı maliyet ve işlevin kozmetik varyantlarıdır.',
     housingCapacity: 3,
   ),
 
@@ -158,7 +188,8 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     role: BuildingRole.housing,
     summary:
         'Kalın taş duvar, kışın içeri sızmaz. Köy Evi\'nden geniş: üç kişi '
-        'sıkışmadan yaşar, sabah dinlenmiş kalkar (moral).',
+        'sıkışmadan yaşar, sabah dinlenmiş kalkar (moral). Mavi ve '
+        'yeşil çatı aynı maliyet ve işlevin kozmetik varyantlarıdır.',
     housingCapacity: 3,
   ),
 
@@ -323,28 +354,30 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.bathhouse: BuildingFunction(
     role: BuildingRole.civic,
     summary:
-        'Buhar, mermer, uzun sohbetler. Köylü yıkanır, gevşer, dedikodusunu '
-        'eder; temiz ve dinlenmiş bir köyün morali kendiliğinden yükselir.',
-    civicEffect: CivicEffect.morale,
-    civicValue: 0.10,
+        'Külhan yalnız menzilde hasta ya da yaralı varken yanar: günde '
+        '1 odun harcar. Sıcak su yakındaki hastalık riskini azaltır, mevcut '
+        'hastalık ve yaraların iyileşmesini iki katına çıkarır.',
+    civicEffect: CivicEffect.recovery,
+    civicValue: kBathhouseRecoveryBonus,
   ),
   BuildingType.monument: BuildingFunction(
     role: BuildingRole.civic,
     summary:
-        'Taşa kazınmış bir hatıra. Yolu buradan geçen başını kaldırıp bakar; '
-        'köylü ona bakınca kendini biraz daha büyük hisseder.',
-    civicEffect: CivicEffect.morale,
-    civicValue: 0.06,
+        'Dikildiği anda köyün rejimini ve baskın hane kimliğini taşa '
+        'kazır; aynı satır Vakanüvis kroniğine kalıcı bir dönüm noktası '
+        'olarak geçer. Köy sonra değişse bile yazı değişmez.',
+    civicEffect: CivicEffect.legacy,
   ),
 
   // ─── Liman & Ziyaret Mahallesi ─────────────────────────────────────────────
   BuildingType.caravanserai: BuildingFunction(
     role: BuildingRole.civic,
     summary:
-        'Kervan burada mola verir: hayvan dinlenir, kervancılar uyur, avlu geceyi '
-        'yabancı dillerle geçirir. Köyün taşıyıcıları da bu düzenden hızlanır.',
-    civicEffect: CivicEffect.carrierSpeed,
-    civicValue: 0.15,
+        'Gezgin tüccar doğrudan bu avluya gelir. Han varken ziyaretler '
+        '%35 daha sık, konaklama %55 daha uzundur; dolayısıyla köy fazlasını '
+        'dışarı satmak için daha çok fırsat bulur. Taşıyıcı hızı Ahırın işidir.',
+    civicEffect: CivicEffect.visitorTrade,
+    civicValue: kCaravanseraiVisitDurationMultiplier - 1.0,
   ),
   BuildingType.shrine: BuildingFunction(
     role: BuildingRole.civic,
@@ -357,9 +390,10 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.belltower: BuildingFunction(
     role: BuildingRole.civic,
     summary:
-        'Çan vakti söyler: iş başını, töreni, tehlikeyi. Sesini duyan köy '
-        'kendini bir düzenin içinde hisseder.',
-    civicEffect: CivicEffect.morale,
-    civicValue: 0.08,
+        'Menzilinde bir suç tamamlanırsa alarm çanı çalar. Uyanık '
+        'muhafızların kaçan faili duyma ve kovalamaya katılma menzili %60 '
+        'genişler; kule muhafız yokken tek başına kimseyi yakalamaz.',
+    civicEffect: CivicEffect.alarm,
+    civicValue: kBellGuardResponseMultiplier - 1.0,
   ),
 };

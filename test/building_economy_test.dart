@@ -3,6 +3,7 @@ import 'package:village_sim/buildings/building_entity.dart';
 import 'package:village_sim/buildings/building_function.dart';
 import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/core/resources.dart';
+import 'package:village_sim/systems/building_specialization.dart';
 import 'package:village_sim/systems/building_system.dart';
 import 'package:village_sim/systems/villager_morale.dart';
 
@@ -25,6 +26,15 @@ void main() {
       expect(moraleWeightOf(BuildingType.warehouse), 0.0);
       expect(moraleWeightOf(BuildingType.stable), 0.0); // civic ama lojistik
       expect(moraleWeightOf(BuildingType.townhall), 0.0); // civic ama etkisiz
+      for (final t in [
+        BuildingType.bathhouse,
+        BuildingType.monument,
+        BuildingType.caravanserai,
+        BuildingType.belltower,
+      ]) {
+        expect(moraleWeightOf(t), 0.0,
+            reason: '$t artık moral yığını değil özgün işlevini taşır');
+      }
       expect(amenityMoraleFrom({BuildingType.warehouse: 3}), 0.0);
     });
 
@@ -41,12 +51,12 @@ void main() {
       }
     });
 
-    test('ağırlık sırası korunur: taverna > kütüphane > anıt', () {
+    test('ağırlık sırası korunur: taverna > kütüphane > türbe', () {
       final tavern = amenityMoraleFrom({BuildingType.tavern: 1});
       final library = amenityMoraleFrom({BuildingType.library: 1});
-      final monument = amenityMoraleFrom({BuildingType.monument: 1});
+      final shrine = amenityMoraleFrom({BuildingType.shrine: 1});
       expect(tavern, greaterThan(library));
-      expect(library, greaterThan(monument));
+      expect(library, closeTo(shrine, 1e-9));
     });
 
     test('tek bina hissedilir, tavan aşılmaz', () {
@@ -63,7 +73,7 @@ void main() {
     test('aynı türün ikincisi çeşitlilikten az katar', () {
       final twoSame = amenityMoraleFrom({BuildingType.library: 2});
       final twoDiff =
-          amenityMoraleFrom({BuildingType.library: 1, BuildingType.bathhouse: 1});
+          amenityMoraleFrom({BuildingType.library: 1, BuildingType.shrine: 1});
       expect(twoDiff, greaterThan(twoSame));
       // …ama ikincisi yine de bir şey katar (sıfır değil).
       expect(twoSame, greaterThan(amenityMoraleFrom({BuildingType.library: 1})));
@@ -174,12 +184,89 @@ void main() {
   });
 
   group('taşıyıcı hızı', () {
-    test('ahır + han yığılır, tavanı var', () {
+    test('ahır lojistik verir; han artık aynı etkiyi kopyalamaz', () {
       final one = computeVillageStats([b(BuildingType.stable)]);
       expect(one.carrierSpeedMultiplier, closeTo(1.15, 1e-9));
-      final many = computeVillageStats(
-          [for (var i = 0; i < 20; i++) b(BuildingType.caravanserai, i * 4)]);
-      expect(many.carrierSpeedMultiplier, closeTo(1.8, 1e-9));
+      final withInn = computeVillageStats(
+          [b(BuildingType.stable), b(BuildingType.caravanserai, 4)]);
+      expect(withInn.carrierSpeedMultiplier, closeTo(1.15, 1e-9));
+    });
+  });
+
+  group('geç dönem uzmanlaşmaları', () {
+    test('seçilen dört bina farklı etki türü taşır', () {
+      expect(kBuildingFunctions[BuildingType.bathhouse]!.civicEffect,
+          CivicEffect.recovery);
+      expect(kBuildingFunctions[BuildingType.monument]!.civicEffect,
+          CivicEffect.legacy);
+      expect(kBuildingFunctions[BuildingType.caravanserai]!.civicEffect,
+          CivicEffect.visitorTrade);
+      expect(kBuildingFunctions[BuildingType.belltower]!.civicEffect,
+          CivicEffect.alarm);
+    });
+
+    test('hamam yalnız hasta varken ve odun varsa külhan yakar', () {
+      final idle = stepBathhouseFuel(
+          secondsLeft: 0, dt: 1, woodAvailable: 10, hasPatient: false);
+      expect(idle.active, isFalse);
+      expect(idle.woodUsed, 0);
+
+      final lit = stepBathhouseFuel(
+          secondsLeft: 0, dt: 1, woodAvailable: 1, hasPatient: true);
+      expect(lit.active, isTrue);
+      expect(lit.woodUsed, kBathhouseFuelWood);
+      expect(lit.secondsLeft, kBathhouseFuelSeconds);
+
+      final cold = stepBathhouseFuel(
+          secondsLeft: 0, dt: 1, woodAvailable: 0, hasPatient: true);
+      expect(cold.active, isFalse);
+      expect(bathhouseRecoveryRate(cold.active), 1.0);
+      expect(bathhouseRecoveryRate(lit.active), 2.0);
+      expect(bathhouseIllnessRisk(lit.active), lessThan(1.0));
+    });
+
+    test('anıt dikildiği günün iki kimliğini tek yazıda saklar', () {
+      expect(
+        monumentInscription(
+          regimeTitle: 'Açık Pazar',
+          houseIdentity: 'Demirhan Hanesi',
+          day: 42,
+        ),
+        'Açık Pazar · Demirhan Hanesi · 42. gün',
+      );
+    });
+
+    test('çan yalnız kapsadığı suçta muhafız menzilini genişletir', () {
+      expect(
+        withinBuildingEffect(
+          type: BuildingType.belltower,
+          col: 10,
+          row: 10,
+          targetX: 18,
+          targetY: 10,
+        ),
+        isTrue,
+      );
+      expect(bellGuardResponseRange(16, covered: false), 16);
+      expect(bellGuardResponseRange(16, covered: true), closeTo(25.6, 1e-9));
+    });
+
+    test('han ziyaret aralığını kısaltır, konaklamayı uzatır', () {
+      expect(merchantVisitGap(100, hasCaravanserai: true), 65);
+      expect(merchantVisitDuration(100, hasCaravanserai: true), 155);
+      expect(merchantVisitGap(100, hasCaravanserai: false), 100);
+    });
+
+    test('iki taş konut stratejik değil kozmetik varyanttır', () {
+      final blueMeta = kBuildingMeta[BuildingType.stoneHouseBlue]!;
+      final greenMeta = kBuildingMeta[BuildingType.stoneHouseGreen]!;
+      final blueFn = kBuildingFunctions[BuildingType.stoneHouseBlue]!;
+      final greenFn = kBuildingFunctions[BuildingType.stoneHouseGreen]!;
+      expect(blueMeta.cost.entries, greenMeta.cost.entries);
+      expect(blueFn.housingCapacity, greenFn.housingCapacity);
+      expect(blueFn.role, greenFn.role);
+      expect(blueFn.summary, contains('kozmetik varyant'));
+      expect(greenFn.summary, contains('kozmetik varyant'));
     });
   });
 

@@ -682,6 +682,13 @@ extension _SceneImperial on _VillageSceneState {
       return;
     }
     _imperialPhase = ImperialVisitPhase.parley;
+    _requestPacedImperial(demand);
+  }
+
+  /// Merkezi ritim kapısı heyete sıra verdiğinde pazarlık yüzeyini açar.
+  /// Kuyrukta beklerken askerler eşikte durur, simülasyon akmaya devam eder.
+  void _activateImperialParley(ImperialDemand demand) {
+    _imperialPhase = ImperialVisitPhase.parley;
     AudioManager.instance.playSfx(Sfx.thunderClap); // gümbürtülü giriş
     addCameraShake(6.0, dur: 0.6);
     setStateHere(() => _imperialDemand = demand);

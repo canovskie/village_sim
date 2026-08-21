@@ -14,6 +14,7 @@ import '../entities/villager_entity.dart';
 import '../entities/work_site.dart';
 import '../rendering/asset_style.dart';
 import '../scene/scene_data.dart';
+import '../systems/building_specialization.dart';
 import '../systems/building_system.dart';
 import '../systems/hearth_warmth.dart';
 import '../systems/winter.dart';
@@ -55,6 +56,9 @@ class BuildingInfoPanel extends StatelessWidget {
 
   final int population;
   final int populationCap;
+
+  /// Çan Kulesi alarmını fiilen karşılayabilecek muhafız sayısı.
+  final int guardCount;
 
   final VoidCallback onClose;
   final void Function(ResourceKind kind) onSell;
@@ -122,6 +126,7 @@ class BuildingInfoPanel extends StatelessWidget {
     required this.stats,
     required this.population,
     required this.populationCap,
+    this.guardCount = 0,
     required this.onClose,
     required this.onSell,
     this.onFestival,
@@ -725,6 +730,108 @@ class BuildingInfoPanel extends StatelessWidget {
             accent: true,
           ),
         ];
+      case CivicEffect.recovery:
+        final heat = (building.serviceTimer / kBathhouseFuelSeconds).clamp(
+          0.0,
+          1.0,
+        );
+        final state = building.isActive
+            ? 'Bakım veriyor'
+            : heat > 0
+            ? 'Sıcak · hasta bekliyor'
+            : stockpile.wood >= kBathhouseFuelWood
+            ? 'Hazır'
+            : 'Yakacak yok';
+        return [
+          _row(
+            'Külhan',
+            state,
+            accent: building.isActive,
+            valueColor: stockpile.wood < kBathhouseFuelWood && heat <= 0
+                ? AppUi.rust
+                : null,
+          ),
+          const SizedBox(height: 6),
+          _row('Yakacak', '$kBathhouseFuelWood odun / oyun günü'),
+          const SizedBox(height: 6),
+          _row(
+            'Bakım menzili',
+            '${kBuildingMeta[building.type]!.effectRadius.round()} tile',
+          ),
+          const SizedBox(height: 6),
+          _row(
+            'Yakın iyileşme',
+            '+${(kBathhouseRecoveryBonus * 100).round()}%',
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Yalnız menzilde hasta/yaralı varken yanar; boş hamam odun harcamaz.',
+            style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+          ),
+        ];
+      case CivicEffect.legacy:
+        return [
+          Text(
+            'TAŞA KAZINAN',
+            style: AppUi.label.copyWith(letterSpacing: 0.6),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            building.inscription.isEmpty
+                ? 'Eski yazı okunmuyor'
+                : building.inscription,
+            style: AppUi.bodyHi.copyWith(
+              color: building.inscription.isEmpty ? AppUi.textLo : AppUi.gold,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Bu, anıt dikildiği günün rejim ve hane kimliğidir; köy değişse bile yazı değişmez.',
+            style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+          ),
+        ];
+      case CivicEffect.visitorTrade:
+        final gapReduction =
+            ((1.0 - kCaravanseraiVisitGapMultiplier) * 100).round();
+        final durationBonus =
+            ((kCaravanseraiVisitDurationMultiplier - 1.0) * 100).round();
+        return [
+          _row('Tüccar ziyaretleri', '%$gapReduction daha sık', accent: true),
+          const SizedBox(height: 6),
+          _row('Konaklama', '%$durationBonus daha uzun'),
+          const SizedBox(height: 8),
+          Text(
+            'Gezgin tüccar meydana değil bu avluya gelir; fazlayı satmak için daha çok alım aralığı doğar.',
+            style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+          ),
+        ];
+      case CivicEffect.alarm:
+        return [
+          _row(
+            'Alarm alanı',
+            '${kBuildingMeta[building.type]!.effectRadius.round()} tile',
+          ),
+          const SizedBox(height: 6),
+          _row(
+            'Muhafız duyma menzili',
+            '+${(fn.civicValue * 100).round()}%',
+            accent: true,
+          ),
+          const SizedBox(height: 6),
+          _row(
+            'Köyde muhafız',
+            '$guardCount',
+            valueColor: guardCount > 0 ? AppUi.sage : AppUi.rust,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            guardCount > 0
+                ? 'Menzilde tamamlanan suçta çan çalar; devriye daha uzaktan kovalamaya katılır.'
+                : 'Çan alarm verir ama faili yakalayacak uyanık bir muhafız yok.',
+            style: AppUi.body.copyWith(fontSize: 11, color: AppUi.textLo),
+          ),
+        ];
       case CivicEffect.none:
         return [_row('Boyut', '${building.cols}×${building.rows}')];
     }
@@ -868,8 +975,8 @@ class BuildingInfoPanel extends StatelessWidget {
 
     if (onFestival != null) {
       final role = fn?.role;
-      // Şenlik evlerde, moral binalarında ve belediyede kurulur — ahır/handa
-      // (lojistik) değil.
+      // Şenlik evlerde, moral binalarında ve belediyede kurulur; uzmanlaşmış
+      // bakım/kronik/ziyaret/asayiş binaları ayrı işlerini korur.
       final ok =
           role == BuildingRole.housing ||
           (role == BuildingRole.civic &&
@@ -1157,6 +1264,10 @@ Color _accentFor(BuildingFunction? fn, [BuildingType? type]) {
       return switch (fn.civicEffect) {
         CivicEffect.morale => AppUi.accentSoft,
         CivicEffect.carrierSpeed => AppUi.info,
+        CivicEffect.recovery => AppUi.sage,
+        CivicEffect.legacy => AppUi.gold,
+        CivicEffect.visitorTrade => AppUi.gold,
+        CivicEffect.alarm => AppUi.rust,
         CivicEffect.none => AppUi.accentSoft,
       };
     case BuildingRole.none:
@@ -1182,6 +1293,10 @@ String _roleLabel(BuildingFunction? fn, [BuildingType? type]) {
       return switch (fn.civicEffect) {
         CivicEffect.morale => 'Moral',
         CivicEffect.carrierSpeed => 'Lojistik',
+        CivicEffect.recovery => 'Bakım',
+        CivicEffect.legacy => 'Kronik',
+        CivicEffect.visitorTrade => 'Ziyaret',
+        CivicEffect.alarm => 'Asayiş',
         CivicEffect.none => '',
       };
     case BuildingRole.none:

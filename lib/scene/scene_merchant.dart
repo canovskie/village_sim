@@ -9,6 +9,8 @@ extension _SceneMerchant on _VillageSceneState {
   static const double _kGapMax = 2.25 * kGameDaySeconds;
 
   static const double _kFirstTradeDelay = 5.0;
+
+  /// İki alım arası (sn) — ziyaret boyunca birkaç kez el değiştirir.
   static const double _kTradeInterval = 16.0;
 
   /// Sahne ana döngüsünden her tick. Spawn zamanlayıcısı + bütün ziyaretçilerin
@@ -122,7 +124,10 @@ extension _SceneMerchant on _VillageSceneState {
     // Yol ağı dış dünyayı köye bağlar; han geceleme kapasitesi verir. İkisi de
     // ziyaret üretir ama sıfıra indirmez — dünya lunapark kuyruğuna dönüşmesin.
     if (_roadSystem.count >= 8) gap *= 0.82;
-    if (_firstBuildingOf(BuildingType.caravanserai) != null) gap *= 0.78;
+    gap = merchantVisitGap(
+      gap,
+      hasCaravanserai: _firstBuildingOf(BuildingType.caravanserai) != null,
+    );
     return gap.clamp(0.65 * kGameDaySeconds, _kGapMax);
   }
 
@@ -154,8 +159,10 @@ extension _SceneMerchant on _VillageSceneState {
       VisitorKind.traveler => 0.34 * kGameDaySeconds,
       VisitorKind.stranger => 0.22 * kGameDaySeconds,
     };
-    final visitDuration =
-        baseVisit * (kind == VisitorKind.caravan && hasHan ? 1.30 : 1.0);
+    final visitDuration = merchantVisitDuration(
+      baseVisit,
+      hasCaravanserai: kind == VisitorKind.caravan && hasHan,
+    );
 
     if (kind == VisitorKind.caravan) {
       _addVisitor(
@@ -373,6 +380,8 @@ extension _SceneMerchant on _VillageSceneState {
       Voice.say(const [
         '🛒 Kervan {miktar} {mal} aldı; {köy} {altın} altın kazandı.',
         '🛒 Kervan {miktar} {mal} karşılığı {altın} altın bıraktı.',
+        '🛒 Tüccar {miktar} {mal} aldı; {köy} {altın} altın kazandı.',
+        '🛒 Gezgin tüccar {miktar} {mal} karşılığı {altın} altın bıraktı.',
         '🛒 Tezgâhta pazarlık: {miktar} {mal} gitti, {altın} altın geldi.',
       ], ctx),
     );
@@ -380,6 +389,8 @@ extension _SceneMerchant on _VillageSceneState {
       Voice.say(const [
         'Kervan {miktar} {mal} aldı; kasaya {altın} altın girdi.',
         'Kervanla ticaret: {mal} fazlası {altın} altına döndü.',
+        'Gezgin tüccar {miktar} {mal} aldı; kasaya {altın} altın girdi.',
+        'Tüccarla ticaret: {mal} fazlası {altın} altına döndü.',
       ], ctx),
       icon: '🛒',
     );

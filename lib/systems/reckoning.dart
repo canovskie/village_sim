@@ -32,6 +32,22 @@ import '../cutscene/cutscene.dart';
 import '../text/voice.dart';
 import 'law_compass.dart';
 
+/// Görevlerin ve hesaplaşma karnesinin paylaştığı dört iç sütun.
+///
+/// Bu sınıflandırma yalnız arayüz etiketi değildir: görev akışı oyuncuya
+/// kapanışta tartılacağı dili koşu sürerken öğretir. İmparatorluk itibarı ayrı
+/// bir kurtuluş yoludur; köyün kendi ayakları üstünde durma ölçüsüne girmez.
+enum ReckoningAxis { unity, charter, grit, legacy }
+
+extension ReckoningAxisX on ReckoningAxis {
+  String get label => switch (this) {
+    ReckoningAxis.unity => 'Hane rızası',
+    ReckoningAxis.charter => 'Tüzük',
+    ReckoningAxis.grit => 'Köy ağırlığı',
+    ReckoningAxis.legacy => 'Karar mirası',
+  };
+}
+
 /// İmparatorluğun kararı.
 enum ReckoningVerdict {
   /// 🏴 SANCAK — köy kendi bayrağını diker. İmparatorluk tabiyet değil

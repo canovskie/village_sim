@@ -68,6 +68,9 @@ extension _SceneWedding on _VillageSceneState {
       if (c == null || !_coupleStillPresent(c.$1, c.$2)) _withdrawWedding();
       return;
     }
+    // Düğün dilekçesi başka bir ağır kararın arkasında merkezi kuyrukta da
+    // bekleyebilir. O sırada aynı çifti ezme veya ikinci bir kur başlatma.
+    if (_pacedPetitions.any((p) => p.petition.id == 'villageWedding')) return;
 
     // Gündem doluysa (dilekçe bekliyor / sinematik oynuyor) kur ilerlemesin.
     if (_pendingPetition != null || _activeCutscene != null) return;
@@ -259,11 +262,7 @@ extension _SceneWedding on _VillageSceneState {
     final p = PetitionSystem.byId('villageWedding');
     if (p == null) return;
     _weddingCouple = (bride, groom);
-    _pendingPetition = p;
-    _petitionOverdue = false;
-    _petitionOverdueTimer = 0;
-    _petitionDeadline = _ScenePetitions._kPetitionGrace;
-    _petitionAuthor = bride;
+    _presentPetition(p, author: bride);
     // Herald — çift köy merkezine (ateşe) döner, içleri sevgiyle dolar.
     final (cc, cr) = _villageCenter();
     for (final v in [bride, groom]) {

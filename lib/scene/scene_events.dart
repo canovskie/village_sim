@@ -50,7 +50,11 @@ extension _SceneEvents on _VillageSceneState {
 
   /// Mayalanmayı başlat: olayı seç, omen süresini ayarla, diegetik uyarıyı oynat.
   void _beginOmen() {
-    if (_omenEvent != null || _pendingChoice != null) return;
+    if (_omenEvent != null ||
+        _pendingChoice != null ||
+        _pacedChoices.isNotEmpty) {
+      return;
+    }
     final ctx = EventContext(
       population: _villagers.length,
       stockpile: _stockpile,
@@ -207,6 +211,11 @@ extension _SceneEvents on _VillageSceneState {
   /// Sayılar "acele ettirmesin ama dünya nefesini tutmasın" dengesi: modal
   /// dönemde süre sonsuzdu, sıfıra da inemez — kayıp her zaman haber verilir.
   void _queueChoiceEvent(EventOutcome e) {
+    _requestPacedChoice(e);
+  }
+
+  /// Merkezi ritim kapısı bu olaya sıra verdiğinde görünür karar mührünü kurar.
+  void _activateChoiceEvent(EventOutcome e) {
     final grace =
         kGameDaySeconds * (e.severity == EventSeverity.major ? 0.20 : 0.30);
     // Modal/mühür/bildirim aynı cümleyi konuşsun: varyant burada materyalize.
