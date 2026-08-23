@@ -244,7 +244,7 @@ extension _ScenePlacement on _VillageSceneState {
     final flowerR2 = flowerR * flowerR;
     int flowers = 0;
     for (final d in _decor) {
-      if (d.crushed || !_isFlowerDecor(d.kind)) continue;
+      if (d.crushed || !isFlowerDecorKind(d.kind)) continue;
       if (d2(d.col, d.row) <= flowerR2) flowers++;
     }
 
@@ -418,6 +418,9 @@ extension _ScenePlacement on _VillageSceneState {
               !_isWilderness(c, r) &&
               !_landmarks.any((s) => s.col == c && s.row == r)) {
             _farmTiles.add(FarmTile(c, r));
+            // Tarla bu zeminin yeni sahibidir; eski çiçek/kütük ekin
+            // animasyonunun üstünde kalamaz.
+            _clearDecorTile(c, r);
           }
         }
       }
@@ -469,7 +472,8 @@ extension _ScenePlacement on _VillageSceneState {
       if (!silent) _showNotification('🚫 $reason');
       return false;
     }
-    final cost = kBuildingMeta[_placing!]!.cost;
+    final meta = kBuildingMeta[_placing!]!;
+    final cost = meta.cost;
     if (!_stockpile.canAfford(cost)) {
       if (!silent) {
         _showNotification('Eksik malzeme: ${_stockpile.formatMissing(cost)}');
@@ -485,6 +489,10 @@ extension _ScenePlacement on _VillageSceneState {
     final instant = isFirepit || foundingInstant || _godMode;
     setStateHere(() {
       _stockpile.spend(cost);
+
+      // Tile şantiye emri verildiği anda sahiplenilir. Tamamlanmayı
+      // beklersek çiçek scaffold/toz/çekiç animasyonunun üstünde kalır.
+      _clearDecorFootprint(c, r, meta.cols, meta.rows);
 
       if (instant) {
         final b = BuildingEntity(type: _placing!, col: c, row: r);
@@ -562,6 +570,14 @@ extension _ScenePlacement on _VillageSceneState {
             n.isMarkedForMining = false;
           }
         }
+      }
+      // Sökülen binadaki canlı anchor owner'larını önce usulünce bırak. Yalnız
+      // bu binaya bağlı kişilere dokunulur; başka ambar/kuyu görevleri sürer.
+      for (final v in _villagers) {
+        if (!_anchorSystem.hasReservationAt(b, v)) continue;
+        if (v.hasCarryTask) v.cancelCarryTask();
+        if (b.type == BuildingType.well && v.job != null) _releaseJob(v);
+        if (v.sitClaimed) v.cancelSit();
       }
       // Binayı kaldır + seçimi temizle.
       _buildings.remove(b);
@@ -688,6 +704,9 @@ extension _ScenePlacement on _VillageSceneState {
         _roadOrders.add(
           RoadOrder(col: tile.$1, row: tile.$2, surface: surface),
         );
+        // Yol emriyle birlikte zemin sahiplenilir; builder animasyonu eski
+        // dekorun içinden geçmez.
+        _clearDecorTile(tile.$1, tile.$2);
         laid++;
       }
       _clearRoadDrag();

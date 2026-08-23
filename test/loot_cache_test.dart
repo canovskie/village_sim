@@ -46,8 +46,7 @@ void main() {
     });
 
     test('tetikte muhafız izi büyütür', () {
-      expect(lootFindRadius(0.5, alert: 1.5),
-          greaterThan(lootFindRadius(0.5)));
+      expect(lootFindRadius(0.5, alert: 1.5), greaterThan(lootFindRadius(0.5)));
     });
   });
 
@@ -75,6 +74,18 @@ void main() {
       c.culprit = null;
       expect(c.amount, 12, reason: 'fail gitse de mal toprakta kalmalı');
       expect(c.culpritName, 'Mehmet', reason: 'vakanüvis bir ad yazabilmeli');
+    });
+
+    test('korunum toplamına ayrı stoktaki silah da girer', () {
+      final c = LootCache(
+        gridX: 1,
+        gridY: 1,
+        kind: ResourceKind.wood,
+        amount: 20,
+        weaponAmount: 1,
+        culpritName: 'Hüseyin',
+      );
+      expect(c.totalAmount, 21);
     });
   });
 }

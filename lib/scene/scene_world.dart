@@ -123,6 +123,16 @@ extension _SceneWorld on _VillageSceneState {
   /// Ailevi bağlar burada KOPARILMAZ — geri dönüşü olan çıkışlar (fidye) onları
   /// tek yönlü koparıp geri kurar, ölüm ise yasın kaynağı olarak korur.
   void _forgetVillager(VillagerEntity v) {
+    // Bazı çıkışlar (kaçırılma/devşirme) startDying/startLeaving kullanmadan
+    // varlığı listeden doğrudan çıkarır. Porter, iş hedefi ve ateş oturma slotu
+    // aynı merkezî çıkış kapısında kapanmalı; aksi halde dünyada hayalet claim
+    // kalır. _releaseJob porter görevini de güvenle iptal eder.
+    v.cancelSit();
+    if (v.job != null) {
+      _releaseJob(v);
+    } else {
+      v.cancelCarryTask();
+    }
     if (identical(_selectedVillager, v)) _selectedVillager = null;
     if (identical(_followedVillager, v)) _followedVillager = null;
     if (identical(_draggedVillager, v)) _draggedVillager = null;
@@ -290,10 +300,12 @@ extension _SceneWorld on _VillageSceneState {
     _reedBeds.clear();
     _berryBushes.clear();
     _cookedMeals = 0;
-    _decor.clear();
+    _replaceDecor(const []);
     _trees.clear();
     _mineNodes.clear();
     _landmarks.clear();
+    _farmTiles.clear();
+    _graves.clear();
     _buildings.clear();
     _orders.clear();
     _roadOrders.clear();
@@ -393,7 +405,7 @@ extension _SceneWorld on _VillageSceneState {
     _waterTiles.addAll(result.waterTiles);
     _lotuses.addAll(result.lotuses);
     _reeds.addAll(result.reeds);
-    _decor.addAll(result.decor);
+    _replaceDecor(result.decor);
     _trees.addAll(result.trees);
     _mineNodes.addAll(result.mineNodes);
     _landmarks.addAll(result.landmarks);
@@ -402,6 +414,10 @@ extension _SceneWorld on _VillageSceneState {
     // Arazi: merkezde açıklık aç, gen ormanını yoğun vahşi ormanla değiştir,
     // sınır halkasına kesilebilir ağaçları diz. _trees'i yeniden kurar.
     _initLand();
+    // _initLand dünya üreticisinin ağaç listesinden sonra vahşi orman/sınır
+    // yüzeylerini kurar. Dekoru ancak bütün doğal yüzeyler son hâlini aldıktan
+    // sonra bugünkü spacing, bütçe ve sahiplik sözleşmesine taşı.
+    _sanitizeDecorPopulation();
 
     // Yeni map → ground picture cache invalid.
     _groundVersion++;

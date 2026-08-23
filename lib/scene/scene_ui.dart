@@ -187,6 +187,7 @@ extension _SceneUi on _VillageSceneState {
                       reeds: _reeds,
                       berryBushes: _berryBushes,
                       decor: _decor,
+                      decorVersion: _decorVersion,
                       landmarks: _landmarks,
                       graves: _graves,
                       reedBeds: _reedBeds,
@@ -344,6 +345,7 @@ extension _SceneUi on _VillageSceneState {
         stockpile: _stockpile,
         selected: _placing,
         hasFirepit: _hasFire,
+        bypassCosts: _godMode,
         onlyType: target,
         hintType: target,
         onSelect: _onSelectBuilding,
@@ -354,19 +356,43 @@ extension _SceneUi on _VillageSceneState {
         stockpile: _stockpile,
         selected: _placing,
         hasFirepit: false,
+        bypassCosts: _godMode,
         // Adımın istediği kart — ateş yokken katalogda zaten tek kart var ama
         // işaret yine de konur: oyuncunun ilk hamlesi budur.
         hintType: _stepBuildTarget,
         onSelect: _onSelectBuilding,
       );
     }
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildCategoryTabs(),
-        const SizedBox(height: 4),
-        _buildCategoryContent(),
-      ],
+    final compact = useCompactGameUi(context);
+    if (compact) {
+      // Mobil katalog zaten tam ekran opak bir çalışma yüzeyi. Burada ikinci
+      // panel açılmaz; kategori rayı sabit kalır, kart ızgarası kalan bütün
+      // yüksekliği kullanır.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildCategoryTabs(),
+          Container(height: 1, color: AppUi.line),
+          Expanded(child: _buildCategoryTransition(embedded: true)),
+        ],
+      );
+    }
+
+    // Masaüstünde kategori ve kartlar tek katalog yüzeyidir. Önceki iki ayrı
+    // AppPanel üst üste küçük kapsüller gibi duruyor, içerik tek bir araçken
+    // görsel olarak iki farklı pencere hissi veriyordu.
+    return AppPanel(
+      padding: EdgeInsets.zero,
+      accent: AppUi.accent,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildCategoryTabs(),
+          Container(height: 1, color: AppUi.line),
+          _buildCategoryTransition(embedded: true),
+        ],
+      ),
     );
   }
 
@@ -680,24 +706,65 @@ extension _SceneUi on _VillageSceneState {
 
   /// Seçili kategorinin içeriği — bina kategorisinde palet, Arazi/Yol'da
   /// yol döşeme + Tarla/Kes/Kaz modları.
-  Widget _buildCategoryContent() {
+  Widget _buildCategoryContent({required bool embedded}) {
     if (_buildCategory == BuildCategory.araziYol) {
       final tools = _buildLandRoadTools();
-      if (!useCompactGameUi(context)) return tools;
-      return SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        child: tools,
+      if (useCompactGameUi(context)) {
+        return Align(
+          alignment: Alignment.centerLeft,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: tools,
+          ),
+        );
+      }
+      return SizedBox(
+        height: 124,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: tools,
+          ),
+        ),
       );
     }
     return BuildingPanel(
       stockpile: _stockpile,
       selected: _placing,
       hasFirepit: _hasFire,
+      bypassCosts: _godMode,
       category: _buildCategory,
       isUnlocked: _isCraftKnown,
       hintType: _stepBuildTarget,
+      embedded: embedded,
       onSelect: _onSelectBuilding,
+    );
+  }
+
+  Widget _buildCategoryTransition({required bool embedded}) {
+    final child = KeyedSubtree(
+      key: ValueKey('build_category_${_buildCategory.name}'),
+      child: _buildCategoryContent(embedded: embedded),
+    );
+    if (AppUi.captureStatic) return child;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0.025, 0),
+            end: Offset.zero,
+          ).animate(animation),
+          child: child,
+        ),
+      ),
+      child: child,
     );
   }
 
@@ -714,17 +781,73 @@ extension _SceneUi on _VillageSceneState {
     );
     if (useCompactGameUi(context)) {
       return SizedBox(
-        height: 46,
+        height: 54,
         child: SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
           child: tabs,
         ),
       );
     }
-    return AppPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-      child: tabs,
+    final count = _buildCategory == BuildCategory.araziYol
+        ? 7
+        : BuildingType.values
+              .where(
+                (type) =>
+                    kBuildingMeta.containsKey(type) &&
+                    kBuildingCategory[type] == _buildCategory &&
+                    _isCraftKnown(type),
+              )
+              .length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 7),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Color.alphaBlend(
+                AppUi.accent.withValues(alpha: 0.13),
+                AppUi.surface0,
+              ),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: AppUi.accent.withValues(alpha: 0.45)),
+            ),
+            child: const GameIcon(
+              GameIconData.hammer,
+              size: 14,
+              color: AppUi.accent,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'İNŞA',
+            style: AppUi.title.copyWith(fontSize: 11, letterSpacing: 1.1),
+          ),
+          const SizedBox(width: 10),
+          Container(width: 1, height: 24, color: AppUi.line),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: tabs,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _buildCategory == BuildCategory.araziYol
+                ? '$count ARAÇ'
+                : '$count YAPI',
+            style: AppUi.label.copyWith(
+              fontSize: 8.5,
+              letterSpacing: 0.8,
+              color: AppUi.textLo,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -739,56 +862,76 @@ extension _SceneUi on _VillageSceneState {
     final hinted = !sel && target != null && kBuildingCategory[target] == cat;
     return GuideTarget(
       id: GuideAnchors.buildTab(cat.name),
-      child: GestureDetector(
-        onTap: () => setStateHere(() => _buildCategory = cat),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          // 44 = Apple HIG dokunma eşiği. 40'a indirmeyi denedim, harness altı
-          // kategori sekmesini de "tap<44" diye işaretledi — 4dp uğruna doğru
-          // takas değil.
-          constraints: compact
-              ? const BoxConstraints(minHeight: 44)
-              : const BoxConstraints(),
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-          decoration: BoxDecoration(
-            color: sel
-                ? Color.alphaBlend(
-                    AppUi.accent.withValues(alpha: 0.22),
-                    AppUi.surface2,
-                  )
-                : AppUi.surface0,
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(
-              // İşaretli sekme seçili gibi DURMAZ: seçili kenar dolu ember,
-              // işaret ise yarı ember. İki durum karışırsa oyuncu sekmenin açık
-              // olduğunu sanır ve boş kataloğa bakar.
-              color: sel
-                  ? AppUi.accent
-                  : hinted
-                  ? AppUi.accent.withValues(alpha: 0.55)
-                  : AppUi.line,
-              width: sel ? 1.4 : (hinted ? 1.4 : 1),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => setStateHere(() => _buildCategory = cat),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            // 44 = Apple HIG dokunma eşiği. 40'a indirmeyi denedim, harness
+            // altı kategori sekmesini de "tap<44" diye işaretledi — 4dp uğruna
+            // doğru takas değil.
+            constraints: compact
+                ? const BoxConstraints(minHeight: 44)
+                : const BoxConstraints(),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 8,
+              vertical: compact ? 6 : 5,
             ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(cat.icon, style: const TextStyle(fontSize: 12)),
-              const SizedBox(width: 5),
-              Text(
-                cat.label.toUpperCase(),
-                style: AppUi.button.copyWith(
-                  fontSize: compact ? 11 : 9.5,
-                  letterSpacing: 0.8,
-                  color: sel ? AppUi.accentSoft : AppUi.textMid,
-                ),
+            decoration: BoxDecoration(
+              color: sel
+                  ? Color.alphaBlend(
+                      AppUi.accent.withValues(alpha: 0.22),
+                      AppUi.surface2,
+                    )
+                  : AppUi.surface0,
+              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+              border: Border.all(
+                // İşaretli sekme seçili gibi DURMAZ: seçili kenar dolu ember,
+                // işaret ise yarı ember. İki durum karışırsa oyuncu sekmenin
+                // açık olduğunu sanır ve boş kataloğa bakar.
+                color: sel
+                    ? AppUi.accent
+                    : hinted
+                    ? AppUi.accent.withValues(alpha: 0.55)
+                    : AppUi.line,
+                width: sel ? 1.4 : (hinted ? 1.4 : 1),
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GameIcon(
+                  _buildCategoryIcon(cat),
+                  size: compact ? 14 : 12,
+                  color: sel ? AppUi.accentSoft : AppUi.textLo,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  cat.label.toUpperCase(),
+                  style: AppUi.button.copyWith(
+                    fontSize: compact ? 11 : 9.5,
+                    letterSpacing: 0.8,
+                    color: sel ? AppUi.accentSoft : AppUi.textMid,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  GameIconData _buildCategoryIcon(BuildCategory category) => switch (category) {
+    BuildCategory.konut => GameIconData.home,
+    BuildCategory.uretim => GameIconData.hammer,
+    BuildCategory.ticaret => GameIconData.coin,
+    BuildCategory.civic => GameIconData.flame,
+    BuildCategory.altyapi => GameIconData.cog,
+    BuildCategory.araziYol => GameIconData.map,
+  };
 
   /// ŞEFFAFLIK HEDEFLERİ — "şu an burada bir şey kuruluyor/planlanıyor" diyen
   /// tile'lar. Bunları ÖRTEN binaları painter yarı saydam çizer.
@@ -834,13 +977,13 @@ extension _SceneUi on _VillageSceneState {
   }
 
   /// Bina seçimi — modları temizle, aynı binaya basınca bırak (toggle).
-  void _onSelectBuilding(BuildingType type) {
+  bool _onSelectBuilding(BuildingType type) {
     final meta = kBuildingMeta[type];
     if (meta != null && !_godMode && !_stockpile.canAfford(meta.cost)) {
       _showNotification(
         '🚫 ${meta.label} için eksik: ${_stockpile.formatMissing(meta.cost)}',
       );
-      return;
+      return false;
     }
     setStateHere(() {
       _farmMode = false;
@@ -865,6 +1008,7 @@ extension _SceneUi on _VillageSceneState {
       _placeReason = null;
       _placeFacts = null;
     });
+    return true;
   }
 
   /// Arazi/Yol sekmesi içeriği — yol döşeme + Tarla/Kes/Kaz modları.

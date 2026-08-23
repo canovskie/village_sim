@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../core/constants.dart';
+import '../systems/decor_population.dart';
 import 'decor_entity.dart';
 import 'mine_node.dart';
 import 'nature_entity.dart';
@@ -142,7 +143,10 @@ class WorldGenerator {
     final taken = <(int, int)>{};
 
     bool free(int c, int r) =>
-        c >= 1 && c < kCols - 1 && r >= 1 && r < kRows - 1 &&
+        c >= 1 &&
+        c < kCols - 1 &&
+        r >= 1 &&
+        r < kRows - 1 &&
         !water.contains((c, r)) &&
         !treeTiles.contains((c, r)) &&
         !mineTiles.contains((c, r)) &&
@@ -178,14 +182,16 @@ class WorldGenerator {
         final r = r0 + _rng.nextInt(3) - 1;
         if (!free(c, r)) continue;
         taken.add((c, r));
-        bushes.add(BerryBush(
-          col: c,
-          row: r,
-          variant: _rng.nextInt(3),
-          // Olgunluk dağınık başlar — hepsi aynı anda dolup aynı anda boşalırsa
-          // toplayıcı sırayla değil dalga dalga çalışır, iş düzensiz görünür.
-          ripeness: 0.35 + _rng.nextDouble() * 0.65,
-        ));
+        bushes.add(
+          BerryBush(
+            col: c,
+            row: r,
+            variant: _rng.nextInt(3),
+            // Olgunluk dağınık başlar — hepsi aynı anda dolup aynı anda boşalırsa
+            // toplayıcı sırayla değil dalga dalga çalışır, iş düzensiz görünür.
+            ripeness: 0.35 + _rng.nextDouble() * 0.65,
+          ),
+        );
       }
     }
     return bushes;
@@ -271,7 +277,12 @@ class WorldGenerator {
 
       // Suyun içinde kalan kara kareleri (girinti) — suya kat.
       for (final (c, r) in tiles) {
-        for (final (nc, nr) in [(c - 1, r), (c + 1, r), (c, r - 1), (c, r + 1)]) {
+        for (final (nc, nr) in [
+          (c - 1, r),
+          (c + 1, r),
+          (c, r - 1),
+          (c, r + 1),
+        ]) {
           if (nc < 1 || nc >= kCols - 1 || nr < 1 || nr >= kRows - 1) continue;
           if (tiles.contains((nc, nr))) continue;
           // Başlangıç bölgesi korunur: köyün ortasına göl taşırmayalım.
@@ -470,11 +481,25 @@ class WorldGenerator {
     // Her tür için İLK grup dar banda zorlanır → açılan reach o türü KESİN ve
     // sırayla karşılar; kalan gruplar band mininden cap'e serbest dağılır.
     void groups(OreType type, int count, double minSpan) {
-      _placeGroup(type, water, treeTiles, occupied, mines,
-          minSpan: minSpan, maxSpan: minSpan + 16);
+      _placeGroup(
+        type,
+        water,
+        treeTiles,
+        occupied,
+        mines,
+        minSpan: minSpan,
+        maxSpan: minSpan + 16,
+      );
       for (int i = 1; i < count; i++) {
-        _placeGroup(type, water, treeTiles, occupied, mines,
-            minSpan: minSpan, maxSpan: _kSpanCap);
+        _placeGroup(
+          type,
+          water,
+          treeTiles,
+          occupied,
+          mines,
+          minSpan: minSpan,
+          maxSpan: _kSpanCap,
+        );
       }
     }
 
@@ -608,9 +633,13 @@ class WorldGenerator {
   ) {
     final decor = <DecorEntity>[];
     final occupied = <(int, int)>{};
+    final groundFloraTiles = <(int, int)>{};
 
     bool tileFree(int c, int r) =>
-        c >= 0 && c < kCols && r >= 0 && r < kRows &&
+        c >= 0 &&
+        c < kCols &&
+        r >= 0 &&
+        r < kRows &&
         !water.contains((c, r)) &&
         !treeTiles.contains((c, r)) &&
         !mineTiles.contains((c, r)) &&
@@ -656,6 +685,10 @@ class WorldGenerator {
         final c = _rng.nextInt(kCols);
         final r = _rng.nextInt(kRows);
         if (!tileFree(c, r)) continue;
+        if (isFlowerDecorKind(kind) &&
+            !hasGroundFloraBreathingRoom((c, r), groundFloraTiles)) {
+          continue;
+        }
         // Bias kabul olasılığı: landmark yakınsa daha yüksek
         double acceptP = 0.35; // base — uzak alanlarda nadir
         if (treeBias > 0 && nearLandmark(c, r, treeTiles)) {
@@ -666,6 +699,7 @@ class WorldGenerator {
         }
         if (_rng.nextDouble() > acceptP.clamp(0.0, 1.0)) continue;
         occupied.add((c, r));
+        if (isGroundFloraDecorKind(kind)) groundFloraTiles.add((c, r));
         decor.add(makeDecor(c, r, kind, variantCount));
         placed++;
       }
@@ -675,23 +709,54 @@ class WorldGenerator {
     // ~%75 azaltıldı — "düzenlenmiş köy" hissi için sparse landmark dağılım.
     int n(int v) => (v * _areaScale).round();
 
+    // Çiçek, dünyanın alanıyla doğrusal değil kenar uzunluğuyla (sqrt alan)
+    // büyür. 128×128 haritada eski doğrusal ölçek çiçek sayısını 330'a kadar
+    // çıkarıyordu; sublinear ölçek hem dünyayı canlı tutar hem boş çayır bırakır.
+    int nf(int v) => ambientFlowerCount(v, kCols * kRows);
+
+    final ambientFlowerBudget = ambientFlowerCount(
+      kAmbientFlowerBaseCount,
+      kCols * kRows,
+    );
+    var ambientFlowersPlaced = 0;
+
+    void scatterFlower(
+      DecorKind kind,
+      int baseCount,
+      int variantCount, {
+      double treeBias = 0.0,
+      double waterBias = 0.0,
+    }) {
+      final remaining = ambientFlowerBudget - ambientFlowersPlaced;
+      if (remaining <= 0) return;
+      final before = decor.length;
+      scatterBiased(
+        kind,
+        min(nf(baseCount), remaining),
+        variantCount,
+        treeBias: treeBias,
+        waterBias: waterBias,
+      );
+      ambientFlowersPlaced += decor.length - before;
+    }
+
     // Çiçekler — wildflower patch'leri, mostly su kıyısına meyilli (sulak meadow)
-    scatterBiased(DecorKind.daisy,     n(10), 3, waterBias: 0.45, treeBias: 0.10);
-    scatterBiased(DecorKind.poppy,     n(8),  3, waterBias: 0.35, treeBias: 0.10);
-    scatterBiased(DecorKind.lavender,  n(7),  3, treeBias: 0.30);
-    scatterBiased(DecorKind.buttercup, n(9),  3, waterBias: 0.40, treeBias: 0.15);
+    scatterFlower(DecorKind.daisy, 10, 3, waterBias: 0.45, treeBias: 0.10);
+    scatterFlower(DecorKind.poppy, 8, 3, waterBias: 0.35, treeBias: 0.10);
+    scatterFlower(DecorKind.lavender, 7, 3, treeBias: 0.30);
+    scatterFlower(DecorKind.buttercup, 9, 3, waterBias: 0.40, treeBias: 0.15);
     // Yonca — düşük yoğunluk, açık alana
-    scatterBiased(DecorKind.clover,    n(10), 2);
+    scatterFlower(DecorKind.clover, 10, 2);
     // Mantarlar — ağaç dibine kuvvetli bias (orman atmosferi)
-    scatterBiased(DecorKind.mushroomRed,   n(4), 2, treeBias: 0.60);
+    scatterBiased(DecorKind.mushroomRed, n(4), 2, treeBias: 0.60);
     scatterBiased(DecorKind.mushroomBrown, n(6), 2, treeBias: 0.55);
     // Çalı — ağaç çevresine bias (orman edge'i)
     scatterBiased(DecorKind.bushSmall, n(5), 3, treeBias: 0.45);
     // Kütükler — nadir landmark, ağaç komşusu (kesilmiş ağaç hissi)
     scatterBiased(DecorKind.fallenLog, n(2), 2, treeBias: 0.55);
-    scatterBiased(DecorKind.stump,     n(3), 2, treeBias: 0.55);
+    scatterBiased(DecorKind.stump, n(3), 2, treeBias: 0.55);
     // Taş kümeleri — su kenarı (river-smoothed pebble) ya da random
-    scatterBiased(DecorKind.pebble,    n(7), 3, waterBias: 0.45);
+    scatterBiased(DecorKind.pebble, n(7), 3, waterBias: 0.45);
 
     return decor;
   }

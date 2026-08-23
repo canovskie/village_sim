@@ -300,29 +300,45 @@ class ResourceRenderer {
     );
   }
 
-  /// Taşınan kutu — kollar arasında, gövdenin önünde göğüs hizasında.
-  static void drawCarriedBox(
-    Canvas canvas,
-    ResourceBox box,
-    double screenX,
-    double screenY,
-  ) {
+  /// Taşınan kutu — karakterin YEREL uzayında, iki el arasında. Çağıran bunu
+  /// CharacterRenderer'ın flip/build/life-stage ve torso dönüşümleri içinde
+  /// çalıştırır; burada screen-space koordinatı kabul etmek bilinçli olarak yok.
+  static void drawCarriedBox(Canvas canvas, ResourceBox box) {
     final img = _imgs[box.spriteName];
     if (img == null) return;
-    _drawSprite(canvas, img, screenX, screenY - 22, 20.0);
+    // Gövde genişliği ~24, eller ±7: kutu bedene oranlı 34 yerel px. Eski
+    // 20 EKRAN px'i çocuk/yaşlı ölçeğini yok sayıp yükü karakterden büyük ve
+    // havada gösteriyordu.
+    _drawSprite(canvas, img, 2.0, -40.0, 34.0);
   }
 
-  /// Taşınan saman/balya — kollar arasında, göğüs hizasında.
-  /// Balya büyük → omuza yakın (-26 px), saman küçük → göğüs hizasında.
-  static void drawCarriedHay(
-    Canvas canvas,
-    HayEntity hay,
-    double screenX,
-    double screenY,
-  ) {
+  /// Taşınan saman/balya — karakterin yerel uzayında, kollar arasında.
+  /// `baleofstraw` canvas'ının görünür altı normalize ~0.739'da biter; tam
+  /// image altını ankrajlamak yükü ~7 ekran px havaya kaldırıyordu. GroundY
+  /// ile görünür alt yüzeyi doğrudan kavrama çizgisine sabitliyoruz.
+  static void drawCarriedHay(Canvas canvas, HayEntity hay) {
     final img = _imgs[hay.isBale ? 'baleofstraw' : 'hay'];
     if (img == null) return;
-    final yOff = hay.isBale ? -26.0 : -22.0;
-    _drawSprite(canvas, img, screenX, screenY + yOff, hay.isBale ? 26.0 : 16.0);
+    if (hay.isBale) {
+      _drawGroundedSprite(
+        canvas,
+        img,
+        0.5,
+        0.739,
+        46.0,
+        anchorX: 2.0,
+        anchorY: -38.0,
+      );
+    } else {
+      _drawGroundedSprite(
+        canvas,
+        img,
+        0.5,
+        0.994,
+        28.0,
+        anchorX: 2.0,
+        anchorY: -40.0,
+      );
+    }
   }
 }

@@ -365,7 +365,7 @@ extension _SceneVillagePulse on _VillageSceneState {
         }
 
       case _VillagePulseKind.doorstepGarden:
-        final count = primary ? 3 : 1;
+        final count = primary ? 2 : 1;
         if (primary) _stockpile.wood -= 2;
         final planted = _plantPulseGarden(actor, count);
         actor.feel(NpcEmotion.joy, 4.5, moodDelta: primary ? 0.09 : 0.04);
@@ -491,12 +491,7 @@ extension _SceneVillagePulse on _VillageSceneState {
         if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
         final beside =
             dc == -1 || dr == -1 || dc == home.cols || dr == home.rows;
-        if (!beside || _waterTiles.contains((c, r))) continue;
-        if (_isOccupiedByBuilding(c, r)) continue;
-        if (_trees.any((t) => t.col == c && t.row == r && !t.isFelled)) {
-          continue;
-        }
-        if (_decor.any((d) => d.col == c && d.row == r)) continue;
+        if (!beside) continue;
         cands.add((c, r));
       }
     }
@@ -508,19 +503,10 @@ extension _SceneVillagePulse on _VillageSceneState {
       DecorKind.buttercup,
     ];
     var planted = 0;
-    for (final (c, r) in cands.take(wanted)) {
-      _decor.add(
-        DecorEntity(
-          col: c,
-          row: r,
-          kind: flowers[_rng.nextInt(flowers.length)],
-          variant: _rng.nextInt(3),
-          jitterX: (_rng.nextDouble() - 0.5) * 0.38,
-          jitterY: (_rng.nextDouble() - 0.5) * 0.38,
-          swaySeed: _rng.nextInt(1000),
-        ),
-      );
-      planted++;
+    for (final (c, r) in cands) {
+      if (planted >= wanted) break;
+      final kind = flowers[_rng.nextInt(flowers.length)];
+      if (_tryPlantDecor(c, r, kind, jitter: 0.38)) planted++;
     }
     return planted;
   }

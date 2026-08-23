@@ -229,6 +229,10 @@ extension _SceneVignette on _VillageSceneState {
   /// Elde kalan nesne en sinsi artıktır: rolü üstüne giydirilen köylü eski
   /// eyleminin kovasını ömür boyu taşırdı (bkz. [_cancelAct]'ın gerekçesi).
   void _prepForScene(VillagerEntity v) {
+    // Suçüstü yakalama gibi bazı sahneler muhafızı yeniden `goTo` çağırmadan
+    // doğrudan role sokar. Taşıma zincirini burada kapatmazsak kaynak görünmez,
+    // teslim slotu da rezerve kalır.
+    v.cancelCarryTask();
     v.act = null;
     v.actPose = null;
     v.prop = PropKind.none;

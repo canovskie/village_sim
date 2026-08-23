@@ -143,11 +143,12 @@ extension _SceneFuneral on _VillageSceneState {
   }
 
   /// Mezar dikilebilir mi: harita içi, engelsiz (bina/su/maden/ağaç), susuz,
-  /// üzerinde başka mezar yok.
+  /// üzerinde dekor ya da başka mezar yok.
   bool _isGraveTileFree(int c, int r) {
     if (c < 0 || c >= kCols || r < 0 || r >= kRows) return false;
     if (_obstacles.contains((c, r))) return false;
     if (_waterTiles.contains((c, r))) return false;
+    if (_decor.any((d) => d.col == c && d.row == r)) return false;
     for (final g in _graves) {
       if (g.col.round() == c && g.row.round() == r) return false;
     }

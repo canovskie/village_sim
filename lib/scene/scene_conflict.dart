@@ -1514,6 +1514,9 @@ extension _SceneConflict on _VillageSceneState {
     } else {
       ey = kRows - 0.5;
     }
+    // Kenara varana kadar iş claim'lerini tutmasın; workforce taraması da
+    // isLeaving kapısıyla bu köylüyü yeniden işe alamaz.
+    if (v.job != null) _releaseJob(v);
     v.startLeaving(ex, ey);
     _chronicle(
       Voice.say(wasFeud ? _kExileFeudChroniclePool : _kExileChroniclePool, ctx),

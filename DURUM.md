@@ -1,6 +1,6 @@
 # DURUM — projenin o anki hâli
 
-**Son güncelleme: 12 Ağustos 2026.**
+**Son güncelleme: 23 Ağustos 2026.**
 
 Bu dosya ESKİR. Kalıcı kurallar için [CLAUDE.md](CLAUDE.md), "bu iş nerede
 yaşıyor" için `lib/main.dart` başındaki HARİTA yorumu. Burası yalnız üç
@@ -15,15 +15,16 @@ Boş bir liste iyi haber değil, bakımsız bir belgedir.
 
 | | |
 |---|---|
-| Kaynak | 276 dosya, ~109.700 satır (`lib/`) |
-| Test | 75 dosya, ~11.000 satır, **677 test** (~4 dk) |
+| Kaynak | 300 dosya, 125.450 satır (`lib/`) |
+| Test | 100 dosya, 15.880 satır, **827 test** (~13 dk) |
 | `flutter analyze` | temiz |
-| Varlıklar | 122 MB (85 MB'ı `assets/buildings`) |
+| Varlıklar | 136 MB (85 MB'ı `assets/buildings`) |
 | İçerik | 31 bina, 11 meslek, 8 kaynak, 34 hüküm, 10 suç türü |
 
-En büyük dosyalar: `character_renderer` (2420), `game_painter` (2412),
-`main.dart` (2364), `village_ledger` (2326), `scene_crime` (1990),
-`scene_tick` (1848).
+En büyük dosyalar: `character_renderer` (3316), `main.dart` (2745),
+`game_painter` (2493), `ui_gallery_capture_main` (2456),
+`village_ledger` (2401), `scene_crime` (2128), `law_book_panel` (2000),
+`scene_tick` (1917).
 
 ---
 
@@ -84,16 +85,28 @@ Bunların hepsi kurulu, bağlı ve testli.
   yalnız NESNE anlatan işaretler kaldı (🌿 hasta ev, 🕊️ kavgadan çekilme) +
   sohbetin konu ikonları *(2026-08-08)*
 - Suç + devriye + yargı; çekişme + kan davası; hastalık/veba; düğün/cenaze
+- **Hırsızlık mal korunumu** — çuval/zula sayaçları ayrı stoktaki silahı da
+  kapsıyor; yakalanma, kaçış, gömme ve geri alma yolları malı sızdırmıyor
+  *(2026-08-23)*
 
 **Üretim & hayatta kalma**
 - Tarım kapalı döngüsü, 11 meslek, zanaat ilerlemesi, hayvancılık
 - Kış: 4 eksenli hazırlık + yün→kışlık zinciri + soğuk çadır
 - Ateş yakıtı, böğürtlen→aşçı zinciri, sazlık yatakları
+- **Taşıyıcı görev yaşam döngüsü** — pickup/teslim/iptal/ölüm/sahne geçişi
+  rezervasyonları atomik temizleniyor; gerçek yük iki elle çiziliyor
+  *(2026-08-23)*
 
 **Altyapı**
 - Çoklu slot kayıt/yükleme, ayarlar kalıcılığı *(2026-08-08)*
 - Ses: 3 katman, 30 dosya
 - Mobil "kenar rayı" teması, iOS'a atma zinciri
+- **Dekor nüfusu ve painter cache sözleşmesi** — sahipli kalıcı yüzeyler eski
+  kayıtta sanitize ediliyor; geçici yükler florayı silmiyor; yerinde liste
+  mutasyonu `decorVersion` ile bucket cache'i yeniliyor *(2026-08-23)*
+- **Bina kataloğu yenilemesi** — metadata'dan thumbnail/maliyet/footprint,
+  renk dışı seçim ve yeterlilik durumları, tam ekran mobil katalog ve
+  896×414 + 760×360 taşma sözleşmeleri *(2026-08-23)*
 - Dev konsol, dev panel, almanak, 35 capture/prova aracı
 
 ---
@@ -144,8 +157,8 @@ Bina PNG'leri muhtemelen
 gereğinden yüksek çözünürlükte; oyun onları `spriteScale` ile küçültüyor.
 Ölçülmeden dokunulmamalı ama bakılmalı.
 
-### 3. `lib/tools/` — 35 dosya, 9.076 satır
-Kaynağın %8,4'ü geliştirici aracı. Çoğu tek seferlik capture harness'ı.
+### 3. `lib/tools/` — 38 dosya, 9.548 satır
+Kaynağın %7,6'sı geliştirici aracı. Çoğu tek seferlik capture harness'ı.
 Silmek şart değil ama hangisinin hâlâ koştuğu bilinmiyor; ölmüş olanlar
 bakım yükü.
 

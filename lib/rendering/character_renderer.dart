@@ -7,6 +7,19 @@ import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
 import 'tool_renderer.dart';
 
+/// İki elle yük taşırken kolların omuz-pivot açıları. Canvas'ta +açı aşağı
+/// doğru uzanan kolu SOLA, -açı SAĞA yatırır; dolayısıyla sol kol negatif,
+/// sağ kol pozitif olmalıdır. İşaretler ters dönerse iki el yükten dışarı açılır.
+@visibleForTesting
+({double armL, double armR}) twoHandCarryArmAngles(
+  double phase,
+  double moveIntensity,
+) {
+  final m = moveIntensity.clamp(0.0, 1.0);
+  final gripBreath = sin(phase) * (0.015 + m * 0.035);
+  return (armL: -0.52 + gripBreath, armR: 0.52 - gripBreath);
+}
+
 // ─── ANİMASYON ────────────────────────────────────────────────────────────────
 
 class _Anim {
@@ -65,15 +78,15 @@ class _Anim {
     final m = moveIntensity.clamp(0.0, 1.0);
 
     if (carrying) {
-      final wobble = sin(phase) * (0.02 + m * 0.04);
+      final grip = twoHandCarryArmAngles(phase, m);
       final bobWalk = (cos(phase * 2) - 1) * 2.0;
       final liftL = max(0.0, sin(phase)) * 1.4 * m;
       final liftR = max(0.0, -sin(phase)) * 1.4 * m;
       return _Anim(
         sin(phase) * (0.04 + m * 0.34),
         -sin(phase) * (0.04 + m * 0.34),
-        0.65 + wobble,
-        -0.65 - wobble,
+        grip.armL,
+        grip.armR,
         bobWalk * m,
         lean: m * 0.06,
         legLiftL: liftL,
@@ -364,6 +377,15 @@ class CharacterRenderer {
     /// Jestin gücü 0..1. Sıfırdan başlayıp sıfıra dönen bir ZARF beklenir:
     /// kol aniden kalkarsa jest değil seğirme olur.
     double gestureAmount = 0,
+
+    /// Elde/sırtta taşınan sahne nesnesi. Callback, karakterin yön aynalaması
+    /// ve beden ölçeği uygulanmış yerel uzayında; torso bob/lean/twist ile aynı
+    /// transform altında çağrılır. Böylece nesne ayrı screen-space'te yüzmez.
+    void Function(Canvas)? heldItem,
+
+    /// Çuval gibi sırt yükleri gövdeden önce çizilir; ön yükler (sepet/kutu)
+    /// gövde üstünde kalır. İki durumda da kavrayan eller en son çizilir.
+    bool heldItemBehindBody = false,
   }) {
     // İmparatorluk askeri köyün YABANCISI — hane kuşağı takmaz. Aksi halde
     // dışarıdan gelen vergici bir köy hanesinin rengiyle görünürdü.
@@ -381,26 +403,48 @@ class CharacterRenderer {
     // uzun köylü orantısal olarak hafif ince görünsün.
     final b = visual?.build ?? 1.0;
     if (b != 1.0) canvas.scale(1 + (b - 1) * 0.55, b);
+    // Ayrı iki sahiplik var:
+    // - [heldItem] mesleğin kendi sabit prop'unu ve sağ-el jestini bastırır;
+    // - [carrying] iki eli birden kilitler, dolayısıyla sol-el meşalesi ve
+    //   saldırı kolu da ancak bu durumda devre dışı kalır.
+    // Tek-elli balta/kova için ikisini aynı saymak görünmez gece ışığı ve
+    // koldan kopuk saldırı aleti üretiyordu.
+    final handsBusy = carrying || heldItem != null;
+    final twoHandsBusy = carrying;
     var anim = _Anim.compute(walkPhase, moveIntensity, carrying: carrying);
     if (pose != CharPose.normal) {
       // Poz tüm duruşu ele alır — yürüyüş/taşıma/meşale açıları geçersiz.
       anim = _poseAnim(pose, time);
-    } else if (torchLevel > 0.02) {
+    } else if (!twoHandsBusy && torchLevel > 0.02) {
       // Meşale taşıyorsa sol kol yukarı kilitlenir → el ve meşale tek birim.
       anim = anim.copyWith(armL: _kTorchArmAngle);
     }
     // JEST — pozdan SONRA ve yalnız SAĞ kola. Sırası önemli: oturan hikâye
     // anlatıcısının eli de kalkabilsin diye pozu ezmiyor, üstüne biniyor;
     // sol kola dokunmadığı için meşale taşıyan da selam verebilir.
-    if (gesture != CharGesture.none && gestureAmount > 0.02) {
+    if (!handsBusy && gesture != CharGesture.none && gestureAmount > 0.02) {
       anim = anim.copyWith(
         armR: _gestureArm(gesture, gestureAmount, time, anim.armR),
       );
     }
-    if (attacking && costume != NpcCostume.imperial) {
+    if (!twoHandsBusy && attacking && costume != NpcCostume.imperial) {
       // Muhafız mızrağı ve milisin aleti aynı vuruş ritminde öne gelir.
+      // Gece meşalesi sol eldeyse saldırı yalnız sağ kolu devralsın;
+      // aksi halde aşağıda sabit torch pivotu çizilirken sol kol ondan kopar.
       final jab = sin(time * 8.6 + (visual?.blinkPhase ?? 0));
-      anim = anim.copyWith(armL: -0.55, armR: 1.34 + jab * 0.38);
+      anim = anim.copyWith(
+        armL: torchLevel > 0.02 ? anim.armL : -0.55,
+        armR: 1.34 + jab * 0.38,
+      );
+    }
+
+    // Sırt yükü karakterin arkasında kalır. Callback zaten flip/build scale
+    // içinde; yalnız üst gövdenin kendi hareket dönüşümünü paylaşması gerekir.
+    if (heldItem != null && heldItemBehindBody) {
+      canvas.save();
+      _applyTorsoTransform(canvas, anim);
+      heldItem(canvas);
+      canvas.restore();
     }
 
     // Özel kostüm (imparatorluk askeri) tip/meslek/evreyi önceler — köyün
@@ -414,6 +458,7 @@ class CharacterRenderer {
         time,
         commander: commander,
         attacking: attacking,
+        handsBusy: handsBusy,
       );
     } else if (primitiveClothing) {
       final baseVisual = visual ?? _fallbackVisual;
@@ -438,9 +483,11 @@ class CharacterRenderer {
         case VillagerType.blacksmith:
           v != null
               ? _blacksmithNpc(canvas, anim, v, time)
-              : _blacksmith(canvas, anim);
+              : _blacksmith(canvas, anim, handsBusy: handsBusy);
         case VillagerType.guard:
-          v != null ? _guardNpc(canvas, anim, v, time) : _guard(canvas, anim);
+          v != null
+              ? _guardNpc(canvas, anim, v, time, handsBusy: handsBusy)
+              : _guard(canvas, anim, handsBusy: handsBusy);
         case VillagerType.miner:
           v != null ? _minerNpc(canvas, anim, v, time) : _miner(canvas, anim);
         case VillagerType.fisher:
@@ -452,13 +499,37 @@ class CharacterRenderer {
         case VillagerType.priest:
           _priestNpc(canvas, anim, v ?? _fallbackVisual, time);
         case VillagerType.shepherd:
-          _shepherdNpc(canvas, anim, v ?? _fallbackVisual, time);
+          _shepherdNpc(
+            canvas,
+            anim,
+            v ?? _fallbackVisual,
+            time,
+            handsBusy: handsBusy,
+          );
         case VillagerType.hunter:
-          _hunterNpc(canvas, anim, v ?? _fallbackVisual, time);
+          _hunterNpc(
+            canvas,
+            anim,
+            v ?? _fallbackVisual,
+            time,
+            handsBusy: handsBusy,
+          );
         case VillagerType.miller:
-          _millerNpc(canvas, anim, v ?? _fallbackVisual, time);
+          _millerNpc(
+            canvas,
+            anim,
+            v ?? _fallbackVisual,
+            time,
+            handsBusy: handsBusy,
+          );
         case VillagerType.innkeeper:
-          _innkeeperNpc(canvas, anim, v ?? _fallbackVisual, time);
+          _innkeeperNpc(
+            canvas,
+            anim,
+            v ?? _fallbackVisual,
+            time,
+            handsBusy: handsBusy,
+          );
       }
     }
 
@@ -472,10 +543,33 @@ class CharacterRenderer {
       canvas.restore();
     }
 
+    if (heldItem != null && !heldItemBehindBody) {
+      canvas.save();
+      _applyTorsoTransform(canvas, anim);
+      heldItem(canvas);
+      canvas.restore();
+    }
+    if (heldItem != null && carrying) {
+      canvas.save();
+      _applyTorsoTransform(canvas, anim);
+      _drawCarryGripHands(
+        canvas,
+        anim,
+        visual?.skin ?? _skinFor(type),
+        shoulderX: _carryShoulderX(
+          type,
+          costume: costume,
+          stage: stage,
+          primitiveClothing: primitiveClothing,
+        ),
+      );
+      canvas.restore();
+    }
+
     // Gece dışarıda meşale — sol omuz (off-hand), tüm character render
     // yolları aynı helper'ı kullanır → civilian + worker pattern tutarlı.
     // Oturma/ayin/yas pozunda eller serbest → meşale taşınmaz.
-    if (pose == CharPose.normal) {
+    if (pose == CharPose.normal && !twoHandsBusy) {
       _torchInLeftHand(canvas, torchLevel, time: time, torchPhase: torchPhase);
     }
     canvas.restore();
@@ -986,6 +1080,59 @@ class CharacterRenderer {
     if (anim.bob != 0) c.translate(0, anim.bob);
   }
 
+  /// Ön yük sprite'ı kolların üstüne çizilir; kavrama temasını geri getirmek
+  /// için iki elin son 5 px'ini aynı omuz dönüşüyle bir kez daha üste basarız.
+  /// Bu yalnız iki-elli yükte çalışır; tek elli aletlerin kendi arm callback'i
+  /// ve silueti korunur.
+  static void _drawCarryGripHands(
+    Canvas c,
+    _Anim anim,
+    Color skin, {
+    required double shoulderX,
+  }) {
+    void grip(double shoulderX, double angle) {
+      c.save();
+      c.translate(shoulderX, -68);
+      c.rotate(angle);
+      _shadedRect(c, const Rect.fromLTWH(-3.5, 16.5, 7, 5.5), skin);
+      c.restore();
+    }
+
+    grip(-shoulderX, anim.armL);
+    grip(shoulderX, anim.armR);
+  }
+
+  /// Meslek gövdelerinin omuz pivotları küçük farklar taşır. Kavrama elini
+  /// sabit ±16'ya basmak özellikle muhafızda bileği yükten 4 px ayırıyordu.
+  static double _carryShoulderX(
+    VillagerType type, {
+    required NpcCostume costume,
+    required LifeStage stage,
+    required bool primitiveClothing,
+  }) {
+    if (costume == NpcCostume.imperial) return 20;
+    if (primitiveClothing) return 16;
+    if (!stage.hasProfession) return 15;
+    return switch (type) {
+      VillagerType.farmer => 15,
+      VillagerType.merchant => 16,
+      VillagerType.blacksmith => 18,
+      VillagerType.guard => 20,
+      VillagerType.miner => 16,
+      VillagerType.fisher => 15,
+      VillagerType.priest => 17,
+      VillagerType.shepherd || VillagerType.hunter => 15,
+      VillagerType.miller || VillagerType.innkeeper => 16,
+    };
+  }
+
+  static Color _skinFor(VillagerType type) =>
+      (type == VillagerType.blacksmith ||
+          type == VillagerType.miner ||
+          type == VillagerType.hunter)
+      ? _skin2
+      : _skin1;
+
   /// Yumuşak yuvarlak kafa, tatlı parlayan göz ve gülümseme (visual'sız fallback).
   static void _head(Canvas c, Color skin, {double y = -80}) {
     final faceR = RRect.fromRectAndCorners(
@@ -1124,7 +1271,7 @@ class CharacterRenderer {
   }
 
   // ─── 3. DEMİRCİ ───────────────────────────────────────────────────────────
-  static void _blacksmith(Canvas c, _Anim anim) {
+  static void _blacksmith(Canvas c, _Anim anim, {bool handsBusy = false}) {
     _shadow(c, anim);
     _leg(c, -6, anim.legL, const Color(0xFF3A3028), _leatherDk);
     _leg(c, 6, anim.legR, const Color(0xFF3A3028), _leatherDk);
@@ -1150,7 +1297,7 @@ class CharacterRenderer {
       18,
       anim.armR,
       const Color(0xFF5A3818),
-      (arm) => ToolRenderer.drawHammer(arm, scale: 1.15),
+      handsBusy ? null : (arm) => ToolRenderer.drawHammer(arm, scale: 1.15),
     );
     _head(c, _skin2, y: -82);
     // Deri kukuleta
@@ -1160,7 +1307,7 @@ class CharacterRenderer {
   }
 
   // ─── 4. MUHAFIZ ───────────────────────────────────────────────────────────
-  static void _guard(Canvas c, _Anim anim) {
+  static void _guard(Canvas c, _Anim anim, {bool handsBusy = false}) {
     _shadow(c, anim);
     _leg(c, -6, anim.legL, const Color(0xFF504838), const Color(0xFF303028));
     _leg(c, 6, anim.legR, const Color(0xFF504838), const Color(0xFF303028));
@@ -1184,15 +1331,20 @@ class CharacterRenderer {
     c.drawRect(const Rect.fromLTWH(-28, -74, 16, 10), _s(_leatherDk));
     c.drawRect(const Rect.fromLTWH(12, -74, 16, 10), _f(_leather));
     c.drawRect(const Rect.fromLTWH(12, -74, 16, 10), _s(_leatherDk));
-    // Sol kol + kalkan
-    _armWithShield(c, -20, anim.armL);
-    // Sağ kol + mızrak
-    _arm(c, 20, anim.armR, const Color(0xFFB8A878), (arm) {
-      arm.drawRect(const Rect.fromLTWH(3, -40, 3, 80), _f(_woodBrown));
-      // Mızrak ucu
-      arm.drawRect(const Rect.fromLTWH(1, -52, 7, 12), _f(_ironGrey));
-      arm.drawRect(const Rect.fromLTWH(1, -52, 7, 12), _s(_ironDk));
-    });
+    if (handsBusy) {
+      _arm(c, -20, anim.armL, const Color(0xFFB8A878));
+      _arm(c, 20, anim.armR, const Color(0xFFB8A878));
+    } else {
+      // Sol kol + kalkan
+      _armWithShield(c, -20, anim.armL);
+      // Sağ kol + mızrak
+      _arm(c, 20, anim.armR, const Color(0xFFB8A878), (arm) {
+        arm.drawRect(const Rect.fromLTWH(3, -40, 3, 80), _f(_woodBrown));
+        // Mızrak ucu
+        arm.drawRect(const Rect.fromLTWH(1, -52, 7, 12), _f(_ironGrey));
+        arm.drawRect(const Rect.fromLTWH(1, -52, 7, 12), _s(_ironDk));
+      });
+    }
     _head(c, _skin1);
     // Demir miğfer
     c.drawRect(const Rect.fromLTWH(-11, -100, 22, 20), _f(_ironGrey));
@@ -2443,7 +2595,13 @@ class CharacterRenderer {
   }
 
   // ─── MUHAFIZ (yeni — shaded + per-NPC görsel) ──────────────────────────────
-  static void _guardNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+  static void _guardNpc(
+    Canvas c,
+    _Anim anim,
+    NpcVisual v,
+    double time, {
+    bool handsBusy = false,
+  }) {
     final gambBase = _cloth(const Color(0xFFB8A878), v.clothingShift);
     final hoseBase = _cloth(const Color(0xFF504838), v.clothingShift * 0.4);
     final gambStripe = darker(gambBase, 0.20);
@@ -2479,13 +2637,18 @@ class CharacterRenderer {
     _shadedRect(c, const Rect.fromLTWH(-28, -74, 16, 10), _leather);
     _shadedRect(c, const Rect.fromLTWH(12, -74, 16, 10), _leather);
 
-    // Sol kol + kalkan
-    _shadedArmWithShield(c, -20, anim.armL, gambBase, v.skin);
-    // Sağ kol + mızrak
-    _shadedArm(c, 20, anim.armR, gambBase, v.skin, (arm) {
-      _shadedRect(arm, const Rect.fromLTWH(3, -40, 3, 80), _woodBrown);
-      _shadedRect(arm, const Rect.fromLTWH(1, -52, 7, 12), _ironGrey);
-    });
+    if (handsBusy) {
+      _shadedArm(c, -20, anim.armL, gambBase, v.skin);
+      _shadedArm(c, 20, anim.armR, gambBase, v.skin);
+    } else {
+      // Sol kol + kalkan
+      _shadedArmWithShield(c, -20, anim.armL, gambBase, v.skin);
+      // Sağ kol + mızrak
+      _shadedArm(c, 20, anim.armR, gambBase, v.skin, (arm) {
+        _shadedRect(arm, const Rect.fromLTWH(3, -40, 3, 80), _woodBrown);
+        _shadedRect(arm, const Rect.fromLTWH(1, -52, 7, 12), _ironGrey);
+      });
+    }
 
     _shadedHead(c, v, time);
 
@@ -2536,14 +2699,16 @@ class CharacterRenderer {
     double time, {
     bool commander = false,
     bool attacking = false,
+    bool handsBusy = false,
   }) {
     final hose = _cloth(_impSteelDk, v.clothingShift * 0.3);
 
     // Saldırı modunda mızrak ileri DÜRTÜLÜR (jab) + gövde öne saldırgan eğilir.
     // ~1.5 rad mızrağı yatay-ileri çevirir; jab salınımı içeri/dışarı dürtme.
     final jab = sin(time * 8.0);
-    final spearArm = attacking ? 1.5 + jab * 0.30 : anim.armR;
-    final atkLean = attacking ? 0.18 + jab.clamp(0.0, 1.0) * 0.07 : 0.0;
+    final effectiveAttack = attacking && !handsBusy;
+    final spearArm = effectiveAttack ? 1.5 + jab * 0.30 : anim.armR;
+    final atkLean = effectiveAttack ? 0.18 + jab.clamp(0.0, 1.0) * 0.07 : 0.0;
 
     _shadow(c, anim);
 
@@ -2606,24 +2771,29 @@ class CharacterRenderer {
     _shadedRect(c, const Rect.fromLTWH(-29, -75, 17, 11), _impSteel);
     _shadedRect(c, const Rect.fromLTWH(12, -75, 17, 11), _impSteel);
 
-    // Sol kol + imparatorluk kalkanı.
-    _shadedArm(c, -20, anim.armL, _impSteel, v.skin, (arm) {
-      _shadedRect(arm, const Rect.fromLTWH(-17, 2, 23, 24), _impCrimson);
-      _shadedRect(arm, const Rect.fromLTWH(-15, 4, 19, 20), _impCrimDk);
-      // Altın hat + merkez çelik kabara.
-      arm.drawRect(const Rect.fromLTWH(-15, 12, 19, 2), _f(_impGold));
-      arm.drawRect(const Rect.fromLTWH(-9, 8, 4, 12), _f(_impGold));
-      _shadedRect(arm, const Rect.fromLTWH(-8, 11, 6, 6), _impSteel);
-    });
-    // Sağ kol + mızrak (uzun çelik uçlu). Saldırıda [spearArm] ileri dürter.
-    _shadedArm(c, 20, spearArm, _impSteel, v.skin, (arm) {
-      _shadedRect(arm, const Rect.fromLTWH(3, -46, 3, 88), _woodBrown);
-      _shadedRect(arm, const Rect.fromLTWH(0, -62, 9, 18), _impSteel);
-      arm.drawRect(
-        const Rect.fromLTWH(2, -64, 5, 4),
-        _f(lighter(_impSteel, 0.18)),
-      );
-    });
+    if (handsBusy) {
+      _shadedArm(c, -20, anim.armL, _impSteel, v.skin);
+      _shadedArm(c, 20, anim.armR, _impSteel, v.skin);
+    } else {
+      // Sol kol + imparatorluk kalkanı.
+      _shadedArm(c, -20, anim.armL, _impSteel, v.skin, (arm) {
+        _shadedRect(arm, const Rect.fromLTWH(-17, 2, 23, 24), _impCrimson);
+        _shadedRect(arm, const Rect.fromLTWH(-15, 4, 19, 20), _impCrimDk);
+        // Altın hat + merkez çelik kabara.
+        arm.drawRect(const Rect.fromLTWH(-15, 12, 19, 2), _f(_impGold));
+        arm.drawRect(const Rect.fromLTWH(-9, 8, 4, 12), _f(_impGold));
+        _shadedRect(arm, const Rect.fromLTWH(-8, 11, 6, 6), _impSteel);
+      });
+      // Sağ kol + mızrak (uzun çelik uçlu). Saldırıda [spearArm] ileri dürter.
+      _shadedArm(c, 20, spearArm, _impSteel, v.skin, (arm) {
+        _shadedRect(arm, const Rect.fromLTWH(3, -46, 3, 88), _woodBrown);
+        _shadedRect(arm, const Rect.fromLTWH(0, -62, 9, 18), _impSteel);
+        arm.drawRect(
+          const Rect.fromLTWH(2, -64, 5, 4),
+          _f(lighter(_impSteel, 0.18)),
+        );
+      });
+    }
 
     _shadedHead(c, v, time);
 
@@ -2731,7 +2901,13 @@ class CharacterRenderer {
   // ─── ÇOBAN ────────────────────────────────────────────────────────────────
   /// Silüet imzası: ham yün tunik + kahve POST yelek (omuzları kabartır) +
   /// uzun kıvrık DEĞNEK (crook) + kenarlı hasır şapka.
-  static void _shepherdNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+  static void _shepherdNpc(
+    Canvas c,
+    _Anim anim,
+    NpcVisual v,
+    double time, {
+    bool handsBusy = false,
+  }) {
     final woolBase = _cloth(_kShepherdWool, v.clothingShift);
     final peltBase = _cloth(const Color(0xFF6E5236), v.clothingShift * 0.5);
     final hoseBase = _cloth(_woolBrown, v.clothingShift * 0.4);
@@ -2757,6 +2933,7 @@ class CharacterRenderer {
     // Sağ el + çoban değneği — ELİN İÇİNDEN geçer (x≈0, kol ekseni), gövdeden
     // kopuk havada durmaz.
     _shadedArm(c, 15, anim.armR, woolBase, v.skin, (arm) {
+      if (handsBusy) return;
       _shadedRect(arm, const Rect.fromLTWH(-1, -42, 3, 80), _woodBrown);
       // Kıvrık uç — iki blokla "crook"
       _shadedRect(arm, const Rect.fromLTWH(-1, -46, 8, 3), _woodBrown);
@@ -2774,7 +2951,13 @@ class CharacterRenderer {
   // ─── AVCI ─────────────────────────────────────────────────────────────────
   /// Silüet imzası: koyu orman yeşili KUKULETA (sivri uçlu) + çapraz sadak
   /// (oklar omzundan çıkar) + elde YAY. Kalabalıkta anında okunur.
-  static void _hunterNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+  static void _hunterNpc(
+    Canvas c,
+    _Anim anim,
+    NpcVisual v,
+    double time, {
+    bool handsBusy = false,
+  }) {
     final cloakBase = _cloth(_kHunterGreen, v.clothingShift);
     final hoseBase = _cloth(const Color(0xFF3E3628), v.clothingShift * 0.4);
 
@@ -2810,6 +2993,7 @@ class CharacterRenderer {
     _shadedArm(c, -15, anim.armL, cloakBase, v.skin);
     // Sağ el + yay — kavis ELDEN çıkar (kol ekseninde), havada durmaz
     _shadedArm(c, 15, anim.armR, cloakBase, v.skin, (arm) {
+      if (handsBusy) return;
       final bow = Path()
         ..moveTo(1, -30)
         ..quadraticBezierTo(13, 0, 1, 30);
@@ -2843,7 +3027,13 @@ class CharacterRenderer {
   // ─── DEĞİRMENCİ / FIRINCI ─────────────────────────────────────────────────
   /// Silüet imzası: UNLU BEYAZ önlük (köyde tek beyaz kütle) + omuzda un çuvalı
   /// + bez başlık. Uzaktan bile "beyaz" olan tek meslek.
-  static void _millerNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+  static void _millerNpc(
+    Canvas c,
+    _Anim anim,
+    NpcVisual v,
+    double time, {
+    bool handsBusy = false,
+  }) {
     final clothBase = _cloth(_kMillerCloth, v.clothingShift);
     final hoseBase = _cloth(const Color(0xFF5E584C), v.clothingShift * 0.4);
     const sack = Color(0xFFBFAE86);
@@ -2875,18 +3065,21 @@ class CharacterRenderer {
       c.drawRect(Rect.fromLTWH(p.dx, p.dy, 2, 2), _f(const Color(0xFFF2EEE2)));
     }
 
-    // Sol OMUZDA un çuvalı — gövdeye BİNDİRİLMİŞ (eski hâli 1px boşlukla havada
-    // duruyordu, tabela gibi okunuyordu) + omuz üstünden geçen kayış.
-    _shadedRect(c, const Rect.fromLTWH(-23, -80, 14, 17), sack);
-    c.drawRect(
-      const Rect.fromLTWH(-20, -82, 7, 3),
-      _f(_leatherDk),
-    ); // ağzı bağlı
-    c.drawLine(
-      const Offset(-12, -78),
-      const Offset(-2, -70),
-      _s(_leatherDk, 2.0),
-    );
+    if (!handsBusy) {
+      // Sol OMUZDA un çuvalı — gövdeye BİNDİRİLMİŞ (eski hâli 1px boşlukla
+      // havada duruyordu) + omuz üstünden geçen kayış. Porter yükü varken bu
+      // meslek prop'u gizlenir; iki ayrı çuval aynı gövdede belirmez.
+      _shadedRect(c, const Rect.fromLTWH(-23, -80, 14, 17), sack);
+      c.drawRect(
+        const Rect.fromLTWH(-20, -82, 7, 3),
+        _f(_leatherDk),
+      ); // ağzı bağlı
+      c.drawLine(
+        const Offset(-12, -78),
+        const Offset(-2, -70),
+        _s(_leatherDk, 2.0),
+      );
+    }
 
     _shadedArm(c, -16, anim.armL, clothBase, v.skin);
     _shadedArm(c, 16, anim.armR, clothBase, v.skin);
@@ -2902,7 +3095,13 @@ class CharacterRenderer {
   // ─── HANCI / MEYHANECİ ────────────────────────────────────────────────────
   /// Silüet imzası: şarap kırmızısı yelek + beyaz önlük + elde KÖPÜKLÜ MAŞRAPA.
   /// Köyün tek kırmızısı — hanın sıcaklığını taşır.
-  static void _innkeeperNpc(Canvas c, _Anim anim, NpcVisual v, double time) {
+  static void _innkeeperNpc(
+    Canvas c,
+    _Anim anim,
+    NpcVisual v,
+    double time, {
+    bool handsBusy = false,
+  }) {
     final shirtBase = _cloth(const Color(0xFFC8B9A0), v.clothingShift * 0.6);
     final vestBase = _cloth(_kInnkeeperWine, v.clothingShift);
     final hoseBase = _cloth(const Color(0xFF4A3A32), v.clothingShift * 0.4);
@@ -2935,6 +3134,7 @@ class CharacterRenderer {
     _shadedArm(c, -16, anim.armL, shirtBase, v.skin);
     // Sağ el + köpüklü maşrapa (tahta bardak + krem köpük)
     _shadedArm(c, 16, anim.armR, shirtBase, v.skin, (arm) {
+      if (handsBusy) return;
       _shadedRect(
         arm,
         const Rect.fromLTWH(1, 14, 9, 11),

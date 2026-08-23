@@ -396,11 +396,11 @@ extension _SceneFlow on _VillageSceneState {
     // çiçekli bir çayıra üç çiçek. Oyuncu bir adımı bitirdiğini yalnız köşedeki
     // bildirimden anlıyordu, KÖYDEN anlamıyordu.
     //
-    // İki değişiklik: (1) kuruluş kademesinde miktar artar ve yarıçap DARALIR
-    // → serpme değil, ocağın çevresinde gözle görülür bir çiçeklenme halkası
-    // olur; (2) en küçük ödül bile kısa bir şenlik FX'i taşır, yani ekranda
-    // bir şey OLUR. Köy büyüdükçe (tier yükseldikçe) ödül eski sakin hâline
-    // döner — o noktada zaten köyün her yeri çiçek.
+    // Kuruluş kademesinde şenlik FX'i ödülü görünür kılar; kalıcı
+    // çiçek ise yalnız birkaç vurgu noktasıdır. Eski 8/12 demetlik dar
+    // halkalar ilk iki kademede merkeze 100'den fazla sprite yığıyordu.
+    // Ortak spacing+bütçe kapısıyla beraber bu sayılar köyü renklendirir,
+    // zemini kaplamaz.
     final early = _charterTier <= 1;
     switch (kind) {
       case VisualReward.sparkle:
@@ -409,9 +409,9 @@ extension _SceneFlow on _VillageSceneState {
           _activeFx.add(
             ActiveFx(const EventEffect(fx: EventFx.festival, duration: 4), 4),
           );
-          _scatterRewardDecor(cc, cr, 2, 8);
+          _scatterRewardDecor(cc, cr, 2, 3);
         } else {
-          _scatterRewardDecor(cc, cr, 3, 2);
+          _scatterRewardDecor(cc, cr, 3, 1);
         }
       case VisualReward.bloom:
         _feelVillage(NpcEmotion.joy, 4, 0.06);
@@ -419,22 +419,22 @@ extension _SceneFlow on _VillageSceneState {
           _activeFx.add(
             ActiveFx(const EventEffect(fx: EventFx.festival, duration: 6), 6),
           );
-          _scatterRewardDecor(cc, cr, 3, 12);
+          _scatterRewardDecor(cc, cr, 3, 5);
         } else {
-          _scatterRewardDecor(cc, cr, 4, 4);
+          _scatterRewardDecor(cc, cr, 4, 2);
         }
       case VisualReward.festival:
         _activeFx.add(
           ActiveFx(const EventEffect(fx: EventFx.festival, duration: 14), 14),
         );
         _feelVillage(NpcEmotion.joy, 8, 0.10);
-        _scatterRewardDecor(cc, cr, 5, 6);
+        _scatterRewardDecor(cc, cr, 5, 4);
       case VisualReward.landmark:
         _activeFx.add(
           ActiveFx(const EventEffect(fx: EventFx.festival, duration: 20), 20),
         );
         _feelVillage(NpcEmotion.joy, 12, 0.14);
-        _scatterRewardDecor(cc, cr, 7, 12);
+        _scatterRewardDecor(cc, cr, 7, 6);
     }
   }
 
@@ -447,8 +447,8 @@ extension _SceneFlow on _VillageSceneState {
     return (kCols ~/ 2, kRows ~/ 2);
   }
 
-  /// Merkez çevresine kalıcı çiçek/çalı serpme — su/bina/ağaç/dekor çakışmasız
-  /// (`_sprinkleGreenAround` deseni).
+  /// Merkez çevresine kalıcı çiçek/çalı serpme. Bütün yüzey,
+  /// spacing ve nüfus kuralları [scene_decor] içindeki tek kapıdan geçer.
   void _scatterRewardDecor(
     int cc,
     int cr,
@@ -469,28 +469,16 @@ extension _SceneFlow on _VillageSceneState {
       for (int dc = -radius; dc <= radius; dc++) {
         final c = cc + dc, r = cr + dr;
         if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
-        if (_waterTiles.contains((c, r))) continue;
-        if (_isOccupiedByBuilding(c, r)) continue;
-        if (_trees.any((t) => t.col == c && t.row == r)) continue;
-        if (_decor.any((d) => d.col == c && d.row == r)) continue;
         cands.add((c, r));
       }
     }
     if (cands.isEmpty) return;
     cands.shuffle(_rng);
-    for (int i = 0; i < count && i < cands.length; i++) {
-      final (c, r) = cands[i];
-      _decor.add(
-        DecorEntity(
-          col: c,
-          row: r,
-          kind: kinds[_rng.nextInt(kinds.length)],
-          variant: _rng.nextInt(3),
-          jitterX: (_rng.nextDouble() - 0.5) * 0.5,
-          jitterY: (_rng.nextDouble() - 0.5) * 0.5,
-          swaySeed: _rng.nextInt(1000),
-        ),
-      );
+    var planted = 0;
+    for (final (c, r) in cands) {
+      if (planted >= count) break;
+      final kind = kinds[_rng.nextInt(kinds.length)];
+      if (_tryPlantDecor(c, r, kind)) planted++;
     }
   }
 }

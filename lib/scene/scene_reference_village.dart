@@ -231,6 +231,9 @@ extension _SceneReferenceVillage on _VillageSceneState {
       // patlar. Kronik zaten elle yazılmış geçmişi taşıyor (yukarıda).
       _backfillAchievements();
 
+      // Dünya üretiminden sonra eklenen koru, yapılar ve tarlalar artık son
+      // hâlinde. Ambient dekoru bu sahipli yüzeylerden ancak şimdi ayır.
+      _sanitizeDecorPopulation();
       _fixNpcSpawns();
 
       // Görsel etkileşim provası: normal referans köyüne dokunmaz. Kamera

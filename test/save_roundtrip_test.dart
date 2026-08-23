@@ -98,6 +98,51 @@ void main() {
       isNull,
       reason: 'yükleme sırasında istisna atıldı',
     );
+
+    // Porter zincirinin item/callback/anchor parçaları geçicidir ve kayda
+    // yazılmaz. Eski ya da taşıma anında alınmış bir kayıt yalnız enum state'i
+    // geri getirirse köylü boş elle hayalet taşıyıcı olarak (0,0)'a yürür.
+    final baseline = kProbeWorldJson;
+    for (final transient in const ['walkingToPickup', 'carrying']) {
+      final world = Map<String, dynamic>.from(
+        jsonDecode(baseline) as Map<String, dynamic>,
+      );
+      final villager = Map<String, dynamic>.from(
+        (world['villagers'] as List).first as Map,
+      );
+      villager['state'] = transient;
+      villager['targetCol'] = -25.0;
+      villager['targetRow'] = -25.0;
+      (world['villagers'] as List)[0] = villager;
+
+      kProbeSaveError = 'koşmadı';
+      kProbeRestoreJson = jsonEncode(world);
+      for (var i = 0; i < 40 && kProbeRestoreJson.isNotEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(kProbeSaveError, '', reason: '$transient kayıt açılamadı');
+
+      kProbeSaveRoundtrip = true;
+      for (var i = 0; i < 40 && kProbeSaveRoundtrip; i++) {
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final recaptured = Map<String, dynamic>.from(
+        jsonDecode(kProbeWorldJson) as Map<String, dynamic>,
+      );
+      final restored = Map<String, dynamic>.from(
+        (recaptured['villagers'] as List).first as Map,
+      );
+      // Restore idle'a normalize eder; probe yeniden snapshot alana kadar doğal
+      // rutin yeni, güvenli bir hareket başlatabilir. Kalıcı sözleşme porter
+      // enum'unun ve bozuk eski hedefin geri gelmemesidir.
+      expect(
+        restored['state'],
+        isNot(anyOf('walkingToPickup', 'carrying')),
+        reason: '$transient porter state yeniden canlandı',
+      );
+      expect(restored['targetCol'], isNot(-25.0));
+      expect(restored['targetRow'], isNot(-25.0));
+    }
     kProbeOn = false;
   });
 

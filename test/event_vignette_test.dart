@@ -43,7 +43,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
     kProbeOn = false;
     kForcedEventId = '';
     kProbeTriggerEvent = false;
@@ -63,15 +65,24 @@ void main() {
 
     kCaptureMode = true;
     kMindTelemetryOn = true;
+    kProbeVignetteId = '';
+    kProbeVignetteCast = 0;
+    kProbeChoiceWaiting = '';
+    kProbeChoiceTimeouts = 0;
     // ŞART: global — önceki testten true kalırsa sahne hazır olmadan tick
     // denenir (bkz. living_probe_test'teki aynı tuzak).
     kCaptureSceneReady = false;
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'vignette'),
-      ));
-      for (var i = 0; i < 160 && !kCaptureSceneReady; i++) {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'vignette'),
+        ),
+      );
+      // Tam süitte birkaç ağır living-probe aynı anda asset açıyor. Sekiz
+      // saniyelik eski duvar-saati bütçesi sahne daha tick almadan flake
+      // üretiyordu; koşul yine aynı, yalnız yoğun CI için nefes payı geniş.
+      for (var i = 0; i < 600 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
     });
@@ -82,6 +93,7 @@ void main() {
     kDevSpeedBoostOverride = 0;
     kForcedEventId = '';
     kProbeTriggerEvent = false;
+    kProbeChoiceWaiting = '';
     await tester.pumpWidget(const SizedBox());
   }
 
@@ -93,8 +105,11 @@ void main() {
 
   /// [ok] doğru olana kadar pump et (azami [maxSteps]). Sim duraklıysa pump
   /// boşa gider — bu yüzden pay bol tutulur. Dönüş: koşul tuttu mu.
-  Future<bool> waitUntil(WidgetTester tester, bool Function() ok,
-      {int maxSteps = 4000}) async {
+  Future<bool> waitUntil(
+    WidgetTester tester,
+    bool Function() ok, {
+    int maxSteps = 4000,
+  }) async {
     for (var i = 0; i < maxSteps; i++) {
       if (ok()) return true;
       await tester.pump(const Duration(milliseconds: 16));
@@ -113,72 +128,105 @@ void main() {
     kProbeTriggerEvent = true;
     if (e.needsChoice) {
       // 1) Olay omen'i bitirip kuyruğa düşsün (mühür ancak o zaman çizilir).
-      await waitUntil(tester, () => kProbeChoiceWaiting == e.id);
+      final queued = await waitUntil(tester, () => kProbeChoiceWaiting == e.id);
+      expect(queued, isTrue, reason: '${e.id} karar kuyruğuna hiç ulaşmadı');
       await tester.pump();
       // 2) Mühre tıkla → modal açılır.
       final seal = find.text('KARAR');
-      if (seal.evaluate().isNotEmpty) {
-        await tester.tap(seal);
-        await tester.pump();
-      }
+      expect(seal, findsOneWidget, reason: '${e.id} KARAR mührünü açmadı');
+      await tester.tap(seal);
+      await tester.pump();
       // 3) İlk şıkkı seç.
       final label = e.choices!.first.label;
-      if (find.text(label).evaluate().isNotEmpty) {
-        await tester.tap(find.text(label));
-        await tester.pump();
-      }
+      final choice = find.text(label);
+      expect(
+        choice,
+        findsOneWidget,
+        reason: '${e.id} ilk karar seçeneğini göstermedi',
+      );
+      await tester.tap(choice);
+      await tester.pump();
     }
-    await waitUntil(tester, () => kProbeVignetteId == e.id);
+    final staged = await waitUntil(tester, () => kProbeVignetteId == e.id);
+    expect(staged, isTrue, reason: '${e.id} NPC sahnesini hiç kurmadı');
   }
 
-  testWidgets('her rastgele olay dünyada bir NPC sahnesi kurar', (tester) async {
+  testWidgets('her rastgele olay dünyada bir NPC sahnesi kurar', (
+    tester,
+  ) async {
     await boot(tester);
     expect(kCaptureSceneReady, isTrue, reason: 'referans köy kurulamadı');
     kDevSpeedBoostOverride = 6.0;
 
-    final missed = <String>[];
+    var choiceSeen = false;
     for (final e in EventSystem.events) {
+      // Ağır kararların arasında gerçek oyunda 0,65 gün sakinleşme süresi var.
+      // İkinci ve sonraki ağır kararı art arda zorlamak yerine temiz köyde
+      // aynı gerçek kuyruk/modal yolunu oynat. Otomatik olaylar aynı sahnede
+      // kalır; gereksiz dokuz ayrı asset kurulumu tam süiti boğmaz.
+      if (e.needsChoice && choiceSeen) {
+        await shutdown(tester);
+        await boot(tester);
+        expect(
+          kCaptureSceneReady,
+          isTrue,
+          reason: '${e.id} için referans köy yeniden kurulamadı',
+        );
+        kDevSpeedBoostOverride = 6.0;
+      }
+      choiceSeen |= e.needsChoice;
       kProbeVignetteId = '';
       kProbeVignetteCast = 0;
       await fireEvent(tester, e);
-      if (kProbeVignetteId != e.id || kProbeVignetteCast == 0) {
-        missed.add('${e.id}(sahne=${kProbeVignetteId.isEmpty ? "YOK" : kProbeVignetteId}'
-            ',kadro=$kProbeVignetteCast)');
-      }
-      // Sıradaki olay temiz kadro bulsun — sahnenin kapanmasını bekle.
-      await waitUntil(tester, () => kProbeVignetteId.isEmpty);
+      expect(
+        kProbeVignetteCast,
+        greaterThan(0),
+        reason: '${e.id} NPC kadrosu bulamadı',
+      );
+      final closed = await waitUntil(tester, () => kProbeVignetteId.isEmpty);
+      expect(closed, isTrue, reason: '${e.id} NPC sahnesi kapanmadı');
     }
-
-    expect(missed, isEmpty,
-        reason: 'şu olaylar dünyada hiç sahnelenmedi: ${missed.join(", ")}');
     await shutdown(tester);
   });
 
-  testWidgets('vinyet kadrosu salıverilir — hiçbir köylü rolde donmaz',
-      (tester) async {
+  testWidgets('vinyet kadrosu salıverilir — hiçbir köylü rolde donmaz', (
+    tester,
+  ) async {
     await boot(tester);
     kDevSpeedBoostOverride = 6.0;
 
     // En uzun koreografi yangındır (iki turlu kova zinciri) — kilitlenme riski
     // en yüksek sahne odur.
-    final fire = EventSystem.events.firstWhere((e) => e.id == EventIds.houseFire);
+    final fire = EventSystem.events.firstWhere(
+      (e) => e.id == EventIds.houseFire,
+    );
     await fireEvent(tester, fire);
-    expect(kProbeVignetteCast, greaterThan(0),
-        reason: 'yangın sahnesi hiç kurulmadı — kadro bulunamıyor');
+    expect(
+      kProbeVignetteCast,
+      greaterThan(0),
+      reason: 'yangın sahnesi hiç kurulmadı — kadro bulunamıyor',
+    );
 
     // Vinyet ömrü 30 sn; ondan sonra kadro koşulsuz salıverilmeli.
     final closed = await waitUntil(tester, () => kProbeVignetteId.isEmpty);
     expect(closed, isTrue, reason: 'vinyet sahnesi hiç kapanmadı');
     // Salıverme telemetri turunda okunur — birkaç kare pay bırak.
     await run(tester, 60);
-    expect(kProbeCeremonyLocked, 0,
-        reason: '$kProbeCeremonyLocked köylü ceremony niyetinde DONDU — '
-            '_releaseVignette çalışmıyor (bkz. scene_vignette tuzağı)');
+    expect(
+      kProbeCeremonyLocked,
+      0,
+      reason:
+          '$kProbeCeremonyLocked köylü ceremony niyetinde DONDU — '
+          '_releaseVignette çalışmıyor (bkz. scene_vignette tuzağı)',
+    );
 
     // Köy salıverilenlerle birlikte yeniden hareket etmeli.
     final before = kMindDistance;
-    final moved = await waitUntil(tester, () => kMindDistance > before,
-        maxSteps: 1500);
+    final moved = await waitUntil(
+      tester,
+      () => kMindDistance > before,
+      maxSteps: 1500,
+    );
     expect(moved, isTrue, reason: 'sahne bitti ama köy kımıldamıyor');
     await shutdown(tester);
   });

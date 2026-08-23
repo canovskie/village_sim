@@ -955,7 +955,7 @@ List<Shot> buildShots() => <Shot>[
                 selected: c == BuildCategory.konut
                     ? BuildingType.woodenHouse
                     : null,
-                onSelect: (_) {},
+                onSelect: (_) => true,
                 hasFirepit: true,
                 category: c,
                 // Birkaç zanaat kilitli — kilitli görünümü de görelim.
@@ -1055,7 +1055,7 @@ List<Shot> buildShots() => <Shot>[
               buildSegment: BuildingPanel(
                 stockpile: _stock(),
                 selected: BuildingType.woodenHouse,
-                onSelect: (_) {},
+                onSelect: (_) => true,
                 hasFirepit: true,
                 category: BuildCategory.konut,
               ),
@@ -1102,7 +1102,7 @@ List<Shot> buildShots() => <Shot>[
           buildSegment: BuildingPanel(
             stockpile: _stock(),
             selected: BuildingType.mill,
-            onSelect: (_) {},
+            onSelect: (_) => true,
             hasFirepit: true,
             category: BuildCategory.uretim,
           ),

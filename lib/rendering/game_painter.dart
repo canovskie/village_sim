@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math';
 import 'dart:ui' as ui;
 
@@ -17,6 +18,7 @@ import '../entities/villager_job.dart';
 import '../entities/worker_entity.dart';
 import '../farm/farm_renderer.dart';
 import '../farm/farm_tile.dart';
+import '../systems/decor_population.dart';
 import '../systems/event_system.dart';
 import '../systems/hearth_warmth.dart';
 import '../systems/lighting_system.dart';
@@ -247,11 +249,15 @@ final List<(int, int, int, int)> _mineRects = [];
 
 // Static entity spatial bucket grid — decor/tree/lotus/reed/mine.
 // 8-tile bucket cell, key = (col >> 3, row >> 3). Topology değişmedikçe
-// (list length aynı) viewport içinde olan bucket'lar iterate edilir; çok
-// büyük listeler için her frame full scan'i atlar.
-// Invalidate: list length değişimi (entity eklendi/silindi).
+// viewport içinde olan bucket'lar iterate edilir; çok büyük listeler için her
+// frame full scan'i atlar.
 final Map<(int, int), List<DecorEntity>> _decorBuckets = {};
+List<DecorEntity>? _decorBucketsSource;
+int _decorBucketsVersion = -1;
 int _decorBucketsLen = -1;
+// Ground-flora ve depth-scene pass'leri aynı viewport taramasını paylaşır.
+// paint senkron olduğu için frame başında doldurulup iki pass'te güvenle okunur.
+final List<DecorEntity> _visibleDecorBuffer = [];
 final Map<(int, int), List<TreeEntity>> _treeBuckets = {};
 int _treeBucketsLen = -1;
 final Map<(int, int), List<LotusEntity>> _lotusBuckets = {};
@@ -432,6 +438,11 @@ class VillageGamePainter extends CustomPainter {
   final List<ReedClump> reeds;
   final List<BerryBush> berryBushes;
   final List<DecorEntity> decor;
+
+  /// [decor] yerinde mutate edildiğinde spatial bucket ve repaint invalidation
+  /// tokeni. Aynı listeye ekleme/silme/değiştirme yapan sahne bunu artırır.
+  final int decorVersion;
+
   final List<WorldLandmark> landmarks;
   final List<Grave> graves;
   final List<ReedBed> reedBeds;
@@ -534,6 +545,7 @@ class VillageGamePainter extends CustomPainter {
     this.reeds = const [],
     this.berryBushes = const [],
     this.decor = const [],
+    this.decorVersion = 0,
     this.landmarks = const [],
     this.graves = const [],
     this.reedBeds = const [],
@@ -603,6 +615,11 @@ class VillageGamePainter extends CustomPainter {
     }
 
     _drawGround(canvas, size);
+    // Çiçek/yonca zeminin parçası gibi davranır: tarla, yol, gölge, bina ve
+    // aktörlerden önce çizilir. Böylece tatlı bir zemin detayı olarak kalır;
+    // karakterlerin ve animasyonların üstüne yapışmaz.
+    _collectVisibleDecor(size);
+    _drawGroundFlora(canvas, size);
     _drawMud(canvas, size);
     _drawFarmTiles(canvas, size);
     _drawWaterFoam(canvas, size);
@@ -1223,6 +1240,87 @@ class VillageGamePainter extends CustomPainter {
     }
   }
 
+  // ── Zemin florası ────────────────────────────────────────────────────────
+
+  /// Decor spatial cache'ini kaynak liste kimliği, açık mutasyon sürümü ve
+  /// uzunluk üzerinden doğrular; sonra görünür dekoru iki çizim pass'inin ortak
+  /// tamponuna toplar. Liste kimliği kontrolü aynı uzunlukta yeni dünya/listenin
+  /// eski bucket'ları yanlışlıkla kullanmasını, [decorVersion] ise aynı listenin
+  /// yerinde değiştirilmesini kapsar.
+  void _collectVisibleDecor(Size size) {
+    const bucketShift = 3; // cell size = 1 << 3 = 8 tile
+    if (!identical(_decorBucketsSource, decor) ||
+        _decorBucketsVersion != decorVersion ||
+        _decorBucketsLen != decor.length) {
+      _decorBuckets.clear();
+      for (final d in decor) {
+        final key = (d.col >> bucketShift, d.row >> bucketShift);
+        (_decorBuckets[key] ??= []).add(d);
+      }
+      _decorBucketsSource = decor;
+      _decorBucketsVersion = decorVersion;
+      _decorBucketsLen = decor.length;
+    }
+
+    final visible = _visibleDecorBuffer..clear();
+    if (decor.isEmpty) return;
+
+    final (minX, maxX, minY, maxY) = _visBounds(size);
+    final tl = screenToGrid(Offset(minX, minY), size, camera);
+    final tr = screenToGrid(Offset(maxX, minY), size, camera);
+    final br = screenToGrid(Offset(maxX, maxY), size, camera);
+    final bl = screenToGrid(Offset(minX, maxY), size, camera);
+    final minCol = min(min(tl.$1, tr.$1), min(br.$1, bl.$1));
+    final maxCol = max(max(tl.$1, tr.$1), max(br.$1, bl.$1));
+    final minRow = min(min(tl.$2, tr.$2), min(br.$2, bl.$2));
+    final maxRow = max(max(tl.$2, tr.$2), max(br.$2, bl.$2));
+    final cMinB = (minCol.floor() >> bucketShift) - 1;
+    final cMaxB = (maxCol.ceil() >> bucketShift) + 1;
+    final rMinB = (minRow.floor() >> bucketShift) - 1;
+    final rMaxB = (maxRow.ceil() >> bucketShift) + 1;
+
+    // Jitter + en geniş küçük decor sprite'ı için eski 48px güvenli marj.
+    const up = 32.0;
+    const side = 48.0;
+    final ox = size.width / 2 + camera.dx;
+    final oy = size.height * 0.28 + camera.dy;
+    for (int by = rMinB; by <= rMaxB; by++) {
+      for (int bx = cMinB; bx <= cMaxB; bx++) {
+        final bucket = _decorBuckets[(bx, by)];
+        if (bucket == null) continue;
+        for (final d in bucket) {
+          // Wilderness (orman duvarı altı) dekoru sisin üstünden sızmasın.
+          if (wilderness.contains((d.col, d.row))) continue;
+          final gx = d.col + 0.5;
+          final gy = d.row + 0.5;
+          final sx = ox + (gx - gy) * kTileW / 2;
+          final sy = oy + (gx + gy) * kTileH / 2;
+          if (sx >= minX - side &&
+              sx <= maxX + side &&
+              sy >= minY - up &&
+              sy <= maxY + kTileH) {
+            visible.add(d);
+          }
+        }
+      }
+    }
+  }
+
+  /// Çiçek ve yoncayı gerçek bir foreground objesi değil, zemine basılı flora
+  /// olarak çizer. Hacimli dekor türleri [_drawScene]'de depth-sort'ta kalır.
+  void _drawGroundFlora(Canvas canvas, Size size) {
+    for (final d in _visibleDecorBuffer) {
+      if (!isGroundFloraDecorKind(d.kind)) continue;
+      final center = gridToScreen(
+        d.col + 0.5 + d.jitterX,
+        d.row + 0.5 + d.jitterY,
+        size,
+        camera,
+      );
+      DecorRenderer.draw(canvas, center, d, time: time);
+    }
+  }
+
   // ── Sahne (derinlik sıralı) ────────────────────────────────────────────────
   //
   // Viewport culling: her entity'nin ekran pozisyonu hesaplanır, viewport
@@ -1305,27 +1403,12 @@ class VillageGamePainter extends CustomPainter {
     rMinB--;
     rMaxB++;
 
-    // Decor bucket build (if topology değişti).
-    if (_decorBucketsLen != decor.length) {
-      _decorBuckets.clear();
-      for (final d in decor) {
-        final key = (d.col >> kBucket, d.row >> kBucket);
-        (_decorBuckets[key] ??= []).add(d);
-      }
-      _decorBucketsLen = decor.length;
-    }
-    for (int by = rMinB; by <= rMaxB; by++) {
-      for (int bx = cMinB; bx <= cMaxB; bx++) {
-        final list = _decorBuckets[(bx, by)];
-        if (list == null) continue;
-        for (final d in list) {
-          // Wilderness (orman duvarı altı) dekoru sisin üstünden sızmasın —
-          // cleared tile'lardaki undergrowth/kütük görünür (mutual exclusive).
-          if (wilderness.contains((d.col, d.row))) continue;
-          if (inView(d.col + 0.5, d.row + 0.5, upSmall, sideS)) {
-            _sceneBuffer.add(_DecorDrawable(d, time));
-          }
-        }
+    // Görünür decor bucket'ları ground-flora pass'inden önce bir kez tarandı.
+    // Yalnız hacimli/öne çıkması gereken türleri depth-sort sahnesine al;
+    // çiçek ve yonca zeminde kaldığı için aktör/bina üstüne binemez.
+    for (final d in _visibleDecorBuffer) {
+      if (!isGroundFloraDecorKind(d.kind)) {
+        _sceneBuffer.add(_DecorDrawable(d, time));
       }
     }
 
@@ -1407,8 +1490,19 @@ class VillageGamePainter extends CustomPainter {
       }
     }
 
+    // `isBeingCarried` pickup noktasına yürürken de rezervasyon bayrağıdır;
+    // o evrede yük hâlâ yerde görünmelidir. Yalnız gerçekten bir köylünün
+    // eline geçmiş nesneleri zemin pass'inden çıkar.
+    final heldLoads = HashSet<Object>.identity();
+    for (final villager in villagers) {
+      if (villager.state == VillagerState.carrying &&
+          villager.carriedItem != null) {
+        heldLoads.add(villager.carriedItem!);
+      }
+    }
+
     for (final b in resourceBoxes) {
-      if (b.isDelivered || b.isBeingCarried) continue;
+      if (b.isDelivered || heldLoads.contains(b)) continue;
       if (inView(b.gridX, b.gridY, upSmall, sideS)) {
         _sceneBuffer.add(_ResourceBoxDrawable(b, time));
       }
@@ -1424,7 +1518,7 @@ class VillageGamePainter extends CustomPainter {
       }
     }
     for (final h in hayEntities) {
-      if (h.isDelivered || h.isBeingCarried) continue;
+      if (h.isDelivered || heldLoads.contains(h)) continue;
       if (inView(h.gridX, h.gridY, upSmall, sideS)) {
         _sceneBuffer.add(_HayDrawable(h, time));
       }
@@ -2379,6 +2473,7 @@ class VillageGamePainter extends CustomPainter {
       old.reeds != reeds ||
       old.berryBushes != berryBushes ||
       old.decor != decor ||
+      old.decorVersion != decorVersion ||
       old.landmarks != landmarks ||
       old.cows != cows ||
       old.zoom != zoom ||

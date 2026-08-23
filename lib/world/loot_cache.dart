@@ -50,6 +50,10 @@ class LootCache {
     this.culprit,
   });
 
+  /// Korunum hesabındaki toplam ganimet birimi. Silah ayrı stok alanında
+  /// tutulsa da çuvalda, toprakta ve geri alma yolunda kaybolmamalıdır.
+  int get totalAmount => amount + weaponAmount;
+
   /// İzo derinlik sıralaması (painter's algo) — diğer dünya nesneleriyle aynı.
   double get depth => gridX + gridY;
 }

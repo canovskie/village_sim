@@ -196,6 +196,7 @@ extension _SceneWork on _VillageSceneState {
           v.isCarrying ||
           v.sitClaimed ||
           v.isDying ||
+          v.isLeaving ||
           v.activity != VillagerActivity.none) {
         continue;
       }

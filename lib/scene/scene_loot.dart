@@ -61,7 +61,7 @@ extension _SceneLoot on _VillageSceneState {
     _lootCaches.remove(l);
     _stockpile.add(l.kind, l.amount);
     if (l.weaponAmount > 0) _stockpile.weapons += l.weaponAmount;
-    kProbeLootRecovered += l.amount + l.weaponAmount;
+    kProbeLootRecovered += l.totalAmount;
 
     finder.feel(NpcEmotion.wonder, 4.0, moodDelta: 0.04);
     finder.lookToward(l.gridX, l.gridY);

@@ -4,12 +4,12 @@ part of '../main.dart';
 // sohbette çift bu diziyi sırayla "söyler" → baloncuk anlamlı görünür
 // (rastgele tek emoji yerine konuşmanın konusu).
 const List<String> _kTopicGeneral = ['💬', '🙂', '❓', '😄'];
-const List<String> _kTopicFarm    = ['🌾', '💧', '☀', '🥕'];
-const List<String> _kTopicTrade   = ['🪙', '📦', '⚖', '🤝'];
-const List<String> _kTopicFood    = ['🍺', '🍞', '😋', '🍲'];
-const List<String> _kTopicFamily  = ['👶', '❤', '🏠', '😊'];
-const List<String> _kTopicWork    = ['⚒', '🪵', '🪨', '💪'];
-const List<String> _kTopicGossip  = ['🤫', '👀', '😮', '🙊'];
+const List<String> _kTopicFarm = ['🌾', '💧', '☀', '🥕'];
+const List<String> _kTopicTrade = ['🪙', '📦', '⚖', '🤝'];
+const List<String> _kTopicFood = ['🍺', '🍞', '😋', '🍲'];
+const List<String> _kTopicFamily = ['👶', '❤', '🏠', '😊'];
+const List<String> _kTopicWork = ['⚒', '🪵', '🪨', '💪'];
+const List<String> _kTopicGossip = ['🤫', '👀', '😮', '🙊'];
 const List<String> _kTopicWeather = ['☀', '🌧', '🌬', '🌈'];
 
 /// Sosyal canlılık: chat/music/dance — bağlama duyarlı, dağıtık per-NPC
@@ -32,12 +32,12 @@ extension _SceneNpcActivity on _VillageSceneState {
     // süre → birkaç replik gidip gelir. Gerçek bir haber aktarıldıysa konu
     // dedikodudur; baloncuk uydurma bir konu göstermez.
     final icons = gossiped ? _kTopicGossip : _convoTopic(v, partner);
-    final dur   = 6.0 + _rng.nextDouble() * 3.0;
+    final dur = 6.0 + _rng.nextDouble() * 3.0;
     _beginConvo(v, partner, icons, dur, starter: true);
     _beginConvo(partner, v, icons, dur, starter: false);
     partner.socialCooldown = 40 + _rng.nextDouble() * 80;
     // Yüzünü karşısındakine dön — sohbet ediyormuş gibi.
-    v.facingRight       = partner.gridX >= v.gridX;
+    v.facingRight = partner.gridX >= v.gridX;
     partner.facingRight = v.gridX >= partner.gridX;
     v.feel(NpcEmotion.content, dur, moodDelta: 0.03);
     partner.feel(NpcEmotion.content, dur, moodDelta: 0.03);
@@ -45,15 +45,20 @@ extension _SceneNpcActivity on _VillageSceneState {
   }
 
   /// Bir köylüyü sohbet durumuna sokar (karşılıklı konuşma state'i).
-  void _beginConvo(VillagerEntity v, VillagerEntity other, List<String> icons,
-      double dur, {required bool starter}) {
-    v.activity     = VillagerActivity.chat;
+  void _beginConvo(
+    VillagerEntity v,
+    VillagerEntity other,
+    List<String> icons,
+    double dur, {
+    required bool starter,
+  }) {
+    v.activity = VillagerActivity.chat;
     v.chatBubbleTime = dur;
     v.chatBubbleIcon = ''; // baloncuk artık convoNow()'dan gelir
-    v.convoPartner   = other;
-    v.convoIcons     = icons;
-    v.convoTotal     = dur;
-    v.convoStarter   = starter;
+    v.convoPartner = other;
+    v.convoIcons = icons;
+    v.convoTotal = dur;
+    v.convoStarter = starter;
   }
 
   /// Konuşan iki köylüye bağlama göre bir konu (replik ikonu dizisi) seçer:
@@ -69,12 +74,21 @@ extension _SceneNpcActivity on _VillageSceneState {
     }
 
     add(_kTopicFarm, isType(VillagerType.farmer) ? 2.5 : 0);
-    add(_kTopicWork,
-        (isType(VillagerType.blacksmith) || isType(VillagerType.miner)) ? 2.2 : 0);
-    add(_kTopicTrade,
-        near(BuildingType.market, 4) ? 2.5 : (isType(VillagerType.merchant) ? 1.5 : 0));
+    add(
+      _kTopicWork,
+      (isType(VillagerType.blacksmith) || isType(VillagerType.miner)) ? 2.2 : 0,
+    );
+    add(
+      _kTopicTrade,
+      near(BuildingType.market, 4)
+          ? 2.5
+          : (isType(VillagerType.merchant) ? 1.5 : 0),
+    );
     add(_kTopicFood, near(BuildingType.tavern, 4) ? 2.6 : 0);
-    add(_kTopicFamily, (a.children.isNotEmpty || b.children.isNotEmpty) ? 1.8 : 0);
+    add(
+      _kTopicFamily,
+      (a.children.isNotEmpty || b.children.isNotEmpty) ? 1.8 : 0,
+    );
     add(_kTopicGossip, 1.0);
     add(_kTopicWeather, 0.8);
     add(_kTopicGeneral, 1.6);
@@ -117,10 +131,18 @@ extension _SceneNpcActivity on _VillageSceneState {
 
   /// Dev panel: rastgele uygun NPC'de müzik başlat.
   bool _devStartMusic() {
-    final adults = _villagers.where(
-        (v) => !v.isInsideBuilding && !v.isSleeping && v.hasProfession &&
-               v.activity == VillagerActivity.none).toList()
-      ..shuffle(_rng);
+    final adults =
+        _villagers
+            .where(
+              (v) =>
+                  !v.isInsideBuilding &&
+                  !v.isSleeping &&
+                  v.hasProfession &&
+                  !v.isCarrying &&
+                  v.activity == VillagerActivity.none,
+            )
+            .toList()
+          ..shuffle(_rng);
     if (adults.isEmpty) return false;
     _tryStartMusicFor(adults.first);
     adults.first.socialCooldown = 40 + _rng.nextDouble() * 50;
@@ -129,10 +151,18 @@ extension _SceneNpcActivity on _VillageSceneState {
 
   /// Dev panel: rastgele uygun çiftte dans başlat.
   bool _devStartDance() {
-    final adults = _villagers.where(
-        (v) => !v.isInsideBuilding && !v.isSleeping && v.hasProfession &&
-               v.activity == VillagerActivity.none).toList()
-      ..shuffle(_rng);
+    final adults =
+        _villagers
+            .where(
+              (v) =>
+                  !v.isInsideBuilding &&
+                  !v.isSleeping &&
+                  v.hasProfession &&
+                  !v.isCarrying &&
+                  v.activity == VillagerActivity.none,
+            )
+            .toList()
+          ..shuffle(_rng);
     for (final v in adults) {
       if (_tryStartDanceFor(v)) {
         v.socialCooldown = 40 + _rng.nextDouble() * 50;
@@ -144,10 +174,18 @@ extension _SceneNpcActivity on _VillageSceneState {
 
   /// Dev panel: rastgele uygun çiftte sohbet başlat.
   bool _devStartChat() {
-    final adults = _villagers.where(
-        (v) => !v.isInsideBuilding && !v.isSleeping && v.hasProfession &&
-               v.activity == VillagerActivity.none).toList()
-      ..shuffle(_rng);
+    final adults =
+        _villagers
+            .where(
+              (v) =>
+                  !v.isInsideBuilding &&
+                  !v.isSleeping &&
+                  v.hasProfession &&
+                  !v.isCarrying &&
+                  v.activity == VillagerActivity.none,
+            )
+            .toList()
+          ..shuffle(_rng);
     for (final v in adults) {
       if (_tryStartChatFor(v)) {
         v.socialCooldown = 40 + _rng.nextDouble() * 50;
@@ -175,7 +213,13 @@ extension _SceneNpcActivity on _VillageSceneState {
   VillagerEntity? _findNearbyIdle(VillagerEntity v) {
     for (final o in _villagers) {
       if (identical(o, v)) continue;
-      if (o.isInsideBuilding || o.isSleeping || o.isLeaving || !o.hasProfession) continue;
+      if (o.isInsideBuilding ||
+          o.isSleeping ||
+          o.isLeaving ||
+          !o.hasProfession) {
+        continue;
+      }
+      if (o.isCarrying || o.isDying) continue;
       if (o.activity != VillagerActivity.none) continue;
       if (o.socialCooldown > 0) continue;
       if (v.memory.suspects(o) || v.memory.opinionOf(o) < -0.40) continue;

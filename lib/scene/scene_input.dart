@@ -252,6 +252,10 @@ extension _SceneInput on _VillageSceneState {
       final w = _toWorld(d.localFocalPoint);
       if (w != null) {
         final v = _draggedVillager!;
+        // İlk gerçek sürüklemede, konumu ışınlamadan önce porter zincirini
+        // kapat. Böylece alınmış yük eski pickup'a dönmez; köylünün son gerçek
+        // konumuna düşer ve teslim slot'u yalnız bir kez salınır.
+        if (!_dragMovedVillager) v.cancelCarryTask();
         v.gridX = w.$1;
         v.gridY = w.$2;
         v.targetCol = w.$1;

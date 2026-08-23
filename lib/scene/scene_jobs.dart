@@ -28,6 +28,7 @@ extension _SceneJobs on _VillageSceneState {
       v.jobReassignCd <= 0 &&
       v.canRunErrands &&
       !v.isDying &&
+      !v.isLeaving &&
       !v.isInsideBuilding &&
       !v.isSleeping &&
       !v.isCarrying &&
@@ -50,6 +51,7 @@ extension _SceneJobs on _VillageSceneState {
       v.jobReassignCd <= 0 &&
       v.canRunErrands &&
       !v.isDying &&
+      !v.isLeaving &&
       !v.isInsideBuilding &&
       !v.isSleeping &&
       !v.isCarrying;
@@ -61,6 +63,7 @@ extension _SceneJobs on _VillageSceneState {
       v.hasActiveJob &&
       !_jobPausedByPlayer(v) &&
       !v.isDying &&
+      !v.isLeaving &&
       !v.isInsideBuilding &&
       !v.isSleeping &&
       !v.isCarrying &&
@@ -357,6 +360,9 @@ extension _SceneJobs on _VillageSceneState {
       if (occupied.contains((col, row))) continue;
       if (_waterTiles.contains((col, row))) continue;
       if (forbidden.contains((col, row))) continue;
+      // Fidan bu karenin kalıcı sahibi olur; mevcut çiçek/kütük ağacın
+      // gövdesinin altında kalmasın.
+      _clearDecorTile(col, row);
       _trees.add(
         TreeEntity(col: col, row: row, type: TreeType.pine, isGrowing: true),
       );
@@ -475,7 +481,7 @@ extension _SceneJobs on _VillageSceneState {
       // Hasta/yaralı/çocuk köylüye iş GEÇİRİLMEZ ama kararı SİLİNMEZ: iyileşince
       // kendi işine döner. (Kararı burada sıfırlasaydık oyuncu bir hastalıktan
       // sonra kurduğu iş bölümünü sessizce kaybederdi.)
-      if (!v.canRunErrands || v.isDying) continue;
+      if (!v.canRunErrands || v.isDying || v.isLeaving) continue;
       // Hane elini çekmişse oyuncunun kararı da SAKLANIR ama uygulanmaz —
       // hastalık deseniyle birebir aynı. Bu kapı olmadan iki döngü çakışırdı:
       // `_applyPlayerAssignments` (2 sn) işi geri verir, `_dropWithheldJobs`
@@ -622,11 +628,15 @@ extension _SceneJobs on _VillageSceneState {
   /// teslim olmadan zinciri tamamlar. Teslim yeri yoksa ürün yerde kalır ve
   /// genel taşıyıcı sistemi daha sonra devralır.
   bool _sendOwnOutput(VillagerEntity v, ResourceBox box) {
+    // Tamamlanan iş darbesinin pozu bu metodun çağrıldığı karede hâlâ üstünde
+    // olabilir. Önce onu temizle; gerçek bir act/sahne sürüyorsa helper zaten
+    // dokunmaz ve uygunluk kapısı görevi reddeder.
+    _setWorkPose(v, null);
+    if (!v.canAcceptCarryTask) return false;
     final claim = _anchorSystem.claimDeliverySlot(box.gridX, box.gridY, v);
     if (claim == null) return false;
     final (point, slot) = claim;
-    box.isBeingCarried = true;
-    v.assignCarryTask(
+    final accepted = v.assignCarryTask(
       box,
       box.gridX,
       box.gridY,
@@ -634,6 +644,7 @@ extension _SceneJobs on _VillageSceneState {
       slot.row,
       onDelivered: () {
         point.release(slot, v);
+        box.isBeingCarried = false;
         box.isDelivered = true;
         _resourceBoxes.remove(box);
         switch (box.type) {
@@ -670,8 +681,26 @@ extension _SceneJobs on _VillageSceneState {
           store.deliveryTally++;
         }
       },
+      onCancelled: (wasPickedUp) {
+        point.release(slot, v);
+        box.isBeingCarried = false;
+        if (wasPickedUp) {
+          ResourcePlacement.placeBox(
+            box,
+            v.gridX,
+            v.gridY,
+            _resourceBoxes,
+            _time,
+          );
+        }
+      },
     );
-    return true;
+    if (!accepted) {
+      point.release(slot, v);
+      return false;
+    }
+    box.isBeingCarried = true;
+    return accepted;
   }
 
   ResourceBox _spawnJobBox(
@@ -691,6 +720,9 @@ extension _SceneJobs on _VillageSceneState {
   void _releaseJob(VillagerEntity v) {
     final job = v.job;
     if (job == null) return;
+    // Üreticinin kendi çıktısını taşıdığı sırada kadrodan çıkması görünmez yük
+    // bırakmamalı. Callback, item'i ayağa yerleştirip delivery slot'unu salar.
+    v.cancelCarryTask();
     switch (job.role) {
       case JobRole.builder:
         if (job.claim is BuildOrder) {
@@ -982,6 +1014,9 @@ extension _SceneJobs on _VillageSceneState {
       job.reportCycle(job.timer, r.surface.buildDuration);
       if (job.timer >= r.surface.buildDuration) {
         r.completed = true;
+        // Eski kayıt/araç akışları yol emri verilirken temizlememiş
+        // olabilir; yol sprite'ı zemini almadan önce son kez sahiplen.
+        _clearDecorTile(r.col, r.row);
         _roadSystem.add(RoadTile(col: r.col, row: r.row, surface: r.surface));
         job.claim = null;
         job.phase = 0;
@@ -1509,7 +1544,7 @@ extension _SceneJobs on _VillageSceneState {
       DecorEntity? best;
       double bestD = double.infinity;
       for (final d in _decor) {
-        if (d.crushed || !_isFlowerDecor(d.kind)) continue;
+        if (d.crushed || !isFlowerDecorKind(d.kind)) continue;
         final dx = d.col + 0.5 - ox, dy = d.row + 0.5 - oy;
         final rr = dx * dx + dy * dy;
         if (rr > r2) continue;

@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../text/voice.dart';
 import 'app_ui.dart';
 import 'guide_spotlight.dart';
 import 'mobile_ui.dart';
@@ -105,10 +107,11 @@ class _CommandBarState extends State<CommandBar> {
           Flexible(
             flex: 3,
             fit: FlexFit.loose,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: widget.buildSegment,
-            ),
+            // Katalog kendi yatay kart rayını taşır. Dışarıdan ikinci bir
+            // scroll vermek kategori başlığını kartlarla birlikte ekrandan
+            // kaçırıyordu; birleşik katalog mevcut genişliği kullanırken tek
+            // kartlı standalone kuruluş paneli içerik kadar büyüyebilir.
+            child: widget.buildSegment,
           ),
           const SizedBox(width: 14),
           // ── ORTA: bağlam ─────────────────────────────────────────────────
@@ -283,7 +286,16 @@ class _CommandBarState extends State<CommandBar> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Bir yapı veya araç seç',
+                            Voice.pick(
+                              const [
+                                'Bir yapı veya araç seç',
+                                'Kurmak istediğin yapı ya da aracı seç',
+                              ],
+                              widget.village.runes.fold(
+                                0,
+                                (a, b) => a * 31 + b,
+                              ),
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppUi.body.copyWith(color: AppUi.textLo),

@@ -8,6 +8,7 @@ import '../core/resources.dart';
 import '../entities/villager_entity.dart';
 import '../world/hay_entity.dart';
 import '../world/resource_box.dart';
+import '../world/resource_placement.dart';
 import 'anchor_system.dart';
 
 /// Idle köylüleri yere düşmüş kaynak kutularına ve hay balyalarına atar.
@@ -26,6 +27,12 @@ void assignCarriers({
   required ResourceBundle stockpile,
   required AnchorSystem anchorSystem,
   double baleYieldMultiplier = 1.0,
+  double time = 0,
+
+  /// İptal anındaki sahne saatini verir. [time] eski/doğrudan çağrılar için
+  /// fallback'tir; uzun taşıma sonunda drop animasyonunun atama anına değil
+  /// gerçek bırakma anına bağlanması için sahne bu callback'i geçer.
+  double Function()? timeNow,
 
   /// Yiyeceğin köy ambarına GİRİŞ kapısı. Verilmezse doğrudan eklenir.
   /// Sahne bunu hane karşılığına bağlar: küskün hanenin taşıdığı balya köy
@@ -52,7 +59,10 @@ void assignCarriers({
       (mills.length > kMillBonusMaxCount ? kMillBonusMaxCount : mills.length);
 
   for (final v in villagers) {
-    if (v.state != VillagerState.idle) continue;
+    // `idle` tek başına yeterli değildir: iş darbesi, mikro-eylem ve sohbet de
+    // state'i idle tutabilir. Modelin ortak kapısı yarım sahneyi kesmemizi ve
+    // o sahnenin bir sonraki tick'te taşıma state'ini ezmesini engeller.
+    if (!v.canAcceptCarryTask) continue;
     // Çocuklar çalışmaz — yalnızca oyun oynar.
     if (v.isChild) continue;
     // Çiftçiler odun/maden kutusu taşımaz — sadece saman/balya taşır.
@@ -79,9 +89,8 @@ void assignCarriers({
         );
         if (claim == null) continue; // tüm slot'lar dolu, bir dahaki tick'te
         final (point, slot) = claim;
-        nearestBox.isBeingCarried = true;
         final box = nearestBox;
-        v.assignCarryTask(
+        final accepted = v.assignCarryTask(
           box,
           box.gridX,
           box.gridY,
@@ -89,6 +98,7 @@ void assignCarriers({
           slot.row,
           onDelivered: () {
             point.release(slot, v);
+            box.isBeingCarried = false;
             box.isDelivered = true;
             resourceBoxes.remove(box);
             switch (box.type) {
@@ -109,7 +119,30 @@ void assignCarriers({
                 stockpile.food += box.amount;
             }
           },
+          onCancelled: (wasPickedUp) {
+            point.release(slot, v);
+            box.isBeingCarried = false;
+            // Pickup öncesi kesintide kutu zaten yerde doğru noktadadır.
+            // Eline aldıktan sonra kesildiyse ayağına düşür; eski pickup
+            // noktasına ışınlanıp uzakta yeniden belirmesin.
+            if (wasPickedUp) {
+              ResourcePlacement.placeBox(
+                box,
+                v.gridX,
+                v.gridY,
+                resourceBoxes,
+                timeNow?.call() ?? time,
+              );
+            }
+          },
         );
+        if (!accepted) {
+          // Reddedilen atama hiç başlamadı; onCancelled yalnız sonradan kesilen
+          // kabul edilmiş görevlerindir. Ön claim'i burada geri al.
+          point.release(slot, v);
+          continue;
+        }
+        box.isBeingCarried = true;
         continue;
       }
     }
@@ -130,16 +163,15 @@ void assignCarriers({
         }
       }
       if (nearestBale != null) {
-        final claim = anchorSystem.claimDeliverySlot(
+        final claim = anchorSystem.claimWarehouseDeliverySlot(
           nearestBale.gridX,
           nearestBale.gridY,
           v,
         );
         if (claim == null) continue;
         final (point, slot) = claim;
-        nearestBale.isBeingCarried = true;
         final bale = nearestBale;
-        v.assignCarryTask(
+        final accepted = v.assignCarryTask(
           bale,
           bale.gridX,
           bale.gridY,
@@ -147,6 +179,7 @@ void assignCarriers({
           slot.row,
           onDelivered: () {
             point.release(slot, v);
+            bale.isBeingCarried = false;
             bale.isDelivered = true;
             hayEntities.remove(bale);
             // 1 balya = kHayPilesPerBale hasat. Değirmen başına +kMillBaleBonus
@@ -175,7 +208,25 @@ void assignCarriers({
               nearest.grindPulse = kMillGrindSeconds;
             }
           },
+          onCancelled: (wasPickedUp) {
+            point.release(slot, v);
+            bale.isBeingCarried = false;
+            if (wasPickedUp) {
+              ResourcePlacement.placeHay(
+                bale,
+                v.gridX,
+                v.gridY,
+                hayEntities,
+                timeNow?.call() ?? time,
+              );
+            }
+          },
         );
+        if (!accepted) {
+          point.release(slot, v);
+          continue;
+        }
+        bale.isBeingCarried = true;
       }
     }
   }

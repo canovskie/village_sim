@@ -52,6 +52,14 @@ class _VillagerDrawable extends _Drawable {
     if (e.isInsideBuilding) return;
 
     final s = gridToScreen(e.renderX, e.renderY, size, camera);
+    final porterLoad =
+        e.state == VillagerState.carrying && e.carriedItem != null;
+    final twoHandedItem = e.holdsItemTwoHanded;
+    final hasHeldItem = porterLoad || e.prop != PropKind.none;
+    // İki-elli yük sol eli de sahiplenir. Tek-elli prop ise sağ elde kalır ve
+    // gece meşalesi sol elde yanmaya devam eder; yalnız prop'un kendisi meşale
+    // ise ikinci bir meşale/glow çizilmez.
+    final ambientTorchBlocked = twoHandedItem || e.prop == PropKind.torch;
 
     // Gölge — ayak altında, torch glow'un da altında.  Boyut karakter
     // ölçeğiyle (yaşam-evresi dahil) orantılı. (Ölüm dalı kendi solan gölgesini
@@ -82,7 +90,7 @@ class _VillagerDrawable extends _Drawable {
     // meşalenin GERÇEK ucunda (sağ omuz +x, baş üstü -68 yüksekliği — char
     // scale * lifeStage.renderScale ile ölçeklenmiş).
     final torchLv = e.torchLevel;
-    final showTorch = torchLv > 0.02;
+    final showTorch = torchLv > 0.02 && !ambientTorchBlocked;
     if (showTorch) {
       final charScaleNow = kCharScale * e.displayScale;
       final shoulderX = (e.effectiveFacingRight ? 1 : -1) * 5.0 * charScaleNow;
@@ -175,7 +183,14 @@ class _VillagerDrawable extends _Drawable {
     // Üstlenilmiş iş (inşaat/tarla/maden…) — köylüyü baz meslek yerine iş
     // sprite'ıyla (alet + aksiyon pozu) çiz. Kimlik (yüz/saç) e.visual'dan gelir,
     // yani isimli köylü doğru yüzle görünür. Gölge/torch yukarıda çizildi.
-    if (e.job != null && _jobHasSprite(e.job!.role)) {
+    // Yük/prop taşıyan işçi generic karakter yoluna düşer: o yol eldeki
+    // nesneyi CharacterRenderer'ın torso transformuna bağlar. Erken return
+    // eskiden kendi ürününü taşıyan işçiyi tamamen yüksüz, çiçekçi/toplayıcıyı
+    // sepetsiz ve sağım yapan çobanı kovasız çiziyordu.
+    if (e.job != null &&
+        _jobHasSprite(e.job!.role) &&
+        !e.isCarrying &&
+        e.prop == PropKind.none) {
       _drawJobVillager(canvas, e, s);
       return;
     }
@@ -446,7 +461,9 @@ class _VillagerDrawable extends _Drawable {
     // JEST SEÇİMİ — selam kısa ve sayaçlı, anlatım aktivitenin kendisi kadar
     // sürer. İkisi de tek kolu devralır, o yüzden selam önceliklidir: el
     // sallayan anlatıcı bir kolla iki iş yapamaz.
-    final (gesture, gestureAmount) = e.waveTime > 0
+    final (gesture, gestureAmount) = hasHeldItem
+        ? (CharGesture.none, 0.0)
+        : e.waveTime > 0
         ? (CharGesture.wave, _waveEnvelope(e.waveTime))
         : e.activity == VillagerActivity.storytelling
         // Anlatımın sönüşü hikâyenin son saniyesine bağlı; kalkışı oturma
@@ -474,15 +491,39 @@ class _VillagerDrawable extends _Drawable {
       canvas.rotate(-recoil);
       canvas.scale(0.96, 0.985);
     }
+    void drawHeldItem(Canvas heldCanvas) {
+      if (porterLoad) {
+        final item = e.carriedItem!;
+        if (item is ResourceBox) {
+          ResourceRenderer.drawCarriedBox(heldCanvas, item);
+        } else if (item is HayEntity) {
+          ResourceRenderer.drawCarriedHay(heldCanvas, item);
+        }
+        return;
+      }
+      PropRenderer.draw(
+        heldCanvas,
+        e.prop,
+        // Callback CharacterRenderer'ın yön aynalamasının İÇİNDE çalışır.
+        // Burada tekrar yön vermek çift aynalama üretirdi; sağ-kanonik çizim
+        // gövdeyle birlikte sola çevrilir.
+        facingRight: true,
+        walkPhase: e.walkPhase,
+        moveIntensity: e.moveIntensity,
+        time: time,
+        combat: e.imperialAttacking,
+      );
+    }
+
     CharacterRenderer.draw(
       canvas,
       e.type,
       flipX: !e.effectiveFacingRight,
       walkPhase: e.walkPhase,
       moveIntensity: e.moveIntensity,
-      carrying: e.isCarrying && e.carriedItem != null,
+      carrying: twoHandedItem,
       pose: charPose,
-      torchLevel: torchLv,
+      torchLevel: ambientTorchBlocked ? 0 : torchLv,
       torchPhase: e.torchPhase,
       visual: e.visual,
       time: time,
@@ -500,26 +541,15 @@ class _VillagerDrawable extends _Drawable {
       // JEST — selam ve hikâye anlatımı GÖVDEDE oynar, başın üstünde değil.
       gesture: gesture,
       gestureAmount: gestureAmount,
+      heldItem: hasHeldItem ? drawHeldItem : null,
+      heldItemBehindBody: !porterLoad && e.prop == PropKind.sack,
     );
-    // ELDEKİ NESNE (bkz. villager_act / prop_renderer) — kova, çuval, ekmek,
-    // maşrapa, sepet, odun. Karakterle AYNI yerel uzayda çizilir ki ölçek ve
-    // duruş (eğilme/salınım) nesneye de uygulansın; ayrı çizilseydi eğilen
-    // köylünün kovası havada asılı kalırdı.
-    if (e.prop != PropKind.none) {
-      PropRenderer.draw(
-        canvas,
-        e.prop,
-        facingRight: e.effectiveFacingRight,
-        walkPhase: e.walkPhase,
-        moveIntensity: e.moveIntensity,
-        time: time,
-        combat: e.imperialAttacking,
-      );
-    }
     // Müzik aktivitesinde eline saz/bağlama çiz — sprite scale'inde, göğüs
     // hizasında. Karakter sprite ile birlikte çizilir ki flip etse de doğru
     // tarafta olsun.
-    if (e.activity == VillagerActivity.music && e.chatBubbleTime > 0) {
+    if (!hasHeldItem &&
+        e.activity == VillagerActivity.music &&
+        e.chatBubbleTime > 0) {
       canvas.save();
       // Göğüs hizası — yaklaşık y=-52 (origin ayakta), x=4 (sağ el).
       canvas.translate(e.facingRight ? 6 : -6, -52);
@@ -529,16 +559,6 @@ class _VillagerDrawable extends _Drawable {
       canvas.restore();
     }
     canvas.restore();
-
-    // Draw carried item above the villager
-    if (e.carriedItem != null) {
-      final item = e.carriedItem!;
-      if (item is ResourceBox) {
-        ResourceRenderer.drawCarriedBox(canvas, item, s.dx, s.dy - danceBounce);
-      } else if (item is HayEntity) {
-        ResourceRenderer.drawCarriedHay(canvas, item, s.dx, s.dy - danceBounce);
-      }
-    }
     // Sohbet baloncuğu.
     final bubbleBase = Offset(
       s.dx,

@@ -22,7 +22,7 @@ extension _SceneProbe on _VillageSceneState {
     kProbeTheftInside = ac?.inside ?? false;
     kProbeTheftSack = ac?.culprit.prop == PropKind.sack;
     kProbeLootCount = _lootCaches.length;
-    kProbeLootTotal = _lootCaches.fold<int>(0, (a, l) => a + l.amount);
+    kProbeLootTotal = _lootCaches.fold<int>(0, (a, l) => a + l.totalAmount);
     kProbeStockTotal = _stockpile.food + _stockpile.wood + _stockpile.stone;
 
     // GÖVDE DİLİ — selam gövdede mi oynuyor, baş üstüne emoji geri sızdı mı.

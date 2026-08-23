@@ -1,13 +1,14 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //  KÖY SİMÜLASYONU — HARİTA
 //
-//  main.dart tek bir devasa dosya DEĞİL: `VillageScene` durumunu paylaşan 43
+//  main.dart tek bir devasa dosya DEĞİL: `VillageScene` durumunu paylaşan 60
 //  part'ın çatısı. "Bu iş nerede yaşıyor?" sorusunun cevabı aşağıdadır. Yeni
 //  bir sistem eklerken buraya BİR SATIR ekle — haritasız kalan kod, takip
 //  edilemeyen koddur.
 //
 //  ── DÜNYA & DÖNGÜ ─────────────────────────────────────────────────────────
 //   scene_world          dünya kurulumu + uzamsal sorgular + nüfus sayımları
+//   scene_decor          dekor nüfusu + tek yerleşim/temizleme kapısı
 //   scene_tick           ana döngü: her sistemin sırayla sürüldüğü yer
 //   scene_land           arazi/reveal (ZOOM KISITI modeli)
 //   scene_save           tam dünya kayıt/yükleme (JSON, indeks-bazlı referans)
@@ -137,6 +138,7 @@ import 'systems/combat_motion.dart';
 import 'systems/contextual_guides.dart';
 import 'systems/crime_system.dart';
 import 'systems/decision_pacing.dart';
+import 'systems/decor_population.dart';
 import 'systems/estate_system.dart';
 import 'systems/event_system.dart';
 import 'systems/founding_choice.dart';
@@ -239,6 +241,7 @@ part 'scene/scene_craft.dart';
 part 'scene/scene_crime.dart';
 part 'scene/scene_custom.dart';
 part 'scene/scene_decision_pacing.dart';
+part 'scene/scene_decor.dart';
 part 'scene/scene_dev_console.dart';
 part 'scene/scene_divan.dart';
 part 'scene/scene_estates.dart';
@@ -569,7 +572,8 @@ int kProbeLootTotal = 0;
 /// Hırsızlığın dokunduğu üç kaynağın stok toplamı.
 int kProbeStockTotal = 0;
 
-/// Bu koşuda çalınan toplam mal + zuladan geri alınan toplam mal.
+/// Bu koşuda çalınan toplam ganimet + geri alınan toplam ganimet. Silah ayrı
+/// stok alanında tutulsa da aynı korunum hesabına girer.
 ///
 /// Korunum bunlarla ölçülür, ham stokla DEĞİL: köyün ekonomisi paralel dönüyor
 /// (köylü yiyor, işçi üretiyor), o yüzden stok toplamı hırsızlıktan bağımsız
@@ -1277,6 +1281,11 @@ class _VillageSceneState extends State<VillageScene>
   int _cookedMeals = 0;
   // ── Ground decor (çiçek, mantar, çalı, kütük, taş) — pure visual ─────────
   final List<DecorEntity> _decor = [];
+
+  /// Painter spatial bucket'ları için topoloji anahtarı. Liste yerinde
+  /// mutate edildiğinden yalnız `length` eski konumdaki hayalet dekoru
+  /// yakalayamaz; her ekleme/silme bu sayacı ilerletir (scene_decor).
+  int _decorVersion = 0;
 
   // ── Mezarlık — kilise yanında biriken mezarlar (cenaze sistemi) ──────────
   final List<Grave> _graves = [];

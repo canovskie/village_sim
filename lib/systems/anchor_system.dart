@@ -59,23 +59,31 @@ class AnchorPoint {
 
 /// Tüm anchor noktalarını binalardan türeten merkezi otorite.
 /// main.dart bir instance tutar; topology değişince [rebuild] çağırır
-/// (her tick DEĞİL — aktif rezervasyonlar reset olur aksi halde).
+/// (her tick DEĞİL — aynı bina rezervasyonları korunsa da yeniden türetme
+/// gereksiz iştir).
 class AnchorSystem {
   /// Kuyular — çiftçi su alımı.
   final List<AnchorPoint> wellPoints = [];
+
   /// Depo (warehouse) — taşıyıcı teslim noktası.
   final List<AnchorPoint> warehousePoints = [];
+
   /// Ateş yeri — taşıyıcı teslim fallback'i (depo yoksa) + gece toplanma.
   final List<AnchorPoint> firepitPoints = [];
+
   /// Ateş yeri — akşam toplanıp ısınma/hikaye dinleme oturma yerleri.
   /// Carrier slot'larından bağımsız: aynı anda hem teslim hem oturma olabilir.
   /// İç halka (radius 1.15) — sitter alev'e daha yakın, carrier dış halkada.
   final List<AnchorPoint> firepitSitPoints = [];
 
-  /// Tüm noktaları siler ve binalardan yeniden üretir.
-  /// Eski slot rezervasyonları kaybolur — NPC bir sonraki claim'inde
-  /// yeni slot alır (otomatik recovery).
+  /// Noktaları binalardan yeniden türetir. Aynı [BuildingEntity] yaşamaya
+  /// devam ediyorsa mevcut point/slot nesnesi korunur: canlı callback'ler eski
+  /// slot'u bırakırken aynı koordinatın yeni listede boş görünmesi engellenir.
   void rebuild(List<BuildingEntity> buildings) {
+    final oldWells = {for (final p in wellPoints) p.building: p};
+    final oldWarehouses = {for (final p in warehousePoints) p.building: p};
+    final oldFirepits = {for (final p in firepitPoints) p.building: p};
+    final oldFirepitSeats = {for (final p in firepitSitPoints) p.building: p};
     wellPoints.clear();
     warehousePoints.clear();
     firepitPoints.clear();
@@ -86,59 +94,89 @@ class AnchorSystem {
           // 1×1 kuyu; 4 yönden yaklaşım slotu (kuzey, güney, doğu, batı).
           final cx = b.col + 0.5;
           final cy = b.row + 0.5;
-          wellPoints.add(AnchorPoint(
-            building: b,
-            slots: [
-              AnchorSlot(cx,       cy - 0.7),
-              AnchorSlot(cx,       cy + 0.7),
-              AnchorSlot(cx - 0.7, cy      ),
-              AnchorSlot(cx + 0.7, cy      ),
-            ],
-          ));
+          wellPoints.add(
+            oldWells[b] ??
+                AnchorPoint(
+                  building: b,
+                  slots: [
+                    AnchorSlot(cx, cy - 0.7),
+                    AnchorSlot(cx, cy + 0.7),
+                    AnchorSlot(cx - 0.7, cy),
+                    AnchorSlot(cx + 0.7, cy),
+                  ],
+                ),
+          );
         case BuildingType.warehouse:
           // 3×2 depo. 5 teslim slotu: güney yarım halka + 1 doğu girişi.
           // Tile (col..col+2, row..row+1).
-          warehousePoints.add(AnchorPoint(
-            building: b,
-            slots: [
-              AnchorSlot(b.col + 0.5, b.row + 2.3), // güney-sol
-              AnchorSlot(b.col + 1.5, b.row + 2.6), // güney-orta
-              AnchorSlot(b.col + 2.5, b.row + 2.3), // güney-sağ
-              AnchorSlot(b.col + 3.3, b.row + 1.0), // doğu
-              AnchorSlot(b.col + 3.3, b.row + 0.0), // kuzey-doğu
-            ],
-          ));
+          warehousePoints.add(
+            oldWarehouses[b] ??
+                AnchorPoint(
+                  building: b,
+                  slots: [
+                    AnchorSlot(b.col + 0.5, b.row + 2.3), // güney-sol
+                    AnchorSlot(b.col + 1.5, b.row + 2.6), // güney-orta
+                    AnchorSlot(b.col + 2.5, b.row + 2.3), // güney-sağ
+                    AnchorSlot(b.col + 3.3, b.row + 1.0), // doğu
+                    AnchorSlot(b.col + 3.3, b.row + 0.0), // kuzey-doğu
+                  ],
+                ),
+          );
         case BuildingType.firepit:
           // 1×1 ateş yeri. 6 slot çevresinde — gündüz teslim fallback'i,
           // gece de toplanma (sleep target dağıtımı ayrı sistem).
           final cx = b.col + 0.5;
           final cy = b.row + 0.5;
-          firepitPoints.add(AnchorPoint(
-            building: b,
-            slots: [
-              for (int i = 0; i < 6; i++)
-                _ringSlot(cx, cy, 1.4, i, 6),
-            ],
-          ));
+          firepitPoints.add(
+            oldFirepits[b] ??
+                AnchorPoint(
+                  building: b,
+                  slots: [
+                    for (int i = 0; i < 6; i++) _ringSlot(cx, cy, 1.4, i, 6),
+                  ],
+                ),
+          );
           // Aynı ateşin oturma halkaları — akşam toplanması ve törenler için.
           // İÇ halka 6 kişilik (carrier slot'larıyla çakışmasın diye 30°/0.25
           // tile offset). DIŞ halka 8 kişilik: tören çağrıları 7-8 kişi
           // istiyordu ama yalnız 6 yer vardı, fazlası sessizce düşüyordu —
           // "bütün köy toplandı" hep 6 kişilik görünürdü. Dış halka teslim
           // halkasının (1.4) dışında kalır, yol kesmez.
-          firepitSitPoints.add(AnchorPoint(
-            building: b,
-            slots: [
-              for (int i = 0; i < 6; i++)
-                _ringSlotOffset(cx, cy, 1.15, i, 6, 0.5),
-              for (int i = 0; i < 8; i++)
-                _ringSlotOffset(cx, cy, 2.05, i, 8, 0.5),
-            ],
-          ));
+          firepitSitPoints.add(
+            oldFirepitSeats[b] ??
+                AnchorPoint(
+                  building: b,
+                  slots: [
+                    for (int i = 0; i < 6; i++)
+                      _ringSlotOffset(cx, cy, 1.15, i, 6, 0.5),
+                    for (int i = 0; i < 8; i++)
+                      _ringSlotOffset(cx, cy, 2.05, i, 8, 0.5),
+                  ],
+                ),
+          );
         default:
           break;
       }
     }
+  }
+
+  /// [building] üzerindeki herhangi bir slot [owner] tarafından tutuluyor mu?
+  /// Bina sökülmeden önce yalnız o hedefe giden görevleri iptal etmek için.
+  bool hasReservationAt(BuildingEntity building, Object owner) {
+    for (final points in [
+      wellPoints,
+      warehousePoints,
+      firepitPoints,
+      firepitSitPoints,
+    ]) {
+      for (final point in points) {
+        if (!identical(point.building, building)) continue;
+        if (point.slots.any((slot) => identical(slot._owner, owner))) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   static AnchorSlot _ringSlot(double cx, double cy, double r, int i, int n) {
@@ -148,40 +186,65 @@ class AnchorSystem {
 
   /// [_ringSlot] varyantı — açıyı [offsetSteps] adım kaydırır (1 step = 1/n).
   /// Sit halkasını carrier halkasından açı olarak ofsetlemek için.
-  static AnchorSlot _ringSlotOffset(double cx, double cy, double r,
-      int i, int n, double offsetSteps) {
+  static AnchorSlot _ringSlotOffset(
+    double cx,
+    double cy,
+    double r,
+    int i,
+    int n,
+    double offsetSteps,
+  ) {
     final a = (i + offsetSteps) * (2 * pi / n);
     return AnchorSlot(cx + r * cos(a), cy + r * sin(a));
   }
 
   /// Verilen NPC'ye en yakın boş kuyu slot'u — claim'i yapar.
   (AnchorPoint, AnchorSlot)? claimNearestWell(
-      double npcCol, double npcRow, Object owner) =>
-      _claimNearestFrom(wellPoints, npcCol, npcRow, owner);
+    double npcCol,
+    double npcRow,
+    Object owner,
+  ) => _claimNearestFrom(wellPoints, npcCol, npcRow, owner);
 
   /// Ateş başında oturma slot'u — akşam toplanma için.
   /// Sadece [npcCol,npcRow] çevresinde [maxDist] tile'dan yakın ateşleri arar
   /// (uzaktaki ateşe yürüyüp bütün sahneyi kateden NPC olmasın).
   (AnchorPoint, AnchorSlot)? claimNearestFirepitSit(
-      double npcCol, double npcRow, Object owner,
-      {double maxDist = 14.0}) =>
-      _claimNearestFromWithin(
-          firepitSitPoints, npcCol, npcRow, owner, maxDist);
+    double npcCol,
+    double npcRow,
+    Object owner, {
+    double maxDist = 14.0,
+  }) =>
+      _claimNearestFromWithin(firepitSitPoints, npcCol, npcRow, owner, maxDist);
 
   /// Carrier teslim slot'u — önce warehouse'tan, yoksa firepit'ten.
   /// Tek API: assignCarriers bunu çağırır, fallback chain burada.
   (AnchorPoint, AnchorSlot)? claimDeliverySlot(
-      double npcCol, double npcRow, Object owner) {
+    double npcCol,
+    double npcRow,
+    Object owner,
+  ) {
     final fromWh = _claimNearestFrom(warehousePoints, npcCol, npcRow, owner);
     if (fromWh != null) return fromWh;
     return _claimNearestFrom(firepitPoints, npcCol, npcRow, owner);
   }
 
+  /// Balya gibi ateş yerine bırakılmaması gereken yükler için yalnızca
+  /// ambar slot'u sahiplenir. Ambar doluysa null döner; firepit fallback yoktur.
+  (AnchorPoint, AnchorSlot)? claimWarehouseDeliverySlot(
+    double npcCol,
+    double npcRow,
+    Object owner,
+  ) => _claimNearestFrom(warehousePoints, npcCol, npcRow, owner);
+
   /// [_claimNearestFrom] varyantı — yalnızca [maxDist] tile içindeki noktaları
   /// değerlendirir. Uzaktaki sosyal noktaya kalkışmamak için.
   (AnchorPoint, AnchorSlot)? _claimNearestFromWithin(
-      List<AnchorPoint> points, double npcCol, double npcRow,
-      Object owner, double maxDist) {
+    List<AnchorPoint> points,
+    double npcCol,
+    double npcRow,
+    Object owner,
+    double maxDist,
+  ) {
     final maxD2 = maxDist * maxDist;
     AnchorPoint? bestPoint;
     AnchorSlot? bestSlot;
@@ -208,7 +271,11 @@ class AnchorSystem {
 
   /// Liste içinden NPC'ye en yakın boş slot'u claim eder. Boş yoksa null.
   (AnchorPoint, AnchorSlot)? _claimNearestFrom(
-      List<AnchorPoint> points, double npcCol, double npcRow, Object owner) {
+    List<AnchorPoint> points,
+    double npcCol,
+    double npcRow,
+    Object owner,
+  ) {
     AnchorPoint? bestPoint;
     AnchorSlot? bestSlot;
     double bestD2 = double.infinity;
@@ -219,9 +286,9 @@ class AnchorSystem {
         final dy = s.row - npcRow;
         final d2 = dx * dx + dy * dy;
         if (d2 < bestD2) {
-          bestD2   = d2;
+          bestD2 = d2;
           bestPoint = p;
-          bestSlot  = s;
+          bestSlot = s;
         }
       }
     }
@@ -231,4 +298,3 @@ class AnchorSystem {
     return (bestPoint, bestSlot);
   }
 }
-

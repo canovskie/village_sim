@@ -747,7 +747,9 @@ extension _SceneCrime on _VillageSceneState {
     // ÇUVAL da aynı sözleşmeye tabi: mal alındıysa ve henüz gömülmediyse yük
     // failin elindedir. Başka sistemler (scene_work/scene_jobs) prop'u
     // temizlemeye çalışır; tek doğruluk burasıdır.
-    if (c.kind == CrimeKind.theft && c.lootAmount > 0 && !c.buried) {
+    if (c.kind == CrimeKind.theft &&
+        (c.lootAmount > 0 || c.weaponAmount > 0) &&
+        !c.buried) {
       v.prop = PropKind.sack;
     }
     final vic = c.victim;
@@ -806,7 +808,9 @@ extension _SceneCrime on _VillageSceneState {
       case _CrimePhase.flee:
         // HIRSIZLIK — kaçış bir yere doğrudur: zulanın gömüleceği nokta.
         // Varınca eğilip gömer; mal buharlaşmaz, toprağa geçer.
-        if (c.kind == CrimeKind.theft && !c.buried && c.lootAmount > 0) {
+        if (c.kind == CrimeKind.theft &&
+            !c.buried &&
+            (c.lootAmount > 0 || c.weaponAmount > 0)) {
           if (_wdist(v.gridX, v.gridY, c.bx, c.by) <= 1.2) {
             v.state = VillagerState.idle;
             v.targetCol = v.gridX;
@@ -859,6 +863,9 @@ extension _SceneCrime on _VillageSceneState {
     if (c.kind == CrimeKind.abduction) {
       // Kurbanı kavra, köyün dışına yönel — uzun, görünür bir sürükleme.
       final vic = c.victim!;
+      // Kurban prowl sırasında porter olmuş olabilir. Sürükleme doğrudan
+      // state/konum sahibi olmadan önce yükü grab noktasına güvenle bırak.
+      vic.cancelCarryTask();
       vic.activity = VillagerActivity.abducted;
       vic.feel(NpcEmotion.fear, 12.0, moodDelta: -0.25);
       final (ex, ey) = _abductionExit(v);
@@ -987,7 +994,7 @@ extension _SceneCrime on _VillageSceneState {
     final amount = c.lootAmount;
     v.prop = PropKind.none;
     v.actPose = null;
-    if (kind == null || amount <= 0) return;
+    if (kind == null || (amount <= 0 && c.weaponAmount <= 0)) return;
 
     final cache = LootCache(
       gridX: v.gridX,
@@ -1076,7 +1083,7 @@ extension _SceneCrime on _VillageSceneState {
     // HIRSIZLIK — kaçış rastgele "uzağa" değil, ZULAYA doğrudur. Yükü olan
     // hırsızın gidecek bir yeri vardır; kaçış penceresi de bu yüzden uzun
     // (yüklü ve yavaş: yakalanabilir olmalı).
-    if (c.kind == CrimeKind.theft && c.lootAmount > 0) {
+    if (c.kind == CrimeKind.theft && (c.lootAmount > 0 || c.weaponAmount > 0)) {
       final (bx, by) = _buryTarget(v);
       c.bx = bx;
       c.by = by;
@@ -1124,11 +1131,13 @@ extension _SceneCrime on _VillageSceneState {
         if (amount > 0) _stockpile.add(kind, -amount);
         c.lootKind = kind;
         c.lootAmount = amount;
-        if (_stockpile.weapons > 0 && _rng.nextDouble() < 0.18) {
+        if (amount > 0 && _stockpile.weapons > 0 && _rng.nextDouble() < 0.18) {
           c.weaponAmount = 1;
           _stockpile.weapons--;
         }
-        kProbeTheftTaken += amount; // prova: malın korunumu kanıtı
+        // Silah ayrı stok alanında olsa da aynı çuvalın parçasıdır. Prova
+        // topraktaki ve geri alınan toplamla aynı birimi saymalı.
+        kProbeTheftTaken += amount + c.weaponAmount;
         v.wealth += amount * 1.5;
 
       case CrimeKind.pickpocket:
@@ -1294,7 +1303,9 @@ extension _SceneCrime on _VillageSceneState {
     // Çuval elinde kaçtıysa (gömmeye yetişemedi) mal ORTADA KALMAZ: bulunduğu
     // yere gömülmüş sayılır. Aksi hâlde `_clearCrimeState` çuvalı silerdi ve
     // çalınan mal sessizce buharlaşırdı — geri alınabilirlik sözleşmesi kırılır.
-    if (c.kind == CrimeKind.theft && !c.buried && c.lootAmount > 0) {
+    if (c.kind == CrimeKind.theft &&
+        !c.buried &&
+        (c.lootAmount > 0 || c.weaponAmount > 0)) {
       _buryLoot(c);
     }
 
@@ -1386,7 +1397,9 @@ extension _SceneCrime on _VillageSceneState {
     // hedefe varamadı) ve çuval elindeyken buradan geçilirse `_clearCrimeState`
     // onu siler: stoktan düşmüş ama dünyada hiçbir yerde olmayan bir mal kalır.
     // Gece bastırıp kaçan hırsız uykuya daldığında tam olarak bu oluyordu.
-    if (c.kind == CrimeKind.theft && !c.buried && c.lootAmount > 0) {
+    if (c.kind == CrimeKind.theft &&
+        !c.buried &&
+        (c.lootAmount > 0 || c.weaponAmount > 0)) {
       _buryLoot(c); // bulunduğu yere gömülmüş sayılır — geri alınabilir kalır
     }
     _clearCrimeState(c.culprit);
@@ -1604,14 +1617,30 @@ extension _SceneCrime on _VillageSceneState {
     // yakalanırsa çuval elinde değildir; o mal zulada kalır ve ayrıca
     // bulunması gerekir — kaçış hızının gerçek bir bedeli olsun.)
     final loot = c.lootKind;
-    if (loot != null && !c.buried && c.lootAmount > 0) {
-      _stockpile.add(loot, c.lootAmount);
-      kProbeLootRecovered += c.lootAmount;
+    if (loot != null && !c.buried && (c.lootAmount > 0 || c.weaponAmount > 0)) {
+      if (c.lootAmount > 0) _stockpile.add(loot, c.lootAmount);
+      if (c.weaponAmount > 0) _stockpile.weapons += c.weaponAmount;
+      final recovered = c.lootAmount + c.weaponAmount;
+      kProbeLootRecovered += recovered;
+      final returned = <String>[
+        if (c.lootAmount > 0) '${c.lootAmount} ${loot.label.toLowerCase()}',
+        if (c.weaponAmount > 0) '${c.weaponAmount} silah',
+      ].join(' ve ');
       _showNotification(
-        '🧺 Çuval geri alındı — ${c.lootAmount} ${loot.label.toLowerCase()} '
-        'ambara döndü.',
+        Voice.say(
+          const [
+            '🧺 Çuval geri alındı. {mal} ambara döndü.',
+            '🧺 Yakalanan çuval açıldı; {mal} yeniden ambarda.',
+          ],
+          _voice(
+            v,
+            seed: _stableSeed('çalınanGeri${v.name}', _dayCount),
+            extra: {'mal': returned},
+          ),
+        ),
       );
       c.lootAmount = 0;
+      c.weaponAmount = 0;
     }
 
     _clearCrimeState(v);

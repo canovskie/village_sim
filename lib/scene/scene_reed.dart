@@ -144,13 +144,16 @@ extension _SceneReed on _VillageSceneState {
       final sx = cx + cos(ang) * _kBedRing;
       final sy = cy + sin(ang) * _kBedRing;
       final c = sx.round(), r = sy.round();
+      final decorC = sx.floor(), decorR = sy.floor();
       if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
       if (_obstacles.contains((c, r))) continue;
       if (_waterTiles.contains((c, r))) continue;
       // Saz yatağı dekoratif zeminin üstüne bindirilmemeli. Yalnız path
       // engeline bakmak yeterli değildi: dekor, ağaç, cevher, tarla ve yerdeki
       // üretim yığınları aynı karede kalabiliyordu.
-      if (_decor.any((d) => d.col == c && d.row == r && !d.crushed)) continue;
+      // ReedBed sahipliği restore/sanitizer tarafında floor tile'ıyla ölçülür;
+      // burada da aynı kareyi kullan ki .5 çevresinde yatak çiçeğe kaymasın.
+      if (_decor.any((d) => d.col == decorC && d.row == decorR)) continue;
       if (_trees.any((t) => t.col == c && t.row == r && !t.isFelled)) continue;
       if (_mineNodes.any((m) => m.col == c && m.row == r && !m.isDepleted)) {
         continue;

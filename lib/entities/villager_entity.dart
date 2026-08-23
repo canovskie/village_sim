@@ -306,6 +306,9 @@ class VillagerEntity extends WorkerEntity {
   }
 
   void goTo(double x, double y, double dwell) {
+    // Dış sistemlerden gelen yeni hareket emri porter state-machine'ini
+    // ezmemeli. Önce yükü güvenle yere bırakıp teslim rezervasyonunu sal.
+    if (hasCarryTask) cancelCarryTask();
     targetCol = x;
     targetRow = y;
     _errandDwell = dwell;
@@ -416,6 +419,8 @@ class VillagerEntity extends WorkerEntity {
   double _pickupX = 0, _pickupY = 0;
   double _deliverX = 0, _deliverY = 0;
   void Function()? _onDelivered;
+  void Function(bool wasPickedUp)? _onCarryCancelled;
+  bool _cancellingCarryTask = false;
 
   /// Ahır binalarının verdiği taşıma hızı çarpanı (≥1). main.dart her tick atar.
   /// Yalnızca pickup/teslimat hareketine uygulanır.
@@ -679,7 +684,13 @@ class VillagerEntity extends WorkerEntity {
   /// ölümlerde true (sahne tören düzenler).
   void startDying({double duration = 1.6, bool funeral = false}) {
     if (isDying) return;
+    // Terminal bayrak callback'ten ÖNCE kurulmalı. İptal callback'i yeniden
+    // taşıma atamaya kalkarsa ölen köylü bunu güvenilir biçimde reddeder.
     isDying = true;
+    // Ani/olay ölümü doğal ölüm hattındaki "önce teslim et" kapısından
+    // geçmeyebilir. Yükü ve teslim slot'unu sahibine iade etmeden AI'ı
+    // dondurursak kaynak görünmez, anchor da sonsuza dek dolu kalır.
+    cancelCarryTask();
     _deathDur = duration;
     _deathT = duration;
     deathHoldsFuneral = funeral;
@@ -700,7 +711,13 @@ class VillagerEntity extends WorkerEntity {
 
   void startLeaving(double edgeX, double edgeY) {
     if (isLeaving || isDying) return;
+    // Terminal bayrak callback'ten önce kurulur; aksi halde callback aynı
+    // köylüye yeni porter işi verip ayrılış state'inin altında sızdırabilir.
     isLeaving = true;
+    // Sürgün/ayrılış taşıma state-machine'ini artık sürdürmez. Yükü köylünün
+    // ayağına bırakıp teslim rezervasyonunu sal; harita kenarına görünmez bir
+    // kutuyla yürüyüp kaynağı da köyden silmesin.
+    cancelCarryTask();
     _leaveX = edgeX;
     _leaveY = edgeY;
     emotion = NpcEmotion.grief; // ağır, başı önde ayrılış (gövde dili)
@@ -930,9 +947,62 @@ class VillagerEntity extends WorkerEntity {
       !isInsideBuilding &&
       state != VillagerState.sleeping &&
       !isSeatedAtFire &&
+      !holdsItemTwoHanded &&
       (hasProfession || lanternMandate);
   bool get isCarrying =>
       state == VillagerState.carrying || state == VillagerState.walkingToPickup;
+
+  /// Porter'ın görünür state'i dışarıdan ezilmiş olsa bile özel görev alanları
+  /// doluysa görev hâlâ aktiftir. Çakışan atama ve kayıt normalizasyonu yalnız
+  /// enum'a bakarsa kaynak/callback sızıntısını kaçırır.
+  bool get hasCarryTask =>
+      isCarrying ||
+      _pickupItem != null ||
+      carriedItem != null ||
+      _onDelivered != null ||
+      _onCarryCancelled != null;
+
+  /// Renderer'ın iki eli yük duruşuna alacağı tek kapı. Pickup'a giderken yük
+  /// henüz elde değildir; porter yükü ancak [carriedItem] dolunca iki ellidir.
+  /// Gündelik sahnelerdeki çuval/sepet/odun da aynı duruşu kullanır.
+  bool get holdsItemTwoHanded =>
+      (state == VillagerState.carrying && carriedItem != null) ||
+      propTwoHanded(prop);
+
+  /// Genel taşıyıcı taramasının bir köylüyü yarım sahneden/iş darbesinden
+  /// koparmaması için model-seviyesi uygunluk. Atanmış ama henüz hedef
+  /// sahiplenmemiş bir işçi porter olabilir; başlamış faz/claim/su turu olamaz.
+  bool get canAcceptCarryTask {
+    final activeJob = job;
+    final jobIsBetweenCycles =
+        activeJob == null ||
+        (activeJob.phase == 0 &&
+            activeJob.claim == null &&
+            activeJob.claim2 == null &&
+            activeJob.claim3 == null &&
+            !activeJob.working &&
+            !activeJob.harvesting &&
+            !activeJob.carryingWater &&
+            activeJob.harvestHayPos == null);
+    return state == VillagerState.idle &&
+        !isWalking &&
+        !hasCarryTask &&
+        !_cancellingCarryTask &&
+        !isDying &&
+        !isLeaving &&
+        !isInsideBuilding &&
+        canRunErrands &&
+        !sitClaimed &&
+        !isSeatedAtFire &&
+        activity == VillagerActivity.none &&
+        act == null &&
+        actPose == null &&
+        prop == PropKind.none &&
+        waveTime <= 0 &&
+        chatBubbleTime <= 0 &&
+        jobIsBetweenCycles &&
+        mind.intent.priority < IntentPriority.committed;
+  }
 
   /// Güncel yaşam evresi (yaştan türer).
   LifeStage get lifeStage => lifeStageForDays(ageDays);
@@ -955,22 +1025,63 @@ class VillagerEntity extends WorkerEntity {
   WanderBehavior get _activeBehavior =>
       isChild ? WanderBehavior.playful : behavior;
 
-  void assignCarryTask(
+  bool assignCarryTask(
     Object item,
     double pickX,
     double pickY,
     double destX,
     double destY, {
     void Function()? onDelivered,
+    void Function(bool wasPickedUp)? onCancelled,
   }) {
+    // `false`, görevin hiç başlamadığı anlamına gelir; bu durumda callback
+    // çağrılmaz. Önceden anchor claim eden çağıran bool kolunda kendi claim'ini
+    // geri alır. Aktif görevi burada zorla kesmek yarım sahne/iş ve yeniden
+    // giriş yarışları üretiyordu.
+    if (!canAcceptCarryTask) return false;
+
     _pickupItem = item;
+    carriedItem = null;
     _pickupX = pickX;
     _pickupY = pickY;
     _deliverX = destX;
     _deliverY = destY;
     _onDelivered = onDelivered;
+    _onCarryCancelled = onCancelled;
     state = VillagerState.walkingToPickup;
     isWalking = true;
+    return true;
+  }
+
+  /// Aktif porter zincirini güvenle kes. Callback, yük gerçekten ele alınmışsa
+  /// `true` alır; çağıran böylece yerdeki item'i pickup noktasında bırakmakla
+  /// köylünün mevcut konumuna düşürmek arasında doğru kararı verir.
+  void cancelCarryTask() {
+    if (!hasCarryTask) return;
+
+    final wasPickedUp = carriedItem != null;
+    final onCancelled = _onCarryCancelled;
+    _pickupItem = null;
+    carriedItem = null;
+    _onDelivered = null;
+    _onCarryCancelled = null;
+    _pickupX = _pickupY = _deliverX = _deliverY = 0;
+    loco.reset();
+    if (state == VillagerState.walkingToPickup ||
+        state == VillagerState.carrying) {
+      state = VillagerState.idle;
+      idleTimer = 0.2;
+    }
+    isWalking = false;
+    // Önce iç state temizlenir. Callback boyunca yeni görev kabul edilmez;
+    // böylece dış hareket/ölüm/işten ayrılma emri callback'in yeniden atadığı
+    // bir görevi hemen ezip ikinci bir kaynak sızıntısı oluşturamaz.
+    _cancellingCarryTask = true;
+    try {
+      onCancelled?.call(wasPickedUp);
+    } finally {
+      _cancellingCarryTask = false;
+    }
   }
 
   /// Taşıma zincirinin kalan gerçek süresi. Panel koordinatları bilmez; modelin
@@ -1176,7 +1287,14 @@ class VillagerEntity extends WorkerEntity {
         gridX = _pickupX;
         gridY = _pickupY;
         loco.reset();
-        carriedItem = _pickupItem;
+        final item = _pickupItem;
+        if (item == null) {
+          // Bozuk/yarım restore ya da dışarıdan kesilen görev teslim evresine
+          // boş elle geçmesin; cancellation callback anchor'ı da geri alır.
+          cancelCarryTask();
+          return;
+        }
+        carriedItem = item;
         _pickupItem = null;
         state = VillagerState.carrying;
         isWalking = false;
@@ -1199,12 +1317,19 @@ class VillagerEntity extends WorkerEntity {
         gridX = _deliverX;
         gridY = _deliverY;
         loco.reset();
-        _onDelivered?.call();
-        _onDelivered = null;
+        final onDelivered = _onDelivered;
+        // Teslim callback'i kaynak listesini değiştirebilir, hatta hata
+        // fırlatabilir. Önce köylünün state'ini atomik biçimde temizle; aksi
+        // halde callback sırasında aynı teslimat bir sonraki karede tekrarlanır.
+        _pickupItem = null;
         carriedItem = null;
+        _onDelivered = null;
+        _onCarryCancelled = null;
+        _pickupX = _pickupY = _deliverX = _deliverY = 0;
         state = VillagerState.idle;
         idleTimer = 0.4 + rng.nextDouble() * 1.5;
         isWalking = false;
+        onDelivered?.call();
       } else {
         isWalking = true;
       }

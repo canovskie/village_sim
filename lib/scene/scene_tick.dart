@@ -665,7 +665,7 @@ extension _SceneTick on _VillageSceneState {
       if (!_decor.any(
         (d) => d.col == f.col && d.row == f.row && d.kind == DecorKind.stump,
       )) {
-        _decor.add(
+        _appendDecor(
           DecorEntity(
             col: f.col,
             row: f.row,
@@ -684,7 +684,7 @@ extension _SceneTick on _VillageSceneState {
         (d) =>
             d.col == f.col && d.row == f.row && d.kind == DecorKind.fallenLog,
       )) {
-        _decor.add(
+        _appendDecor(
           DecorEntity(
             col: f.col,
             row: f.row,
@@ -730,7 +730,7 @@ extension _SceneTick on _VillageSceneState {
       final r2 = meta.effectRadius * meta.effectRadius;
       int flowers = 0;
       for (final d in _decor) {
-        if (d.crushed || !_isFlowerDecor(d.kind)) continue;
+        if (d.crushed || !isFlowerDecorKind(d.kind)) continue;
         final dx = (d.col + 0.5) - cx;
         final dy = (d.row + 0.5) - cy;
         if (dx * dx + dy * dy <= r2) flowers++;
@@ -758,6 +758,8 @@ extension _SceneTick on _VillageSceneState {
         hayEntities: _hayEntities,
         stockpile: _stockpile,
         anchorSystem: _anchorSystem,
+        time: _time,
+        timeNow: () => _time,
         baleYieldMultiplier:
             _season.yieldMultiplier *
             (_policies.cropRotation ? 1.2 : 1.0) *
@@ -855,12 +857,12 @@ extension _SceneTick on _VillageSceneState {
     // karşı yakınlık testinden geçir (ilk isabet yeter → early break).
     const double r2 = 0.40 * 0.40; // ~yarım tile: doğrudan basış
     for (final d in _decor) {
-      if (d.crushed || !_isFlowerDecor(d.kind)) continue;
+      if (d.crushed || !isFlowerDecorKind(d.kind)) continue;
       if (_moverOnTile(d.col + 0.5, d.row + 0.5, r2)) d.startCrush();
     }
 
     // Animasyonu ilerlet + biten çiçekleri temizle (tickCrush true dönerse bitti).
-    _decor.removeWhere((d) => d.tickCrush(dt));
+    _removeDecorWhere((d) => d.tickCrush(dt));
   }
 
   /// Ekranda hareket eden herhangi bir köylü/işçi (cx,cy) merkezine r2
@@ -902,15 +904,6 @@ extension _SceneTick on _VillageSceneState {
       '🌠 Gökyüzü göktaşı yağmuruyla doldu — köy başını kaldırıp izledi.',
     );
   }
-
-  /// Decor türü bir çiçek mi — arı kovanı bal sinerjisi (menzildeki çiçek
-  /// sayısı üretimi hızlandırır). Mantar/çalı/kütük çiçek sayılmaz.
-  bool _isFlowerDecor(DecorKind k) =>
-      k == DecorKind.daisy ||
-      k == DecorKind.poppy ||
-      k == DecorKind.lavender ||
-      k == DecorKind.buttercup ||
-      k == DecorKind.clover;
 
   /// Arı sürülerini mevcut kovanlardan türetir. Var olan sürüler pozisyona
   /// göre korunur (orbit state sıfırlanmaz); kaldırılan kovanın sürüsü düşer,
@@ -1542,6 +1535,16 @@ extension _SceneTick on _VillageSceneState {
     for (int i = 0; i < _villagers.length; i++) {
       final v = _villagers[i];
       // Çocuklar da selamlaşır (el sallar) — köyün sokakları çocuklu canlanır.
+      // Yüklü köylünün iki eli doludur; selam jesti sağ kolu devralıp yükü
+      // havada bırakmasın. Görünmeyen/ayrılan NPC de komşu adayı değildir.
+      if (v.isCarrying ||
+          v.prop != PropKind.none ||
+          v.isDying ||
+          v.isLeaving ||
+          v.isSleeping ||
+          v.isInsideBuilding) {
+        continue;
+      }
       if (v.chatBubbleTime > 0) continue;
       if (v.greetCooldown > 0) continue;
       final key = (v.gridX.floor() ~/ 2, v.gridY.floor() ~/ 2);
@@ -1552,6 +1555,14 @@ extension _SceneTick on _VillageSceneState {
       if (v.chatBubbleTime > 0) continue;
       if (v.greetCooldown > 0) {
         v.greetCooldown -= 1.2;
+        continue;
+      }
+      if (v.isCarrying ||
+          v.prop != PropKind.none ||
+          v.isDying ||
+          v.isLeaving ||
+          v.isSleeping ||
+          v.isInsideBuilding) {
         continue;
       }
       // Taban her zaman açık; komşuluk politikası selamı sıklaştırır.

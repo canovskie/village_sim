@@ -267,7 +267,8 @@ extension _SceneSave on _VillageSceneState {
     // modal açıkken de çalışabildiği için aktif talebi de aynı kuyruk formatında
     // sakla; aksi hâlde yüklemede karar sessizce kaybolurdu.
     final savedImperialDemand = _pacedImperialDemand ?? _imperialDemand;
-    final savedImperialRequestId = _pacedImperialRequestId ??
+    final savedImperialRequestId =
+        _pacedImperialRequestId ??
         (_decisionPacing.active?.kind == HeavyDecisionKind.imperial
             ? _decisionPacing.active!.id
             : null);
@@ -585,6 +586,10 @@ extension _SceneSave on _VillageSceneState {
     int Function(Object?) bRef,
     int Function(Object?) vRef,
   ) {
+    // Porter callback/hedefleri geçici runtime state'idir ve JSON'a girmez.
+    // Enum'u tek başına kaydetmek yüklemede boş elle (0,0)'a yürüyen bir NPC
+    // üretirdi; snapshot'ta görevi kesilmiş, bulunduğu yerde idle sayılır.
+    final transientCarry = v.hasCarryTask;
     return {
       'type': v.type.name,
       'name': v.name,
@@ -600,9 +605,9 @@ extension _SceneSave on _VillageSceneState {
       'facingRight': v.facingRight,
       'ageDays': v.ageDays,
       'lifespanDays': v.lifespanDays.isFinite ? v.lifespanDays : null,
-      'state': v.state.name,
-      'targetCol': v.targetCol,
-      'targetRow': v.targetRow,
+      'state': transientCarry ? VillagerState.idle.name : v.state.name,
+      'targetCol': transientCarry ? v.gridX : v.targetCol,
+      'targetRow': transientCarry ? v.gridY : v.targetRow,
       'isFavorite': v.isFavorite,
       'wed': v.wed,
       // Üstlenilmiş iş — yalnız rol adı; faz/sayaç/claim geçici (açılışta
@@ -811,24 +816,39 @@ extension _SceneSave on _VillageSceneState {
     'jitterY': g.jitterY,
   };
 
-  Map<String, dynamic> _resourceBoxToJson(ResourceBox r) => {
-    'type': r.type.name,
-    'x': r.gridX,
-    'y': r.gridY,
-    'amount': r.amount,
-    'slotIndex': r.slotIndex,
-  };
+  VillagerEntity? _carrierHolding(Object item) {
+    for (final v in _villagers) {
+      if (identical(v.carriedItem, item)) return v;
+    }
+    return null;
+  }
 
-  Map<String, dynamic> _hayToJson(HayEntity h) => {
-    'type': h.type.name,
-    'x': h.gridX,
-    'y': h.gridY,
-    'slotIndex': h.slotIndex,
-    'pileSize': h.pileSize,
-    // spawnTime kayıtlıysa harmanın FIFO sırası ve düşme animasyonu
-    // yüklemeden sonra da doğru kalır (_time de kaydediliyor).
-    'spawnTime': h.spawnTime,
-  };
+  Map<String, dynamic> _resourceBoxToJson(ResourceBox r) {
+    final carrier = _carrierHolding(r);
+    return {
+      'type': r.type.name,
+      // Pickup öncesinde kaynak zaten yerde ve koordinatı korunur. Ele alınmış
+      // yükse snapshot kesintisi onu taşıyıcının ayağında dünyaya bırakır.
+      'x': carrier?.gridX ?? r.gridX,
+      'y': carrier?.gridY ?? r.gridY,
+      'amount': r.amount,
+      'slotIndex': r.slotIndex,
+    };
+  }
+
+  Map<String, dynamic> _hayToJson(HayEntity h) {
+    final carrier = _carrierHolding(h);
+    return {
+      'type': h.type.name,
+      'x': carrier?.gridX ?? h.gridX,
+      'y': carrier?.gridY ?? h.gridY,
+      'slotIndex': h.slotIndex,
+      'pileSize': h.pileSize,
+      // spawnTime kayıtlıysa harmanın FIFO sırası ve düşme animasyonu
+      // yüklemeden sonra da doğru kalır (_time de kaydediliyor).
+      'spawnTime': h.spawnTime,
+    };
+  }
 
   // ── Restore (JSON → state) ──────────────────────────────────────────────────
 
@@ -844,13 +864,14 @@ extension _SceneSave on _VillageSceneState {
     _berryBushes.clear();
     _cookedMeals = 0;
     _berriesPicked = 0;
-    _decor.clear();
+    _replaceDecor(const []);
     _trees.clear();
     _cleared.clear();
     _wilderness.clear();
     _wildTreeTiles.clear();
     _mineNodes.clear();
     _landmarks.clear();
+    _farmTiles.clear();
     _buildings.clear();
     _orders.clear();
     _roadOrders.clear();
@@ -1252,9 +1273,10 @@ extension _SceneSave on _VillageSceneState {
     _berriesPicked = _i(w['berriesPicked']);
     _woodHarvested = _i(w['woodHarvested']);
     _firstMealShown = _b(w['firstMealShown']);
-    for (final raw in (w['decor'] as List? ?? const [])) {
-      _decor.add(_decorFromJson(Map<String, dynamic>.from(raw as Map)));
-    }
+    _replaceDecor([
+      for (final raw in (w['decor'] as List? ?? const []))
+        _decorFromJson(Map<String, dynamic>.from(raw as Map)),
+    ]);
     if (!w.containsKey('landmarks')) {
       _seedLandmarksForLegacySave();
     }
@@ -1546,6 +1568,10 @@ extension _SceneSave on _VillageSceneState {
     _meteorShowerTimer = _d(w['meteorShowerTimer'], 4.0 * kGameDaySeconds);
 
     // 11) Türetilmiş yapıları yeniden kur.
+    // Dekor kayıtta yüzeylerden bağımsızdır. Bina, şantiye, yol, tarla ve
+    // diğer kalıcı dünya nesnelerinin tamamı geri geldikten sonra eski
+    // kayıtları bugünkü sahiplik/bütçe/spacing sözleşmesine taşı.
+    _sanitizeDecorPopulation();
     // Reach kayda GİRMEZ — bina/görevden türer. Snap'lemezsek `_kSpanStart`ten
     // başlayıp 1.2/sn tırmanır: oturmuş bir köyü açınca kamera dakikalarca
     // kendiliğinden geri çekilir. Hedefe doğrudan otur (referans köy de aynısını
@@ -1659,9 +1685,19 @@ extension _SceneSave on _VillageSceneState {
     // Kayıttan dönen köylü "zaten öyle duruyordu" — dönüş animasyonu oynamasın
     // (yoksa yükleme anında köyün yarısı yerinde takla atar).
     v.loco.snapFacing(_b(j['facingRight'], true));
-    v.state = _enumByName(VillagerState.values, j['state'], VillagerState.idle);
-    v.targetCol = _d(j['targetCol'], v.gridX);
-    v.targetRow = _d(j['targetRow'], v.gridY);
+    final savedState = _enumByName(
+      VillagerState.values,
+      j['state'],
+      VillagerState.idle,
+    );
+    // Eski kayıtlar callback/item/hedef taşımadan porter enum'unu yazabiliyor.
+    // Böyle bir state'i canlandırmak boş elle (0,0)'a giden yetim görev üretir.
+    final orphanedCarry =
+        savedState == VillagerState.walkingToPickup ||
+        savedState == VillagerState.carrying;
+    v.state = orphanedCarry ? VillagerState.idle : savedState;
+    v.targetCol = orphanedCarry ? v.gridX : _d(j['targetCol'], v.gridX);
+    v.targetRow = orphanedCarry ? v.gridY : _d(j['targetRow'], v.gridY);
     v.isFavorite = _b(j['isFavorite']);
     v.wed = _b(j['wed']);
     // Üstlenilmiş iş rolü — atama detayı (claim/faz) _syncJobWorkforce'la kurulur.

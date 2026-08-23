@@ -744,6 +744,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       if (_obstacles.contains((c, r))) continue;
       if (treeSet.contains((c, r))) continue;
       if (_forbiddenForTrees.contains((c, r))) continue;
+      // Fidan kalıcı bir yüzeydir; altında eski decor bırakma.
+      _clearDecorTile(c, r);
       _trees.add(
         TreeEntity(col: c, row: r, type: TreeType.pine, isGrowing: true),
       );
@@ -790,6 +792,11 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       (b) => b.col == o.col && b.row == o.row && b.type == o.type,
       orElse: () => BuildingEntity(type: o.type, col: o.col, row: o.row),
     );
+    final footprint = kBuildingMeta[o.type]!;
+    // Doğrudan kurulan/dev/referans yapılar `_doPlace` kapısını atlar;
+    // tamamlanma kancası ikinci emniyet ağıdır. Bina ve spawn-pop FX'i
+    // aynı tile'daki eski dekorla hiçbir zaman birlikte yaşamaz.
+    _clearDecorFootprint(o.col, o.row, footprint.cols, footprint.rows);
     // _BuildingDrawable spawn-pop animasyonu (ilk ~0.6s scale + toz) için.
     building.spawnTime = _time;
 
@@ -966,8 +973,8 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     }
   }
 
-  /// Yeşil köy: bina çevresine 2-4 rastgele çiçek/çalı/buttercup decor ekler.
-  /// 2-tile radius footprint dışından sample, su/bina/dekor çakışmasız.
+  /// Yeşil köy: bina çevresine 1-2 küçük bitki vurgusu ekler.
+  /// Fazlası her yeni yapıyla katlanıp köyü dekor halısına çeviriyordu.
   void _sprinkleGreenAround(BuildingEntity b) {
     const kinds = [
       DecorKind.daisy,
@@ -988,35 +995,24 @@ extension _SceneBuildingSpawn on _VillageSceneState {
             r < b.row + b.rows) {
           continue;
         }
-        if (_waterTiles.contains((c, r))) continue;
-        if (_isOccupiedByBuilding(c, r)) continue;
-        if (_decor.any((d) => d.col == c && d.row == r)) continue;
-        if (_trees.any((t) => t.col == c && t.row == r)) continue;
         candidates.add((c, r));
       }
     }
     if (candidates.isEmpty) return;
     candidates.shuffle(_rng);
-    final pick = 2 + _rng.nextInt(3); // 2-4
-    for (int i = 0; i < pick && i < candidates.length; i++) {
-      final (c, r) = candidates[i];
-      _decor.add(
-        DecorEntity(
-          col: c,
-          row: r,
-          kind: kinds[_rng.nextInt(kinds.length)],
-          variant: _rng.nextInt(3),
-          jitterX: (_rng.nextDouble() - 0.5) * 0.5,
-          jitterY: (_rng.nextDouble() - 0.5) * 0.5,
-          swaySeed: _rng.nextInt(1000),
-        ),
-      );
+    final pick = 1 + _rng.nextInt(2); // 1-2
+    var planted = 0;
+    for (final (c, r) in candidates) {
+      if (planted >= pick) break;
+      final kind = kinds[_rng.nextInt(kinds.length)];
+      if (_tryPlantDecor(c, r, kind)) planted++;
     }
   }
 
   /// Çiçek bahçesi etki alanı içinde RANDOM tile'lara çiçek demeti dağıtır.
-  /// "Aşırı kalabalık olmasın" hedefi: radius içindeki uygun tile'ların
-  /// yalnızca yaklaşık %35'i çiçeklenir, gerisi çim kalır → boşluklu, doğal.
+  /// Radius içinde 2-4 demetlik bilinçli bir bahçe kurar. Her demet ortak
+  /// spacing ve yüzey kuralından geçer; kulübenin asset'indeki çiçeklerle
+  /// yarışan ikinci bir çiçek duvarı oluşmaz.
   void _spawnFlowerGardenDecor(BuildOrder o) {
     final meta = kBuildingMeta[BuildingType.floristCottage]!;
     final radius = meta.effectRadius;
@@ -1042,38 +1038,28 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         final c = o.col + dc;
         final r = o.row + dr;
         if (c < 0 || c >= kCols || r < 0 || r >= kRows) continue;
-        // Bina footprint'i hariç tut — planter ortayı kapsıyor zaten
-        if (c == o.col && r == o.row) continue;
+        // Bina footprint'i hariç tut — planter yapının kendisinde.
+        if (c >= o.col &&
+            c < o.col + meta.cols &&
+            r >= o.row &&
+            r < o.row + meta.rows) {
+          continue;
+        }
         // Yarıçap içinde mi (Öklid)
         final dx = (c + 0.5) - cx;
         final dy = (r + 0.5) - cy;
         if (dx * dx + dy * dy > radius * radius) continue;
-        // Su / bina / mevcut dekor / ağaç çakışması yok
-        if (_waterTiles.contains((c, r))) continue;
-        if (_isOccupiedByBuilding(c, r)) continue;
-        if (_decor.any((d) => d.col == c && d.row == r)) continue;
-        if (_trees.any((t) => t.col == c && t.row == r)) continue;
         candidates.add((c, r));
       }
     }
     candidates.shuffle(_rng);
 
-    // Yalnızca yaklaşık 1/3'ünü çiçeklendir → seyrek, doğal hava.
-    // Üst limit 7: bahçe etrafı tıka basa dolmasın.
-    final pick = (candidates.length * 0.35).round().clamp(3, 7);
-    for (int i = 0; i < pick && i < candidates.length; i++) {
-      final (c, r) = candidates[i];
-      _decor.add(
-        DecorEntity(
-          col: c,
-          row: r,
-          kind: kinds[_rng.nextInt(kinds.length)],
-          variant: _rng.nextInt(3),
-          jitterX: (_rng.nextDouble() - 0.5) * 0.5,
-          jitterY: (_rng.nextDouble() - 0.5) * 0.5,
-          swaySeed: _rng.nextInt(1000),
-        ),
-      );
+    final pick = (candidates.length * 0.22).round().clamp(2, 4);
+    var planted = 0;
+    for (final (c, r) in candidates) {
+      if (planted >= pick) break;
+      final kind = kinds[_rng.nextInt(kinds.length)];
+      if (_tryPlantDecor(c, r, kind)) planted++;
     }
   }
 
@@ -1168,6 +1154,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       }
       // Saha eli otomatik doğmaz — _syncFarmerWorkforce (tick) ilk karede
       // köyün çiftçi kadrosuna göre kadroyu kurar.
+      _sanitizeDecorPopulation();
       _fixNpcSpawns();
     });
     _showNotification('🏡 Yaşayan köy kuruldu!');
@@ -1287,6 +1274,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
         }
       }
       // Saha eli _syncFarmerWorkforce (tick) tarafından kurulur.
+      _sanitizeDecorPopulation();
       _fixNpcSpawns();
 
       // Ekstra köylüler — yataklar dolsun, sokakta canlılık olsun.
