@@ -43,8 +43,9 @@ int kReferenceDayFor(Season s) =>
 
 /// Varyantın kayıt slotu. Temel mevsim (yaz) KANONİK slotu kullanır — menüdeki
 /// "Referans Köy" girişi ile aynı dosya; diğer üçü kendi slotunda yaşar.
-String kReferenceSlotIdFor(Season s) =>
-    s == kReferenceBaseSeason ? kReferenceSlotId : '${kReferenceSlotId}_${s.name}';
+String kReferenceSlotIdFor(Season s) => s == kReferenceBaseSeason
+    ? kReferenceSlotId
+    : '${kReferenceSlotId}_${s.name}';
 
 String kReferenceSlotNameFor(Season s) =>
     s == kReferenceBaseSeason ? kReferenceSlotName : 'Referans · ${s.label}';
@@ -62,7 +63,7 @@ const int kRefH = 19;
 const List<(BuildingType, int, int)> kRefLayout = [
   // ── Meydan ────────────────────────────────────────────────────────────────
   (BuildingType.firepit, 11, 8),
-  // ── Konut mahallesi (batı) — 8 ev + 2 çadır = 18 yatak ────────────────────
+  // ── Konut mahallesi (batı) — 8 ev + 1 çadır = 18 yatak ────────────────────
   (BuildingType.woodenHouse, 0, 1),
   (BuildingType.woodenHouse, 0, 4),
   (BuildingType.woodenHouse, 0, 7),
@@ -72,7 +73,6 @@ const List<(BuildingType, int, int)> kRefLayout = [
   (BuildingType.woodenHouse, 3, 7),
   (BuildingType.woodenHouse, 3, 10),
   (BuildingType.tent, 6, 2),
-  (BuildingType.tent, 6, 5),
   // ── Yönetim & mabet (kuzey) ───────────────────────────────────────────────
   (BuildingType.townhall, 9, 1),
   (BuildingType.church, 15, 1),

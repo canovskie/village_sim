@@ -295,6 +295,9 @@ extension _SceneSave on _VillageSceneState {
       'governanceLegacy': _governanceLegacy,
       'lastPopMilestone': _lastPopMilestone,
       'firstReedBedShown': _firstReedBedShown,
+      'foundingFirstNightFastForwarded': _foundingFirstNightFastForwarded,
+      'foundingTentsReadyDay': _foundingTentsReadyDay,
+      'foundingTentIllnessTriggered': _foundingTentIllnessTriggered,
       'firepit': bRef(_firepitBuilding),
       'firekeeper': vRef(_firekeeper),
 
@@ -353,6 +356,7 @@ extension _SceneSave on _VillageSceneState {
           },
       ],
       'knownCrafts': _knownCrafts.toList(),
+      'specialistOffersClaimed': _specialistOffersClaimed,
       // Merkezi ağır-karar otoritesi + henüz yüzeye çıkmamış payload'lar.
       // Yalnız timer'ları yazmak yetmez: kuyruk kaybolursa oyuncunun önüne
       // gelmemiş karar sessizce buharlaşır.
@@ -401,6 +405,9 @@ extension _SceneSave on _VillageSceneState {
       'roadOrders': [for (final o in _roadOrders) _roadOrderToJson(o)],
       'roads': [for (final t in _roadSystem.all) _roadTileToJson(t)],
       'farmTiles': [for (final t in _farmTiles) _farmTileToJson(t)],
+      'harmanSites': [
+        for (final site in _harmanSites) {'col': site.col, 'row': site.row},
+      ],
       'trees': [for (final t in _trees) _treeToJson(t)],
       'mineNodes': [for (final n in _mineNodes) _mineNodeToJson(n)],
       'landmarks': [
@@ -564,6 +571,7 @@ extension _SceneSave on _VillageSceneState {
 
   Map<String, dynamic> _buildingToJson(BuildingEntity b) => {
     'type': b.type.name,
+    if (b.design != BuildingDesign.original) 'design': b.design.name,
     'col': b.col,
     'row': b.row,
     'isActive': b.isActive,
@@ -624,6 +632,7 @@ extension _SceneSave on _VillageSceneState {
       if (v.surname.isNotEmpty) 'surname': v.surname,
       if (v.injuryDays > 0) 'injuryDays': v.injuryDays,
       if (v.sickDays > 0) 'sickDays': v.sickDays,
+      if (v.tutorialIllness) 'tutorialIllness': true,
       // Kışlık giysi — köyün emeği; yükleyince sırtından düşmesin.
       if (v.hasCoat) 'hasCoat': true,
       if (v.laborDays > 0) 'laborDays': v.laborDays,
@@ -738,6 +747,7 @@ extension _SceneSave on _VillageSceneState {
 
   Map<String, dynamic> _orderToJson(BuildOrder o) => {
     'type': o.type.name,
+    if (o.design != BuildingDesign.original) 'design': o.design.name,
     'col': o.col,
     'row': o.row,
     'completed': o.completed,
@@ -847,6 +857,8 @@ extension _SceneSave on _VillageSceneState {
       // spawnTime kayıtlıysa harmanın FIFO sırası ve düşme animasyonu
       // yüklemeden sonra da doğru kalır (_time de kaydediliyor).
       'spawnTime': h.spawnTime,
+      if (h.targetHarmanCol != null) 'harmanCol': h.targetHarmanCol,
+      if (h.targetHarmanRow != null) 'harmanRow': h.targetHarmanRow,
     };
   }
 
@@ -861,6 +873,7 @@ extension _SceneSave on _VillageSceneState {
     _lotuses.clear();
     _reeds.clear();
     _reedBeds.clear();
+    _foundingBedTargets.clear();
     _berryBushes.clear();
     _cookedMeals = 0;
     _berriesPicked = 0;
@@ -872,6 +885,7 @@ extension _SceneSave on _VillageSceneState {
     _mineNodes.clear();
     _landmarks.clear();
     _farmTiles.clear();
+    _harmanSites.clear();
     _buildings.clear();
     _orders.clear();
     _roadOrders.clear();
@@ -881,6 +895,10 @@ extension _SceneSave on _VillageSceneState {
     _clearRoadDrag();
     _cows.clear();
     _villagers.clear();
+    _foundingCouncilPending = false;
+    _foundingCouncilFormed = false;
+    _foundingCouncilHold = 0.0;
+    _foundingCouncilTargets.clear();
     _resourceBoxes.clear();
     _eggs.clear();
     _lootCaches.clear();
@@ -902,6 +920,7 @@ extension _SceneSave on _VillageSceneState {
     _villagePulseLastActor = null;
     _villagePulseEchoes.clear();
     _knownCrafts.clear();
+    _specialistOffersClaimed = 0;
     _completedQuests.clear();
     _guideShown.clear();
     _coatsMade = 0;
@@ -990,6 +1009,14 @@ extension _SceneSave on _VillageSceneState {
     _governanceLegacy = _d(w['governanceLegacy']);
     _lastPopMilestone = _i(w['lastPopMilestone']);
     _firstReedBedShown = _b(w['firstReedBedShown']);
+    final hasFirstNightFastForward = w.containsKey(
+      'foundingFirstNightFastForwarded',
+    );
+    _foundingFirstNightFastForwarded = _b(w['foundingFirstNightFastForwarded']);
+    _foundingFirstNightSleepGlimpse = 0.0;
+    final hasFoundingShelterFlow = w.containsKey('foundingTentsReadyDay');
+    _foundingTentsReadyDay = _i(w['foundingTentsReadyDay']);
+    _foundingTentIllnessTriggered = _b(w['foundingTentIllnessTriggered']);
 
     // 3) Harita / kaynaklar / sistemler.
     for (final t in (w['water'] as List? ?? const [])) {
@@ -1015,6 +1042,21 @@ extension _SceneSave on _VillageSceneState {
     };
     for (final q in (w['completedQuests'] as List? ?? const [])) {
       _completedQuests.add(q as String);
+    }
+    // Eski akışta çadır saz gecesinden ÖNCE kurulabiliyordu. O kaydı geri
+    // açınca insanları evlerinden çıkarıp geçmiş bir geceyi yeniden oynatamayız.
+    if (!hasFoundingShelterFlow && _completedQuests.contains('tent')) {
+      _completedQuests.add('firstNight');
+    }
+    if (!hasFirstNightFastForward &&
+        (_dayCount > 1 || _completedQuests.contains('firstNight'))) {
+      _foundingFirstNightFastForwarded = true;
+    }
+    // Bu görev yeni eklendi. Kalıcı evi zaten kurulmuş eski kayıtları geriye
+    // döndürüp öğretici hastalığa sokma; ders o köyde fiilen geçilmiş sayılır.
+    if (_completedQuests.contains('house')) {
+      _completedQuests.add('tentIllness');
+      _foundingTentIllnessTriggered = true;
     }
     for (final g in (w['guideShown'] as List? ?? const [])) {
       _guideShown.add(g as String);
@@ -1072,6 +1114,7 @@ extension _SceneSave on _VillageSceneState {
     for (final c in (w['knownCrafts'] as List? ?? const [])) {
       _knownCrafts.add(c as String);
     }
+    _specialistOffersClaimed = _i(w['specialistOffersClaimed']);
 
     // 4) Binalar (önce — referans hedefi).
     for (final raw in (w['buildings'] as List? ?? const [])) {
@@ -1208,6 +1251,10 @@ extension _SceneSave on _VillageSceneState {
     for (final raw in (w['farmTiles'] as List? ?? const [])) {
       _farmTiles.add(_farmTileFromJson(Map<String, dynamic>.from(raw as Map)));
     }
+    for (final raw in (w['harmanSites'] as List? ?? const [])) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      _harmanSites.add(HarmanSite(col: _i(j['col']), row: _i(j['row'])));
+    }
     for (final raw in (w['trees'] as List? ?? const [])) {
       _trees.add(_treeFromJson(Map<String, dynamic>.from(raw as Map)));
     }
@@ -1315,7 +1362,13 @@ extension _SceneSave on _VillageSceneState {
           )
           ..slotIndex = _i(j['slotIndex'])
           ..pileSize = _i(j['pileSize'], 1)
-          ..spawnTime = _d(j['spawnTime']),
+          ..spawnTime = _d(j['spawnTime'])
+          ..targetHarmanCol = j.containsKey('harmanCol')
+              ? _i(j['harmanCol'])
+              : null
+          ..targetHarmanRow = j.containsKey('harmanRow')
+              ? _i(j['harmanRow'])
+              : null,
       );
     }
     // Gömülü zulalar — mal toprakta durmaya devam eder. Fail indeksi
@@ -1428,7 +1481,10 @@ extension _SceneSave on _VillageSceneState {
     // sürümden kalkmış olay → sessizce düşer; kalanı aynen kaldığı yerden).
     final choiceId = w['pendingChoice'];
     if (choiceId is String && choiceId.isNotEmpty) {
-      for (final ev in EventSystem.events) {
+      final specialist = choiceId == EventIds.specialistCaravan
+          ? _specialistCaravanEvent()
+          : null;
+      for (final ev in [?specialist, ...EventSystem.events]) {
         if (ev.id == choiceId && ev.needsChoice) {
           // Metin varyantı gün+id tohumuyla yeniden dokunur — kayıttan dönen
           // oyuncu mühre tıklayınca aynı cümleyi okur.
@@ -1467,7 +1523,10 @@ extension _SceneSave on _VillageSceneState {
       final requestId = raw['requestId'];
       final eventId = raw['eventId'];
       if (requestId is! String || eventId is! String) continue;
-      for (final event in EventSystem.events) {
+      final specialist = eventId == EventIds.specialistCaravan
+          ? _specialistCaravanEvent()
+          : null;
+      for (final event in [?specialist, ...EventSystem.events]) {
         if (event.id == eventId && event.needsChoice) {
           _pacedChoices.add(_PacedChoice(requestId: requestId, event: event));
           break;
@@ -1637,6 +1696,11 @@ extension _SceneSave on _VillageSceneState {
       type: _enumByName(BuildingType.values, j['type'], BuildingType.firepit),
       col: _i(j['col']),
       row: _i(j['row']),
+      design: _enumByName(
+        BuildingDesign.values,
+        j['design'],
+        BuildingDesign.original,
+      ),
     );
     b.isActive = _b(j['isActive']);
     b.userPaused = _b(j['userPaused']);
@@ -1720,6 +1784,7 @@ extension _SceneSave on _VillageSceneState {
     v.surname = (j['surname'] as String?) ?? '';
     v.injuryDays = _d(j['injuryDays']);
     v.sickDays = _d(j['sickDays']);
+    v.tutorialIllness = _b(j['tutorialIllness']);
     v.laborDays = _d(j['laborDays']);
     v.disabled = _b(j['disabled']);
     v.feudKills = _i(j['feudKills']);
@@ -1777,6 +1842,11 @@ extension _SceneSave on _VillageSceneState {
       type: _enumByName(BuildingType.values, j['type'], BuildingType.firepit),
       col: _i(j['col']),
       row: _i(j['row']),
+      design: _enumByName(
+        BuildingDesign.values,
+        j['design'],
+        BuildingDesign.original,
+      ),
     );
     o.crew = 0; // geçici — builder yeniden talep eder
     o.completed = _b(j['completed']);

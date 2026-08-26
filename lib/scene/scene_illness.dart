@@ -76,6 +76,7 @@ extension _SceneIllness on _VillageSceneState {
 
   void _tickIllness(double dt) {
     if (_villagers.isEmpty) return;
+    _maybeTriggerFoundingTentIllness();
     final step = dt / kGameDaySeconds;
     final winter = _season.isFrozen;
     final foodShort = _wasStarving;
@@ -112,7 +113,7 @@ extension _SceneIllness on _VillageSceneState {
       };
       // Ölüm zarı yalnız HÂLÂ hastayken — iyileşme anını (sickDays≤0) ölüm
       // kapmasın (iyileşen köylü son karede ölmesin).
-      if (ageF > 0 && v.sickDays > 0) {
+      if (!v.tutorialIllness && ageF > 0 && v.sickDays > 0) {
         final frail =
             ageF *
             (1.15 - v.morale.clamp(0.0, 1.0)) *
@@ -127,6 +128,7 @@ extension _SceneIllness on _VillageSceneState {
       // ── İyileşti ────────────────────────────────────────────────────────────
       if (v.sickDays <= 0) {
         v.sickDays = 0;
+        v.tutorialIllness = false;
         // İyileşme = gövde dili (content + hafif mood) + kronik kaydı; baş-üstü
         // ikon YOK (çökük duruş kalkar, köylü dikelir — görünür işaret budur).
         v.feel(NpcEmotion.content, 3.0, moodDelta: 0.06);
@@ -154,6 +156,69 @@ extension _SceneIllness on _VillageSceneState {
       if (anySick) AudioManager.instance.playSfxChance(Sfx.cough, 0.12);
       _maybeOnsetIllness(winter, foodShort);
     }
+  }
+
+  /// Kuruluş dersinin kontrollü hastalığı.
+  ///
+  /// Bütün kurucular çadıra girdikten sonra en az bir çadır gecesi geçer;
+  /// odun, su ve tarla temeli de hazırsa sağlıklı bir çadır sakini ateşlenir.
+  /// Bu hastalık normal iyileşme döngüsünü kullanır fakat ölüm zarı atmaz.
+  /// Aynı anda marangozluk açılır: oyuncuya "ev gerek" deyip kilitli bir ev
+  /// kartı göstermek öğretmek değil, yolu kapatmak olurdu.
+  void _maybeTriggerFoundingTentIllness() {
+    if (_foundingTentIllnessTriggered || _completedQuests.contains('house')) {
+      return;
+    }
+    const foundations = {'firstNight', 'tent', 'lumber', 'well', 'farm'};
+    if (!foundations.every(_completedQuests.contains)) return;
+    if (_foundingTentsReadyDay == 0) {
+      _foundingTentsReadyDay = _dayCount;
+      return;
+    }
+    if (_dayCount <= _foundingTentsReadyDay) return;
+
+    final candidates = _villagers.where((v) {
+      final home = v.homeBuilding;
+      return !v.isDying &&
+          v.lifeStage != LifeStage.child &&
+          v.lifeStage != LifeStage.elder &&
+          v.sickDays <= 0 &&
+          v.injuryDays <= 0 &&
+          home is BuildingEntity &&
+          home.type == BuildingType.tent;
+    }).toList();
+    if (candidates.isEmpty) return;
+    final chosen = candidates.first;
+
+    chosen.sickDays = 2.0;
+    chosen.tutorialIllness = true;
+    chosen.feel(NpcEmotion.fear, 3.5, moodDelta: -0.04);
+    _sendHome(chosen);
+    chosen.chatBubbleIcon = '🤒';
+    chosen.chatBubbleTime = 5.0;
+    _illnessSeen++;
+    _foundingTentIllnessTriggered = true;
+
+    // Kuruluş ekibinden sağlıklı bir el marangozluğu üstlensin; bilginin
+    // sonraki zanaat-kaybı kontrollerinde de gerçek bir taşıyıcısı olsun.
+    final builder = _villagers.firstWhere(
+      (v) => !identical(v, chosen) && !v.isDying,
+      orElse: () => chosen,
+    );
+    final currentMastery = builder.mastery[Craft.carpentry] ?? 0.0;
+    if (currentMastery < 22.0) builder.mastery[Craft.carpentry] = 22.0;
+    _knownCrafts.add(Craft.carpentry);
+
+    AudioManager.instance.playSfx(Sfx.cough);
+    _showNotification(
+      '🤒 ${chosen.name} çadırda ateşlendi — bez duvar yetmedi. Köy Evi artık kurulabilir.',
+    );
+    _chronicle(
+      '${chosen.name} çadırın neminde hastalandı. Köy, kalıcı dam için marangozluğa başladı.',
+      icon: '🤒',
+      kind: ChronicleKind.crisis,
+      milestone: true,
+    );
   }
 
   /// TECRİT — hastayı kendi damına yollar. Evi yoksa (evsiz/sazlıkta yatan)
@@ -207,14 +272,10 @@ extension _SceneIllness on _VillageSceneState {
       // kurasında öne çıkar. İki ihmale kadar çarpan 1.0'dır: kışın bir gece
       // ocağın sönmesi kimseyi hasta etmez.
       final neglectW = neglectIllnessMultiplier(_coldNeglectOf(v));
-      final bathRisk =
-          bathhouseIllnessRisk(_coveredByActiveBathhouse(v));
+      final bathRisk = bathhouseIllnessRisk(_coveredByActiveBathhouse(v));
       bathRiskSum += bathRisk;
       weights.add(
-        ageW *
-            (1.4 - v.morale.clamp(0.0, 1.0)) *
-            neglectW *
-            bathRisk,
+        ageW * (1.4 - v.morale.clamp(0.0, 1.0)) * neglectW * bathRisk,
       );
     }
     if (cands.isEmpty) return;
@@ -293,7 +354,12 @@ extension _SceneIllness on _VillageSceneState {
   void _plagueToll({required bool healer}) {
     final pool =
         _villagers
-            .where((v) => !v.isDying && v.lifeStage != LifeStage.child)
+            .where(
+              (v) =>
+                  !v.isDying &&
+                  !v.tutorialIllness &&
+                  v.lifeStage != LifeStage.child,
+            )
             .toList()
           ..sort((a, b) => _plagueFrailty(b).compareTo(_plagueFrailty(a)));
     if (pool.isEmpty) return;

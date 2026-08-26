@@ -21,27 +21,36 @@ class PathContext {
   /// dolaştırır. main.dart'ın _squeezeTiles set'inin referansı.
   Set<(int, int)> squeezeTiles;
 
+  /// Geçilebilir ama gündelik rotada tercih edilmeyen yüzeyler: ekin, harman,
+  /// saz yatağı ve benzeri çalışma/yaşam alanları. İş hedefi bu karedeyse NPC
+  /// yine ulaşabilir; transit geçişte yol varsa etrafından dolaşır.
+  Set<(int, int)> softTiles;
+
   int version = 0;
 
   PathContext({
     required this.roadSystem,
     Set<(int, int)>? blockedTiles,
     Set<(int, int)>? squeezeTiles,
-  })  : blockedTiles  = blockedTiles  ?? const {},
-        squeezeTiles  = squeezeTiles  ?? const {};
+    Set<(int, int)>? softTiles,
+  }) : blockedTiles = blockedTiles ?? const {},
+       squeezeTiles = squeezeTiles ?? const {},
+       softTiles = softTiles ?? const {};
 
   static const double _kSqueezePenalty = 4.0;
+  static const double _kSoftPenalty = 2.6;
 
   double costAt(int col, int row) {
     final road = roadSystem.at(col, row);
     if (road != null) {
       return switch (road.surface) {
-        RoadSurface.dirt       => 0.70,
-        RoadSurface.stone      => 0.55,
+        RoadSurface.dirt => 0.70,
+        RoadSurface.stone => 0.55,
         RoadSurface.woodBridge => 0.70,
       };
     }
     if (squeezeTiles.contains((col, row))) return _kSqueezePenalty;
+    if (softTiles.contains((col, row))) return _kSoftPenalty;
     return 1.0;
   }
 

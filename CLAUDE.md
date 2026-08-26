@@ -121,16 +121,23 @@ Hepsi en az bir kez gerçekten oldu.
 
 ## 5. Doğrulama — "çalışıyor" ne demek
 
-Üç kademe var ve **üçü de gerekli**:
+Doğrulama değişikliğin riskiyle orantılıdır; her işte bütün kademeler koşulmaz:
 
-1. **`flutter analyze`** → sıfır sorun. Pazarlık yok.
-2. **Birim testi** (`test/*_test.dart`) — `systems/` altındaki saf mantık.
-   Sözleşmeyi test et, sayıyı değil: "hanelerin rızası en ağır sütundur"
-   iyi bir test, "unity 0.34'tür" kötü.
-3. **PROVA testi** (`test/*_probe_test.dart`) — **gerçek sahnede**. En sinsi
-   hata "kod var ama hiç tetiklenmiyor"dur ve bunu hiçbir birim testi görmez.
-   Bir özellik ekranda görünmesi gerekiyorsa, göründüğünü prova testi
-   kanıtlamalı.
+1. **Küçük UI / metin / asset işi:** `flutter analyze` + yalnız ilgili hedefli
+   test. Prova ve tam süit gerekmez.
+2. **Çekirdek sistem mantığı:** `flutter analyze` + ilgili birim testi + ilgili
+   prova testi.
+3. **Tam `flutter test` süiti:** yalnız kullanıcı açıkça isterse veya değişiklik
+   çok sayıda sistemi yatay kesiyorsa çalıştırılır.
+
+**Birim testi** (`test/*_test.dart`) — `systems/` altındaki saf mantık.
+Sözleşmeyi test et, sayıyı değil: "hanelerin rızası en ağır sütundur"
+iyi bir test, "unity 0.34'tür" kötü.
+
+**PROVA testi** (`test/*_probe_test.dart`) — **gerçek sahnede**. En sinsi
+hata "kod var ama hiç tetiklenmiyor"dur ve bunu hiçbir birim testi görmez.
+Bir özellik ekranda görünmesi gerekiyorsa, göründüğünü prova testi
+kanıtlamalı.
 
 Prova kalıbı: referans köyü boot et → `kProbe*Armed = true` →
 `kDevSpeedBoostOverride = 24` → pump → telemetriyi oku → widget'ı `find` et.

@@ -6,6 +6,210 @@ part of '../main.dart';
 /// farklı ama hedef aynı ([_VillageSceneState]) — çağıranlar için hiçbir
 /// şey değişmez, metotlar aynen taşındı.
 extension _SceneUiOverlays on _VillageSceneState {
+  String get _foundingTesterPhase {
+    if (_foundingCouncilPending) return '1 · Kurucular halka oluyor';
+    if (identical(_activeCutscene, kOpeningCutscene)) {
+      return '2 · Kuruluş meclisi ve seçimler';
+    }
+    if (!_hasFire) return '3 · Ocağın yeri bekleniyor';
+    if (!_completedQuests.contains('firstNight')) {
+      if (_foundingBedTargets.isNotEmpty) {
+        return '4 · Saz yataklar doğal olarak seriliyor';
+      }
+      return '4 · İlk gece ve uyku düzeni';
+    }
+    if (!_completedQuests.contains('tent')) {
+      return '5 · Kuruculara çadır kuruluyor';
+    }
+    if (!_completedQuests.contains('lumber')) {
+      return '6 · İlk odun zinciri kuruluyor';
+    }
+    return '✓ Doğal kuruluş tamamlandı';
+  }
+
+  Widget buildFoundingTesterOverlay() => ListenableBuilder(
+    listenable: _hudFrame,
+    builder: (_, _) {
+      final restart = widget.onRestartRun;
+      final current = _stepCache?.quest;
+      final homeless = _villagers.where((v) => v.homeBuilding == null).length;
+      final progress = <(String, bool)>[
+        ('Halka', _foundingChoiceMade),
+        ('Ocak', _hasFire),
+        ('Gece', _completedQuests.contains('firstNight')),
+        ('Çadır', _completedQuests.contains('tent')),
+        ('Odun', _completedQuests.contains('lumber')),
+      ];
+
+      Future<void> restartFresh() async {
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: AppUi.surface1,
+            title: const Text('Taze doğal koşu', style: AppUi.title),
+            content: const Text(
+              'Bu tester oturumu kapanıp yeni rastgele dünyada kuruluş en '
+              'baştan başlayacak.',
+              style: AppUi.body,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('VAZGEÇ'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('BAŞTAN BAŞLAT'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed == true) restart?.call();
+      }
+
+      final compact = useCompactGameUi(context);
+      return Positioned.fill(
+        child: SafeArea(
+          minimum: EdgeInsets.only(
+            left: compact ? 8 : 12,
+            top: compact ? 8 : 12,
+          ),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: _foundingTesterPanelOpen
+                ? Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: compact ? 250 : 280,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xE614181D),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppUi.accent.withValues(alpha: 0.72),
+                        ),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x66000000),
+                            blurRadius: 16,
+                            offset: Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'DOĞAL KURULUŞ TESTER',
+                                  style: AppUi.label.copyWith(
+                                    color: AppUi.accentSoft,
+                                    letterSpacing: 1.0,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Gözlem panelini gizle',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => setStateHere(
+                                  () => _foundingTesterPanelOpen = false,
+                                ),
+                                icon: const Icon(
+                                  Icons.visibility_off_outlined,
+                                  size: 18,
+                                  color: AppUi.textMid,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            _foundingTesterPhase,
+                            style: AppUi.body.copyWith(
+                              color: AppUi.textHi,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Wrap(
+                            spacing: 5,
+                            runSpacing: 5,
+                            children: [
+                              for (final (label, done) in progress)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: done
+                                        ? AppUi.sage.withValues(alpha: 0.20)
+                                        : AppUi.surface0,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: done ? AppUi.sage : AppUi.line,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '${done ? '✓' : '○'} $label',
+                                    style: AppUi.label.copyWith(
+                                      color: done ? AppUi.sage : AppUi.textLo,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Aktif adım: ${current?.label ?? 'hazırlanıyor'}\n'
+                            'Nüfus ${_villagers.length} · evsiz $homeless · '
+                            'yatak ${_reedBeds.length} + ${_foundingBedTargets.length} serimde\n'
+                            'Yapı ${_buildings.length} · şantiye '
+                            '${_orders.where((o) => !o.completed).length}\n'
+                            'Erzak ${_stockpile.food} · odun ${_stockpile.wood} · '
+                            'gün $_dayCount · hız ${_timeScale.toStringAsFixed(0)}×',
+                            style: AppUi.body.copyWith(
+                              color: AppUi.textMid,
+                              height: 1.35,
+                            ),
+                          ),
+                          const SizedBox(height: 7),
+                          Text(
+                            'Sabit tohum yok · otomasyon yok · ekonomi/AI doğal',
+                            style: AppUi.label.copyWith(color: AppUi.sage),
+                          ),
+                          if (restart != null) ...[
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: restartFresh,
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('TAZE KOŞU'),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  )
+                : Material(
+                    color: Colors.transparent,
+                    child: IconButton.filled(
+                      tooltip: 'Gözlem panelini aç',
+                      onPressed: () =>
+                          setStateHere(() => _foundingTesterPanelOpen = true),
+                      icon: const Icon(Icons.visibility_outlined),
+                    ),
+                  ),
+          ),
+        ),
+      );
+    },
+  );
+
   /// Oyuncu kamerayı ilk kez gerçekten hareket ettirene dek kalan, kayıt başına
   /// tek seferlik kontrol notu. Modlar kendi canlı şeritlerine sahip olduğu için
   /// yalnız boş elde görünür.

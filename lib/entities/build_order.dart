@@ -1,3 +1,4 @@
+import '../buildings/building_design.dart';
 import '../buildings/building_type.dart';
 import '../core/constants.dart';
 
@@ -5,6 +6,7 @@ class BuildOrder {
   final BuildingType type;
   final int col;
   final int row;
+  final BuildingDesign design;
 
   bool completed = false; // building has been placed
 
@@ -37,8 +39,13 @@ class BuildOrder {
   /// boşluğunu kapatan görünür karşılıktır.
   bool startAnnounced = false;
 
-  BuildOrder({required this.type, required this.col, required this.row})
-    : requiredWorkers = buildWorkersFor(type);
+  BuildOrder({
+    required this.type,
+    required this.col,
+    required this.row,
+    BuildingDesign design = BuildingDesign.original,
+  }) : design = normalizeBuildingDesign(type, design),
+       requiredWorkers = buildWorkersFor(type);
 
   bool get assigned => crew > 0;
 

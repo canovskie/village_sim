@@ -169,19 +169,18 @@ class Cutscene {
 /// Ton: **imparatorluğun vergi elinden kaçış**. Bu, oyunun sonraki İmparatorluk
 /// tehdidine (scene_imperial) tohum bırakır: gölge bir gün geri gelecek.
 /// Hikâye YALNIZ açılışta yüklüdür; sonra pasifleşir (dünya sessizce açılır).
-/// Sakin tempolu; kafile ekranda yürüyüp DURUR (amaçsız kayma yok).
+/// Sakin tempolu; canlı dünyada halka tamamlandıktan sonra sorular açılır.
 ///
 /// ÜÇ ÇEKİM (eskiden altıydı, on bir replikle). Açılış "izlenen" bir film
 /// olmaktan çıkıp KARAR VERİLEN bir eşik oldu: kısalan her çekimin sonunda
 /// oyuncunun eli var — kafilenin yükü (kadro + stok) ve köyün/hanenin adı.
 /// Üçüncü çekim biter bitmez oyuncu gerçek haritada ateşin yerini seçer.
 const Cutscene kOpeningCutscene = Cutscene([
-  // 1) NEDEN yola düştük + YOL — tek çekim. Eskiden bu ikisi ayrı iki çekimdi
-  //    (dört replik); anlattıkları tek şeydi: vergi eli sıkınca yürüdük.
-  //    Kafile bu çekimde ekrana girer, gruplanır ve DURUR.
+  // 1) HALKA — kafile bu sahneden önce canlı haritada merkeze yürüyüp çember
+  //    olmuştur. Kısa bir nefesin ardından sorular başlar.
   CutsceneShot(
-    bg: CutsceneBg.road,
-    setPiece: CutsceneSetPiece.caravan,
+    bg: CutsceneBg.valleyDawn,
+    setPiece: CutsceneSetPiece.camp,
     panFrom: 0.0,
     panTo: 0.02,
     // Kamera gökten aşağı iner ve kafileyi bulur (tilt) + hafifçe yaklaşır.
@@ -196,49 +195,39 @@ const Cutscene kOpeningCutscene = Cutscene([
       CutsceneActor(
         type: VillagerType.guard,
         seed: 21,
-        fromX: -0.85,
-        toX: 0.18,
+        fromX: 0.18,
         y: 0.86,
         scale: 1.2,
-        walk: true,
+        pose: CutsceneActorPose.sit,
       ),
       CutsceneActor(
         type: VillagerType.merchant,
         seed: 3,
-        fromX: -0.62,
-        toX: 0.34,
+        fromX: 0.36,
         y: 0.80,
         scale: 1.05,
-        walk: true,
-        entranceDelay: 0.18,
+        pose: CutsceneActorPose.sit,
       ),
       CutsceneActor(
         type: VillagerType.farmer,
         seed: 12,
-        fromX: -0.42,
-        toX: 0.50,
+        fromX: 0.62,
         y: 0.82,
         scale: 1.1,
-        walk: true,
-        entranceDelay: 0.36,
+        pose: CutsceneActorPose.sit,
       ),
       CutsceneActor(
         type: VillagerType.priest,
         seed: 7,
-        fromX: -0.22,
-        toX: 0.68,
+        fromX: 0.80,
         y: 0.78,
         scale: 1.0,
-        walk: true,
-        entranceDelay: 0.54,
+        pose: CutsceneActorPose.sit,
       ),
     ],
     lines: [
       CutsceneLine(
-        'Vergiciler her harmanda geldi. Son gelişlerinde ambarda ölçecek bir şey yoktu; yine de deftere bir şey yazdılar.',
-      ),
-      CutsceneLine(
-        'O gece birkaç hane kapısını kilitlemedi bile. Kimse nereye gittiğini bilmiyordu; herkes neden gittiğini biliyordu.',
+        'Yol burada bitti. Kurucular ilk kez yüz yüze bir halka oldu.',
       ),
     ],
   ),
@@ -301,11 +290,11 @@ const Cutscene kOpeningCutscene = Cutscene([
     ],
     lines: [
       CutsceneLine(
-        'İmparatorluk buraya uzak. Şimdilik. Burada yakacağın ateşin dumanını kimse saymayacak.',
+        'Ateşi yakmadan önce bu yeni yerin sözünü birlikte verelim.',
         speaker: 'Maple',
       ),
       CutsceneLine(
-        'Önce ateşi kurup şu vadiyi bizim yerimiz yapalım. Adını sonra birlikte koyarsın.',
+        'Bu köyün adı ne olsun; kurucu haneyi hangi adla analım?',
         speaker: 'Maple',
       ),
     ],

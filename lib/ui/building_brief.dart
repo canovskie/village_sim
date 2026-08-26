@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
+import '../buildings/building_design.dart';
 import '../buildings/building_lore.dart';
 import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
@@ -22,6 +23,7 @@ import 'mobile_ui.dart';
 /// ([IgnorePointer] çağıran tarafta): oyuncu okurken de yerini seçebilsin.
 class BuildingBrief extends StatelessWidget {
   final BuildingType type;
+  final BuildingDesign design;
 
   /// Hayaletin durduğu yerin ölçümü — null ise ipuçları nötr okunur (henüz
   /// haritaya gelinmedi).
@@ -36,6 +38,7 @@ class BuildingBrief extends StatelessWidget {
   const BuildingBrief({
     super.key,
     required this.type,
+    this.design = BuildingDesign.original,
     required this.facts,
     required this.reason,
     required this.noteSeed,
@@ -89,7 +92,7 @@ class BuildingBrief extends StatelessWidget {
   // ── Başlık: portre + ad + maliyet ─────────────────────────────────────────
 
   Widget _header(BuildingMeta meta, bool compact) {
-    final thumb = BuildingRenderer.thumbnails[type];
+    final thumb = BuildingRenderer.thumbnailFor(type, design);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -103,10 +106,13 @@ class BuildingBrief extends StatelessWidget {
             border: Border.all(color: AppUi.line, width: 1),
           ),
           child: thumb != null
-              ? CustomPaint(painter: _ThumbPainter(thumb))
+              ? CustomPaint(painter: _ThumbPainter(thumb, type))
               : const Center(
-                  child: GameIcon(GameIconData.home,
-                      size: 17, color: AppUi.textMid),
+                  child: GameIcon(
+                    GameIconData.home,
+                    size: 17,
+                    color: AppUi.textMid,
+                  ),
                 ),
         ),
         const SizedBox(width: 10),
@@ -141,16 +147,16 @@ class BuildingBrief extends StatelessWidget {
   }
 
   static String _resName(ResourceKind k) => switch (k) {
-        ResourceKind.wood => 'odun',
-        ResourceKind.stone => 'taş',
-        ResourceKind.iron => 'demir',
-        ResourceKind.coal => 'kömür',
-        ResourceKind.food => 'yem',
-        ResourceKind.gold => 'altın',
-        ResourceKind.honey => 'bal',
-        ResourceKind.wool => 'yün',
-        ResourceKind.reed => 'saz',
-      };
+    ResourceKind.wood => 'odun',
+    ResourceKind.stone => 'taş',
+    ResourceKind.iron => 'demir',
+    ResourceKind.coal => 'kömür',
+    ResourceKind.food => 'yem',
+    ResourceKind.gold => 'altın',
+    ResourceKind.honey => 'bal',
+    ResourceKind.wool => 'yün',
+    ResourceKind.reed => 'saz',
+  };
 
   // ── Yerleşim ipucu satırı ─────────────────────────────────────────────────
 
@@ -218,59 +224,60 @@ class BuildingBrief extends StatelessWidget {
   // ── Tatlı not ─────────────────────────────────────────────────────────────
 
   Widget _noteRow(String note, bool compact) => Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Süslü tipografik işaret (❦) fontta yok → emoji fallback'i sarı bir
-          // leke olarak çiziliyordu. Sade em-dash hem yükte hem okumada temiz.
-          Text('—',
-              style: AppUi.body.copyWith(fontSize: 11, color: AppUi.gold)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              note,
-              // Telefonda da İKİ satır: tek satıra sığmayan not "…inanma…"
-              // diye yarıda kesiliyordu — yarım kalan bir cümle tatlı değil.
-              maxLines: compact ? 2 : 3,
-              overflow: TextOverflow.ellipsis,
-              style: AppUi.body.copyWith(
-                fontSize: 11,
-                height: 1.25,
-                color: AppUi.textLo,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      // Süslü tipografik işaret (❦) fontta yok → emoji fallback'i sarı bir
+      // leke olarak çiziliyordu. Sade em-dash hem yükte hem okumada temiz.
+      Text('—', style: AppUi.body.copyWith(fontSize: 11, color: AppUi.gold)),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Text(
+          note,
+          // Telefonda da İKİ satır: tek satıra sığmayan not "…inanma…"
+          // diye yarıda kesiliyordu — yarım kalan bir cümle tatlı değil.
+          maxLines: compact ? 2 : 3,
+          overflow: TextOverflow.ellipsis,
+          style: AppUi.body.copyWith(
+            fontSize: 11,
+            height: 1.25,
+            color: AppUi.textLo,
+            fontStyle: FontStyle.italic,
           ),
-        ],
-      );
+        ),
+      ),
+    ],
+  );
 
   // ── Geçersizlik sebebi ────────────────────────────────────────────────────
 
   Widget _reasonRow(String reason) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-        decoration: BoxDecoration(
-          color: AppUi.rust.withValues(alpha: 0.13),
-          borderRadius: BorderRadius.circular(AppUi.radiusSm),
-          border: Border.all(color: AppUi.rust.withValues(alpha: 0.6)),
-        ),
-        child: Text(
-          '🚫 $reason',
-          style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.rust),
-        ),
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+    decoration: BoxDecoration(
+      color: AppUi.rust.withValues(alpha: 0.13),
+      borderRadius: BorderRadius.circular(AppUi.radiusSm),
+      border: Border.all(color: AppUi.rust.withValues(alpha: 0.6)),
+    ),
+    child: Text(
+      '🚫 $reason',
+      style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.rust),
+    ),
+  );
 }
 
 /// Pre-scaled thumbnail'ı orijinal oranıyla çizen hafif painter.
 class _ThumbPainter extends CustomPainter {
   final ui.Image img;
-  _ThumbPainter(this.img);
+  final BuildingType type;
+  _ThumbPainter(this.img, this.type);
 
   static final _paint = AssetStyle.paint();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sw = img.width.toDouble();
-    final sh = img.height.toDouble();
+    final src = BuildingRenderer.thumbnailSourceRect(type, img);
+    final sw = src.width;
+    final sh = src.height;
     final scale = (sw / sh > size.width / size.height)
         ? size.width / sw
         : size.height / sh;
@@ -278,12 +285,12 @@ class _ThumbPainter extends CustomPainter {
     final h = sh * scale;
     canvas.drawImageRect(
       img,
-      Rect.fromLTWH(0, 0, sw, sh),
+      src,
       Rect.fromLTWH((size.width - w) / 2, size.height - h, w, h),
       _paint,
     );
   }
 
   @override
-  bool shouldRepaint(_ThumbPainter old) => old.img != img;
+  bool shouldRepaint(_ThumbPainter old) => old.img != img || old.type != type;
 }

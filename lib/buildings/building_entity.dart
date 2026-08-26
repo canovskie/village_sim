@@ -1,3 +1,4 @@
+import 'building_design.dart';
 import 'building_function.dart';
 import 'building_type.dart';
 
@@ -9,6 +10,9 @@ class BuildingEntity {
   final BuildingType type;
   final int col;
   final int row;
+
+  /// İşlevi değiştirmeyen, oyuncunun seçebildiği görsel varyant.
+  BuildingDesign design;
 
   /// Maden ocağı gibi içeride çalışma olan binalar için
   bool isActive = false;
@@ -118,7 +122,12 @@ class BuildingEntity {
   /// avludaki 1-3 parçalık görsel yığının yoğunluğunu belirler.
   int deliveryTally = 0;
 
-  BuildingEntity({required this.type, required this.col, required this.row});
+  BuildingEntity({
+    required this.type,
+    required this.col,
+    required this.row,
+    BuildingDesign design = BuildingDesign.original,
+  }) : design = normalizeBuildingDesign(type, design);
 
   int get cols => kBuildingMeta[type]!.cols;
   int get rows => kBuildingMeta[type]!.rows;

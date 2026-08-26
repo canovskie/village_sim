@@ -50,6 +50,9 @@ enum QuestPointer {
   /// Ocak (ateş yeri) — pişirme/toplanma adımları.
   hearth,
 
+  /// Ateş çevresindeki kurucu saz yatakları.
+  reedBeds,
+
   /// Köyün merkezi (ocak varsa orası, yoksa kurucuların durduğu yer) —
   /// "buraya bir şey dik" adımları.
   villageCenter,
@@ -201,6 +204,13 @@ class QuestContext {
   /// Kaçıncı gün — "ilk geceyi çıkar" gibi zaman adımları için.
   final int dayCount;
 
+  /// Ateş çevresinde kurulmuş saz yatakları. İlk gece görevi yalnız takvime
+  /// değil, her kurucunun gerçekten yatağı olmasına bakar.
+  final int reedBedCount;
+
+  /// Kuruluşta çadırın yetersizliğini öğreten güvenli hastalık gösterildi mi.
+  final bool foundingTentIllnessTriggered;
+
   /// Yol ağının AYNI bağlı bileşenine komşu en yüksek üretim noktası sayısı.
   /// Ham yol karesi değil, yolun köyde neyi birbirine bağladığını ölçer.
   final int connectedProductionSites;
@@ -253,6 +263,8 @@ class QuestContext {
     this.roadCount = 0,
     this.regimeNamed = false,
     this.dayCount = 1,
+    this.reedBedCount = 0,
+    this.foundingTentIllnessTriggered = false,
     this.connectedProductionSites = 0,
     this.loyalHouses = 0,
     this.withheldHouses = 0,
@@ -270,6 +282,10 @@ class QuestContext {
   int get year => yearOf(dayCount);
   bool has(BuildingType t) => buildings.any((b) => b.type == t);
   bool hasRole(BuildingRole r) => buildings.any((b) => b.fn?.role == r);
+
+  int get tentCapacity => buildings
+      .where((b) => b.type == BuildingType.tent)
+      .fold(0, (sum, b) => sum + (b.fn?.housingCapacity ?? 0));
 }
 
 /// Aynı kesintisiz yol bileşenine değen en yüksek üretim noktası sayısı.
@@ -434,7 +450,7 @@ class QuestBook {
   // ── Görev havuzu ──────────────────────────────────────────────────────────
   static const List<Quest> all = [
     // ── Tier 0 — Yeni Ocak (KURULUŞ) ─────────────────────────────────────
-    // Yedi adım. Bu liste üç kez küçüldü ve her seferinde aynı sebeple:
+    // Sekiz adım. Bu liste üç kez küçüldü ve her seferinde aynı sebeple:
     //
     // (1) Beş "şu binayı dik" görevinden ibaretti; arada dakikalarca hiçbir şey
     //     olmuyordu → on iki mikro adıma bölündü.
@@ -444,9 +460,10 @@ class QuestBook {
     //     düştü. İlk berat da Belediye öncesi yazılı kanun olmayacağı için
     //     kuruluşun dışına, Belediye adımının hemen arkasına taşındı.
     //
-    // İlk ÜÇ adım rehberli ([Quest.guided]) ve sırası bilinçli: ocak (bir
-    // yapıyı haritaya kur) → çadır (barınak ayrı bir karar) → oduncu kulübesi
-    // (iş binaya bağlı, kadroya değil). Kuruluş boyunca Kanunname anlatılmaz.
+    // İlk DÖRT adım rehberli ([Quest.guided]) ve sırası bilinçli: ocak (bir
+    // yapıyı haritaya kur) → saz yatak (geceyi dünyada gör) → çadır (barınak
+    // ayrı bir karar) → oduncu kulübesi (iş binaya bağlı, kadroya değil).
+    // Kuruluş boyunca Kanunname anlatılmaz.
     Quest(
       id: 'firepit',
       icon: '🔥',
@@ -465,11 +482,30 @@ class QuestBook {
       thanks: 'Ateş yandı. Artık dönülecek bir yerimiz var.',
     ),
     Quest(
+      id: 'firstNight',
+      icon: '🌙',
+      label: 'Saz yatakta sabahla',
+      hint:
+          'Ateşin çevresindeki saz yataklara bak. İlk gece herkes burada '
+          'uyusun; herkes uzanınca bu ilk gece hemen sabaha saracak.',
+      category: QuestCategory.founding,
+      axis: ReckoningAxis.unity,
+      tier: 0,
+      speaker: VillagerType.priest,
+      reward: VisualReward.festival,
+      check: _survivedFirstNight,
+      pointer: QuestPointer.reedBeds,
+      guided: true,
+      voice: 'Bu gece sazın üstünde yatacağız. Ateş sönmesin, sabahı görelim.',
+      thanks: 'Sabah oldu. Şimdi herkese kuru bir örtü gerekecek.',
+    ),
+    Quest(
       id: 'tent',
       icon: '⛺',
-      label: 'İlk çadırı kur',
+      label: 'Herkese çadır kur',
       hint:
-          'İnşa düğmesinden Çadırı seçip boş bir kareye kur. Bir usta işi alır.',
+          'Her çadır iki kişi barındırır. Çadırları nüfusun tamamına yetecek '
+          'sayıda kur; bir usta işi kendiliğinden alır.',
       category: QuestCategory.founding,
       axis: ReckoningAxis.unity,
       tier: 0,
@@ -479,8 +515,8 @@ class QuestBook {
       pointer: QuestPointer.villageCenter,
       buildTarget: BuildingType.tent,
       guided: true,
-      voice: 'Gece yaklaşıyor. Hiç olmazsa bir çadır kuralım.',
-      thanks: 'Bu gece biri örtünün altında yatacak.',
+      voice: 'Saz çiyi çekti. İkişer kişilik çadırları herkese yetiştirelim.',
+      thanks: 'Herkes örtü altında. Yine de bez duvar, dam değildir.',
     ),
     Quest(
       id: 'lumber',
@@ -516,6 +552,45 @@ class QuestBook {
       pointer: QuestPointer.villageCenter,
       buildTarget: BuildingType.well,
     ),
+    // Kuyu ile ev arasındaki sıra bilinçli: kuyu biter bitmez pahalı eve
+    // bakıp odun saymak yerine oyuncu suyun işe yarayacağı toprağı ÇİZER.
+    // Kafile bütçesi bu kısa, etkin adımdan sonra ilk evi hazır karşılar
+    // (bkz. founding_mode_ui_test). Böylece kuruluşta kaynak bekleme ekranı
+    // değil, art arda kararlar vardır.
+    Quest(
+      id: 'farm',
+      icon: '🌾',
+      label: 'Toprağı sür',
+      hint:
+          'Tarla modunu aç, kuyunun yakınına düz bir alan seç. Böğürtlen köyü '
+          'kurtarmaz, sadece ilk günleri kurtarır; karnı toprak doyurur.',
+      category: QuestCategory.production,
+      axis: ReckoningAxis.grit,
+      tier: 0,
+      speaker: VillagerType.farmer,
+      reward: VisualReward.bloom,
+      check: _farm,
+      pointer: QuestPointer.villageCenter,
+      voice: 'Su geldi. Şimdi onun yetiştireceği toprağı sürelim.',
+      thanks: 'Toprak sürüldü. Gerisini yağmurla emek bilir.',
+    ),
+    Quest(
+      id: 'tentIllness',
+      icon: '🤒',
+      label: 'Çadırın bedelini gör',
+      hint:
+          'Temeller hazır. Bir çadır sakini soğuk ve nemden ateşlenecek; '
+          'öksürüğü duyunca neden kalıcı bir dam gerektiği anlaşılacak.',
+      category: QuestCategory.founding,
+      axis: ReckoningAxis.unity,
+      tier: 0,
+      speaker: VillagerType.farmer,
+      reward: VisualReward.sparkle,
+      check: _tentIllness,
+      pointer: QuestPointer.villageCenter,
+      voice: 'Bez duvar rüzgârı kesmedi. Birinin öksürüğü ağırlaşıyor.',
+      thanks: 'Gördük: çadır yol içindir. Buraya gerçek bir dam gerek.',
+    ),
     Quest(
       id: 'house',
       icon: '🏠',
@@ -533,39 +608,6 @@ class QuestBook {
       buildTarget: BuildingType.woodenHouse,
       voice: 'Çadır bir geceyi kurtarır. Bize bir dam lazım.',
       thanks: 'Dam çatıldı. Bu, bir hane kuruldu demek.',
-    ),
-    Quest(
-      id: 'farm',
-      icon: '🌾',
-      label: 'Toprağı sür',
-      hint:
-          'Tarla modunu aç, düz bir alan seç. Böğürtlen köyü kurtarmaz, '
-          'sadece ilk günleri kurtarır; karnı toprak doyurur.',
-      category: QuestCategory.production,
-      axis: ReckoningAxis.grit,
-      tier: 0,
-      speaker: VillagerType.farmer,
-      reward: VisualReward.bloom,
-      check: _farm,
-      pointer: QuestPointer.villageCenter,
-      voice: 'Böğürtlen bir gün biter. Toprağı sürelim.',
-      thanks: 'Toprak sürüldü. Gerisini yağmur bilir.',
-    ),
-    Quest(
-      id: 'firstNight',
-      icon: '🌙',
-      label: 'İlk geceyi çıkar',
-      hint:
-          'Ateşi söndürme, kimseyi aç bırakma. Sabaha çıkan bir köy artık '
-          'bir kamp değildir.',
-      category: QuestCategory.founding,
-      axis: ReckoningAxis.unity,
-      tier: 0,
-      speaker: VillagerType.priest,
-      reward: VisualReward.festival,
-      check: _survivedFirstNight,
-      voice: 'Ateşi söndürme, kimseyi aç bırakma. Sabahı görelim.',
-      thanks: 'Sabah oldu. Burası artık bir kamp değil.',
     ),
 
     // ── Tier 1 — Kapısı Açık Köy ─────────────────────────────────────────
@@ -972,7 +1014,8 @@ class QuestBook {
 
   // ── Görev kontrolleri ─────────────────────────────────────────────────────
   static bool _firepit(QuestContext c) => c.has(BuildingType.firepit);
-  static bool _tent(QuestContext c) => c.has(BuildingType.tent);
+  static bool _tent(QuestContext c) =>
+      c.population > 0 && c.tentCapacity >= c.population;
   // "İlk dam" ÇADIR DEĞİL: çadırın kendi görevi var ve `hasRole(housing)`
   // onunla zaten dolardı → iki görev tek hamleyle biterdi.
   static bool _house(QuestContext c) => c.has(BuildingType.woodenHouse);
@@ -985,7 +1028,9 @@ class QuestBook {
   // Kadro artık köyün kendi refleksi; adım kulübenin dikildiğini ölçer.
   static bool _lumberCamp(QuestContext c) =>
       c.has(BuildingType.lumberCamp) && c.woodHarvested > 0;
-  static bool _survivedFirstNight(QuestContext c) => c.dayCount >= 2;
+  static bool _survivedFirstNight(QuestContext c) =>
+      c.population > 0 && c.reedBedCount >= c.population && c.dayCount >= 2;
+  static bool _tentIllness(QuestContext c) => c.foundingTentIllnessTriggered;
   static bool _farm(QuestContext c) => c.farmTiles.isNotEmpty;
   static bool _well(QuestContext c) => c.has(BuildingType.well);
   static bool _townhall(QuestContext c) => c.has(BuildingType.townhall);

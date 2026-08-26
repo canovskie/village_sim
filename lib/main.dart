@@ -29,6 +29,7 @@
 //
 //  ── EMEK ──────────────────────────────────────────────────────────────────
 //   scene_jobs           bina-doğumlu işler (inşaat/tarla/maden/kesim/çobanlık)
+//   scene_harman         tarla dışı harman + hasat demeti teslim zinciri
 //   scene_work           sivil meslek döngüleri (değirmenci/hancı/rahip/avcı)
 //   scene_craft          zanaatın doğuşu/kaybı; scene_reed evsizin geçimi
 //   scene_fire           ateşin yakıtı; scene_firepit_gather akşam toplanması
@@ -76,6 +77,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import 'buildings/building_design.dart';
 import 'buildings/building_entity.dart';
 import 'buildings/building_function.dart';
 import 'buildings/building_lore.dart';
@@ -215,6 +217,7 @@ import 'world/day_night_cycle.dart';
 import 'world/decor_entity.dart';
 import 'world/egg_entity.dart';
 import 'world/grave.dart';
+import 'world/harman_site.dart';
 import 'world/hay_entity.dart';
 import 'world/land_expansion.dart';
 import 'world/leaf_burst.dart';
@@ -252,6 +255,7 @@ part 'scene/scene_flow.dart';
 part 'scene/scene_forage.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_guide.dart';
+part 'scene/scene_harman.dart';
 part 'scene/scene_house_actions.dart';
 part 'scene/scene_house_stance.dart';
 part 'scene/scene_illness.dart';
@@ -412,6 +416,15 @@ class _AppRootState extends State<_AppRoot> {
 /// Debug/capture hook: true iken yeni oyun açılış sinematiğini + ateş-yerleştirme
 /// modunu atlar, sim doğrudan akar (scene_capture_main.dart bunu set eder).
 bool kCaptureMode = false;
+
+/// Doğal kuruluş provasının yalnız-GÖZLEM arayüzü. Capture modu değildir:
+/// saat, dünya tohumu, kararlar, NPC aklı ve kaynak ekonomisi normal oyundaki
+/// gibi işler. Yalnız `tools/founding_tester_main.dart` bunu açar.
+bool kFoundingTesterMode = false;
+
+/// Açılış halkasını gerçek sahnede prova ederken ses/platform eklentilerini
+/// kapalı tutup yalnız bu prelüdü capture modunda çalıştırır.
+bool kCaptureFoundingCouncil = false;
 double kCaptureZoom = 1.0;
 int kCaptureCarve =
     0; // capture: başlangıçta bu kadar halka ön-hattı "oy" (kütük/recede demo)
@@ -798,6 +811,9 @@ bool kCaptureLaborOnly = false;
 class VillageScene extends StatefulWidget {
   final VoidCallback? onExitToMenu;
 
+  /// Yalnız doğal kuruluş tester'ının taze koşu düğmesi. Normal oyunda null.
+  final VoidCallback? onRestartRun;
+
   /// Kaldığı yerden devam için yüklenecek dünya (null = taze köy).
   final Map<String, dynamic>? initialWorld;
 
@@ -811,6 +827,7 @@ class VillageScene extends StatefulWidget {
   const VillageScene({
     super.key,
     this.onExitToMenu,
+    this.onRestartRun,
     this.initialWorld,
     this.slotId = '',
     this.slotName = 'Köy',
@@ -1098,15 +1115,16 @@ class _VillageSceneState extends State<VillageScene>
   /// seçimde sıfırlanır (setState'lerde `_selectedBuilding=` yanına eklendi).
   bool _detailExpanded = false;
 
-  /// Telefonda inşa kataloğu tam ekran bir moddur. Sahne durumunda tutulur
-  /// ki Android geri hareketi önce katalogu kapatsın, çıkış onayına gitmesin.
+  /// İnşa kataloğunun açık durumu. Telefonda tam ekran, masaüstünde alt komuta
+  /// kapısına bağlı açılır yüzeydir; geri hareketi önce bunu kapatır.
   bool _mobileBuildCatalogOpen = false;
 
   /// Bir karar/inceleme yüzeyi açıkken dünya kromasını sustur. Aynı kişi ve
   /// görev bilgisinin panelin arkasında HUD + komuta + bildirim olarak tekrar
   /// etmesi, paneli bilgi değil gri kalabalık gibi gösteriyordu.
   bool get _panelFocusOpen =>
-      _mobileBuildCatalogOpen ||
+      _foundingCouncilPending ||
+      (useCompactGameUi(context) && _mobileBuildCatalogOpen) ||
       _detailExpanded ||
       _ledgerSection != null ||
       _petitionModalOpen ||
@@ -1177,6 +1195,8 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Placement ──────────────────────────────────────────────────────────────
   BuildingType? _placing;
+  BuildingDesign _placingDesign = BuildingDesign.original;
+  bool _placingDesignManual = false;
   (int, int)? _ghost;
   // İnşa paleti seçili kategori sekmesi (alt çubuk). Civic = ateş/belediye ile başla.
   BuildCategory _buildCategory = BuildCategory.civic;
@@ -1224,6 +1244,7 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Farm ───────────────────────────────────────────────────────────────────
   final List<FarmTile> _farmTiles = [];
+  final List<HarmanSite> _harmanSites = [];
 
   /// Ambarsız köyde balyalar harmanda çürür (carrier_system depo şartı arar) —
   /// tarla kurulu ama yiyecek gelmiyor. Sessiz kalmasın: aralıklı uyarı.
@@ -1292,6 +1313,17 @@ class _VillageSceneState extends State<VillageScene>
   // Ateş etrafı saz yatakları — evsizler biçtiği sazla kurar, geceleri uyur.
   final List<ReedBed> _reedBeds = [];
   double _reedScan = 0; // _tickReed throttle sayacı
+
+  /// İlk saz yataklarının görünür serim işleri. Yatak ancak sahibi hedefe
+  /// yürüdüğünde dünyaya eklenir; kuruluşta artık otomatik belirmez.
+  final Map<VillagerEntity, (double, double)> _foundingBedTargets = {};
+
+  /// Kurucuların saz yatakta geçirdiği ilk gece bir kez kısaltılır. Gece ancak
+  /// herkes gerçekten yatağa uzandıktan sonra şafağa sarar; sonraki geceler bu
+  /// bayrak yüzünden normal çevrimde kalır.
+  bool _foundingFirstNightFastForwarded = false;
+  double _foundingFirstNightSleepGlimpse = 0.0;
+
   double _workScan = 0; // _tickWork throttle sayacı (meslek iş döngüleri)
   double _weaponCraftTimer = 0;
 
@@ -1304,6 +1336,13 @@ class _VillageSceneState extends State<VillageScene>
   // Kilometre taşı bildirimleri — bir kez tetiklenir.
   int _lastPopMilestone = 0;
   bool _firstReedBedShown = false;
+
+  /// İki kişilik çadırlar nüfusu ilk kez karşıladığında hangi gündeydik.
+  /// Öğretici hastalık aynı anda değil, en az bir çadır gecesinden sonra gelir.
+  int _foundingTentsReadyDay = 0;
+
+  /// Çadırın kalıcı ev olmadığını öğreten güvenli, tek seferlik hastalık.
+  bool _foundingTentIllnessTriggered = false;
 
   // ── Mining (maden kazma) ───────────────────────────────────────────────────
   final List<MineNode> _mineNodes = [];
@@ -1390,8 +1429,8 @@ class _VillageSceneState extends State<VillageScene>
   /// Açılışta oyuncunun verdiği köy adı (kimlik/günce; oynanışa etki yok).
   String _villageName = 'Köy';
 
-  /// İlk ateş kurulduktan sonra, köy gerçek haritada görünürken açılan kimlik
-  /// kartı. Açılış sinematiği artık isim formunu taşımıyor.
+  /// Eski kayıt/araç uyumluluğu için kalan dünya üstü kimlik kartı. Yeni oyun
+  /// köy ve hane adını ilk kuruluş halkasındaki sorularda alır.
   bool _villageNamePromptOpen = false;
   final _villageNamePromptCtrl = TextEditingController();
   final _houseNamePromptCtrl = TextEditingController();
@@ -1402,6 +1441,14 @@ class _VillageSceneState extends State<VillageScene>
   /// Kafilenin yükü seçildi mi (sinematiğin ilk kapısı). Sinematik atlanırsa
   /// false kalır → kapanışta varsayılan yük uygulanır.
   bool _foundingChoiceMade = false;
+  bool _foundingTesterPanelOpen = true;
+
+  /// Yeni oyunun ilk canlı sahnesi: kafile merkezde bir halka kurar; kuruluş
+  /// soruları ancak herkes yerine vardıktan sonra açılır.
+  bool _foundingCouncilPending = false;
+  bool _foundingCouncilFormed = false;
+  double _foundingCouncilHold = 0.0;
+  final Map<VillagerEntity, (double, double)> _foundingCouncilTargets = {};
 
   /// Kafilenin haritaya giriş noktası (EKRAN eksenlerinde: u=c−r, v=c+r).
   /// Kuruluş kararı kadroyu değiştirdiğinde kafile yeniden doğar; aynı yerden
@@ -1430,10 +1477,6 @@ class _VillageSceneState extends State<VillageScene>
 
   /// İlk ateş kurulunca "ateş yakma" sinematiği oynatılsın mı (bir kez).
   bool _firstFirePending = false;
-
-  /// Sinematik kapandıktan sonra kısa süre canvas yerleştirmesini yok say —
-  /// "ilerle" için atılan artçı dokunuşun ateşi kazara kurmasını önler.
-  double _placeGuardUntil = 0;
 
   /// Açılış sinematiğinde köye + haneye ad verildi.
   ///
@@ -1498,6 +1541,7 @@ class _VillageSceneState extends State<VillageScene>
         _foundingChoiceMade = true;
         _applyFoundingChoice(FoundingChoice.fallback);
       }
+      _releaseFoundingCouncil();
       _firstFirePending = true;
       setStateHere(() {
         _placing = BuildingType.firepit;
@@ -1510,7 +1554,6 @@ class _VillageSceneState extends State<VillageScene>
         _zoom = max(_minZoomForReach(_viewSize), readable);
         _clampCamera(_viewSize);
       }
-      _placeGuardUntil = _time + 0.7; // artçı "ilerle" dokunuşunu yut
       _showNotification(
         '🔥 İlk ateş: işaretli merkez açıklıkta bir yere dokun.',
       );
@@ -1673,6 +1716,11 @@ class _VillageSceneState extends State<VillageScene>
   // zanaat burada olmadıkça dikilemez. Baştan BOŞ — köy yalnız ortak survival
   // kitini (çadır/ateş/kuyu/depo/oduncu) bilir; gerisi insanlardan organik doğar.
   final Set<String> _knownCrafts = {};
+
+  /// İlk üç köy kademesinin kazandırdığı uzman kervanı haklarından kaçı
+  /// gerçekten kullanıldı. Hak = rastgele göç değil, oyuncunun eksik zanaat
+  /// seçimi; kayıt/yüklemede aynı kervan yeniden doğmasın diye kalıcıdır.
+  int _specialistOffersClaimed = 0;
   // Bekleyen dilekçeyi GETİREN gerçek köylü (rastgele değil — kim olduğu bilinir).
   // Modal portresinde gösterilir; tıklanınca bilgi/aile paneli açılır.
   VillagerEntity? _petitionAuthor;
@@ -2228,6 +2276,7 @@ class _VillageSceneState extends State<VillageScene>
     WorkerEntity.pathContext = _pathContext;
     _pathContext.blockedTiles = _obstacles;
     _pathContext.squeezeTiles = _squeezeTiles;
+    _pathContext.softTiles = _softObs;
 
     // Kayıttan devam → dünyayı kaldığı yerden kur; yoksa taze köy üret.
     final save = widget.initialWorld;
@@ -2238,10 +2287,11 @@ class _VillageSceneState extends State<VillageScene>
       if (widget.referenceVillage) {
         // Referans köy: açılış sinematiği + ateş yerleştirme YOK — köy hazır
         // kurulur (asset'ler yüklenince, aşağıda). Test zemini beklemesin.
-      } else if (!kCaptureMode) {
-        // Yeni oyun → açılış sinematiği; bitince oyuncu ateş yerini seçer.
-        _activeCutscene = kOpeningCutscene;
+      } else if (!kCaptureMode || kCaptureFoundingCouncil) {
+        // Yeni oyun → önce canlı dünyada halka kurulur; kuruluş soruları halka
+        // tamamlanınca açılır. Sorulardan sonra oyuncu ateş yerini seçer.
         _introPlaceFire = true;
+        _beginFoundingCouncil();
         _chronicle('Köyün kuruluşu', icon: '🔥', milestone: true);
       } else {
         // Zoom-reveal: kamera clamp'i (_clampCamera) zaten reach'e göre
@@ -2468,6 +2518,7 @@ class _VillageSceneState extends State<VillageScene>
         _roadMode) {
       setStateHere(() {
         _placing = null;
+        _placingDesignManual = false;
         _ghost = null;
         _placeReason = null;
         _placeFacts = null;
@@ -2731,11 +2782,13 @@ class _VillageSceneState extends State<VillageScene>
                     key: ValueKey(identityHashCode(_activeCutscene)),
                     cutscene: _activeCutscene!,
                     onDone: _onCutsceneDone,
-                    showNameGate: !_introPlaceFire,
                     onNameChosen: _onVillageNamed,
                     onFoundingChoice: _onFoundingChoice,
                   ),
                 ),
+              // Ayrı tester target'ı: simülasyona dokunmadan kuruluş state'ini
+              // okur. Sinematiğin de üstünde kalır ki bütün zincir izlenebilsin.
+              if (kFoundingTesterMode) buildFoundingTesterOverlay(),
             ],
           ),
         ),

@@ -132,7 +132,11 @@ class BoardRail extends StatelessWidget {
       width: LedgerBoard.railW,
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       decoration: const BoxDecoration(
-        color: AppUi.surface0,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF15181D), AppUi.surface0],
+        ),
         border: Border(right: BorderSide(color: AppUi.line)),
       ),
       child: LayoutBuilder(
@@ -225,6 +229,24 @@ class _RailButton extends StatelessWidget {
           ),
           child: Row(
             children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 2,
+                height: on ? 22 : 8,
+                decoration: BoxDecoration(
+                  color: on ? item.color : AppUi.line.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: on
+                      ? [
+                          BoxShadow(
+                            color: item.color.withValues(alpha: 0.32),
+                            blurRadius: 6,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 6),
               Opacity(
                 opacity: on ? 1 : 0.7,
                 child: SemanticIcon(
@@ -341,6 +363,20 @@ class BoardCol extends StatelessWidget {
               height: LedgerBoard.headH,
               child: Row(
                 children: [
+                  Transform.rotate(
+                    angle: math.pi / 4,
+                    child: Container(
+                      width: 5,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: AppUi.accent.withValues(alpha: 0.72),
+                        border: Border.all(
+                          color: AppUi.accentSoft.withValues(alpha: 0.42),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
                   Text(
                     head!,
                     style: AppUi.label.copyWith(
@@ -623,6 +659,12 @@ class BoardTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final base = tint == null
+        ? const Color(0xFF0D1211)
+        : Color.alphaBlend(
+            tint!.withValues(alpha: 0.12),
+            const Color(0xFF0D1211),
+          );
     final body = ClipRRect(
       borderRadius: BorderRadius.circular(AppUi.radiusSm),
       child: Stack(
@@ -630,12 +672,14 @@ class BoardTile extends StatelessWidget {
           Container(
             padding: padding.add(EdgeInsets.only(left: edge == null ? 0 : 4)),
             decoration: BoxDecoration(
-              color: tint == null
-                  ? const Color(0xFF0D1211)
-                  : Color.alphaBlend(
-                      tint!.withValues(alpha: 0.12),
-                      const Color(0xFF0D1211),
-                    ),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.alphaBlend(Colors.white.withValues(alpha: 0.025), base),
+                  base,
+                ],
+              ),
               borderRadius: BorderRadius.circular(AppUi.radiusSm),
               border: Border.all(
                 color: highlight
@@ -655,6 +699,15 @@ class BoardTile extends StatelessWidget {
               bottom: 0,
               child: Container(width: 3, color: edge),
             ),
+          Positioned(
+            left: edge == null ? 8 : 12,
+            right: 8,
+            top: 0,
+            child: Container(
+              height: 1,
+              color: Colors.white.withValues(alpha: 0.035),
+            ),
+          ),
         ],
       ),
     );

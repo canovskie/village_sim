@@ -1277,6 +1277,7 @@ class _BuildingDrawable extends _Drawable {
         deliveryPulse: b.deliveryPulse,
         deliveryTally: b.deliveryTally,
         season: season,
+        design: b.design,
         windowGlow: b.windowGlow,
       );
       canvas.restore();
@@ -1299,6 +1300,7 @@ class _BuildingDrawable extends _Drawable {
         deliveryPulse: b.deliveryPulse,
         deliveryTally: b.deliveryTally,
         season: season,
+        design: b.design,
         windowGlow: b.windowGlow,
       );
     }

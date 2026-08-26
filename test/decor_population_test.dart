@@ -7,6 +7,7 @@ import 'package:village_sim/main.dart' as game;
 import 'package:village_sim/rendering/game_painter.dart';
 import 'package:village_sim/rendering/tile_renderer.dart';
 import 'package:village_sim/systems/decor_population.dart';
+import 'package:village_sim/systems/founding_site.dart';
 import 'package:village_sim/world/decor_entity.dart';
 import 'package:village_sim/world/world_generator.dart';
 
@@ -66,6 +67,13 @@ void main() {
       expect(isGroundFloraDecorKind(DecorKind.fallenLog), isFalse);
       expect(isGroundFloraDecorKind(DecorKind.stump), isFalse);
       expect(isGroundFloraDecorKind(DecorKind.pebble), isFalse);
+    });
+
+    test('yalnız hacimli doğal dekor NPC engelidir', () {
+      expect(DecorKind.values.where(isBlockingDecorKind).toSet(), {
+        DecorKind.fallenLog,
+        DecorKind.bushSmall,
+      });
     });
   });
 
@@ -146,6 +154,27 @@ void main() {
           );
           seen.add(tile);
         }
+      }
+    });
+
+    test('kuruluş çekirdeği ağaç, dekor ve böğürtlen çalısından arıdır', () {
+      for (final seed in seeds) {
+        final world = WorldGenerator(seed).generate();
+        expect(
+          world.trees.where((t) => isFoundingCoreTile(t.col, t.row)),
+          isEmpty,
+          reason: 'tohum $seed: kuruluş çekirdeğine ağaç doğdu',
+        );
+        expect(
+          world.decor.where((d) => isFoundingCoreTile(d.col, d.row)),
+          isEmpty,
+          reason: 'tohum $seed: kuruluş çekirdeğine dekor doğdu',
+        );
+        expect(
+          world.berryBushes.where((b) => isFoundingCoreTile(b.col, b.row)),
+          isEmpty,
+          reason: 'tohum $seed: kuruluş çekirdeğine çalı doğdu',
+        );
       }
     });
 
@@ -260,7 +289,7 @@ void main() {
         // kalmalı, zemin florası düşmeli.
         rawDecor.add(_decorJson(71, 71, DecorKind.pebble, seed++));
         rawDecor.add(_decorJson(71, 71, DecorKind.buttercup, seed++));
-        // Bilinçli kompozisyon: ikisi de aynı tile'da ve aynı sırada kalmalı.
+        // Eski kesim izi: aynı tile'daki dev gövde düşmeli, küçük dip kalmalı.
         rawDecor.add(_decorJson(73, 73, DecorKind.stump, seed++));
         rawDecor.add(_decorJson(73, 73, DecorKind.fallenLog, seed++));
 
@@ -329,7 +358,7 @@ void main() {
           painter.decor
               .where((d) => d.col == 73 && d.row == 73)
               .map((d) => d.kind),
-          orderedEquals([DecorKind.stump, DecorKind.fallenLog]),
+          orderedEquals([DecorKind.stump]),
         );
 
         final flowers = painter.decor
@@ -419,7 +448,7 @@ void main() {
           painter.decor
               .where((d) => d.col == 73 && d.row == 73)
               .map((d) => d.kind),
-          orderedEquals([DecorKind.stump, DecorKind.fallenLog]),
+          orderedEquals([DecorKind.stump]),
         );
       },
     );

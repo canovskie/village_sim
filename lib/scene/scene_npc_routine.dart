@@ -53,10 +53,10 @@ extension _SceneNpcRoutine on _VillageSceneState {
   /// bir gidiştir (gezinti/komşu).
   _ErrandTarget? _pickErrand(VillagerEntity v, {double foodBias = 1.0}) {
     final tod = _cycle.timeOfDay;
-    final morning   = tod >= 0.25 && tod < 0.45;
-    final midday    = tod >= 0.45 && tod < 0.62;
+    final morning = tod >= 0.25 && tod < 0.45;
+    final midday = tod >= 0.45 && tod < 0.62;
     final afternoon = tod >= 0.62 && tod < 0.78;
-    final evening   = tod >= 0.78 && tod < 0.92;
+    final evening = tod >= 0.78 && tod < 0.92;
 
     // (x, y, dwell, weight, hedef türü)
     final cands = <(double, double, double, double, BuildingType?)>[];
@@ -79,11 +79,17 @@ extension _SceneNpcRoutine on _VillageSceneState {
       if (best == null) return;
       final cx = best.col + best.cols / 2.0;
       final cy = best.row + best.rows / 2.0;
-      final spread = (best.cols > best.rows ? best.cols : best.rows) / 2.0 + 1.6;
+      final spread =
+          (best.cols > best.rows ? best.cols : best.rows) / 2.0 + 1.6;
       final spot = _freeSpotNear(cx, cy, spread);
       if (spot == null) return;
-      cands.add((spot.$1, spot.$2,
-          dwellLo + _rng.nextDouble() * (dwellHi - dwellLo), w, t));
+      cands.add((
+        spot.$1,
+        spot.$2,
+        dwellLo + _rng.nextDouble() * (dwellHi - dwellLo),
+        w,
+        t,
+      ));
     }
 
     // KÖYÜN HÂLİ — zaman ağırlıklarının üstüne dünya basıncı biner. Aynı köylü,
@@ -93,24 +99,47 @@ extension _SceneNpcRoutine on _VillageSceneState {
 
     // Pazar — sabah/öğle alışveriş. Aç köylü saat gözetmez: taban ağırlık
     // eklenir, yoksa öğle dışında acıkan biri pazarı hiç düşünmezdi.
-    addBuilding(BuildingType.market,
-        ((morning ? 2.2 : 0) + (midday ? 2.0 : 0) + (afternoon ? 1.0 : 0) +
-                (foodBias - 1.0) * 1.2) *
-            p.marketPull * foodBias, 5, 10);
+    addBuilding(
+      BuildingType.market,
+      ((morning ? 2.2 : 0) +
+              (midday ? 2.0 : 0) +
+              (afternoon ? 1.0 : 0) +
+              (foodBias - 1.0) * 1.2) *
+          p.marketPull *
+          foodBias,
+      5,
+      10,
+    );
     // Taverna — öğleden sonra/akşam.
-    addBuilding(BuildingType.tavern,
-        ((afternoon ? 2.2 : 0) + (evening ? 2.4 : 0) + (midday ? 0.8 : 0) +
-                (foodBias - 1.0) * 0.9) *
-            p.tavernPull * foodBias, 6, 12);
+    addBuilding(
+      BuildingType.tavern,
+      ((afternoon ? 2.2 : 0) +
+              (evening ? 2.4 : 0) +
+              (midday ? 0.8 : 0) +
+              (foodBias - 1.0) * 0.9) *
+          p.tavernPull *
+          foodBias,
+      6,
+      12,
+    );
     // Kuyu — su, gün boyu az. Su Yolu fermanı kuyu–tarla trafiğini canlandırır.
     addBuilding(BuildingType.well, 0.8 * p.wellPull, 3, 5);
     // Ateş başı — akşam yüksek.
-    addBuilding(BuildingType.firepit, (evening ? 2.0 : 0.4) * p.firePull, 6, 10);
+    addBuilding(
+      BuildingType.firepit,
+      (evening ? 2.0 : 0.4) * p.firePull,
+      6,
+      10,
+    );
     // Kilise — ara sıra; inanç hükümleri burayı köyün merkezi yapabilir.
     addBuilding(BuildingType.church, 0.7 * p.churchPull, 6, 10);
     // Meclis/meydan — gündüz. Rejimin en okunur silueti bu ağırlıkta.
-    addBuilding(BuildingType.townhall,
-        ((morning || midday) ? 0.8 : 0.3) * p.squarePull, 4, 7);
+    addBuilding(
+      BuildingType.townhall,
+      ((morning || midday) ? 0.8 : 0.3) * p.squarePull,
+      4,
+      7,
+    );
 
     // Ev — akşam dinlenme çekimi. Mülk Tapusu/Tek Söz herkesi kendi kapısına
     // çeker; Ortak Ambar ve komün tersine iter.
@@ -119,7 +148,8 @@ extension _SceneNpcRoutine on _VillageSceneState {
       final w = (0.5 + (evening ? 1.2 : 0)) * p.homePull * foodBias;
       final cx = home.col + home.cols / 2.0;
       final cy = home.row + home.rows / 2.0;
-      final spread = (home.cols > home.rows ? home.cols : home.rows) / 2.0 + 1.4;
+      final spread =
+          (home.cols > home.rows ? home.cols : home.rows) / 2.0 + 1.4;
       final spot = _freeSpotNear(cx, cy, spread);
       if (spot != null) {
         cands.add((spot.$1, spot.$2, 8 + _rng.nextDouble() * 8, w, home.type));
@@ -134,11 +164,13 @@ extension _SceneNpcRoutine on _VillageSceneState {
     // korunur; hür/şen köyde insan insana yaklaşır, baskı altında dağılır.
     final visit = _randomVisitSpot(v);
     if (visit != null) {
-      cands.add((visit.$1, visit.$2, 4 + _rng.nextDouble() * 4,
-          (1.2 + (afternoon ? 0.8 : 0)) *
-              p.visitPull *
-              (0.55 + 1.3 * p.huddle),
-          null));
+      cands.add((
+        visit.$1,
+        visit.$2,
+        4 + _rng.nextDouble() * 4,
+        (1.2 + (afternoon ? 0.8 : 0)) * p.visitPull * (0.55 + 1.3 * p.huddle),
+        null,
+      ));
     }
 
     // ÖBEĞE KATIL — kalabalık kanalının asıl işi. Yukarıdaki ziyaret rastgele
@@ -149,16 +181,26 @@ extension _SceneNpcRoutine on _VillageSceneState {
     if (p.huddle > 0.22) {
       final knot = _huddleSpot(v);
       if (knot != null) {
-        cands.add((knot.$1, knot.$2, 5 + _rng.nextDouble() * 5,
-            2.4 * (p.huddle - 0.22), null));
+        cands.add((
+          knot.$1,
+          knot.$2,
+          5 + _rng.nextDouble() * 5,
+          2.4 * (p.huddle - 0.22),
+          null,
+        ));
       }
     }
 
     // Gezinti — organik çeşitlilik, her zaman düşük taban.
     final stroll = _freeSpotNear(v.spawnCol, v.spawnRow, 3.0);
     if (stroll != null) {
-      cands.add((stroll.$1, stroll.$2, 3 + _rng.nextDouble() * 3,
-          1.0 * p.strollPull, null));
+      cands.add((
+        stroll.$1,
+        stroll.$2,
+        3 + _rng.nextDouble() * 3,
+        1.0 * p.strollPull,
+        null,
+      ));
     }
 
     if (cands.isEmpty) return null;
@@ -213,11 +255,13 @@ extension _SceneNpcRoutine on _VillageSceneState {
   /// Uzakta olmayan rastgele başka bir uyanık köylünün yanında boş bir nokta.
   (double, double)? _randomVisitSpot(VillagerEntity v) {
     final others = _villagers
-        .where((o) =>
-            !identical(o, v) &&
-            !o.isInsideBuilding &&
-            !o.isSleeping &&
-            o.canRunErrands)
+        .where(
+          (o) =>
+              !identical(o, v) &&
+              !o.isInsideBuilding &&
+              !o.isSleeping &&
+              o.canRunErrands,
+        )
         .toList();
     if (others.isEmpty) return null;
     final o = others[_rng.nextInt(others.length)];
@@ -239,6 +283,9 @@ extension _SceneNpcRoutine on _VillageSceneState {
       if (c < 1 || c >= kCols - 1 || r < 1 || r >= kRows - 1) continue;
       if (_obstacles.contains((c, r))) continue;
       if (_waterTiles.contains((c, r))) continue;
+      // Gezinti/sohbet hedefi ekinin, harmanın ya da birinin yatağının üstü
+      // olmasın. İş sistemleri bu yüzeylere kendi hedefleriyle hâlâ ulaşır.
+      if (_softObs.contains((c, r))) continue;
       if (_roadSystem.has(c, r)) return (tx, ty);
       fallback ??= (tx, ty);
     }

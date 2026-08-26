@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/villager_type.dart';
+import 'package:village_sim/core/constants.dart';
 import 'package:village_sim/systems/founding_choice.dart';
 
 /// KURULUŞ KARARI — açılış sinematiğine gömülü ilk seçim.
@@ -15,8 +16,10 @@ void main() {
     test('üç seçenek + bir varsayılan var', () {
       expect(FoundingChoice.all.length, 3);
       // Sinematik atlanabilir; atlayan oyuncu da bir kadroyla başlamalı.
-      expect(FoundingChoice.byId('yok-böyle-bir-id').id,
-          FoundingChoice.fallback.id);
+      expect(
+        FoundingChoice.byId('yok-böyle-bir-id').id,
+        FoundingChoice.fallback.id,
+      );
       for (final c in FoundingChoice.all) {
         expect(FoundingChoice.byId(c.id).id, c.id);
       }
@@ -32,13 +35,24 @@ void main() {
       // Desen (♂ ♀ ♂ ♀ ♂yaşlı) bozulursa çiftler ayrı evlere düşer ve doğum
       // sessizce durur — bkz. _spawnFoundingCaravan.
       for (final c in options) {
-        expect(c.roster.length, greaterThanOrEqualTo(5),
-            reason: '${c.id}: kadro beş kişiden az olamaz');
+        expect(
+          c.roster.length,
+          greaterThanOrEqualTo(5),
+          reason: '${c.id}: kadro beş kişiden az olamaz',
+        );
         final genders = [for (final (_, male) in c.roster.take(5)) male];
-        expect(genders, [true, false, true, false, true],
-            reason: '${c.id}: cinsiyet deseni bozulmuş — çiftler ayrılır');
-        expect(c.roster[4].$1, VillagerType.priest,
-            reason: '${c.id}: beşinci yaşlı dul olmalı (ateş başı anlatıcı)');
+        expect(genders, [
+          true,
+          false,
+          true,
+          false,
+          true,
+        ], reason: '${c.id}: cinsiyet deseni bozulmuş — çiftler ayrılır');
+        expect(
+          c.roster[4].$1,
+          VillagerType.priest,
+          reason: '${c.id}: beşinci yaşlı dul olmalı (ateş başı anlatıcı)',
+        );
       }
     });
 
@@ -52,19 +66,31 @@ void main() {
 
     test('hiçbir seçenek köyü açlıktan öldürmez, hiçbiri her şeyi vermez', () {
       // No-fail omurgası: yanlış seçim ceza değil, farklı bir ritim olmalı.
-      for (final c in FoundingChoice.all) {
-        expect(c.food, greaterThanOrEqualTo(10), reason: '${c.id}: azık çok az');
-        expect(c.wood, greaterThanOrEqualTo(12),
-            reason: '${c.id}: ateş yeri bedava ama ilk çadır (6 odun) '
-                'kurulamıyorsa oyuncu ilk dakikada sıkışır');
+      for (final c in options) {
+        final oneDay = (c.people * kFoodPerVillagerPerDay).ceil();
+        expect(
+          c.food,
+          greaterThanOrEqualTo(oneDay),
+          reason: '${c.id}: kafile bir tam gün dolmadan açlığa düşüyor',
+        );
+        expect(
+          c.wood,
+          greaterThanOrEqualTo(12),
+          reason:
+              '${c.id}: ateş yeri bedava ama ilk çadır (6 odun) '
+              'kurulamıyorsa oyuncu ilk dakikada sıkışır',
+        );
         // Üstünlük TEK eksende kalmalı — hepsinde en iyi olan bir kart yok.
         final best = [
           c.wood == _max((x) => x.wood),
           c.food == _max((x) => x.food),
           c.people == _max((x) => x.people),
         ].where((b) => b).length;
-        expect(best, lessThanOrEqualTo(1),
-            reason: '${c.id}: birden çok eksende en iyi — bedeli yok');
+        expect(
+          best,
+          lessThanOrEqualTo(1),
+          reason: '${c.id}: birden çok eksende en iyi — bedeli yok',
+        );
       }
     });
 
@@ -72,21 +98,31 @@ void main() {
       // Kafileye eklenen can bekârdır (eşi dışarıdan gelir) ve çift dizilimini
       // bozmaması için listenin SONUNA eklenir — tek soy kuralı korunur.
       for (final c in options) {
-        expect(c.roster.length, lessThanOrEqualTo(6),
-            reason: '${c.id}: kuruluş kalabalığı köyü kamp olmaktan çıkarır');
+        expect(
+          c.roster.length,
+          lessThanOrEqualTo(6),
+          reason: '${c.id}: kuruluş kalabalığı köyü kamp olmaktan çıkarır',
+        );
       }
-      final crowd =
-          FoundingChoice.all.where((c) => c.roster.length > 5).toList();
-      expect(crowd.length, 1,
-          reason: 'kalabalık seçeneği tek olmalı — ekseni o taşıyor');
+      final crowd = FoundingChoice.all
+          .where((c) => c.roster.length > 5)
+          .toList();
+      expect(
+        crowd.length,
+        1,
+        reason: 'kalabalık seçeneği tek olmalı — ekseni o taşıyor',
+      );
     });
 
     test('kart metinleri bedeli söyler', () {
       for (final c in options) {
         expect(c.title.trim(), isNotEmpty);
         expect(c.blurb.trim(), isNotEmpty);
-        expect(c.cost.trim(), isNotEmpty,
-            reason: '${c.id}: bedeli görünmeyen seçim karar değildir');
+        expect(
+          c.cost.trim(),
+          isNotEmpty,
+          reason: '${c.id}: bedeli görünmeyen seçim karar değildir',
+        );
       }
     });
   });

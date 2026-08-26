@@ -68,7 +68,7 @@ class _EraseChip extends StatelessWidget {
       onTap: () {
         onTap();
         if (useCompactGameUi(context)) {
-          const MobileCatalogCloseNotification().dispatch(context);
+          const BuildCatalogCloseNotification().dispatch(context);
         }
       },
       child: AnimatedContainer(
@@ -158,7 +158,7 @@ class _Chip extends StatelessWidget {
       onTap: () {
         onTap();
         if (useCompactGameUi(context)) {
-          const MobileCatalogCloseNotification().dispatch(context);
+          const BuildCatalogCloseNotification().dispatch(context);
         }
       },
       child: AnimatedContainer(

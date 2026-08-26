@@ -65,8 +65,10 @@ class FoundingChoice {
   };
 
   /// Sinematikteki üç seçenek. Denge kasıtlı olarak ÜÇ AYRI EKSENDE kurulu:
-  /// azık (zaman kazandırır), alet (bina hızlandırır), can (el sayısı artırır).
-  /// Hiçbiri "doğru" değil — hepsi ilk iki günün ritmini başka türlü büker.
+  /// azık (zaman kazandırır), alet (sonraki binalara pay bırakır), can (el
+  /// sayısı artırır). Her yük, zorunlu kuruluş zincirini beklemeden kuracak
+  /// tabanı taşır; seçim bu tabanın ÜSTÜNDE farklı bir avantaj verir. Hiçbiri
+  /// "doğru" değil — hepsi ilk iki günün ritmini başka türlü büker.
   static const List<FoundingChoice> all = [
     FoundingChoice(
       id: 'seed',
@@ -81,9 +83,9 @@ class FoundingChoice {
         (VillagerType.farmer, false), // eşi
         (VillagerType.priest, true), // dul yaşlı
       ],
-      wood: 18,
-      stone: 8,
-      food: 48,
+      wood: 56,
+      stone: 16,
+      food: 80,
     ),
     FoundingChoice(
       id: 'tools',
@@ -98,9 +100,9 @@ class FoundingChoice {
         (VillagerType.miller, false),
         (VillagerType.priest, true),
       ],
-      wood: 46,
+      wood: 68,
       stone: 30,
-      food: 12,
+      food: 48,
     ),
     FoundingChoice(
       id: 'people',
@@ -119,9 +121,9 @@ class FoundingChoice {
           true,
         ), // fazladan can — bekâr, eşi dışarıdan gelir
       ],
-      wood: 18,
-      stone: 10,
-      food: 22,
+      wood: 56,
+      stone: 16,
+      food: 64,
     ),
   ];
 
@@ -140,9 +142,9 @@ class FoundingChoice {
       (VillagerType.miller, false),
       (VillagerType.priest, true),
     ],
-    wood: 25,
-    stone: 15,
-    food: 25,
+    wood: 56,
+    stone: 16,
+    food: 56,
   );
 
   static FoundingChoice byId(String id) {

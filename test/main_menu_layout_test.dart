@@ -43,11 +43,10 @@ Future<void> _pumpMenu(WidgetTester tester, Size logical) async {
       ),
     ),
   );
-  // Ticker sürekli döndüğü için pumpAndSettle KULLANILMAZ — birkaç kare yeter
-  // (AppReveal animasyonu bitsin).
-  for (var i = 0; i < 12; i++) {
-    await tester.pump(const Duration(milliseconds: 60));
-  }
+  // Üretim menüsünde sürekli ticker yok: giriş animasyonları bitince gerçekten
+  // settle olabilmeli. Bu aynı zamanda tam ekran kasma regresyonunu korur.
+  await tester.pumpAndSettle();
+  expect(tester.binding.hasScheduledFrame, isFalse);
 }
 
 void main() {

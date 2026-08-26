@@ -9,6 +9,13 @@ import 'wind.dart';
 /// Çimen üstü dekor sprite'larını yükler ve çizer.
 /// Her kind için 2-3 varyant; world generator önceden seçtiği variant'ı kullanırız.
 class DecorRenderer {
+  static const double _fallenLogSourceHeight = 128.0;
+
+  // PNG'lerin opak temas çizgisi tuvalin dibinde değil. Bu değerler alpha
+  // >= 16 için ölçülen son pikselin alt kenarıdır; kalan bölüm saydam padding.
+  // Sprite'ı bu padding kadar aşağı almak, kütüğü gölgesine gerçekten oturtur.
+  static const List<double> _fallenLogGroundEdges = [109.0, 114.0];
+
   // kind → variant index → image
   static final Map<DecorKind, List<ui.Image?>> _imgs = {};
 
@@ -20,17 +27,17 @@ class DecorRenderer {
     ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.6);
 
   static Future<void> loadAll() async {
-    await _loadKind(DecorKind.daisy,         'daisy_cluster',     3);
-    await _loadKind(DecorKind.poppy,         'poppy_cluster',     3);
-    await _loadKind(DecorKind.lavender,      'lavender_cluster',  3);
-    await _loadKind(DecorKind.buttercup,     'buttercup_cluster', 3);
-    await _loadKind(DecorKind.mushroomRed,   'mushroom_red',      2);
-    await _loadKind(DecorKind.mushroomBrown, 'mushroom_brown',    2);
-    await _loadKind(DecorKind.clover,        'clover_patch',      2);
-    await _loadKind(DecorKind.bushSmall,     'bush_small',        3);
-    await _loadKind(DecorKind.fallenLog,     'fallen_log',        2);
-    await _loadKind(DecorKind.stump,         'stump',             2);
-    await _loadKind(DecorKind.pebble,        'pebble_cluster',    3);
+    await _loadKind(DecorKind.daisy, 'daisy_cluster', 3);
+    await _loadKind(DecorKind.poppy, 'poppy_cluster', 3);
+    await _loadKind(DecorKind.lavender, 'lavender_cluster', 3);
+    await _loadKind(DecorKind.buttercup, 'buttercup_cluster', 3);
+    await _loadKind(DecorKind.mushroomRed, 'mushroom_red', 2);
+    await _loadKind(DecorKind.mushroomBrown, 'mushroom_brown', 2);
+    await _loadKind(DecorKind.clover, 'clover_patch', 2);
+    await _loadKind(DecorKind.bushSmall, 'bush_small', 3);
+    await _loadKind(DecorKind.fallenLog, 'fallen_log', 2);
+    await _loadKind(DecorKind.stump, 'stump', 2);
+    await _loadKind(DecorKind.pebble, 'pebble_cluster', 3);
   }
 
   static Future<void> _loadKind(DecorKind kind, String base, int count) async {
@@ -75,10 +82,27 @@ class DecorRenderer {
     }
   }
 
+  @visibleForTesting
+  static double groundingShiftFor(
+    DecorKind kind,
+    int variant,
+    double drawHeight,
+  ) {
+    if (kind != DecorKind.fallenLog) return 0.0;
+    final safeVariant = variant.clamp(0, _fallenLogGroundEdges.length - 1);
+    final groundEdge = _fallenLogGroundEdges[safeVariant];
+    return drawHeight * (1.0 - groundEdge / _fallenLogSourceHeight);
+  }
+
   /// Tile merkezinden çizim. [center] = gridToScreen(col+0.5, row+0.5).
   /// Kütük gibi geniş objeler için draw boyutu kind'a göre ayarlanır.
   /// [time] verilirse esnek bitkiler ortak rüzgâr alanıyla (Wind) sallanır.
-  static void draw(Canvas canvas, Offset center, DecorEntity d, {double time = 0}) {
+  static void draw(
+    Canvas canvas,
+    Offset center,
+    DecorEntity d, {
+    double time = 0,
+  }) {
     final list = _imgs[d.kind];
     if (list == null || list.isEmpty) return;
     final variant = d.variant.clamp(0, list.length - 1);
@@ -97,8 +121,8 @@ class DecorRenderer {
       case DecorKind.fallenLog:
         drawH = 40.0; // yatay, yaklaşık 1 tile geniş
         baseOffset = 11.0;
-        shadowScale = 0.82;
-        shadowH = 8.0;
+        shadowScale = 0.74;
+        shadowH = 4.5;
         break;
       case DecorKind.stump:
         drawH = 32.0;
@@ -128,6 +152,7 @@ class DecorRenderer {
     final drawW = drawH * img.width / img.height;
 
     final baseY = center.dy + baseOffset;
+    final groundingShift = groundingShiftFor(d.kind, variant, drawH);
 
     // Önce yer gölgesi (sprite'ın hemen altında, hafif yukarı kayık elips).
     if (shadowScale > 0) {
@@ -144,19 +169,24 @@ class DecorRenderer {
 
     final dst = Rect.fromLTWH(
       center.dx - drawW / 2,
-      baseY - drawH,
+      baseY - drawH + groundingShift,
       drawW,
       drawH,
     );
-    final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
+    );
 
     // Ezilme animasyonu — köylü basınca yere doğru yassılaşıp solar. Taban
     // (baseY) sabit; sprite dikeyde ezilir, yatayda hafif yayılır, alpha söner.
     // Sway kapatılır (ezilirken sallanma tuhaf durur).
     final crush = d.crushProgress;
     if (crush > 0) {
-      final sink = 1.0 - 0.82 * crush;      // dikey ezilme (yere yatar)
-      final spread = 1.0 + 0.22 * crush;    // yatay hafif yayılma
+      final sink = 1.0 - 0.82 * crush; // dikey ezilme (yere yatar)
+      final spread = 1.0 + 0.22 * crush; // yatay hafif yayılma
       canvas.saveLayer(
         null,
         Paint()..color = Color.fromARGB(((1.0 - crush) * 255).round(), 0, 0, 0),
@@ -173,8 +203,13 @@ class DecorRenderer {
     // sabit (baseY), tepe sallanır; düz/ağır objelerde amp=0 → skew yok.
     final amp = _swayAmp(d.kind);
     if (amp > 0) {
-      final sway = Wind.swayAt(d.col.toDouble(), d.row.toDouble(), time,
-          amp: amp, jitter: (d.swaySeed * 1.618) % (2 * pi));
+      final sway = Wind.swayAt(
+        d.col.toDouble(),
+        d.row.toDouble(),
+        time,
+        amp: amp,
+        jitter: (d.swaySeed * 1.618) % (2 * pi),
+      );
       canvas.save();
       canvas.translate(center.dx, baseY);
       canvas.skew(sway, 0);

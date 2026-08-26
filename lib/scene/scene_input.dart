@@ -19,6 +19,9 @@ extension _SceneInput on _VillageSceneState {
   // ── Mouse scroll wheel ile zoom ────────────────────────────────────────────
 
   void _onCanvasPointerSignal(PointerSignalEvent event) {
+    // Kuruluş yürüyüşü kendi kamera planına sahiptir. Bu birkaç saniyedeki
+    // pinch/teker hareketi halkayı farklı bir ölçekte bırakmasın.
+    if (_foundingCouncilPending) return;
     if (event is! PointerScrollEvent) return;
     final delta = event.scrollDelta.dy;
     final factor = (1.0 - delta * 0.0012).clamp(0.80, 1.25);
@@ -140,6 +143,7 @@ extension _SceneInput on _VillageSceneState {
   // ── Scale (pinch + pan) ────────────────────────────────────────────────────
 
   void _onCanvasScaleStart(ScaleStartDetails d) {
+    if (_foundingCouncilPending) return;
     _scaleStart = _zoom;
     _panAnchor = d.localFocalPoint;
     _cameraAnchor = _camera;
@@ -204,6 +208,7 @@ extension _SceneInput on _VillageSceneState {
   }
 
   void _onCanvasScaleUpdate(ScaleUpdateDetails d) {
+    if (_foundingCouncilPending) return;
     if (useTouchUi(context) &&
         (_roadMode || _farmMode) &&
         _panAnchor != null &&
@@ -290,6 +295,7 @@ extension _SceneInput on _VillageSceneState {
   }
 
   void _onCanvasScaleEnd(ScaleEndDetails _) {
+    if (_foundingCouncilPending) return;
     // Tutup-bırak: sürüklenen köylüyü bırak (su üstündeyse en yakın karaya çek;
     // taşıma anlık işi/kavgayı keser). Hareket yoksa salt tık → seçim/müdahale.
     if (_draggedVillager != null) {
@@ -360,7 +366,7 @@ extension _SceneInput on _VillageSceneState {
   // seçim bırakılır. Tek dokunuş ise _onCanvasTapUp → tek bina + seçimi bırak.
 
   void _onCanvasLongPressStart(LongPressStartDetails d) {
-    if (_placing == null || _time < _placeGuardUntil) return;
+    if (_placing == null) return;
     _multiPlace = true;
     _placeStrokeTiles.clear();
     final tile = _toTile(d.localPosition);
@@ -392,6 +398,7 @@ extension _SceneInput on _VillageSceneState {
       _placeStrokeTiles.clear();
       // Çoklu dikim bitti → kartı bırak (tek tık ile aynı sonuç: palete dön).
       _placing = null;
+      _placingDesignManual = false;
       _ghost = null;
       _placeReason = null;
       _placeFacts = null;
@@ -428,6 +435,7 @@ extension _SceneInput on _VillageSceneState {
   }
 
   void _onCanvasTapUp(TapUpDetails d) {
+    if (_foundingCouncilPending) return;
     // Telefonda yol/tarla için sürükleme MECBURİ DEĞİL: birinci dokunuş ilk
     // noktayı sabitler, ikinci dokunuş bitişi seçip uygular. Drag hâlâ çalışır;
     // bu yol yalnız küçük izometrik karelerde parmak hassasiyetine alternatiftir.

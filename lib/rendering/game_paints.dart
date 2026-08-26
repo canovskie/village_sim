@@ -39,6 +39,20 @@ final _pLumberBorder = Paint()
   ..strokeWidth = 1.5
   ..isAntiAlias = false;
 
+// Harman — tarla dışındaki sıkıştırılmış, tırmıklanmış 2×2 toprak alanı.
+final _pHarmanGround = Paint()
+  ..color = const Color(0xFFC9A46C)
+  ..isAntiAlias = false;
+final _pHarmanBorder = Paint()
+  ..color = const Color(0xFF76552F)
+  ..style = PaintingStyle.stroke
+  ..strokeWidth = 1.15
+  ..isAntiAlias = false;
+final _pHarmanRake = Paint()
+  ..color = const Color(0x55704C27)
+  ..strokeWidth = 0.8
+  ..isAntiAlias = false;
+
 // Marker paints
 final _pTreeX = Paint()
   ..color = const Color(0xDDFF3300)

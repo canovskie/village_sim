@@ -315,7 +315,7 @@ class BuildingInfoPanel extends StatelessWidget {
   // ─── Başlık ───────────────────────────────────────────────────────────────
 
   Widget _header(String label) {
-    final thumb = BuildingRenderer.thumbnails[building.type];
+    final thumb = BuildingRenderer.thumbnailFor(building.type, building.design);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 13, 12, 13),
       child: Row(
@@ -331,7 +331,7 @@ class BuildingInfoPanel extends StatelessWidget {
               border: Border.all(color: AppUi.line, width: 1),
             ),
             child: thumb != null
-                ? CustomPaint(painter: _ThumbPainter(thumb))
+                ? CustomPaint(painter: _ThumbPainter(thumb, building.type))
                 : const Center(
                     child: GameIcon(
                       GameIconData.home,
@@ -771,10 +771,7 @@ class BuildingInfoPanel extends StatelessWidget {
         ];
       case CivicEffect.legacy:
         return [
-          Text(
-            'TAŞA KAZINAN',
-            style: AppUi.label.copyWith(letterSpacing: 0.6),
-          ),
+          Text('TAŞA KAZINAN', style: AppUi.label.copyWith(letterSpacing: 0.6)),
           const SizedBox(height: 5),
           Text(
             building.inscription.isEmpty
@@ -792,8 +789,8 @@ class BuildingInfoPanel extends StatelessWidget {
           ),
         ];
       case CivicEffect.visitorTrade:
-        final gapReduction =
-            ((1.0 - kCaravanseraiVisitGapMultiplier) * 100).round();
+        final gapReduction = ((1.0 - kCaravanseraiVisitGapMultiplier) * 100)
+            .round();
         final durationBonus =
             ((kCaravanseraiVisitDurationMultiplier - 1.0) * 100).round();
         return [
@@ -1371,14 +1368,16 @@ class _CapacityBars extends StatelessWidget {
 
 class _ThumbPainter extends CustomPainter {
   final ui.Image img;
-  _ThumbPainter(this.img);
+  final BuildingType type;
+  _ThumbPainter(this.img, this.type);
 
   static final _paint = AssetStyle.paint();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sw = img.width.toDouble();
-    final sh = img.height.toDouble();
+    final src = BuildingRenderer.thumbnailSourceRect(type, img);
+    final sw = src.width;
+    final sh = src.height;
     final scale = (sw / sh > size.width / size.height)
         ? size.width / sw
         : size.height / sh;
@@ -1386,14 +1385,9 @@ class _ThumbPainter extends CustomPainter {
     final h = sh * scale;
     final left = (size.width - w) / 2;
     final top = size.height - h;
-    canvas.drawImageRect(
-      img,
-      Rect.fromLTWH(0, 0, sw, sh),
-      Rect.fromLTWH(left, top, w, h),
-      _paint,
-    );
+    canvas.drawImageRect(img, src, Rect.fromLTWH(left, top, w, h), _paint);
   }
 
   @override
-  bool shouldRepaint(_ThumbPainter old) => old.img != img;
+  bool shouldRepaint(_ThumbPainter old) => old.img != img || old.type != type;
 }

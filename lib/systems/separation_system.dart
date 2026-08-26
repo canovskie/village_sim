@@ -51,6 +51,7 @@ void applySeparation({
   required List<VillagerEntity> villagers,
   required Set<(int, int)> waterTiles,
   List<AnimalEntity> cows = const [],
+  Set<VillagerEntity> fixedVillagers = const {},
 }) {
   final villagerCount = villagers.length;
   final count = villagerCount + cows.length;
@@ -77,7 +78,7 @@ void applySeparation({
     // A seated villager / milked animal is an immovable obstacle: others
     // still avoid it, but it must not drift.
     _sepWorking[i] = isVillager
-        ? villagers[i].sitClaimed
+        ? villagers[i].sitClaimed || fixedVillagers.contains(villagers[i])
         : cows[i - villagerCount].isBeingMilked;
     final key = (x.floor(), y.floor());
     final bucket = _separationBuckets[key] ??= <int>[];

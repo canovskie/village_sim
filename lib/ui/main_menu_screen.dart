@@ -6,7 +6,6 @@ import 'package:flutter/scheduler.dart';
 
 import '../dev/animation_room.dart';
 import '../main.dart' show kCaptureMode;
-import '../rendering/flame_renderer.dart';
 import '../save/save_manager.dart';
 import '../systems/audio_manager.dart';
 import '../tools/light_editor_main.dart';
@@ -54,7 +53,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     with SingleTickerProviderStateMixin {
   static const _legacyBackdrop = bool.fromEnvironment('LEGACY_MENU_BACKDROP');
 
-  late final Ticker _ticker;
+  Ticker? _legacyTicker;
   Duration _last = Duration.zero;
   double _time = 0;
   bool _hasSaves = false;
@@ -67,7 +66,6 @@ class _MainMenuScreenState extends State<MainMenuScreen>
   @override
   void initState() {
     super.initState();
-    FlameRenderer.loadAll();
     // MENÜ MÜZİĞİ — şafak sahnesinin parçası. Ses motoru burada da ayağa
     // kaldırılır: menü oyundan önce gelir, oyuna hiç girmeyen oyuncu da
     // (ayarlar/kayıtlar) sessiz bir uygulama görmemeli. Dosya yoksa sessiz.
@@ -76,11 +74,17 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       AudioManager.instance.playMusic(MusicTrack.menu);
     }
     _refreshHasSaves();
-    _ticker = createTicker((elapsed) {
-      final dt = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
-      _last = elapsed;
-      setState(() => _time += dt);
-    })..start();
+    // Üretim menüsü sabittir: eskiden bu ticker her vsync'te bütün menü
+    // ağacına setState atıyor, tam ekranda iki büyük görsel ve tüm menü
+    // widget'larını yeniden kuruyordu. Prosedürel eski arka plan yalnız açıkça
+    // istendiğinde kendi geliştirme ticker'ını çalıştırır.
+    if (_legacyBackdrop) {
+      _legacyTicker = createTicker((elapsed) {
+        final dt = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
+        _last = elapsed;
+        setState(() => _time += dt);
+      })..start();
+    }
   }
 
   Future<void> _refreshHasSaves() async {
@@ -101,7 +105,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _legacyTicker?.dispose();
     super.dispose();
   }
 
@@ -111,24 +115,24 @@ class _MainMenuScreenState extends State<MainMenuScreen>
     final touch = useTouchUi(context);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF78976D),
+      backgroundColor: const Color(0xFF111B20),
       body: Stack(
         children: [
-          _MenuSpringBackground(
+          _MenuDawnBackground(
             touch: touch,
             wideMobile: touch && size.aspectRatio >= 1.72,
-            time: _time,
           ),
           // ── Atmosfer (SABAH) ──────────────────────────────────────────────
           // Eski prosedürel sahne yalnız geliştirme karşılaştırması için
           // --dart-define=LEGACY_MENU_BACKDROP=true ile açılabilir.
           if (_legacyBackdrop) const _DawnSky(),
           // Uyanan kuşlar — yüksekte gevşek V, yavaş süzülür.
-          Positioned.fill(
-            child: IgnorePointer(
-              child: CustomPaint(painter: _WakingBirdsPainter(time: _time)),
+          if (_legacyBackdrop)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(painter: _WakingBirdsPainter(time: _time)),
+              ),
             ),
-          ),
           // Yükselen güneş (tepelerin ardından doğar — horizon onu kısmen örter).
           if (_legacyBackdrop)
             Positioned(

@@ -103,6 +103,75 @@ void main() {
     // yazılmaz. Eski ya da taşıma anında alınmış bir kayıt yalnız enum state'i
     // geri getirirse köylü boş elle hayalet taşıyıcı olarak (0,0)'a yürür.
     final baseline = kProbeWorldJson;
+
+    // Görsel tasarım bina türünden bağımsız kalıcıdır: aynı ahşap ev kiremitli
+    // olarak kaydedilip yeniden açıldığında seçimi kaybolmamalı.
+    final designedWorld = Map<String, dynamic>.from(
+      jsonDecode(baseline) as Map<String, dynamic>,
+    );
+    final designedHouse = (designedWorld['buildings'] as List)
+        .cast<Map>()
+        .firstWhere((b) => b['type'] == 'woodenHouse');
+    designedHouse['design'] = 'terracotta';
+    kProbeSaveError = 'koşmadı';
+    kProbeRestoreJson = jsonEncode(designedWorld);
+    for (var i = 0; i < 40 && kProbeRestoreJson.isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(kProbeSaveError, '', reason: 'bina tasarımı kaydı açılamadı');
+    kProbeSaveRoundtrip = true;
+    for (var i = 0; i < 40 && kProbeSaveRoundtrip; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final recapturedDesignWorld = Map<String, dynamic>.from(
+      jsonDecode(kProbeWorldJson) as Map<String, dynamic>,
+    );
+    final recapturedHouse = (recapturedDesignWorld['buildings'] as List)
+        .cast<Map>()
+        .firstWhere((b) => b['type'] == 'woodenHouse');
+    expect(recapturedHouse['design'], 'terracotta');
+
+    // Kuruluş hastalığı yeniden yüklenince sıradan/riskli hastalığa dönüşmesin;
+    // çadır gecesinin günü ve tek-seferlik akış bayrağı da korunmalı.
+    final illnessWorld = Map<String, dynamic>.from(
+      jsonDecode(baseline) as Map<String, dynamic>,
+    );
+    illnessWorld['foundingTentsReadyDay'] = 2;
+    illnessWorld['foundingTentIllnessTriggered'] = true;
+    illnessWorld['foundingFirstNightFastForwarded'] = true;
+    illnessWorld['specialistOffersClaimed'] = 2;
+    (illnessWorld['knownCrafts'] as List).removeWhere(
+      (craft) => craft == 'mining' || craft == 'fishing' || craft == 'trade',
+    );
+    final tutorialPatient = Map<String, dynamic>.from(
+      (illnessWorld['villagers'] as List).first as Map,
+    );
+    tutorialPatient['sickDays'] = 2.0;
+    tutorialPatient['tutorialIllness'] = true;
+    (illnessWorld['villagers'] as List)[0] = tutorialPatient;
+    kProbeSaveError = 'koşmadı';
+    kProbeRestoreJson = jsonEncode(illnessWorld);
+    for (var i = 0; i < 40 && kProbeRestoreJson.isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(kProbeSaveError, '', reason: 'öğretici hastalık kaydı açılamadı');
+    kProbeSaveRoundtrip = true;
+    for (var i = 0; i < 40 && kProbeSaveRoundtrip; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final recapturedIllness = Map<String, dynamic>.from(
+      jsonDecode(kProbeWorldJson) as Map<String, dynamic>,
+    );
+    expect(recapturedIllness['foundingTentsReadyDay'], 2);
+    expect(recapturedIllness['foundingTentIllnessTriggered'], isTrue);
+    expect(recapturedIllness['foundingFirstNightFastForwarded'], isTrue);
+    expect(recapturedIllness['specialistOffersClaimed'], 2);
+    final recapturedPatient = Map<String, dynamic>.from(
+      (recapturedIllness['villagers'] as List).first as Map,
+    );
+    expect(recapturedPatient['sickDays'], greaterThan(0));
+    expect(recapturedPatient['tutorialIllness'], isTrue);
+
     for (final transient in const ['walkingToPickup', 'carrying']) {
       final world = Map<String, dynamic>.from(
         jsonDecode(baseline) as Map<String, dynamic>,
@@ -176,6 +245,16 @@ void main() {
     );
     (world['policies'] as Map).remove('sealedOn'); // mühür günü yoktu
     world.remove('landmarks'); // harita ilgi noktaları henüz yoktu
+    world.remove('foundingTentsReadyDay');
+    world.remove('foundingTentIllnessTriggered');
+    world.remove('foundingFirstNightFastForwarded');
+    world.remove('specialistOffersClaimed');
+    for (final v in world['villagers'] as List) {
+      (v as Map).remove('tutorialIllness');
+    }
+    for (final b in world['buildings'] as List) {
+      (b as Map).remove('design'); // görsel tasarımlar henüz yoktu
+    }
     final log = world['storyLog'] as List;
     for (final e in log) {
       (e as Map).remove('k'); // günce satırının türü yoktu

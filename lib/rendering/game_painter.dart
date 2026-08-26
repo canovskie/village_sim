@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../buildings/building_design.dart';
 import '../buildings/building_entity.dart';
 import '../buildings/building_function.dart';
 import '../buildings/building_renderer.dart';
@@ -31,6 +32,7 @@ import '../world/bird_flock.dart';
 import '../world/decor_entity.dart';
 import '../world/egg_entity.dart';
 import '../world/grave.dart';
+import '../world/harman_site.dart';
 import '../world/hay_entity.dart';
 import '../world/leaf_burst.dart';
 import '../world/loot_cache.dart';
@@ -360,6 +362,7 @@ class VillageGamePainter extends CustomPainter {
   final List<RoadOrder> pendingRoadOrders;
   final Offset camera;
   final BuildingType? ghostType;
+  final BuildingDesign ghostDesign;
   final (int, int)? ghostTile;
   final bool ghostValid;
   final double time;
@@ -404,6 +407,7 @@ class VillageGamePainter extends CustomPainter {
   final double ambientStrength;
 
   final List<FarmTile> farmTiles;
+  final List<HarmanSite> harmanSites;
 
   /// Çoklu tarla seçim önizlemesi: (c1, r1, c2, r2)
   final (int, int, int, int)? farmSelection;
@@ -516,6 +520,7 @@ class VillageGamePainter extends CustomPainter {
     this.pendingRoadOrders = const [],
     required this.camera,
     this.ghostType,
+    this.ghostDesign = BuildingDesign.original,
     this.ghostTile,
     this.ghostValid = false,
     this.roadPreview = const [],
@@ -530,6 +535,7 @@ class VillageGamePainter extends CustomPainter {
     this.ambientTint = const Color(0xFFFFFFFF),
     this.ambientStrength = 0.0,
     this.farmTiles = const [],
+    this.harmanSites = const [],
     this.farmSelection,
     this.trees = const [],
     this.cleared = const {},
@@ -622,6 +628,7 @@ class VillageGamePainter extends CustomPainter {
     _drawGroundFlora(canvas, size);
     _drawMud(canvas, size);
     _drawFarmTiles(canvas, size);
+    _drawHarmanSites(canvas, size);
     _drawWaterFoam(canvas, size);
     // Bina gölgeleri — sahne sprite'larından ÖNCE, zemin üstüne. Bu sayede
     // hiçbir bina gölgesi başka sprite'ın üstüne taşıyamaz.
@@ -949,6 +956,47 @@ class VillageGamePainter extends CustomPainter {
         season,
         watered: t.isWatered,
       );
+    }
+  }
+
+  // ── Harman yeri ───────────────────────────────────────────────────────────
+
+  void _drawHarmanSites(Canvas canvas, Size size) {
+    if (harmanSites.isEmpty) return;
+    const hw = kTileW / 2;
+    const hh = kTileH / 2;
+    final (minX, maxX, minY, maxY) = _visBounds(size);
+    for (final site in harmanSites) {
+      for (final tile in site.tiles) {
+        final s = gridToScreen(
+          tile.$1.toDouble(),
+          tile.$2.toDouble(),
+          size,
+          camera,
+        );
+        final px = s.dx.roundToDouble();
+        final py = s.dy.roundToDouble();
+        if (px < minX || px > maxX || py < minY || py > maxY) continue;
+        _scratchPath
+          ..reset()
+          ..moveTo(px, py)
+          ..lineTo(px + hw, py + hh)
+          ..lineTo(px, py + hh * 2)
+          ..lineTo(px - hw, py + hh)
+          ..close();
+        canvas.drawPath(_scratchPath, _pHarmanGround);
+        canvas.drawPath(_scratchPath, _pHarmanBorder);
+
+        // Tırmık izleri: alanı tarladan ayıran, sıkıştırılmış toprak çizgileri.
+        for (int i = 1; i <= 3; i++) {
+          final t = i / 4.0;
+          canvas.drawLine(
+            Offset(px - hw * (1 - t), py + hh * (1 - t)),
+            Offset(px + hw * t, py + hh * (1 + t)),
+            _pHarmanRake,
+          );
+        }
+      }
     }
   }
 
@@ -1861,7 +1909,15 @@ class VillageGamePainter extends CustomPainter {
     }
 
     canvas.saveLayer(null, Paint()..color = const Color(0xAAFFFFFF));
-    BuildingRenderer.draw(canvas, ghostType!, back, left, right, front);
+    BuildingRenderer.draw(
+      canvas,
+      ghostType!,
+      back,
+      left,
+      right,
+      front,
+      design: ghostDesign,
+    );
     canvas.restore();
   }
 
@@ -2443,6 +2499,7 @@ class VillageGamePainter extends CustomPainter {
       old.time != time ||
       old.ghostTile != ghostTile ||
       old.ghostType != ghostType ||
+      old.ghostDesign != ghostDesign ||
       old.ghostValid != ghostValid ||
       // Yol önizlemesi/şeffaflık hedefleri her sürükleme karesinde değişebilir.
       // TUZAK: roadPreview state'te YERİNDE mutate edilen tek bir liste — `old`
@@ -2456,6 +2513,7 @@ class VillageGamePainter extends CustomPainter {
       old.rainIntensity != rainIntensity ||
       old.nightClarity != nightClarity ||
       old.farmTiles != farmTiles ||
+      old.harmanSites != harmanSites ||
       old.farmSelection != farmSelection ||
       old.lumberSelection != lumberSelection ||
       old.villagers != villagers ||

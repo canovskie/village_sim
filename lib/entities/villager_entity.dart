@@ -464,6 +464,11 @@ class VillagerEntity extends WorkerEntity {
   /// İyi beslenme + mabet iyileşmeyi hızlandırır. Kaydedilir.
   double sickDays = 0.0;
 
+  /// Kuruluşta çadırın yetersizliğini öğreten hastalık mı. Görsel ve iş kaybı
+  /// normal hastalıkla aynıdır; yalnız öğretici uğruna köylü kaybedilmez.
+  /// İyileşince kapanır ve kayıtta korunur.
+  bool tutorialIllness = false;
+
   /// KÜREK CEZASI — kalan zorunlu emek süresi (oyun günü). >0 iken köylü
   /// mahkûm: normal işe/errand'a gitmez, kadroya alınmaz; gündüzleri taş
   /// ocağına koşulur ve köye günlük taş üretir ([_tickConvictLabor]). Süre

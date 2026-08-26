@@ -290,6 +290,7 @@ GameIconData questGlyph(String id) => switch (id) {
   // ── Kuruluş mikro adımları ──────────────────────────────────────────
   'tent' => GameIconData.home,
   'firstNight' => GameIconData.moon,
+  'tentIllness' => GameIconData.heart,
   'townhall' => GameIconData.bank,
   'firstPolicy' => GameIconData.scroll,
   'tavern' => GameIconData.tankard,

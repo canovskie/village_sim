@@ -5,14 +5,19 @@ import '../core/constants.dart';
 class DayNightCycle {
   static const double dayDuration = 240.0; // 4 dakika = tam gün
 
+  /// Gün ışığı artık çevrimin %60'ını, gece %40'ını kaplar. Tam oyun günü yine
+  /// 4 dakikadır; yalnız karanlık yarı 120 sn'den 96 sn'ye kısalır.
+  static const double nightDuration = 96.0;
+  static const double daylightDuration = dayDuration - nightDuration;
+
   /// 0.0 = gece yarısı  0.25 = şafak  0.5 = öğle  0.75 = gün batımı
   double timeOfDay;
 
   double rainIntensity = 0.0;
-  bool   _raining      = false;
-  double _phaseTimer   = 0.0;
+  bool _raining = false;
+  double _phaseTimer = 0.0;
   double _phaseDuration;
-  final  Random _rng;
+  final Random _rng;
 
   /// dayLight bir önceki tick'te gece eşiğinin altındaydı mı?
   /// Edge-trigger için saklanır — onNightFall yalnız geçiş anında çağrılır.
@@ -26,12 +31,14 @@ class DayNightCycle {
   ///  • Star opacity: berrakta yıldızlar parlar.
   ///  • Kıyı sisi (game_painter): berrakta belirgin azalır.
   double _nightClarity = 0.0;
+
   /// Bu gecenin hedef berraklığı — _emitDayNightEdges'in night ledge'inde
   /// rng'den yazılır. Day ledge'inde 0'a düşer.
   double _nightClarityTarget = 0.0;
 
   /// Public: anlık berraklık (renderer'a geçer).
   double get nightClarity => _nightClarity;
+
   /// Public: bu gece random ile berrak mı seçildi (notif/HUD için).
   bool get isClearNight => _nightClarityTarget > 0.5;
 
@@ -43,17 +50,36 @@ class DayNightCycle {
   VoidCallback? onMorning;
 
   DayNightCycle({this.timeOfDay = 0.45, int seed = 42})
-      : _rng          = Random(seed),
-        _phaseDuration = 55 + Random(seed).nextDouble() * 80;
+    : _rng = Random(seed),
+      _phaseDuration = 55 + Random(seed).nextDouble() * 80;
 
   void update(double dt) {
-    timeOfDay = (timeOfDay + dt / dayDuration) % 1.0;
+    // timeOfDay'ın iki yarısı eşit uzunlukta değildir: 0.25→0.75 gündüz,
+    // 0.75→0.25 gece. Yarı çevrimi kendi gerçek süresine bölen çarpan 2'dir.
+    final inNightHalf = timeOfDay < 0.25 || timeOfDay >= 0.75;
+    final phaseDuration = inNightHalf
+        ? nightDuration * 2
+        : daylightDuration * 2;
+    timeOfDay = (timeOfDay + dt / phaseDuration) % 1.0;
     _updateRain(dt);
     _emitDayNightEdges();
     // Berraklık yumuşak yaklaşır — gece başında ~25 sn'de stabilize, gündüze
     // dönerken erkenden 0'a iner. dt'ye dayalı lerp → fps bağımsız.
     final rate = (1.0 - 1.0 / (1.0 + 1.4 * dt)).clamp(0.0, 1.0);
     _nightClarity += (_nightClarityTarget - _nightClarity) * rate;
+  }
+
+  /// Kuruluş öğreticisinin tek gecelik kısa geçişi. Normal çevrim sürelerine
+  /// dokunmaz; yalnız çağrıldığı geceden şafağa sıçrar ve sabah kenarını bir
+  /// kez üretir. Sonraki bütün geceler [update] ile normal uzunlukta akar.
+  void skipNightToMorning() {
+    // 0.25 henüz loş şafak (dayLight 0.15); 0.32 gerçek sabah ışığıdır ve
+    // köylülerin kademeli uyanma eşiğini de geçmiş olur.
+    timeOfDay = 0.32;
+    final wasNight = _wasNight;
+    _wasNight = false;
+    _nightClarityTarget = 0.0;
+    if (wasNight) onMorning?.call();
   }
 
   void _emitDayNightEdges() {
@@ -84,15 +110,15 @@ class DayNightCycle {
       }
       rainIntensity = rainIntensity.clamp(0.0, 1.0);
       if (_phaseTimer >= _phaseDuration) {
-        _raining       = false;
-        _phaseTimer    = 0;
+        _raining = false;
+        _phaseTimer = 0;
         _phaseDuration = 50 + _rng.nextDouble() * 90;
       }
     } else {
       rainIntensity = 0.0;
       if (_phaseTimer >= _phaseDuration) {
-        _raining       = true;
-        _phaseTimer    = 0;
+        _raining = true;
+        _phaseTimer = 0;
         _phaseDuration = 22 + _rng.nextDouble() * 38;
       }
     }
@@ -138,30 +164,30 @@ class DayNightCycle {
   }
 
   Color _overlayTopRgb() => _lerp([
-        (0.00, 0x05, 0x08, 0x20), // gece — derin lacivert
-        (0.20, 0x10, 0x10, 0x38),
-        (0.25, 0x70, 0x40, 0x60), // şafak — mor-pembe üst bant
-        (0.32, 0x40, 0x40, 0x68),
-        (0.38, 0x00, 0x00, 0x00), // gündüz — şeffaf yapacağız
-        (0.62, 0x00, 0x00, 0x00),
-        (0.70, 0x40, 0x30, 0x60),
-        (0.75, 0x80, 0x28, 0x40), // gün batımı — koyu kırmızı-mor üst
-        (0.82, 0x18, 0x10, 0x40),
-        (1.00, 0x05, 0x08, 0x20),
-      ]);
+    (0.00, 0x05, 0x08, 0x20), // gece — derin lacivert
+    (0.20, 0x10, 0x10, 0x38),
+    (0.25, 0x70, 0x40, 0x60), // şafak — mor-pembe üst bant
+    (0.32, 0x40, 0x40, 0x68),
+    (0.38, 0x00, 0x00, 0x00), // gündüz — şeffaf yapacağız
+    (0.62, 0x00, 0x00, 0x00),
+    (0.70, 0x40, 0x30, 0x60),
+    (0.75, 0x80, 0x28, 0x40), // gün batımı — koyu kırmızı-mor üst
+    (0.82, 0x18, 0x10, 0x40),
+    (1.00, 0x05, 0x08, 0x20),
+  ]);
 
   Color _overlayBottomRgb() => _lerp([
-        (0.00, 0x0A, 0x14, 0x30), // gece alt — biraz daha açık
-        (0.20, 0x18, 0x18, 0x38),
-        (0.25, 0xC8, 0x68, 0x18), // şafak ufuk — yanık turuncu
-        (0.32, 0xE0, 0xA8, 0x60),
-        (0.38, 0x00, 0x00, 0x00),
-        (0.62, 0x00, 0x00, 0x00),
-        (0.70, 0xE0, 0x80, 0x30),
-        (0.75, 0xE8, 0x48, 0x18), // gün batımı ufuk — ateş turuncu
-        (0.82, 0x20, 0x14, 0x48),
-        (1.00, 0x0A, 0x14, 0x30),
-      ]);
+    (0.00, 0x0A, 0x14, 0x30), // gece alt — biraz daha açık
+    (0.20, 0x18, 0x18, 0x38),
+    (0.25, 0xC8, 0x68, 0x18), // şafak ufuk — yanık turuncu
+    (0.32, 0xE0, 0xA8, 0x60),
+    (0.38, 0x00, 0x00, 0x00),
+    (0.62, 0x00, 0x00, 0x00),
+    (0.70, 0xE0, 0x80, 0x30),
+    (0.75, 0xE8, 0x48, 0x18), // gün batımı ufuk — ateş turuncu
+    (0.82, 0x20, 0x14, 0x48),
+    (1.00, 0x0A, 0x14, 0x30),
+  ]);
 
   // NOT: ambientTint (modulate) sahneye kendi başına gece tonunu zaten
   // çekiyor → buradaki alpha'lar daha önce "tek darkening kaynağı" olduğunda
@@ -266,8 +292,12 @@ class DayNightCycle {
   }
 
   Color get sunColor {
-    if (timeOfDay < 0.30 || timeOfDay > 0.70) return const Color(0xFFFF9922); // şafak/gün batımı
-    if (timeOfDay < 0.38 || timeOfDay > 0.62) return const Color(0xFFFFD044); // sabah/öğleden sonra
+    if (timeOfDay < 0.30 || timeOfDay > 0.70) {
+      return const Color(0xFFFF9922); // şafak/gün batımı
+    }
+    if (timeOfDay < 0.38 || timeOfDay > 0.62) {
+      return const Color(0xFFFFD044); // sabah/öğleden sonra
+    }
     return const Color(0xFFFFEE55); // öğle
   }
 
@@ -301,7 +331,8 @@ class DayNightCycle {
       final (t1, r1, g1, b1) = frames[i + 1];
       if (t >= t0 && t <= t1) {
         final f = (t - t0) / (t1 - t0);
-        return Color.fromARGB(255,
+        return Color.fromARGB(
+          255,
           (r0 + (r1 - r0) * f).round().clamp(0, 255),
           (g0 + (g1 - g0) * f).round().clamp(0, 255),
           (b0 + (b1 - b0) * f).round().clamp(0, 255),

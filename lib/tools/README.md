@@ -17,6 +17,20 @@ dosyaların varlık sebebi budur.
 | `crime_capture_main.dart` | Suçun evreleri + muhafız tepkisi + hüküm zinciri. |
 | `anim_room_probe_main.dart` | Animasyon odasının kendi kendini kontrolü. |
 
+## Canlı doğal kuruluş tester'ı
+
+`founding_tester_main.dart`, capture aracı değildir. Ana menü ve normal kayıt
+listesi yerine doğrudan rastgele taze köy açar; kuruluş halkası, intro seçimi,
+ateş yerleştirme, saz yatakları, ilk gece, çadır ve ilk odun gerçek oyun
+kurallarıyla işler. Sol üstteki gözlem paneli state'i yalnız okur; sabit tohum,
+god mode, otomatik seçim, zaman dondurma veya hız boost'u kullanmaz. Panel
+gizlenebilir ve **Taze Koşu** ile başka rastgele dünyada baştan başlanabilir.
+
+```
+flutter run -d macos -t lib/tools/founding_tester_main.dart
+flutter run --release -d <iphone-id> -t lib/tools/founding_tester_main.dart
+```
+
 ## Kare yakalayan araçlar (PNG üretir)
 
 | Araç | Neyi gösterir |

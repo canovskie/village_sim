@@ -131,6 +131,7 @@ extension _SceneUi on _VillageSceneState {
                       pendingRoadOrders: _roadOrders,
                       camera: _camera + _shakeOffset,
                       ghostType: _placing,
+                      ghostDesign: _placingDesign,
                       ghostTile: _ghost,
                       ghostValid: _ghost != null && _placing != null
                           ? _isValidPlacement(_ghost!.$1, _ghost!.$2, _placing!)
@@ -145,6 +146,7 @@ extension _SceneUi on _VillageSceneState {
                       rainIntensity: _cycle.rainIntensity,
                       nightClarity: _cycle.nightClarity,
                       farmTiles: _farmTiles,
+                      harmanSites: _harmanSites,
                       farmSelection:
                           (_farmMode && _farmStart != null && _farmEnd != null)
                           ? (
@@ -323,6 +325,12 @@ extension _SceneUi on _VillageSceneState {
             catalogOpen: _mobileBuildCatalogOpen,
             onCatalogOpenChanged: (open) =>
                 setStateHere(() => _mobileBuildCatalogOpen = open),
+            buildModeActive:
+                _placing != null ||
+                _farmMode ||
+                _lumberMode ||
+                _mineMode ||
+                _roadMode,
             onDefter: () => _openLedger(LedgerSection.tuzuk),
             onDivan: () => _openLedger(LedgerSection.divan),
             onRoster: () => _openLedger(LedgerSection.nufus),
@@ -399,12 +407,15 @@ extension _SceneUi on _VillageSceneState {
   /// Kuruluş kararları arasındaki kısa otomatik emek anı. Alakasız bina
   /// kartları açmak yerine köyün ne yaptığını tek satırda söyler.
   Widget _foundingWorkStatus() {
+    final waitingFirstNight = _currentStep?.quest.id == 'firstNight';
     final lumberReady = _buildings.any(
       (b) => b.type == BuildingType.lumberCamp,
     );
     final worker = _villagers.where((v) => v.hasActiveJob).firstOrNull;
     final feedback = worker == null ? null : feedbackFor(worker);
-    final text = worker != null && feedback != null
+    final text = waitingFirstNight
+        ? 'Saz yataklar hazır · herkes uzanınca sabah olacak…'
+        : worker != null && feedback != null
         ? '${worker.name}: ${feedback.state}'
         : lumberReady && _woodHarvested == 0
         ? 'Oduncu ilk ağaca gidiyor…'
@@ -450,18 +461,30 @@ extension _SceneUi on _VillageSceneState {
     // İŞE YARADIĞINI göster (açıklama). "Bir bina seç" ipucunun yerini alır.
     final p = _placing;
     if (p != null) {
+      final designs = buildingDesignsFor(p);
       return CommandContext(
         title: kBuildingMeta[p]?.label ?? '—',
+        subtitle: designs.length > 1 ? _placingDesign.label : null,
         description:
             kBuildingFunctions[p]?.summary ??
             'Boş bir yere tıklayarak yerleştir.',
         actions: [
+          if (designs.length > 1)
+            CommandAction(
+              'Tasarım',
+              GameIconData.dice,
+              onTap: () => setStateHere(() {
+                _placingDesign = nextBuildingDesign(p, _placingDesign);
+                _placingDesignManual = true;
+              }),
+            ),
           CommandAction(
             'Vazgeç',
             GameIconData.close,
             onTap: () => setStateHere(() {
               _placing = null;
               _ghost = null;
+              _placingDesignManual = false;
             }),
           ),
         ],
@@ -469,6 +492,7 @@ extension _SceneUi on _VillageSceneState {
     }
     final b = _selectedBuilding;
     if (b != null) {
+      final designs = buildingDesignsFor(b.type);
       final res = _villagers.where((v) => v.homeBuilding == b).toList();
       final cap = kBuildingFunctions[b.type]?.housingCapacity ?? 0;
       final sub = res.isNotEmpty && res.first.surname.isNotEmpty
@@ -478,13 +502,29 @@ extension _SceneUi on _VillageSceneState {
       return CommandContext(
         title: kBuildingMeta[b.type]?.label ?? '—',
         subtitle: sub,
-        stats: [if (cap > 0) ('Sakinler', '${res.length}/$cap', AppUi.sage)],
+        stats: [
+          if (cap > 0) ('Sakinler', '${res.length}/$cap', AppUi.sage),
+          if (designs.length > 1) ('Tasarım', b.design.label, AppUi.gold),
+        ],
         actions: [
           CommandAction(
             'Detay',
             GameIconData.scroll,
             onTap: () => setStateHere(() => _detailExpanded = true),
           ),
+          if (designs.length > 1)
+            CommandAction(
+              'Tasarım',
+              GameIconData.dice,
+              onTap: () {
+                setStateHere(
+                  () => b.design = nextBuildingDesign(b.type, b.design),
+                );
+                _showNotification(
+                  '${kBuildingMeta[b.type]?.label ?? 'Bina'} tasarımı: ${b.design.label}',
+                );
+              },
+            ),
           CommandAction(
             'Şenlik',
             GameIconData.festival,
@@ -720,7 +760,7 @@ extension _SceneUi on _VillageSceneState {
         );
       }
       return SizedBox(
-        height: 124,
+        height: 120,
         child: Align(
           alignment: Alignment.centerLeft,
           child: SingleChildScrollView(
@@ -800,50 +840,42 @@ extension _SceneUi on _VillageSceneState {
               )
               .length;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 7),
+      padding: const EdgeInsets.fromLTRB(12, 7, 12, 5),
       child: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Color.alphaBlend(
-                AppUi.accent.withValues(alpha: 0.13),
-                AppUi.surface0,
-              ),
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: AppUi.accent.withValues(alpha: 0.45)),
-            ),
-            child: const GameIcon(
-              GameIconData.hammer,
-              size: 14,
-              color: AppUi.accent,
-            ),
-          ),
-          const SizedBox(width: 8),
+          const GameIcon(GameIconData.hammer, size: 14, color: AppUi.accent),
+          const SizedBox(width: 7),
           Text(
-            'İNŞA',
-            style: AppUi.title.copyWith(fontSize: 11, letterSpacing: 1.1),
+            'YAPI KATALOĞU',
+            style: AppUi.title.copyWith(fontSize: 10, letterSpacing: 1.0),
           ),
-          const SizedBox(width: 10),
-          Container(width: 1, height: 24, color: AppUi.line),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
+          Container(width: 1, height: 20, color: AppUi.line),
+          const SizedBox(width: 6),
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: tabs,
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            _buildCategory == BuildCategory.araziYol
-                ? '$count ARAÇ'
-                : '$count YAPI',
-            style: AppUi.label.copyWith(
-              fontSize: 8.5,
-              letterSpacing: 0.8,
-              color: AppUi.textLo,
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppUi.surface0,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppUi.line),
+            ),
+            child: Text(
+              _buildCategory == BuildCategory.araziYol
+                  ? '$count ARAÇ'
+                  : '$count YAPI',
+              style: AppUi.label.copyWith(
+                fontSize: 8,
+                height: 1,
+                letterSpacing: 0.65,
+                color: AppUi.textLo,
+              ),
             ),
           ),
         ],
@@ -867,58 +899,104 @@ extension _SceneUi on _VillageSceneState {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => setStateHere(() => _buildCategory = cat),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            // 44 = Apple HIG dokunma eşiği. 40'a indirmeyi denedim, harness
-            // altı kategori sekmesini de "tap<44" diye işaretledi — 4dp uğruna
-            // doğru takas değil.
-            constraints: compact
-                ? const BoxConstraints(minHeight: 44)
-                : const BoxConstraints(),
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 10 : 8,
-              vertical: compact ? 6 : 5,
-            ),
-            decoration: BoxDecoration(
-              color: sel
-                  ? Color.alphaBlend(
-                      AppUi.accent.withValues(alpha: 0.22),
-                      AppUi.surface2,
-                    )
-                  : AppUi.surface0,
-              borderRadius: BorderRadius.circular(AppUi.radiusSm),
-              border: Border.all(
-                // İşaretli sekme seçili gibi DURMAZ: seçili kenar dolu ember,
-                // işaret ise yarı ember. İki durum karışırsa oyuncu sekmenin
-                // açık olduğunu sanır ve boş kataloğa bakar.
-                color: sel
-                    ? AppUi.accent
-                    : hinted
-                    ? AppUi.accent.withValues(alpha: 0.55)
-                    : AppUi.line,
-                width: sel ? 1.4 : (hinted ? 1.4 : 1),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                GameIcon(
-                  _buildCategoryIcon(cat),
-                  size: compact ? 14 : 12,
-                  color: sel ? AppUi.accentSoft : AppUi.textLo,
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  cat.label.toUpperCase(),
-                  style: AppUi.button.copyWith(
-                    fontSize: compact ? 11 : 9.5,
-                    letterSpacing: 0.8,
-                    color: sel ? AppUi.accentSoft : AppUi.textMid,
+          child: compact
+              ? AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  constraints: const BoxConstraints(minHeight: 44),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? Color.alphaBlend(
+                            AppUi.accent.withValues(alpha: 0.22),
+                            AppUi.surface2,
+                          )
+                        : AppUi.surface0,
+                    borderRadius: BorderRadius.circular(AppUi.radiusSm),
+                    border: Border.all(
+                      color: sel
+                          ? AppUi.accent
+                          : hinted
+                          ? AppUi.accent.withValues(alpha: 0.55)
+                          : AppUi.line,
+                      width: sel || hinted ? 1.4 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GameIcon(
+                        _buildCategoryIcon(cat),
+                        size: 14,
+                        color: sel ? AppUi.accentSoft : AppUi.textLo,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        cat.label.toUpperCase(),
+                        style: AppUi.button.copyWith(
+                          fontSize: 11,
+                          letterSpacing: 0.8,
+                          color: sel ? AppUi.accentSoft : AppUi.textMid,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  padding: const EdgeInsets.fromLTRB(9, 8, 9, 9),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? AppUi.surface3.withValues(alpha: 0.72)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    border: hinted
+                        ? Border.all(
+                            color: AppUi.accent.withValues(alpha: 0.48),
+                          )
+                        : null,
+                  ),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GameIcon(
+                            _buildCategoryIcon(cat),
+                            size: 11,
+                            color: sel ? AppUi.accentSoft : AppUi.textLo,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            cat.label.toUpperCase(),
+                            style: AppUi.button.copyWith(
+                              fontSize: 9,
+                              letterSpacing: 0.65,
+                              color: sel ? AppUi.textHi : AppUi.textMid,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (sel)
+                        Positioned(
+                          left: 5,
+                          right: 5,
+                          bottom: -9,
+                          child: Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: AppUi.accent,
+                              borderRadius: BorderRadius.circular(1),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          ),
         ),
       ),
     );
@@ -998,8 +1076,14 @@ extension _SceneUi on _VillageSceneState {
       if (_placing == type) {
         _placing = null;
         _ghost = null;
+        _placingDesignManual = false;
       } else {
         _placing = type;
+        final ordinal =
+            _buildings.where((b) => b.type == type).length +
+            _orders.where((o) => !o.completed && o.type == type).length;
+        _placingDesign = automaticBuildingDesign(type, ordinal);
+        _placingDesignManual = false;
         _ghost = null;
         // Yeni bir künye açılıyor → tatlı not havuzdan bir sonrakine geçsin.
         _loreNoteSeed++;
@@ -1145,7 +1229,7 @@ extension _SceneUi on _VillageSceneState {
       left: compact ? MobileUi.gutter : 14,
       bottom: compact
           ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap * 2
-          : 132,
+          : 72,
       child: IgnorePointer(
         child: RepaintBoundary(
           child: ListenableBuilder(
@@ -1155,6 +1239,7 @@ extension _SceneUi on _VillageSceneState {
               if (type == null) return const SizedBox.shrink();
               return BuildingBrief(
                 type: type,
+                design: _placingDesign,
                 facts: _placeFacts,
                 reason: _placeReason,
                 noteSeed: _loreNoteSeed,

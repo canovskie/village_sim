@@ -1096,6 +1096,8 @@ List<Shot> buildShots() => <Shot>[
         alignment: Alignment.bottomCenter,
         child: CommandBar(
           agenda: 2,
+          catalogOpen: true,
+          buildModeActive: true,
           onDefter: _noop,
           onDivan: _noop,
           onRoster: _noop,

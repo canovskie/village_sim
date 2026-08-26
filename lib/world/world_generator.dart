@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../core/constants.dart';
 import '../systems/decor_population.dart';
+import '../systems/founding_site.dart';
 import 'decor_entity.dart';
 import 'mine_node.dart';
 import 'nature_entity.dart';
@@ -129,9 +130,8 @@ class WorldGenerator {
   /// yani oduncunun gideceği yerle aynı yöne; köyün ilk iki işi birbirine
   /// yakın durur ve harita "iki ayrı uca koşturma" hissi vermez.
   ///
-  /// Başlangıç bölgesinden DIŞLANMAZ (su/maden gibi): oyuncunun ilk dakikada
-  /// elinin altında birkaç çalı olmalı, yoksa "yapacak bir şey yok" boşluğu
-  /// aynen sürer.
+  /// Kuruluş çekirdeğinin hemen dışında kalır: ilk dakika erişilebilir olur
+  /// ama ocağın ve çadırların içine doğup yerleşimi boğmaz.
   List<BerryBush> _generateBerryBushes(
     Set<(int, int)> water,
     Set<(int, int)> treeTiles,
@@ -152,6 +152,7 @@ class WorldGenerator {
         !mineTiles.contains((c, r)) &&
         !reedTiles.contains((c, r)) &&
         !decorTiles.contains((c, r)) &&
+        !isFoundingCoreTile(c, r) &&
         !taken.contains((c, r));
 
     bool nearTree(int c, int r) {
@@ -403,7 +404,8 @@ class WorldGenerator {
           final r = (cy + sin(a) * d).round().clamp(0, kRows - 1);
           if (occupied.contains((c, r)) ||
               water.contains((c, r)) ||
-              reedTiles.contains((c, r))) {
+              reedTiles.contains((c, r)) ||
+              isFoundingCoreTile(c, r)) {
             continue;
           }
           occupied.add((c, r));
@@ -432,7 +434,8 @@ class WorldGenerator {
         final r = (cy + sin(a) * d).round().clamp(0, kRows - 1);
         if (occupied.contains((c, r)) ||
             water.contains((c, r)) ||
-            reedTiles.contains((c, r))) {
+            reedTiles.contains((c, r)) ||
+            isFoundingCoreTile(c, r)) {
           continue;
         }
         occupied.add((c, r));
@@ -645,6 +648,7 @@ class WorldGenerator {
         !mineTiles.contains((c, r)) &&
         !reedTiles.contains((c, r)) &&
         !landmarkTiles.contains((c, r)) &&
+        !isFoundingCoreTile(c, r) &&
         !occupied.contains((c, r));
 
     // Landmark adjacency helpers — tile'ın 8-komşusunda ağaç/su var mı?

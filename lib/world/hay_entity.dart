@@ -9,12 +9,20 @@ class HayEntity {
 
   /// Drop animasyonu için spawn zamanı.
   double spawnTime = 0;
+
   /// Tile içindeki yığın slotu (pile için, balya 1×1).
   int slotIndex = 0;
+
   /// Saman pile için "büyüklük" — kaç tutam bir araya geldi (renderer
   /// katman sayısını buna göre çoğaltır). Her hay processor pass biraz
   /// büyütebilir.
   int pileSize = 1;
+
+  /// Hasat demeti tarladan harmana taşınırken ayrılmış teslim alanı. Bu bilgi
+  /// harman kapasitesini pickup yürüyüşü sırasında da doğru tutar ve kayıt
+  /// taşımanın ortasında alınırsa demetin yüklemede kaybolmasını engeller.
+  int? targetHarmanCol;
+  int? targetHarmanRow;
 
   HayEntity({required this.type, required this.gridX, required this.gridY});
 

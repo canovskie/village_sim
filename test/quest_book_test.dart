@@ -29,6 +29,8 @@ QuestContext _ctx({
   int roadCount = 0,
   int connectedProductionSites = 0,
   int population = 0,
+  int reedBedCount = 0,
+  bool foundingTentIllnessTriggered = false,
   int houseCount = 0,
   int withheldHouses = 0,
   int pressuresWeathered = 0,
@@ -49,6 +51,8 @@ QuestContext _ctx({
   decorCount: 0,
   charterTier: charterTier,
   dayCount: dayCount,
+  reedBedCount: reedBedCount,
+  foundingTentIllnessTriggered: foundingTentIllnessTriggered,
   woodHarvested: woodHarvested,
   roadCount: roadCount,
   connectedProductionSites: connectedProductionSites,
@@ -397,7 +401,7 @@ void main() {
       final guided = QuestBook.all.where((q) => q.guided).toList();
       expect(guided.length, greaterThanOrEqualTo(3));
       expect(guided.length, lessThanOrEqualTo(5));
-      expect(guided.where((q) => q.tier == 0).length, 3);
+      expect(guided.where((q) => q.tier == 0).length, 4);
       expect(
         guided.where((q) => q.tier > 0).map((q) => q.id),
         orderedEquals(const ['firstPolicy']),
@@ -422,7 +426,9 @@ void main() {
       // Hedefsiz rehberli adım = ekranda hiçbir yeri göstermeyen bir spot.
       for (final q in QuestBook.all.where((q) => q.guided)) {
         expect(
-          q.buildTarget != null || q.uiTarget != QuestUi.none,
+          q.buildTarget != null ||
+              q.uiTarget != QuestUi.none ||
+              q.pointer != QuestPointer.none,
           isTrue,
           reason: '${q.id} rehberli ama gösterecek bir şeyi yok',
         );
@@ -438,10 +444,31 @@ void main() {
       );
     });
 
-    test('ilk gece ikinci güne çıkınca tamamlanır', () {
+    test('ilk gece ancak herkesin saz yatağı varsa ikinci gün tamamlanır', () {
       final q = QuestBook.all.firstWhere((q) => q.id == 'firstNight');
-      expect(q.check(_ctx(dayCount: 1)), isFalse);
-      expect(q.check(_ctx(dayCount: 2)), isTrue);
+      expect(
+        q.check(_ctx(dayCount: 1, population: 5, reedBedCount: 5)),
+        isFalse,
+      );
+      expect(q.check(_ctx(dayCount: 2, population: 5)), isFalse);
+      expect(
+        q.check(_ctx(dayCount: 2, population: 5, reedBedCount: 5)),
+        isTrue,
+      );
+    });
+
+    test('çadır görevi tek çadırla değil bütün nüfus barınınca biter', () {
+      final q = QuestBook.all.firstWhere((q) => q.id == 'tent');
+      final one = BuildingEntity(type: BuildingType.tent, col: 1, row: 1);
+      final two = BuildingEntity(type: BuildingType.tent, col: 3, row: 1);
+      expect(q.check(_ctx(population: 5, buildings: [one])), isFalse);
+      expect(q.check(_ctx(population: 4, buildings: [one, two])), isTrue);
+    });
+
+    test('öğretici çadır hastalığı ayrı bir kuruluş adımıdır', () {
+      final q = QuestBook.all.firstWhere((q) => q.id == 'tentIllness');
+      expect(q.check(_ctx()), isFalse);
+      expect(q.check(_ctx(foundingTentIllnessTriggered: true)), isTrue);
     });
 
     test('çadır ile ev AYNI görevi doldurmaz', () {
@@ -450,6 +477,23 @@ void main() {
       final tent = QuestBook.all.firstWhere((q) => q.id == 'tent');
       final house = QuestBook.all.firstWhere((q) => q.id == 'house');
       expect(tent.check, isNot(same(house.check)));
+    });
+
+    test('kuruluş sırası sazdan çadıra, temellerden hastalık ve eve gider', () {
+      final ids = tier0().map((q) => q.id).toList();
+      expect(
+        ids,
+        orderedEquals(const [
+          'firepit',
+          'firstNight',
+          'tent',
+          'lumber',
+          'well',
+          'farm',
+          'tentIllness',
+          'house',
+        ]),
+      );
     });
 
     test('oduncu görevi kulübe dikilince değil ilk kütük inince biter', () {

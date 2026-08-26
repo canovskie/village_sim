@@ -153,6 +153,8 @@ extension _SceneTick on _VillageSceneState {
     _tickBuildingSystems(dt, starvation);
     _maybeRebuildSpatialCache(dt);
     _tickEntities(dt);
+    _tickFoundingCouncil(raw);
+    _tickFoundingFirstNight(raw);
     _tickMerchants(dt); // arada gelip giden gezgin tüccar (ambiyans)
     _tickPostMotion(dt);
     _tickDerivedAndMeta(dt);
@@ -494,6 +496,12 @@ extension _SceneTick on _VillageSceneState {
       // Oyuncu elinde tuttuğu köylü dondurulur (tutup-bırak) — AI hareketi
       // imleci ezmesin; bırakınca normale döner.
       if (identical(v, _draggedVillager)) continue;
+      // Kuruluş halkası kendi deterministik yürüyüşünü aşağıdaki
+      // `_tickFoundingCouncil` içinde sürer. Normal AI aynı gövdeye ikinci
+      // hedef verirse adım kesik kesik görünür.
+      if (_foundingCouncilPending && _foundingCouncilTargets.containsKey(v)) {
+        continue;
+      }
       v.update(
         npcDt,
         kCols,
@@ -613,12 +621,13 @@ extension _SceneTick on _VillageSceneState {
     for (final t in _farmTiles) {
       t.update(farmDt, season);
     }
+    _ensureHarmanSite();
     // Çiftçilik artık atanmış köylüler eliyle (_runFarmer, scene_jobs) —
     // kuyu/hasat/ekim/sulama döngüsü orada. Hasat hay'ini de o üretir.
     // Yeni balyanın spawnTime'ı gerçek sahne zamanı olsun: aksi hâlde varsayılan
     // 0 yüzünden oyun ilerledikten sonra oluşan balya drop/settle animasyonunu
     // atlayıp harmanda bir anda beliriyordu.
-    processHayPiles(_hayEntities, _farmTiles, time: _time);
+    processHayPiles(_hayEntities, _harmanSites, time: _time);
     _tickBaleStallWarning(dt);
     // Oduncu kesimi artık atanmış köylü (scene_jobs: _runWoodcutter) — kesip
     // odun kütüğü bırakır. Kereste kampının BÖLGE YÖNETİMİ (ağaç işaretleme +
@@ -646,7 +655,9 @@ extension _SceneTick on _VillageSceneState {
       }
     }
     // Devrilmesi tamamlananlar: wild → orman geri çekilir + tile açılır;
-    // her kesim dünyada devrilmiş gövde + küçük bir kütük dibi izi bırakır.
+    // kesilen odun kaynak olarak taşındığı için dünyada yalnız küçük dip izi
+    // kalır. Kalıcı dev gövde bırakmak birkaç kesimde köyü kütük tarlasına
+    // çeviriyordu.
     // Scatter ağaçta
     // doğa-dostu politikada yakına fidan gelir. (Henüz devrilenler listede
     // kalır, çizilmeye devam eder.)
@@ -674,25 +685,6 @@ extension _SceneTick on _VillageSceneState {
             jitterX: 0,
             jitterY: 0,
             swaySeed: f.col * 17 + f.row * 31,
-          ),
-        );
-      }
-      // Devrilen gövde kesimden sonra dünyada kalır; stump ile aynı tile'da
-      // çizildiğinde log üstte görünür ve kesim sonucu anlık bir "pop" yerine
-      // yerin gerçekten değiştiği hissini verir.
-      if (!_decor.any(
-        (d) =>
-            d.col == f.col && d.row == f.row && d.kind == DecorKind.fallenLog,
-      )) {
-        _appendDecor(
-          DecorEntity(
-            col: f.col,
-            row: f.row,
-            kind: DecorKind.fallenLog,
-            variant: (f.col * 31 + f.row * 17).abs() % 2,
-            jitterX: 0,
-            jitterY: 0,
-            swaySeed: f.col * 31 + f.row * 17,
           ),
         );
       }
@@ -783,6 +775,9 @@ extension _SceneTick on _VillageSceneState {
       // _obstacles: su + maden + solid bina. Separation NPC'leri buraya
       // itmesin (eski "waterTiles" param adı geçici; pratikte tüm engeller).
       waterTiles: _obstacles,
+      fixedVillagers: _foundingCouncilPending
+          ? _foundingCouncilTargets.keys.toSet()
+          : const {},
     );
 
     // Hareket yumuşatma — renderX/Y ve moveIntensity.

@@ -41,6 +41,16 @@ bool isFlowerDecorKind(DecorKind kind) => switch (kind) {
 /// gereken alçak flora.
 bool isGroundFloraDecorKind(DecorKind kind) => isFlowerDecorKind(kind);
 
+/// NPC rotasında gerçekten gövdesi olan doğal dekorlar.
+///
+/// Çiçek, mantar, çakıl ve kütük dibi zeminin parçası gibi davranır; yalnız
+/// büyük devrik gövde ile çalı karakteri fiziksel olarak dolaştırır. Böylece
+/// "dekor" tek başına engel anlamına gelmez.
+bool isBlockingDecorKind(DecorKind kind) => switch (kind) {
+  DecorKind.fallenLog || DecorKind.bushSmall => true,
+  _ => false,
+};
+
 /// [candidate] karesi, [groundFloraTiles] içindeki bütün karelerden Chebyshev
 /// ölçüsünde [radius]'tan daha uzaktaysa `true` döner.
 ///

@@ -44,7 +44,7 @@ class _ModeButtonState extends State<ModeButton> {
         onTap: () {
           widget.onTap();
           if (useCompactGameUi(context)) {
-            const MobileCatalogCloseNotification().dispatch(context);
+            const BuildCatalogCloseNotification().dispatch(context);
           }
         },
         child: AnimatedContainer(

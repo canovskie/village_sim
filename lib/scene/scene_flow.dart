@@ -6,7 +6,7 @@ part of '../main.dart';
 extension _SceneFlow on _VillageSceneState {
   static const double _kFlowScan = 0.5;
 
-  /// OCAK → ÇADIR → ODUNCU zinciri gerçekten dönene kadar oyun kuruluş
+  /// OCAK → SAZ GECE → ÇADIRLAR → ODUNCU zinciri gerçekten dönene kadar oyun kuruluş
   /// modundadır. Bu bir save bayrağı değil, dünyanın gerçek durumundan
   /// türetilir; eski kayıtlar ve yarıda kapatılan oyunlar doğru yerden devam eder.
   bool get _foundingModeActive =>
@@ -41,6 +41,8 @@ extension _SceneFlow on _VillageSceneState {
       // "ılımlı" = henüz bir duruş yok demek.
       regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
       dayCount: _dayCount,
+      reedBedCount: _reedBeds.length,
+      foundingTentIllnessTriggered: _foundingTentIllnessTriggered,
       // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
       loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
       withheldHouses: _houseCountWhere((s) => s.withholds),
@@ -163,6 +165,9 @@ extension _SceneFlow on _VillageSceneState {
       if (_completedQuests.contains(q.id)) continue;
       if (!q.check(ctx)) continue;
       _completedQuests.add(q.id);
+      if (q.id == 'tent' && _foundingTentsReadyDay == 0) {
+        _foundingTentsReadyDay = _dayCount;
+      }
       _grantVisualReward(q.reward);
       AudioManager.instance.playSfx(Sfx.bellChime);
       // GÖREVİ İSTEYEN KİŞİ KARŞILIK VERSİN — görev listesi bir alışveriş
@@ -184,12 +189,12 @@ extension _SceneFlow on _VillageSceneState {
         // yönetim kapıları aynı karede açılır. Ayrı bir modal yok;
         // kontrol devri dünyanın akmayı sürdürdüğü tek bir cümledir.
         _chronicle(
-          'Kuruluş tamamlandı; ilk odun indi ve köy kendi işini çevirmeye başladı.',
+          'İlk odun indi; kuruluşun üretim temeli atıldı.',
           icon: '🌿',
           milestone: true,
         );
         _showNotification(
-          '🌿 Köy kendi kendine dönüyor — yönetim artık sende.',
+          '🌿 Odun akışı başladı — şimdi su ve tarla temelini at.',
         );
       }
       break; // bir scan'de bir ödül → sürekli, sakin akış
@@ -280,6 +285,17 @@ extension _SceneFlow on _VillageSceneState {
             ? null
             : (fp.col + fp.cols / 2.0, fp.row + fp.rows / 2.0);
 
+      case QuestPointer.reedBeds:
+        final bed = _reedBeds.firstOrNull;
+        if (bed != null) {
+          _stepBeacon = (bed.gridX, bed.gridY);
+        } else {
+          final fp = _firepitBuilding;
+          _stepBeacon = fp == null
+              ? null
+              : (fp.col + fp.cols / 2.0, fp.row + fp.rows / 2.0);
+        }
+
       case QuestPointer.villageCenter:
         _stepBeacon = _villageHeart();
     }
@@ -310,7 +326,14 @@ extension _SceneFlow on _VillageSceneState {
         (b) => b.type == o.type && b.col == o.col && b.row == o.row,
       );
       if (!exists) {
-        _buildings.add(BuildingEntity(type: o.type, col: o.col, row: o.row));
+        _buildings.add(
+          BuildingEntity(
+            type: o.type,
+            col: o.col,
+            row: o.row,
+            design: o.design,
+          ),
+        );
       }
       o.progress = 1.0;
       o.completed = true;
@@ -348,6 +371,12 @@ extension _SceneFlow on _VillageSceneState {
   BuildingType? get _stepBuildTarget {
     final t = _stepCache?.quest.buildTarget;
     if (t == null) return null;
+    if (t == BuildingType.tent && _stepCache?.quest.id == 'tent') {
+      final capacity = _buildings
+          .where((b) => b.type == BuildingType.tent)
+          .fold(0, (sum, b) => sum + (b.fn?.housingCapacity ?? 0));
+      return capacity >= _villagers.length ? null : t;
+    }
     if (_buildings.any((b) => b.type == t)) return null;
     return t;
   }
@@ -380,7 +409,7 @@ extension _SceneFlow on _VillageSceneState {
     if (identical(_activeCutscene, c)) return;
     // Capture harness'ı sahneyi çeker; kilometre taşı sinematiği araya girerse
     // kare köyü değil diyalog ekranını gösterir (güncesi yine de yazılsın).
-    if (kCaptureMode) {
+    if (kCaptureMode && !kCaptureFoundingCouncil) {
       if (logEntry != null) _chronicle(logEntry, icon: '🎬', milestone: true);
       return;
     }

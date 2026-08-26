@@ -216,6 +216,13 @@ extension _SceneWorld on _VillageSceneState {
     for (final site in _landmarks) {
       _obstacles.add((site.col, site.row));
     }
+    // Yalnız hacimli doğal dekor fiziksel engeldir. Çiçek/mantar/çakıl rota
+    // topolojisine karışmaz; dev kütüğün içinden ise kimse geçmez.
+    for (final decor in _decor) {
+      if (!decor.crushed && isBlockingDecorKind(decor.kind)) {
+        _obstacles.add((decor.col, decor.row));
+      }
+    }
     // Solid binalar — BuildingMeta.walkable=false olanlar NPC engel sayar.
     // (walkable: firepit, well, lamppost, woodenHouse — etrafında/içinde
     // dolaşılanlar). Pending order'lar engel SAYILMAZ — builder içine girmeli.
@@ -234,10 +241,25 @@ extension _SceneWorld on _VillageSceneState {
       _softObs.add((r.col, r.row));
       _softObs.add((r.col2, r.row2));
     }
+    for (final tile in _farmTiles) {
+      _softObs.add((tile.col, tile.row));
+    }
+    for (final site in _harmanSites) {
+      _softObs.addAll(site.tiles);
+    }
+    for (final bed in _reedBeds) {
+      _softObs.add((bed.gridX.floor(), bed.gridY.floor()));
+    }
+    for (final grave in _graves) {
+      _softObs.add((grave.col.floor(), grave.row.floor()));
+    }
 
     _forbiddenForTrees.clear();
     for (final t in _farmTiles) {
       _forbiddenForTrees.add((t.col, t.row));
+    }
+    for (final site in _harmanSites) {
+      _forbiddenForTrees.addAll(site.tiles);
     }
     for (final b in _buildings) {
       for (int c = b.col; c < b.col + b.cols; c++) {
@@ -265,6 +287,9 @@ extension _SceneWorld on _VillageSceneState {
     for (final r in _reeds) {
       _forbiddenForTrees.add((r.col, r.row));
       _forbiddenForTrees.add((r.col2, r.row2));
+    }
+    for (final bed in _reedBeds) {
+      _forbiddenForTrees.add((bed.gridX.floor(), bed.gridY.floor()));
     }
 
     // Squeeze tile'ları: walkable ama karşılıklı (N+S ya da E+W) komşuları
@@ -298,6 +323,7 @@ extension _SceneWorld on _VillageSceneState {
     _lotuses.clear();
     _reeds.clear();
     _reedBeds.clear();
+    _foundingBedTargets.clear();
     _berryBushes.clear();
     _cookedMeals = 0;
     _replaceDecor(const []);
@@ -305,6 +331,7 @@ extension _SceneWorld on _VillageSceneState {
     _mineNodes.clear();
     _landmarks.clear();
     _farmTiles.clear();
+    _harmanSites.clear();
     _graves.clear();
     _buildings.clear();
     _orders.clear();
@@ -317,6 +344,10 @@ extension _SceneWorld on _VillageSceneState {
     _anchorSystem.rebuild(const []); // tüm slot rezervasyonlarını sil
     _cows.clear();
     _villagers.clear();
+    _foundingCouncilPending = false;
+    _foundingCouncilFormed = false;
+    _foundingCouncilHold = 0.0;
+    _foundingCouncilTargets.clear();
     // Yeni harita → kafile yeni bir yandan girsin (giriş noktası bu üretimde
     // bir kez seçilir; kuruluş kararı kadroyu değiştirirse AYNI nokta kullanılır).
     _caravanEntrySet = false;
@@ -343,6 +374,7 @@ extension _SceneWorld on _VillageSceneState {
     // Yeni köy hiçbir zanaat bilmez — yalnız ortak survival kiti açık. Gerisi
     // köyün insanlarından organik doğar (çağrı/birikim/dışarıdan).
     _knownCrafts.clear();
+    _specialistOffersClaimed = 0;
     _ledgerSection = null;
     _mobileBuildCatalogOpen = false;
     _lawRitual = null;
@@ -352,15 +384,16 @@ extension _SceneWorld on _VillageSceneState {
     _governanceLegacy = 0;
 
     _stockpile.clear();
-    // Başlangıç kaynak paketi — oyuncunun erken oyun sıkışmaması için.
-    // Ateş yeri ücretsiz; sonrasında oduncu kulübesi (12 odun) veya bir ev
-    // (18 odun + 4 taş) ya da kuyu (4 odun + 8 taş) kurabilir.
-    // 25/15/25: ilk 1-2 binayı kurmak + ilk günü atlatmak için yeterli.
+    // Başlangıç kaynak paketi — kuruluşta kaynak bekleme boşluğu olmasın.
+    // Ateş yeri ücretsiz; 56/16 odun-taş üç adet iki kişilik çadır + oduncu
+    // kulübesi + kuyu + ilk evi art arda karşılar ve ateşe küçük pay bırakır.
+    // Oduncu yine ilk kütüğü indirmek zorundadır; üretim öğretilir ama oyuncu
+    // kuyudan sonra dakikalarca ev malzemesi seyretmez.
     // YENİ OYUNDA bunu kuruluş kararı EZER (bkz. FoundingChoice / açılış
     // sinematiğinin ilk kapısı); burada duran değer showcase/referans/dev
     // haritalarının tabanı ve sinematik atlanırsa gelen varsayılanla aynıdır.
-    _stockpile.wood = 25;
-    _stockpile.stone = 15;
+    _stockpile.wood = 56;
+    _stockpile.stone = 16;
     _stockpile.food = 25;
     _hasFire = false;
     _firepitBuilding = null;
@@ -370,6 +403,10 @@ extension _SceneWorld on _VillageSceneState {
     // Kilometre taşı bayrakları
     _lastPopMilestone = 0;
     _firstReedBedShown = false;
+    _foundingFirstNightFastForwarded = false;
+    _foundingFirstNightSleepGlimpse = 0.0;
+    _foundingTentsReadyDay = 0;
+    _foundingTentIllnessTriggered = false;
     // Olay & gün durumunu sıfırla
     _eventTimer = kEventFirstDelay;
     _eventMorale = 0.0;

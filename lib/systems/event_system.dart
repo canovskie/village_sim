@@ -17,6 +17,7 @@ abstract final class EventIds {
   static const caravan = 'caravan';
   static const bounty = 'bounty';
   static const accord = 'accord';
+  static const specialistCaravan = 'specialistCaravan';
 }
 
 /// Olay kategorisi — UI banner rengi ve filtre için.

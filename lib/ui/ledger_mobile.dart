@@ -50,13 +50,7 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
       if (!widget.hidden.contains(s)) s,
   ];
 
-  Color _tone(LedgerSection section) => switch (section) {
-    LedgerSection.divan => AppUi.accent,
-    LedgerSection.kanun => AppUi.gold,
-    LedgerSection.nufus => AppUi.sage,
-    LedgerSection.tuzuk => AppUi.rust,
-    LedgerSection.kronik => const Color(0xFFB079D4),
-  };
+  Color _tone(LedgerSection section) => ledgerSectionTone(section);
 
   @override
   void didUpdateWidget(_LedgerBoardShell old) {
@@ -91,18 +85,8 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
           ],
         ),
         Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  _tone(_sec).withValues(alpha: 0.075),
-                  Colors.transparent,
-                  Colors.transparent,
-                ],
-              ),
-            ),
+          child: _LedgerPageField(
+            tone: _tone(_sec),
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 170),
               switchInCurve: Curves.easeOutCubic,

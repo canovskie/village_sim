@@ -364,6 +364,9 @@ extension _SceneEvents on _VillageSceneState {
     EventChoice c, {
     bool timedOut = false,
   }) {
+    if (base.id == EventIds.specialistCaravan) {
+      _acceptSpecialistChoice(c);
+    }
     if (c.foodDelta != 0) {
       _stockpile.food = (_stockpile.food + c.foodDelta).clamp(0, 1 << 30);
     }

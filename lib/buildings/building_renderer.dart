@@ -9,20 +9,58 @@ import '../rendering/flame_renderer.dart';
 import '../rendering/smoke_renderer.dart';
 import '../rendering/water_shimmer_renderer.dart';
 import '../world/season.dart';
+import 'building_design.dart';
 import 'building_type.dart';
 
 class BuildingRenderer {
   // ── Sprite önbelleği ────────────────────────────────────────────────────────
   static final Map<BuildingType, ui.Image> _cache = {};
   static final Map<BuildingType, ui.Image> _winterCache = {};
+  static final Map<(BuildingType, BuildingDesign), ui.Image> _designCache = {};
+  static final Map<(BuildingType, BuildingDesign), ui.Image> _designThumbnails =
+      {};
 
   /// Değirmen iki katmanlıdır: kanatsız gövde normal bina cache'inde, rotor
   /// merkez etrafında ayrı döner. Yüklenemezse eski tek-parça mill.png güvenli
   /// fallback olarak cache'te kalır.
   static ui.Image? _millRotor;
 
-  /// Panel thumbnail'leri — yükleme sırasında 48px genişliğe küçültülmüş
+  /// Panel önizlemeleri. Ayrı, düşük çözünürlüklü kopya üretmek yerine zaten
+  /// bellekte olan tam çözünürlüklü yumuşatılmış sprite'ı paylaşır. Böylece
+  /// büyük katalog kartlarında 32px görsel büyütülüp bulanıklaştırılmaz; ek
+  /// texture belleği ve ikinci decode/blur geçişi de oluşmaz.
   static final Map<BuildingType, ui.Image> thumbnails = {};
+
+  static ui.Image? thumbnailFor(
+    BuildingType type, [
+    BuildingDesign design = BuildingDesign.original,
+  ]) =>
+      _designThumbnails[(type, normalizeBuildingDesign(type, design))] ??
+      thumbnails[type];
+
+  /// Katalog/portre kırpımları, normalize kaynak koordinatlarında. Yalnız
+  /// gerçekten fazla şeffaf tuval taşıyan sprite'lar burada; uzun ve ince ama
+  /// içeriği dolu binalar (çan kulesi/fener gibi) yapay biçimde büyütülmez.
+  /// Dünya renderer'ı bu rect'leri kullanmaz, dolayısıyla sahnedeki footprint
+  /// ve groundY hizaları değişmez.
+  static const Map<BuildingType, Rect> _thumbnailCrops = {
+    BuildingType.beehive: Rect.fromLTRB(0.03, 0.07, 0.97, 0.93),
+    BuildingType.belltower: Rect.fromLTRB(0.07, 0.02, 0.93, 0.98),
+    BuildingType.caravanserai: Rect.fromLTRB(0.025, 0.19, 0.975, 0.81),
+    BuildingType.shrine: Rect.fromLTRB(0.06, 0.025, 0.94, 0.975),
+    BuildingType.tailor: Rect.fromLTRB(0.025, 0.02, 0.975, 0.99),
+    BuildingType.mill: Rect.fromLTRB(0.0, 0.0, 0.90, 1.0),
+  };
+
+  static Rect thumbnailSourceRect(BuildingType type, ui.Image image) {
+    final n = _thumbnailCrops[type] ?? const Rect.fromLTRB(0, 0, 1, 1);
+    return Rect.fromLTRB(
+      n.left * image.width,
+      n.top * image.height,
+      n.right * image.width,
+      n.bottom * image.height,
+    );
+  }
 
   // ── Static Paint havuzu ────────────────────────────────────────────────────
   // Sprite paint AssetStyle'dan — merkezi yumuşaklık konfigürasyonu.
@@ -36,6 +74,21 @@ class BuildingRenderer {
     await _loadSprite(
       BuildingType.woodenHouse,
       'assets/buildings/minihouse.png',
+    );
+    await _loadDesignSprite(
+      BuildingType.woodenHouse,
+      BuildingDesign.terracotta,
+      'assets/buildings/minihouse_terracotta.png',
+    );
+    await _loadDesignSprite(
+      BuildingType.woodenHouse,
+      BuildingDesign.garden,
+      'assets/buildings/minihouse_garden.png',
+    );
+    await _loadDesignSprite(
+      BuildingType.woodenHouse,
+      BuildingDesign.artisan,
+      'assets/buildings/minihouse_artisan.png',
     );
     await _loadSprite(
       BuildingType.stoneHouseBlue,
@@ -209,14 +262,29 @@ class BuildingRenderer {
       // Tam boyut sprite — yükleme anında bir kez yumuşatılır
       final codec = await ui.instantiateImageCodec(raw);
       final frame = await codec.getNextFrame();
-      _cache[type] = await AssetStyle.softenAtLoad(frame.image);
-
-      // 32px thumbnail (panel preview için) — bu da yumuşatılır
-      final thumbCodec = await ui.instantiateImageCodec(raw, targetWidth: 32);
-      final thumbFrame = await thumbCodec.getNextFrame();
-      thumbnails[type] = await AssetStyle.softenAtLoad(thumbFrame.image);
+      final sprite = await AssetStyle.softenAtLoad(frame.image);
+      _cache[type] = sprite;
+      thumbnails[type] = sprite;
     } catch (e) {
       debugPrint('BuildingRenderer: $path yüklenemedi — $e');
+    }
+  }
+
+  static Future<void> _loadDesignSprite(
+    BuildingType type,
+    BuildingDesign design,
+    String path,
+  ) async {
+    try {
+      final data = await rootBundle.load(path);
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      final sprite = await AssetStyle.softenAtLoad(frame.image);
+      final key = (type, normalizeBuildingDesign(type, design));
+      _designCache[key] = sprite;
+      _designThumbnails[key] = sprite;
+    } catch (e) {
+      debugPrint('BuildingRenderer: tasarım sprite yüklenemedi — $path — $e');
     }
   }
 
@@ -270,14 +338,21 @@ class BuildingRenderer {
     double deliveryPulse = 0.0,
     int deliveryTally = 0,
     Season season = Season.spring,
+    BuildingDesign design = BuildingDesign.original,
 
     /// Pencere/fener ışığının kısılma çarpanı (bkz. [BuildingEntity.windowGlow]).
     /// Konutta sakinler uyudukça 0'a iner → evin camı söner. Konut olmayan
     /// binalar 1.0 geçer, davranışları değişmez.
     double windowGlow = 1.0,
   }) {
+    final normalizedDesign = normalizeBuildingDesign(type, design);
+    final designSprite = normalizedDesign == BuildingDesign.original
+        ? null
+        : _designCache[(type, normalizedDesign)];
     final img =
-        (season == Season.winter ? _winterCache[type] : null) ?? _cache[type];
+        designSprite ??
+        (season == Season.winter ? _winterCache[type] : null) ??
+        _cache[type];
     final meta = kBuildingMeta[type];
     // Genel güvenlik fallback'i: PNG yüklenememiş / bilinmeyen bina → basit
     // izometrik kutu placeholder (footprint'e oturur, türe göre renk + harf).

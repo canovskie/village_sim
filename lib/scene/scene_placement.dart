@@ -68,6 +68,7 @@ extension _ScenePlacement on _VillageSceneState {
     ) => c1 < c2 + w2 && c1 + w1 > c2 && r1 < r2 + h2 && r1 + h1 > r2;
 
     final farmSet = {for (final t in _farmTiles) (t.col, t.row)};
+    final harmanSet = {for (final site in _harmanSites) ...site.tiles};
     final mineSet = {
       for (final n in _mineNodes)
         if (!n.isDepleted) (n.col, n.row),
@@ -89,6 +90,9 @@ extension _ScenePlacement on _VillageSceneState {
             return 'Vahşi orman — önce ağaçları temizleyin';
           }
           if (farmSet.contains((c, r))) return 'Tarlanın üzerine kurulamaz';
+          if (harmanSet.contains((c, r))) {
+            return 'Harman yerinin üzerine kurulamaz';
+          }
           if (treeSet.contains((c, r))) return 'Ağacın üzerine kurulamaz';
           if (reedSet.contains((c, r))) return 'Sazlığın üzerine kurulamaz';
           if (mineSet.contains((c, r))) {
@@ -109,6 +113,9 @@ extension _ScenePlacement on _VillageSceneState {
         for (int r = row; r < row + meta.rows; r++) {
           if (_waterTiles.contains((c, r))) return 'Suyun üzerine kurulamaz';
           if (farmSet.contains((c, r))) return 'Tarlanın üzerine kurulamaz';
+          if (harmanSet.contains((c, r))) {
+            return 'Harman yerinin üzerine kurulamaz';
+          }
           if (treeSet.contains((c, r))) return 'Ağacın üzerine kurulamaz';
           if (reedSet.contains((c, r))) return 'Sazlığın üzerine kurulamaz';
           if (mineSet.contains((c, r))) hasMine = true;
@@ -410,17 +417,49 @@ extension _ScenePlacement on _VillageSceneState {
     final r1 = start.$2 < end.$2 ? start.$2 : end.$2;
     final r2 = start.$2 < end.$2 ? end.$2 : start.$2;
     final existing = {for (final t in _farmTiles) (t.col, t.row)};
+    final blocked = <(int, int)>{
+      for (final road in _roadSystem.all) (road.col, road.row),
+      for (final road in _roadOrders)
+        if (!road.completed) (road.col, road.row),
+      for (final tree in _trees)
+        if (!tree.isFelled) (tree.col, tree.row),
+      for (final mine in _mineNodes)
+        if (!mine.isDepleted) (mine.col, mine.row),
+      for (final reed in _reeds) ...[
+        (reed.col, reed.row),
+        (reed.col2, reed.row2),
+      ],
+      for (final bush in _berryBushes) (bush.col, bush.row),
+    };
+    for (final building in _buildings) {
+      for (int c = building.col; c < building.col + building.cols; c++) {
+        for (int r = building.row; r < building.row + building.rows; r++) {
+          blocked.add((c, r));
+        }
+      }
+    }
+    for (final order in _orders) {
+      if (order.completed) continue;
+      final meta = kBuildingMeta[order.type]!;
+      for (int c = order.col; c < order.col + meta.cols; c++) {
+        for (int r = order.row; r < order.row + meta.rows; r++) {
+          blocked.add((c, r));
+        }
+      }
+    }
     setStateHere(() {
       for (int c = c1; c <= c2; c++) {
         for (int r = r1; r <= r2; r++) {
           if (!existing.contains((c, r)) &&
+              !blocked.contains((c, r)) &&
               !_waterTiles.contains((c, r)) &&
               !_isWilderness(c, r) &&
+              !_harmanSites.any((site) => site.containsTile(c, r)) &&
               !_landmarks.any((s) => s.col == c && s.row == r)) {
             _farmTiles.add(FarmTile(c, r));
-            // Tarla bu zeminin yeni sahibidir; eski çiçek/kütük ekin
+            // Tarla bu zeminin yeni sahibidir; dekor ve geçici yatak ekin
             // animasyonunun üstünde kalamaz.
-            _clearDecorTile(c, r);
+            _claimGroundTile(c, r);
           }
         }
       }
@@ -429,17 +468,17 @@ extension _ScenePlacement on _VillageSceneState {
       _farmEnd = null;
       _farmTapAnchor = null;
     });
+    _spatialTimer = 0;
+    _pathContext.bumpVersion();
     // Tarla çizmek ARTIK çiftçi doğurmaz — saha eli sayısı köyün çiftçi
     // kadrosundan + işgücü politikasından türer (_syncFarmerWorkforce, tick).
+    _ensureHarmanSite();
   }
 
   /// Tek tık yerleştirme: bir bina kur, ardından seçimi BIRAK. Çoklu dikim
   /// yalnız basılı-tut (long-press) ile yapılır → _onCanvasLongPress* akışı.
   void _tryPlace(Offset pos) {
     if (_placing == null) return;
-    // Sinematik sonrası kısa kilit: "ilerle" için atılan artçı dokunuş ateşi
-    // kazara kurmasın (oyuncu yeri bilinçli seçsin).
-    if (_time < _placeGuardUntil) return;
     final tile = _toTile(pos);
     if (tile == null) return;
     final placed = _doPlace(tile.$1, tile.$2, silent: false);
@@ -448,6 +487,7 @@ extension _ScenePlacement on _VillageSceneState {
     if (placed && _placing != null) {
       setStateHere(() {
         _placing = null;
+        _placingDesignManual = false;
         _ghost = null;
         _placeReason = null;
         _placeFacts = null;
@@ -461,6 +501,7 @@ extension _ScenePlacement on _VillageSceneState {
   /// yönetir; tek istisna ateş yeri (tekil → kurulunca burada bırakılır).
   bool _doPlace(int c, int r, {required bool silent}) {
     if (_placing == null) return false;
+    final design = normalizeBuildingDesign(_placing!, _placingDesign);
     // Ateş yeri köyün kalbi → TEKİLDİR; bir tane varken ikincisi kurulamaz.
     // Bu aynı zamanda olası çift-tetik (tek dokunuşun hem tap hem long-press
     // olarak çözülmesi) durumunda ikinci yerleştirme + ikinci "ateş yakma"
@@ -492,13 +533,19 @@ extension _ScenePlacement on _VillageSceneState {
 
       // Tile şantiye emri verildiği anda sahiplenilir. Tamamlanmayı
       // beklersek çiçek scaffold/toz/çekiç animasyonunun üstünde kalır.
-      _clearDecorFootprint(c, r, meta.cols, meta.rows);
+      _claimGroundFootprint(c, r, meta.cols, meta.rows);
 
       if (instant) {
-        final b = BuildingEntity(type: _placing!, col: c, row: r);
+        final b = BuildingEntity(
+          type: _placing!,
+          col: c,
+          row: r,
+          design: design,
+        );
         _buildings.add(b);
         _onBuildingCompleted(
-          BuildOrder(type: _placing!, col: c, row: r)..completed = true,
+          BuildOrder(type: _placing!, col: c, row: r, design: design)
+            ..completed = true,
         );
         _pathContext.bumpVersion();
         // Anlık kurulum order completion loop'unu atlar → anchor slot'larını
@@ -506,7 +553,9 @@ extension _ScenePlacement on _VillageSceneState {
         _anchorSystem.rebuild(_buildings);
         _rebuildBeeSwarms();
       } else {
-        _orders.add(BuildOrder(type: _placing!, col: c, row: r));
+        _orders.add(
+          BuildOrder(type: _placing!, col: c, row: r, design: design),
+        );
         // Şantiye kuruldu — aletler çıkar. Bitiş sesinin (buildDone) karşılığı:
         // inşaatın başı da duyulsun, yoksa iş yalnız biterken var oluyor.
         AudioManager.instance.playSfx(Sfx.buildStart);
@@ -514,6 +563,15 @@ extension _ScenePlacement on _VillageSceneState {
 
       // Ateş tekildir → kurulunca seçim hemen bırakılır.
       if (isFirepit) _placing = null;
+      if (!_placingDesignManual && !isFirepit) {
+        // Aynı türü sürükleyerek art arda kurarken görünüş düz enum sırasıyla
+        // dönmesin. Az önce eklenen bina/emir sayıya dahil; sıradaki ordinal
+        // deterministik hash havuzundan yeni mimariyi seçer.
+        final nextOrdinal =
+            _buildings.where((b) => b.type == _placing).length +
+            _orders.where((o) => !o.completed && o.type == _placing).length;
+        _placingDesign = automaticBuildingDesign(_placing!, nextOrdinal);
+      }
       _ghost = null;
       _placeReason = null;
       _placeFacts = null;
@@ -591,6 +649,8 @@ extension _ScenePlacement on _VillageSceneState {
       // Taşı: aynı türü yeniden seçili getir + o kategoriyi aç.
       if (reselect) {
         _placing = b.type;
+        _placingDesign = b.design;
+        _placingDesignManual = true;
         _ghost = null;
         _placeReason = null;
         _placeFacts = null;
@@ -635,6 +695,9 @@ extension _ScenePlacement on _VillageSceneState {
     }
     for (final site in _landmarks) {
       tiles.add((site.col, site.row));
+    }
+    for (final site in _harmanSites) {
+      tiles.addAll(site.tiles);
     }
     return tiles;
   }
@@ -706,7 +769,7 @@ extension _ScenePlacement on _VillageSceneState {
         );
         // Yol emriyle birlikte zemin sahiplenilir; builder animasyonu eski
         // dekorun içinden geçmez.
-        _clearDecorTile(tile.$1, tile.$2);
+        _claimGroundTile(tile.$1, tile.$2);
         laid++;
       }
       _clearRoadDrag();

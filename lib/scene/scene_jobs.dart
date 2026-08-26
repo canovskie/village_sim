@@ -1057,7 +1057,14 @@ extension _SceneJobs on _VillageSceneState {
     if (bo.progress >= 1.0) {
       bo.completed = true;
       AudioManager.instance.playSfx(Sfx.buildDone);
-      _buildings.add(BuildingEntity(type: bo.type, col: bo.col, row: bo.row));
+      _buildings.add(
+        BuildingEntity(
+          type: bo.type,
+          col: bo.col,
+          row: bo.row,
+          design: bo.design,
+        ),
+      );
       if (bo.crew > 0) bo.crew--;
       job.claim = null;
       job.phase = 0;
@@ -1089,6 +1096,7 @@ extension _SceneJobs on _VillageSceneState {
     switch (job.phase) {
       case 0: // karar
         if (frozen) return; // kış molası (sync kadroyu zaten 0'a çeker)
+        _ensureHarmanSite();
         // Sulama turu — Su Yolu Fermanı + boş kuyu slot'u + büyüyen ekin.
         if (irrigate &&
             job.cooldown <= 0 &&
@@ -1112,11 +1120,15 @@ extension _SceneJobs on _VillageSceneState {
         // Önce hasat: olgun ekin bekletilmez.
         final best = _nearestFarmTile(
           v,
-          (t) => t.readyToHarvest && !t.beingHarvested,
+          (t) =>
+              t.readyToHarvest &&
+              !t.beingHarvested &&
+              _harmanHasRoomNear(t.col + 0.5, t.row + 0.5),
         );
         if (best != null) {
           best.beingHarvested = true;
           job.claim = best;
+          job.claim2 = _nearestHarman(best.col + 0.5, best.row + 0.5);
           job.phase = 3;
           return;
         }
@@ -1159,6 +1171,7 @@ extension _SceneJobs on _VillageSceneState {
 
       case 3: // hasada yürü
         if (target == null) {
+          job.claim2 = null;
           job.phase = 0;
           return;
         }
@@ -1175,14 +1188,19 @@ extension _SceneJobs on _VillageSceneState {
         job.phaseAnim = (job.phaseAnim + dt * 2 * pi * 1.4) % (2 * pi);
         job.reportCycle(job.timer, kFarmHarvestDuration);
         if (job.timer >= kFarmHarvestDuration) {
-          final hc = target?.col ?? v.gridX.round();
-          final hr = target?.row ?? v.gridY.round();
+          final site = job.claim2 is HarmanSite
+              ? job.claim2 as HarmanSite
+              : _nearestHarman(v.gridX, v.gridY);
+          // İki çiftçi son boş yere aynı anda geldiyse ikincisi balya ambara
+          // çıkana dek ürünü dalında tutar; harman kapasitesi aşılmaz.
+          if (site == null || !harmanCanAccept(site, _hayEntities)) return;
           target?.harvest(fallowSeconds: fallow);
           job.claim = null;
+          job.claim2 = null;
           job.phase = 0;
           job.phaseAnim = 0;
           job.finishCycle();
-          _spawnFarmHay(hc, hr);
+          _sendHarvestToHarman(v, site);
         }
         return;
 
@@ -1295,24 +1313,6 @@ extension _SceneJobs on _VillageSceneState {
     } else if (!_enRouteTo(v, tx, ty)) {
       v.goTo(tx, ty, 0.2);
     }
-  }
-
-  /// Hasat çıktısı — saman yığını (balyaya, oradan depoya taşınır). Eski
-  /// scene_tick harvestHayPos akışının yerini alır.
-  void _spawnFarmHay(int col, int row) {
-    final hay = HayEntity(
-      type: HayType.pile,
-      gridX: col.toDouble(),
-      gridY: row.toDouble(),
-    );
-    ResourcePlacement.placeHay(
-      hay,
-      col.toDouble(),
-      row.toDouble(),
-      _hayEntities,
-      _time,
-    );
-    _hayEntities.add(hay);
   }
 
   // ── MADENCİ ─────────────────────────────────────────────────────────────────

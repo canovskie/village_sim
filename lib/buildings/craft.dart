@@ -27,7 +27,14 @@ class Craft {
   static const faith = 'faith'; // İnanç — mabet/anıt
 
   static const all = <String>[
-    carpentry, masonry, farming, husbandry, milling, mining, fishing, trade,
+    carpentry,
+    masonry,
+    farming,
+    husbandry,
+    milling,
+    mining,
+    fishing,
+    trade,
     faith,
   ];
 
@@ -35,18 +42,26 @@ class Craft {
   static const structural = <String>{carpentry, masonry};
 
   static String displayName(String key) => switch (key) {
-        carpentry => 'Marangozluk',
-        masonry => 'Taş Ustalığı',
-        farming => 'Çiftçilik',
-        husbandry => 'Hayvancılık',
-        milling => 'Değirmencilik',
-        mining => 'Madencilik',
-        fishing => 'Balıkçılık',
-        trade => 'Ticaret',
-        faith => 'İnanç',
-        _ => key,
-      };
+    carpentry => 'Marangozluk',
+    masonry => 'Taş Ustalığı',
+    farming => 'Çiftçilik',
+    husbandry => 'Hayvancılık',
+    milling => 'Değirmencilik',
+    mining => 'Madencilik',
+    fishing => 'Balıkçılık',
+    trade => 'Ticaret',
+    faith => 'İnanç',
+    _ => key,
+  };
 }
+
+/// Kurucu kafilelerde garanti olmayan uzmanlıklar. Köyün ilk üç tüzük
+/// kademesi bunlardan eksik olanlar için birer gerçek uzman seçimi verir.
+const List<String> kGuaranteedSpecialistCrafts = [
+  Craft.mining,
+  Craft.fishing,
+  Craft.trade,
+];
 
 /// Her bina → dikilmesi için gereken zanaat. null = ortak bilgi (baştan bilinir,
 /// hep açık: barınma/ısı/su/depo/oduncu — köyün survival kiti).
@@ -101,4 +116,10 @@ const Map<VillagerType, String?> kCallingCraft = {
   VillagerType.miner: Craft.mining,
   VillagerType.guard: null,
   VillagerType.hunter: null,
+};
+
+/// Bir kadronun köye beraberinde getirdiği meslek bilgileri. Kurucu yetişkinler
+/// çağrılarını yeniden keşfetmediği için açılışta bu bilgi doğrudan tohumlanır.
+Set<String> craftsCarriedBy(Iterable<VillagerType> types) => {
+  for (final type in types) ?kCallingCraft[type],
 };

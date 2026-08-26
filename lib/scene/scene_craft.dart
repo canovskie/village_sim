@@ -15,6 +15,7 @@ extension _SceneCraft on _VillageSceneState {
   /// birkaç günü aktif taşımayla marangozluk doğsun diye ölçülü tutuldu.
   static const double _kMasteryDiscoverThreshold = 22.0;
   static const double _kCraftScanInterval = 3.0;
+
   /// Bir zanaatı "hâlâ bilen" sayılmak için gereken ustalık — keşif eşiğinden
   /// düşük: az taşımış bir el de zanaatı canlı tutar (yapı zanaatları böylece
   /// nadiren kaybolur; asıl kayıp riski TEK temsilcili meslek zanaatlarında).
@@ -22,14 +23,19 @@ extension _SceneCraft on _VillageSceneState {
 
   /// Bir zanaatı köye kat (idempotent). Zaten biliniyorsa hiçbir şey yapmaz.
   /// Yeni eklendiyse hafif bildirim + günce satırı + köy çapında sevinç → true.
-  bool _discoverCraft(String craft,
-      {VillagerEntity? by, required _CraftSource source}) {
+  bool _discoverCraft(
+    String craft, {
+    VillagerEntity? by,
+    required _CraftSource source,
+  }) {
     if (!_knownCrafts.add(craft)) return false; // Set.add: yeni değilse false
     final name = Craft.displayName(craft);
     final ctx = by != null
-        ? _voice(by,
+        ? _voice(
+            by,
             seed: _stableSeed('zanaat$craft', _dayCount),
-            extra: {'zanaat': name})
+            extra: {'zanaat': name},
+          )
         : null;
     final pool = switch (source) {
       _CraftSource.calling => _kCraftCallingPool,
@@ -72,6 +78,105 @@ extension _SceneCraft on _VillageSceneState {
         }
       }
     }
+    _tickSpecialistOffers();
+  }
+
+  /// İlk üç tüzük kademesinde birer garantili uzman seçimi. Ev görevi bitmeden
+  /// doğmaz; kuruluş anlatısının ortasına kervan kararı girmez.
+  void _tickSpecialistOffers() {
+    if (!_completedQuests.contains('house')) return;
+    final earned = _charterTier < 3 ? _charterTier : 3;
+    if (_specialistOffersClaimed >= earned) return;
+
+    final missing = kGuaranteedSpecialistCrafts
+        .where((craft) => !_knownCrafts.contains(craft))
+        .toList();
+    if (missing.isEmpty) {
+      _specialistOffersClaimed = earned;
+      return;
+    }
+    final alreadyWaiting =
+        _pendingChoice?.id == EventIds.specialistCaravan ||
+        _pacedChoices.any(
+          (payload) => payload.event.id == EventIds.specialistCaravan,
+        );
+    if (alreadyWaiting) return;
+    final event = _specialistCaravanEvent();
+    if (event != null) _requestPacedChoice(event);
+  }
+
+  /// O anda gerçekten eksik olan uzmanlıklardan karar kartı kurar. Statik olay
+  /// kataloğuna girmez; rastgele atılamaz. Kayıt dönüşünde aynı eksik setinden
+  /// yeniden üretilir (bkz. scene_save).
+  EventOutcome? _specialistCaravanEvent() {
+    final missing = kGuaranteedSpecialistCrafts
+        .where((craft) => !_knownCrafts.contains(craft))
+        .toList();
+    if (missing.isEmpty) return null;
+    return EventOutcome(
+      id: EventIds.specialistCaravan,
+      title: 'Uzman Kervanı',
+      icon: '🧳',
+      message:
+          'Kervan köyün boş damını gördü. Yolcularından biri burada kalıp '
+          'bildiği işi köye bırakmaya razı.',
+      annalPool: const ['Köy kapısında bir uzman kervanı durdu.'],
+      category: EventCategory.positive,
+      severity: EventSeverity.minor,
+      choices: [for (final craft in missing) _specialistChoice(craft)],
+    );
+  }
+
+  EventChoice _specialistChoice(String craft) {
+    final (label, detail) = switch (craft) {
+      Craft.mining => (
+        'Madenciyi çağır',
+        'Maden Binasını açar; taş, demir ve kömür işini köye getirir.',
+      ),
+      Craft.fishing => (
+        'Balıkçıyı çağır',
+        'Balıkçı Kulübesini açar; su kıyısını üretime katar.',
+      ),
+      Craft.trade => (
+        'Tüccarı çağır',
+        'Pazar, Kervansaray ve Ahırı açar; dış ticaret bilgisini getirir.',
+      ),
+      _ => ('Uzmanı çağır', '${Craft.displayName(craft)} bilgisini getirir.'),
+    };
+    return EventChoice(
+      id: 'specialist:$craft',
+      label: label,
+      detail: detail,
+      resolutionMessage:
+          'Kervandan bir ${Craft.displayName(craft).toLowerCase()} ustası indi; '
+          'bilgisi artık köyün.',
+      annal: '${Craft.displayName(craft)} bilen bir uzman köye kabul edildi.',
+    );
+  }
+
+  /// Uzman kararının simülasyondaki karşılığı: gerçek bir köylü gelir ve
+  /// zanaat onun üzerinden keşfedilir. Seçim beklerken bilgi başka yoldan
+  /// geldiyse hak tüketilmez; sonraki tarama hâlâ eksik olanı yeniden sunar.
+  void _acceptSpecialistChoice(EventChoice choice) {
+    if (!choice.id.startsWith('specialist:')) return;
+    final craft = choice.id.substring('specialist:'.length);
+    final type = switch (craft) {
+      Craft.mining => VillagerType.miner,
+      Craft.fishing => VillagerType.fisher,
+      Craft.trade => VillagerType.merchant,
+      _ => null,
+    };
+    if (type == null) return;
+    final wasMissing = !_knownCrafts.contains(craft);
+    final specialist = _spawnSpecialist(type);
+    _discoverCraft(craft, by: specialist, source: _CraftSource.migrant);
+    _lifeEvent(
+      specialist,
+      '${Craft.displayName(craft)} ustası olarak kervanla köye geldi.',
+      icon: '🧳',
+      milestone: true,
+    );
+    if (wasMissing) _specialistOffersClaimed++;
   }
 
   // ── Kayıp & çıraklık koruması (melez) ─────────────────────────────────────
@@ -84,15 +189,17 @@ extension _SceneCraft on _VillageSceneState {
   /// Köyde bilgi arşivi (kütüphane/belediye) varken hiçbir zanaat kaybolmaz —
   /// "Lonca" fikrinin somut hâli: kurumsal hafıza bilgiyi kalıcı güvenceye alır.
   /// Erken oyunda bilgi usta-çıraka bağlı kırılgan; arşiv dikilince kaybolmaz.
-  bool get _hasKnowledgeArchive => _buildings.any((b) =>
-      b.type == BuildingType.library || b.type == BuildingType.townhall);
+  bool get _hasKnowledgeArchive => _buildings.any(
+    (b) => b.type == BuildingType.library || b.type == BuildingType.townhall,
+  );
 
   void _onCraftHolderDeath(VillagerEntity v) {
     // Bilgi arşivi (kütüphane/belediye) her zanaatı kalıcı korur → kayıp yok.
     if (_hasKnowledgeArchive) return;
     for (final craft in _craftsHeldBy(v).toList()) {
-      final stillHeld =
-          _villagers.any((o) => !o.isDying && _holdsCraft(o, craft));
+      final stillHeld = _villagers.any(
+        (o) => !o.isDying && _holdsCraft(o, craft),
+      );
       if (stillHeld) continue;
       final apprentice = _policies.apprenticeship ? _pickApprentice(v) : null;
       if (apprentice != null) {
@@ -102,9 +209,11 @@ extension _SceneCraft on _VillageSceneState {
         if (Craft.structural.contains(craft)) {
           apprentice.gainMastery(craft, _kMasteryHolderThreshold);
         }
-        final ctx = _voice(apprentice,
-            seed: _stableSeed('çırak$craft', _dayCount),
-            extra: {'zanaat': Craft.displayName(craft)});
+        final ctx = _voice(
+          apprentice,
+          seed: _stableSeed('çırak$craft', _dayCount),
+          extra: {'zanaat': Craft.displayName(craft)},
+        );
         final msg = Voice.say(_kCraftApprenticePool, ctx);
         _showNotification('🪡 $msg');
         _chronicle(msg, icon: '🪡');
@@ -124,10 +233,15 @@ extension _SceneCraft on _VillageSceneState {
     _villageMemory.add('craft.lost');
     final name = Craft.displayName(craft);
     final ctx = _villagers.isNotEmpty
-        ? _voice(_villagers.first,
-            seed: _stableSeed('kayıp$craft', _dayCount), extra: {'zanaat': name})
+        ? _voice(
+            _villagers.first,
+            seed: _stableSeed('kayıp$craft', _dayCount),
+            extra: {'zanaat': name},
+          )
         : null;
-    final msg = ctx != null ? Voice.say(_kCraftLostPool, ctx) : '$name unutuldu.';
+    final msg = ctx != null
+        ? Voice.say(_kCraftLostPool, ctx)
+        : '$name unutuldu.';
     _showNotification('🕯️ $msg');
     _chronicle(msg, icon: '🕯️', milestone: true);
     _feelVillage(NpcEmotion.grief, 4.0, -0.05);

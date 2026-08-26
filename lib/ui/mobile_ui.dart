@@ -22,11 +22,11 @@ bool debugForceTouchUi = false;
 bool useTouchUi(BuildContext context) =>
     debugForceTouchUi || PlatformAdapt.isMobile || useCompactGameUi(context);
 
-/// Mobil inşa paletindeki gerçek bir araç/kart seçildiğinde paletin dünyayı
-/// örtmeye devam etmemesi için yukarı doğru gönderilen niyet. Kategori sekmesi
-/// bunu göndermez; oyuncu önce sekmeyi, sonra istediği aracı seçebilir.
-class MobileCatalogCloseNotification extends Notification {
-  const MobileCatalogCloseNotification();
+/// İnşa paletindeki gerçek bir araç/kart seçildiğinde kataloğun dünyayı örtmeye
+/// devam etmemesi için yukarı doğru gönderilen niyet. Kategori sekmesi bunu
+/// göndermez; oyuncu önce sekmeyi, sonra istediği aracı seçebilir.
+class BuildCatalogCloseNotification extends Notification {
+  const BuildCatalogCloseNotification();
 }
 
 /// ═══════════════════════════════════════════════════════════════════════════

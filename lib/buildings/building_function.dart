@@ -159,11 +159,11 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.tent: BuildingFunction(
     role: BuildingRole.housing,
     summary:
-        'Derme çatma barınak. Bir köylüyü sokağın soğuğundan alır ama '
+        'Derme çatma barınak. İki köylüyü sokağın soğuğundan alır ama '
         'gerçek bir ev kadar huzur vermez. Kendi ocağı da yoktur: kışın '
         'ısınmasının tek yolu köyün ateşine yakın kurulmuş olmaktır — uzağa '
         'kurulan çadırda geceler titreyerek geçer. Köy ev dikecek hâle gelene kadar.',
-    housingCapacity: 1,
+    housingCapacity: 2,
   ),
 
   BuildingType.woodenHouse: BuildingFunction(

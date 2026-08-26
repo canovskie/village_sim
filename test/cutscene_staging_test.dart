@@ -6,12 +6,18 @@ import 'package:village_sim/cutscene/cutscene.dart';
 void main() {
   test('açılış her çekimde fiziksel bir sahne kurar', () {
     expect(kOpeningCutscene.shots.map((s) => s.setPiece), [
-      CutsceneSetPiece.caravan,
+      CutsceneSetPiece.camp,
       CutsceneSetPiece.camp,
       CutsceneSetPiece.camp,
     ]);
-    final caravan = kOpeningCutscene.shots.first.actors;
-    expect(caravan.skip(1).every((a) => a.entranceDelay > 0), isTrue);
+    // Kafile artık film içinde bir kez daha yürütülmez: canlı dünya önce
+    // halkayı kurar, film o kurulmuş kampın içinden konuşmaya başlar.
+    expect(
+      kOpeningCutscene.shots.first.actors.every(
+        (actor) => actor.pose == CutsceneActorPose.sit,
+      ),
+      isTrue,
+    );
   });
 
   test('ateş sahnesinde oyuncu ayakta duran heykellere bakmaz', () {

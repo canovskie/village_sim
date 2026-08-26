@@ -155,6 +155,7 @@ extension _SceneDecor on _VillageSceneState {
   void _appendDecor(DecorEntity decor) {
     _decor.add(decor);
     _decorVersion++;
+    if (isBlockingDecorKind(decor.kind)) _invalidateDecorTopology();
   }
 
   void _replaceDecor(Iterable<DecorEntity> decor) {
@@ -169,18 +170,42 @@ extension _SceneDecor on _VillageSceneState {
       }
       if (sameTopology) return;
     }
+    final beforeBlocking = <(int, int)>{
+      for (final d in _decor)
+        if (!d.crushed && isBlockingDecorKind(d.kind)) (d.col, d.row),
+    };
+    final afterBlocking = <(int, int)>{
+      for (final d in replacement)
+        if (!d.crushed && isBlockingDecorKind(d.kind)) (d.col, d.row),
+    };
     _decor
       ..clear()
       ..addAll(replacement);
     _decorVersion++;
+    if (beforeBlocking.length != afterBlocking.length ||
+        beforeBlocking.any((tile) => !afterBlocking.contains(tile))) {
+      _invalidateDecorTopology();
+    }
   }
 
   int _removeDecorWhere(bool Function(DecorEntity) remove) {
+    var removedBlocking = false;
+    for (final d in _decor) {
+      if (remove(d) && isBlockingDecorKind(d.kind)) removedBlocking = true;
+    }
     final before = _decor.length;
     _decor.removeWhere(remove);
     final removed = before - _decor.length;
-    if (removed > 0) _decorVersion++;
+    if (removed > 0) {
+      _decorVersion++;
+      if (removedBlocking) _invalidateDecorTopology();
+    }
     return removed;
+  }
+
+  void _invalidateDecorTopology() {
+    _spatialTimer = 0;
+    _pathContext.bumpVersion();
   }
 
   void _clearDecorTile(int c, int r) {
@@ -197,17 +222,67 @@ extension _SceneDecor on _VillageSceneState {
     );
   }
 
+  /// Yol, tarla veya yapı bir zemini sahiplendiğinde düşük dekorun yanında
+  /// geçici saz yatağını ve henüz serilmemiş kuruluş rezervini de kaldırır.
+  /// Sahibi hedef referansını bırakır; evsizse reed sistemi sonraki taramada
+  /// uygun başka bir slot bulur.
+  void _claimGroundFootprint(int col, int row, int cols, int rows) {
+    bool inside(int c, int r) =>
+        c >= col && c < col + cols && r >= row && r < row + rows;
+
+    _clearDecorFootprint(col, row, cols, rows);
+    final displaced = <VillagerEntity>{};
+    final beforeBeds = _reedBeds.length;
+    _reedBeds.removeWhere((bed) {
+      if (!inside(bed.gridX.floor(), bed.gridY.floor())) return false;
+      final owner = bed.owner;
+      if (owner is VillagerEntity) displaced.add(owner);
+      return true;
+    });
+    _foundingBedTargets.removeWhere((villager, target) {
+      if (!inside(target.$1.floor(), target.$2.floor())) return false;
+      displaced.add(villager);
+      return true;
+    });
+    for (final villager in displaced) {
+      if (!villager.sleepIsHome) {
+        villager.sleepTarget = null;
+        if (villager.isSleeping) villager.state = VillagerState.idle;
+      }
+    }
+    if (_reedBeds.length != beforeBeds || displaced.isNotEmpty) {
+      _spatialTimer = 0;
+      _pathContext.bumpVersion();
+    }
+  }
+
+  void _claimGroundTile(int col, int row) =>
+      _claimGroundFootprint(col, row, 1, 1);
+
   /// Eski kayıtları ve doğrudan kurulan test köylerini bugünün
   /// sözleşmesine taşır: sahipli yüzeydeki dekoru atar, bitkilerin arasına
   /// nefes koyar ve toplam çiçek bütçesini aşan uzak yamaları seyreltir.
   void _sanitizeDecorPopulation() {
-    final unblocked = <DecorEntity>[
+    final surfaceSafe = <DecorEntity>[
       for (final d in _decor)
         if (!_decorSurfaceBlocked(d.col, d.row)) d,
     ];
+    // Eski kesim sistemi her ağaçta aynı kareye hem dip hem dev gövde koyup
+    // köyü kalıcı kütük tarlasına çeviriyordu. Bu ikili kesin kesim izidir;
+    // kaynak taşındığı için yalnız küçük dip kalır. Tek başına doğmuş doğal
+    // devrik kütük korunur ve fiziksel engel olur.
+    final stumpTiles = <(int, int)>{
+      for (final d in surfaceSafe)
+        if (d.kind == DecorKind.stump) (d.col, d.row),
+    };
+    final unblocked = <DecorEntity>[
+      for (final d in surfaceSafe)
+        if (!(d.kind == DecorKind.fallenLog &&
+            stumpTiles.contains((d.col, d.row))))
+          d,
+    ];
     // Eski kayıt aynı kareye hem çiçek hem hacimli dekor yazmış olabilir.
-    // Hacimli kompozisyonu (özellikle stump+fallenLog) aynen koru; zemin
-    // florasını o karenin ikinci sahibi yapma.
+    // Hacimli dekoru koru; zemin florasını o karenin ikinci sahibi yapma.
     final volumetricTiles = <(int, int)>{
       for (final d in unblocked)
         if (!isGroundFloraDecorKind(d.kind)) (d.col, d.row),

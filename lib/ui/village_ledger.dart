@@ -74,6 +74,16 @@ enum LedgerSection {
   const LedgerSection(this.icon, this.label, this.blurb, this.short);
 }
 
+/// Defterin her bölümü kendi mürekkep tonunu taşır. Renk yalnız süs değil:
+/// oyuncu başlığı okumadan bile hangi sayfaya geçtiğini çevresel tondan anlar.
+Color ledgerSectionTone(LedgerSection section) => switch (section) {
+  LedgerSection.divan => AppUi.accent,
+  LedgerSection.kanun => AppUi.gold,
+  LedgerSection.nufus => AppUi.sage,
+  LedgerSection.tuzuk => AppUi.rust,
+  LedgerSection.kronik => const Color(0xFFB079D4),
+};
+
 /// Gündeme düşmüş ya da mayalanan tek bir mesele.
 class DivanMatter {
   final String icon;
@@ -486,8 +496,7 @@ class VillageLedger extends StatelessWidget {
               child: SizedBox(
                 width: w,
                 height: h,
-                child: AppGildedFrame(
-                  accent: AppUi.accent,
+                child: _LedgerFrame(
                   // Politika bağlanmamışsa Kanunname bölümü yok.
                   child: compact
                       // TELEFON: hero bandı YOK. Künye rayın tepesine taşındı;
@@ -497,9 +506,7 @@ class VillageLedger extends StatelessWidget {
                       ? _LedgerBoardShell(
                           initial: initialSection,
                           badges: badges,
-                          hidden: {
-                            if (onOpenLaw == null) LedgerSection.kanun,
-                          },
+                          hidden: {if (onOpenLaw == null) LedgerSection.kanun},
                           identityHeader: mobileIdentity(),
                           boardFor: mobileBoardFor,
                           onClose: onClose,
@@ -516,6 +523,7 @@ class VillageLedger extends StatelessWidget {
                                   if (onOpenLaw == null) LedgerSection.kanun,
                                 },
                                 strip: _villageStrip(),
+                                railFooter: _villageRailPulse(),
                                 bodyFor: _bodyFor,
                               ),
                             ),
@@ -585,10 +593,7 @@ class VillageLedger extends StatelessWidget {
             const SizedBox(height: 8),
             _identityBonusRow(),
           ],
-          if (karne.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _karneBlock(),
-          ],
+          if (karne.isNotEmpty) ...[const SizedBox(height: 16), _karneBlock()],
         ];
         // TELEFON YATAY: defterin gövdesine ~300dp kalıyor; masa + künye ilk
         // ekranı doldurunca Divan açıldığında YANIT BEKLEYEN İŞ görünmüyordu.
@@ -606,39 +611,44 @@ class VillageLedger extends StatelessWidget {
   }
 
   Widget _karneBlock() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AppSectionLabel('İMPARATORLUĞUN GÖZÜ — $karneYear. YIL'),
-          const SizedBox(height: 7),
-          for (final row in karne) ...[
-            Text(row.label,
-                style: AppUi.label.copyWith(color: AppUi.textMid)),
-            const SizedBox(height: 3),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: row.value.clamp(0.0, 1.0),
-                minHeight: 5,
-                backgroundColor: AppUi.surface2,
-                valueColor: const AlwaysStoppedAnimation(AppUi.gold),
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(row.note,
-                style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
-            const SizedBox(height: 7),
-          ],
-          if (karneVerdict.isNotEmpty)
-            Text('Defter bugün kapansaydı: $karneVerdict',
-                style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.gold)),
-          if (karneAdviceLine.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(karneAdviceLine,
-                  style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textMid)),
-            ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      AppSectionLabel('İMPARATORLUĞUN GÖZÜ — $karneYear. YIL'),
+      const SizedBox(height: 7),
+      for (final row in karne) ...[
+        Text(row.label, style: AppUi.label.copyWith(color: AppUi.textMid)),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: row.value.clamp(0.0, 1.0),
+            minHeight: 5,
+            backgroundColor: AppUi.surface2,
+            valueColor: const AlwaysStoppedAnimation(AppUi.gold),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          row.note,
+          style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+        ),
+        const SizedBox(height: 7),
+      ],
+      if (karneVerdict.isNotEmpty)
+        Text(
+          'Defter bugün kapansaydı: $karneVerdict',
+          style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.gold),
+        ),
+      if (karneAdviceLine.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(
+            karneAdviceLine,
+            style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textMid),
+          ),
+        ),
+    ],
+  );
 
   /// KANUNNAME sekmesi — yasa defteri + kararların köyde bıraktığı kalıcı iz.
   Widget _kararTab() {
@@ -730,8 +740,11 @@ class VillageLedger extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const GameIcon(GameIconData.chevron,
-                    size: 12, color: AppUi.accentSoft),
+                const GameIcon(
+                  GameIconData.chevron,
+                  size: 12,
+                  color: AppUi.accentSoft,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -794,8 +807,12 @@ class VillageLedger extends StatelessWidget {
         children: [
           Opacity(
             opacity: passed || current ? 1 : 0.45,
-            child: SemanticIcon(t.icon,
-                size: 15, color: AppUi.gold, fallback: GameIconData.crown),
+            child: SemanticIcon(
+              t.icon,
+              size: 15,
+              color: AppUi.gold,
+              fallback: GameIconData.crown,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -851,8 +868,11 @@ class VillageLedger extends StatelessWidget {
         children: [
           SizedBox(
             width: 20,
-            child: GameIcon(questGlyph(s.quest.id),
-                size: 12, color: on ? AppUi.accent : AppUi.textLo),
+            child: GameIcon(
+              questGlyph(s.quest.id),
+              size: 12,
+              color: on ? AppUi.accent : AppUi.textLo,
+            ),
           ),
           Expanded(
             child: Text(
@@ -909,8 +929,10 @@ class VillageLedger extends StatelessWidget {
           if (filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Text('Bu türde kayıt yok.',
-                  style: AppUi.body.copyWith(color: AppUi.textLo)),
+              child: Text(
+                'Bu türde kayıt yok.',
+                style: AppUi.body.copyWith(color: AppUi.textLo),
+              ),
             ),
           for (final e in filtered) _chronicleRow(e),
         ],
@@ -926,8 +948,12 @@ class VillageLedger extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: SemanticIcon(e.icon,
-                size: 15, color: AppUi.textLo, fallback: GameIconData.scroll),
+            child: SemanticIcon(
+              e.icon,
+              size: 15,
+              color: AppUi.textLo,
+              fallback: GameIconData.scroll,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1060,7 +1086,10 @@ class VillageLedger extends StatelessWidget {
     // asıl içerik ekran dışına taşıyordu. Sahne kartı kalıyor, sadece inceliyor.
     final short = useCompactGameUi(context);
     if (short) return _compactHero();
-    const heroH = 132.0;
+    // Sol indeks + nabız, aşağıdaki iki kalın krom şeridini ortadan kaldırdı.
+    // Hero artık daha sıkı bir sinematik kapak; içerik sayfasına 12dp daha
+    // bırakırken mühür ve siluetler hâlâ rahatça okunuyor.
+    const heroH = 120.0;
     return SizedBox(
       height: heroH,
       child: Stack(
@@ -1285,6 +1314,123 @@ class VillageLedger extends StatelessWidget {
     );
   }
 
+  /// Geniş ekranda köyün dört canlı sayısı ana sayfanın üstünde yatay bir
+  /// bant oluşturmaz; cildin dibinde 2×2 bir "nabız" kümesi olur. Aynı veri,
+  /// daha az krom ve defter metaforunda daha güçlü bir aidiyet.
+  Widget _villageRailPulse() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 9, 10, 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppUi.accent.withValues(alpha: 0.055),
+            AppUi.surface0.withValues(alpha: 0.82),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.gold.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 5,
+                height: 5,
+                decoration: const BoxDecoration(
+                  color: AppUi.accent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'KÖYÜN NABZI',
+                style: AppUi.label.copyWith(
+                  fontSize: 8,
+                  letterSpacing: 1.2,
+                  color: AppUi.accentSoft,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _railStat(
+                  GameIconData.heart,
+                  '${(morale * 100).round()}%',
+                  'moral',
+                  _moraleTone,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: _railStat(
+                  GameIconData.people,
+                  '$population',
+                  'nüfus',
+                  AppUi.info,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Row(
+            children: [
+              Expanded(
+                child: _railStat(
+                  GameIconData.wheat,
+                  '$food',
+                  'erzak',
+                  AppUi.sage,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: _railStat(
+                  GameIconData.coin,
+                  '$gold',
+                  'altın',
+                  AppUi.gold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _railStat(GameIconData icon, String value, String label, Color color) {
+    return Row(
+      children: [
+        GameIcon(icon, size: 11, color: color),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                maxLines: 1,
+                style: AppUi.number.copyWith(fontSize: 11.5, color: color),
+              ),
+              Text(
+                label.toUpperCase(),
+                maxLines: 1,
+                style: AppUi.label.copyWith(fontSize: 7, letterSpacing: 0.6),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _stripDiv() => Container(width: 1, height: 24, color: AppUi.line);
 
   Color get _moraleTone => morale >= 0.6
@@ -1330,8 +1476,11 @@ class VillageLedger extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
-                const GameIcon(GameIconData.handshake,
-                    size: 15, color: AppUi.sage),
+                const GameIcon(
+                  GameIconData.handshake,
+                  size: 15,
+                  color: AppUi.sage,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -1383,8 +1532,12 @@ class VillageLedger extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  SemanticIcon(m.icon,
-                      size: 16, color: c, fallback: GameIconData.scroll),
+                  SemanticIcon(
+                    m.icon,
+                    size: 16,
+                    color: c,
+                    fallback: GameIconData.scroll,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1693,15 +1846,20 @@ class VillageLedger extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SemanticIcon(s.stance.icon,
-                size: 11, color: tint, fallback: GameIconData.scales),
+            SemanticIcon(
+              s.stance.icon,
+              size: 11,
+              color: tint,
+              fallback: GameIconData.scales,
+            ),
             const SizedBox(width: 6),
             Text(
               s.stance.label,
               style: AppUi.body.copyWith(
-                  fontSize: 10.5,
-                  color: AppUi.textMid,
-                  fontWeight: FontWeight.w700),
+                fontSize: 10.5,
+                color: AppUi.textMid,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -1795,8 +1953,12 @@ class VillageLedger extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SemanticIcon(f.icon,
-              size: 11, color: f.color, fallback: GameIconData.star),
+          SemanticIcon(
+            f.icon,
+            size: 11,
+            color: f.color,
+            fallback: GameIconData.star,
+          ),
           const SizedBox(width: 5),
           Text(
             f.label,
@@ -1812,6 +1974,136 @@ class VillageLedger extends StatelessWidget {
   }
 }
 
+/// Köy Defteri'ne özel dış cilt. Ortak [AppGildedFrame] ağırlığını korur ama
+/// köşelerde kayıt işaretleri ve kenar ortalarında bölüm ayraçları ekler.
+/// Bunlar çivi/ahşap süsü değil, taş baskı bir arşiv sayfasının geometrisi.
+class _LedgerFrame extends StatelessWidget {
+  final Widget child;
+  const _LedgerFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        AppGildedFrame(accent: AppUi.accent, child: child),
+        const IgnorePointer(child: CustomPaint(painter: _LedgerFramePainter())),
+      ],
+    );
+  }
+}
+
+class _LedgerFramePainter extends CustomPainter {
+  const _LedgerFramePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final faint = Paint()
+      ..color = AppUi.gold.withValues(alpha: 0.20)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final bright = Paint()
+      ..color = AppUi.accent.withValues(alpha: 0.55)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    // Dört köşede birbirinin aynası olan kesik kayıt işaretleri.
+    for (final sx in [-1.0, 1.0]) {
+      for (final sy in [-1.0, 1.0]) {
+        final x = sx < 0 ? 8.0 : size.width - 8.0;
+        final y = sy < 0 ? 8.0 : size.height - 8.0;
+        final p = Path()
+          ..moveTo(x, y + sy * 18)
+          ..lineTo(x, y + sy * 7)
+          ..quadraticBezierTo(x, y, x + sx * 7, y)
+          ..lineTo(x + sx * 18, y);
+        canvas.drawPath(p, faint);
+        canvas.drawCircle(Offset(x + sx * 22, y), 1.4, bright);
+      }
+    }
+
+    // Cildin üst ve alt orta ayraçları: küçük, keskin bir mühür geometrisi.
+    void divider(double y, double sy) {
+      final cx = size.width / 2;
+      canvas.drawLine(Offset(cx - 34, y), Offset(cx - 8, y), faint);
+      canvas.drawLine(Offset(cx + 8, y), Offset(cx + 34, y), faint);
+      final diamond = Path()
+        ..moveTo(cx, y + sy * 4)
+        ..lineTo(cx + 5, y)
+        ..lineTo(cx, y - sy * 4)
+        ..lineTo(cx - 5, y)
+        ..close();
+      canvas.drawPath(diamond, bright);
+    }
+
+    divider(4, 1);
+    divider(size.height - 4, -1);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Bölüm sayfasının çok hafif arşiv alanı: mürekkep tonu köşeden içeri sızar,
+/// büyük kayıt yayları yüzeye ölçek verir. Opak kart çizmez; içerik nefes alır.
+class _LedgerPageField extends StatelessWidget {
+  final Color tone;
+  final Widget child;
+  const _LedgerPageField({required this.tone, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomPaint(painter: _LedgerPageFieldPainter(tone)),
+        child,
+      ],
+    );
+  }
+}
+
+class _LedgerPageFieldPainter extends CustomPainter {
+  final Color tone;
+  const _LedgerPageFieldPainter(this.tone);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()
+        ..shader = RadialGradient(
+          center: const Alignment(-0.92, -0.86),
+          radius: 1.12,
+          colors: [tone.withValues(alpha: 0.10), Colors.transparent],
+        ).createShader(Offset.zero & size),
+    );
+
+    final ink = Paint()
+      ..color = tone.withValues(alpha: 0.055)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final center = Offset(size.width * 0.94, size.height * 0.12);
+    for (final radius in [52.0, 84.0, 118.0]) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        math.pi * 0.45,
+        math.pi * 1.05,
+        false,
+        ink,
+      );
+    }
+    canvas.drawLine(
+      Offset(size.width * 0.72, 0),
+      Offset(size.width, size.height * 0.28),
+      ink,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _LedgerPageFieldPainter oldDelegate) =>
+      oldDelegate.tone != tone;
+}
 
 /// DEFTER MÜHRÜ — köy içi işlerin TEK kapısı, hep ekranda. Eskiden bu mühür
 /// yalnız Divan'ı açardı; nüfus HUD ikonunda, hikâye ⚙ kümesinde, görevler ayrı
@@ -2067,6 +2359,7 @@ class _LedgerShell extends StatefulWidget {
 
   /// Köy durum şeridi (moral/nüfus/yiyecek/altın) — bölümden bağımsız, hep üstte.
   final Widget strip;
+  final Widget railFooter;
   final Widget Function(LedgerSection) bodyFor;
 
   const _LedgerShell({
@@ -2074,6 +2367,7 @@ class _LedgerShell extends StatefulWidget {
     required this.badges,
     required this.hidden,
     required this.strip,
+    required this.railFooter,
     required this.bodyFor,
   });
 
@@ -2111,7 +2405,10 @@ class _LedgerShellState extends State<_LedgerShell> {
         // düşüyordu, ama ekran 393dp kısa olduğu için beş bölümden ancak
         // dördü sığıyor, sonuncusu kesiliyordu. Kısa ekranda zaten hazır olan
         // yatay raf (_rowRail) doğru cevap.
-        final wide = c.maxWidth >= 660 && c.maxHeight >= 430;
+        // 800×600 oyun penceresinde eski eşik 4dp yüzünden yatay düğme
+        // duvarına düşüyordu. Cilt 420dp gövde bulduğunda indeks + nabız rahat
+        // sığıyor; genişliği olan masaüstü artık gerçek masaüstü düzenini alır.
+        final wide = c.maxWidth >= 660 && c.maxHeight >= 420;
         // Telefonda NÜFUS bölümü kendi KPI şeridini (nüfus/hane/moral/varlık)
         // zaten taşıyor. Köy şeridini de üstüne koyunca 393dp'lik ekranda
         // ART ARDA DÖRT yatay bant oluyordu (raf · köy şeridi · KPI şeridi ·
@@ -2123,7 +2420,7 @@ class _LedgerShellState extends State<_LedgerShell> {
         // hiçbir yeni şey söylemiyor, üstelik NÜFUS bölümünün kendi KPI şeridi
         // aynı sayıları bir kez daha yazıyordu. 393dp'lik ekranda listeye yer
         // kalmamasının en büyük tek sebebi buydu.
-        final showStrip = !useCompactGameUi(context);
+        final showStrip = !useCompactGameUi(context) && !wide;
         final body = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -2134,6 +2431,7 @@ class _LedgerShellState extends State<_LedgerShell> {
               ),
               Container(height: 1, color: AppUi.line),
             ],
+            if (wide) _pageHeader(_sec),
             Expanded(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 190),
@@ -2179,9 +2477,16 @@ class _LedgerShellState extends State<_LedgerShell> {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            SizedBox(width: 186, child: _rail()),
+            // Sıra no + arma + uzun bölüm adı + rozet aynı satırda. 186dp'de
+            // KANUNNAME kırpılıyordu; indeks okunurluğu için cilt biraz açıldı.
+            SizedBox(width: 204, child: _rail()),
             Container(width: 1, color: AppUi.line),
-            Expanded(child: body),
+            Expanded(
+              child: _LedgerPageField(
+                tone: ledgerSectionTone(_sec),
+                child: body,
+              ),
+            ),
           ],
         );
       },
@@ -2192,25 +2497,48 @@ class _LedgerShellState extends State<_LedgerShell> {
 
   Widget _rail() {
     return Container(
-      color: AppUi.surface0.withValues(alpha: 0.55),
-      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final s in _sections) ...[
-              // Kuruluşun berat adımı bu rafı gösterir (bkz. scene_guide).
-              if (s == LedgerSection.kanun)
-                GuideTarget(
-                  id: GuideAnchors.sectionKanun,
-                  child: _railItem(s),
-                )
-              else
-                _railItem(s),
-              const SizedBox(height: 6),
-            ],
-          ],
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF111419), AppUi.surface0],
         ),
+      ),
+      padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'İÇİNDEKİLER',
+                    style: AppUi.label.copyWith(
+                      fontSize: 8,
+                      color: AppUi.gold.withValues(alpha: 0.72),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final s in _sections) ...[
+                    // Kuruluşun berat adımı bu rafı gösterir (bkz. scene_guide).
+                    if (s == LedgerSection.kanun)
+                      GuideTarget(
+                        id: GuideAnchors.sectionKanun,
+                        child: _railItem(s),
+                      )
+                    else
+                      _railItem(s),
+                    const SizedBox(height: 5),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          widget.railFooter,
+        ],
       ),
     );
   }
@@ -2218,6 +2546,8 @@ class _LedgerShellState extends State<_LedgerShell> {
   Widget _railItem(LedgerSection s) {
     final on = _sec == s;
     final badge = widget.badges[s] ?? 0;
+    final tone = ledgerSectionTone(s);
+    final number = (_sections.indexOf(s) + 1).toString().padLeft(2, '0');
     return GestureDetector(
       onTap: () => setState(() => _sec = s),
       behavior: HitTestBehavior.opaque,
@@ -2229,28 +2559,37 @@ class _LedgerShellState extends State<_LedgerShell> {
           padding: const EdgeInsets.fromLTRB(11, 9, 9, 9),
           decoration: BoxDecoration(
             color: on
-                ? Color.alphaBlend(
-                    AppUi.accent.withValues(alpha: 0.16),
-                    AppUi.surface1,
-                  )
-                : Colors.transparent,
+                ? Color.alphaBlend(tone.withValues(alpha: 0.11), AppUi.surface1)
+                : AppUi.surface0.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
             // UNIFORM kenar ŞART (non-uniform + borderRadius = paint assert →
             // hiç çizilmez). Seçili işareti bu yüzden ayrı bir katman değil,
             // eşit kenar + ikon rengiyle verilir.
             border: Border.all(
-              color: on ? AppUi.accent.withValues(alpha: 0.55) : AppUi.line,
+              color: on
+                  ? tone.withValues(alpha: 0.62)
+                  : AppUi.line.withValues(alpha: 0.46),
               width: on ? 1.3 : 1,
             ),
           ),
           child: Row(
             children: [
+              Text(
+                number,
+                style: AppUi.number.copyWith(
+                  fontSize: 8,
+                  color: on ? tone : AppUi.textLo.withValues(alpha: 0.48),
+                ),
+              ),
+              const SizedBox(width: 7),
               Opacity(
                 opacity: on ? 1 : 0.72,
-                child: SemanticIcon(s.icon,
-                    size: 15,
-                    color: on ? AppUi.accentSoft : AppUi.textMid,
-                    fallback: GameIconData.scroll),
+                child: SemanticIcon(
+                  s.icon,
+                  size: 15,
+                  color: on ? tone : AppUi.textMid,
+                  fallback: GameIconData.scroll,
+                ),
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -2281,7 +2620,7 @@ class _LedgerShellState extends State<_LedgerShell> {
                   ],
                 ),
               ),
-              if (badge > 0) _badge(badge, on),
+              if (badge > 0) _badge(badge, on, tone),
             ],
           ),
         ),
@@ -2289,17 +2628,88 @@ class _LedgerShellState extends State<_LedgerShell> {
     );
   }
 
-  Widget _badge(int n, bool on) {
+  Widget _badge(int n, bool on, Color tone) {
     return Container(
       margin: const EdgeInsets.only(left: 6),
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
       decoration: BoxDecoration(
-        color: AppUi.accent.withValues(alpha: on ? 0.9 : 0.7),
+        color: tone.withValues(alpha: on ? 0.9 : 0.62),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
         '$n',
         style: AppUi.number.copyWith(fontSize: 9, color: AppUi.ink),
+      ),
+    );
+  }
+
+  /// Ana sayfanın bölüm künyesi. Yatay sekmelerin kaybolduğu geniş düzende
+  /// oyuncunun bulunduğu yer başlık, sıra numarası ve bölüm rengiyle görünür.
+  Widget _pageHeader(LedgerSection section) {
+    final tone = ledgerSectionTone(section);
+    final badge = widget.badges[section] ?? 0;
+    final number = (_sections.indexOf(section) + 1).toString().padLeft(2, '0');
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [tone.withValues(alpha: 0.075), Colors.transparent],
+        ),
+        border: Border(bottom: BorderSide(color: tone.withValues(alpha: 0.22))),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: 0.10),
+              shape: BoxShape.circle,
+              border: Border.all(color: tone.withValues(alpha: 0.46)),
+            ),
+            child: SemanticIcon(
+              section.icon,
+              size: 16,
+              color: tone,
+              fallback: GameIconData.scroll,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$number  ${section.label}',
+                  style: AppUi.title.copyWith(
+                    fontSize: 13.5,
+                    color: AppUi.textHi,
+                  ),
+                ),
+                Text(
+                  section.blurb,
+                  style: AppUi.body.copyWith(fontSize: 10, color: AppUi.textLo),
+                ),
+              ],
+            ),
+          ),
+          if (badge > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                color: tone.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: tone.withValues(alpha: 0.40)),
+              ),
+              child: Text(
+                '$badge KAYIT',
+                style: AppUi.label.copyWith(fontSize: 8, color: tone),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -2352,10 +2762,12 @@ class _LedgerShellState extends State<_LedgerShell> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SemanticIcon(s.icon,
-                size: 13,
-                color: on ? AppUi.accentSoft : AppUi.textLo,
-                fallback: GameIconData.scroll),
+            SemanticIcon(
+              s.icon,
+              size: 13,
+              color: on ? AppUi.accentSoft : AppUi.textLo,
+              fallback: GameIconData.scroll,
+            ),
             const SizedBox(width: 7),
             Text(
               s.label,
@@ -2365,7 +2777,7 @@ class _LedgerShellState extends State<_LedgerShell> {
                 color: on ? AppUi.textHi : AppUi.textLo,
               ),
             ),
-            if (badge > 0) _badge(badge, on),
+            if (badge > 0) _badge(badge, on, ledgerSectionTone(s)),
           ],
         ),
       ),

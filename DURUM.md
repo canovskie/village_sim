@@ -104,9 +104,10 @@ Bunların hepsi kurulu, bağlı ve testli.
 - **Dekor nüfusu ve painter cache sözleşmesi** — sahipli kalıcı yüzeyler eski
   kayıtta sanitize ediliyor; geçici yükler florayı silmiyor; yerinde liste
   mutasyonu `decorVersion` ile bucket cache'i yeniliyor *(2026-08-23)*
-- **Bina kataloğu yenilemesi** — metadata'dan thumbnail/maliyet/footprint,
-  renk dışı seçim ve yeterlilik durumları, tam ekran mobil katalog ve
-  896×414 + 760×360 taşma sözleşmeleri *(2026-08-23)*
+- **Bina kataloğu yenilemesi** — görseli solda, BuildingMeta ad/alan/maliyet
+  bilgisini sağda birleştiren yatay katalog kayıtları; renk dışı seçili/eksik
+  durumları, iki sütun tam ekran mobil katalog ve 896×414 + 760×360 taşma
+  sözleşmeleri *(2026-08-23)*
 - Dev konsol, dev panel, almanak, 35 capture/prova aracı
 
 ---

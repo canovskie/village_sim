@@ -322,10 +322,125 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     final family = _villagers.isNotEmpty ? _villagers.first.surname : null;
     _villagers.clear();
     _spawnFoundingCaravan(roster: c.roster, lineage: family);
+    if (_foundingCouncilFormed) _placeFoundersInCouncil(snap: true);
+
+    // Kurucu köye yalnız iki elini değil, bildiği işi de getirir. Yetişkin
+    // kurucuların `callingFound` değeri zaten true olduğu için bu tohum burada
+    // atılmazsa "köyde çiftçi var ama Çiftçilik bilinmiyor" çelişkisi doğar.
+    _knownCrafts.addAll(craftsCarriedBy(c.roster.map((member) => member.$1)));
 
     _stockpile.wood = c.wood;
     _stockpile.stone = c.stone;
     _stockpile.food = c.food;
+  }
+
+  /// Kafile ilk sorudan önce canlı haritada halka olur. Başlangıçta yürür;
+  /// oyuncu kadroyu seçince overlay arkasında yeniden doğan nihai kadro aynı
+  /// halkaya doğrudan oturtulur.
+  void _beginFoundingCouncil() {
+    _foundingCouncilPending = true;
+    _foundingCouncilFormed = false;
+    _foundingCouncilHold = 0.0;
+    _placeFoundersInCouncil(snap: false);
+  }
+
+  void _placeFoundersInCouncil({required bool snap}) {
+    final heart = foundingHearthCenter();
+    if (_villagers.isEmpty) return;
+    final (cx, cy) = heart;
+    _foundingCouncilTargets.clear();
+    for (var i = 0; i < _villagers.length; i++) {
+      final v = _villagers[i];
+      final angle = -pi / 2 + i * (2 * pi / _villagers.length);
+      final target = _nearestLand(cx + cos(angle) * 2.2, cy + sin(angle) * 2.2);
+      _foundingCouncilTargets[v] = target;
+      // Rutin/iş/sosyal sistemleri bu kısa törensel yürüyüşün hedefini ele
+      // geçirmesin. Halka bırakılırken bu geçici sahiplik mührü temizlenir.
+      v.activity = VillagerActivity.listening;
+      if (snap) {
+        v.gridX = target.$1;
+        v.gridY = target.$2;
+        v.renderX = target.$1;
+        v.renderY = target.$2;
+        v.state = VillagerState.idle;
+        v.lookToward(cx, cy);
+      } else {
+        v.state = VillagerState.moving;
+        v.isWalking = true;
+      }
+    }
+  }
+
+  void _tickFoundingCouncil(double realDt) {
+    if (!_foundingCouncilPending || _activeCutscene != null) return;
+    final heart = foundingHearthCenter();
+    if (_foundingCouncilTargets.isEmpty) return;
+    final (cx, cy) = heart;
+    final stepDt = realDt.clamp(0.0, 0.05);
+
+    // Kısa açılış planı her cihazda aynı merkez/yakınlıkta kalır. Oyuncunun
+    // önceki pinch seviyesi intro halkasının boyuna sızmaz.
+    if (_viewSize.width > 0 && _viewSize.height > 0) {
+      _zoom = max(_minZoomForReach(_viewSize), 1.08);
+      _centerCameraOnUV(cx - cy, cx + cy, _viewSize);
+      _clampCamera(_viewSize);
+    }
+
+    var allArrived = true;
+    for (final entry in _foundingCouncilTargets.entries) {
+      final v = entry.key;
+      final target = entry.value;
+      final dx = target.$1 - v.gridX;
+      final dy = target.$2 - v.gridY;
+      final dist = sqrt(dx * dx + dy * dy);
+      if (dist > 0.04) {
+        allArrived = false;
+        // Normal NPC A*/separation/stuck-yield zinciri bu planın sahibi
+        // değildir. Sabit hızlı yaklaşım yol-verip-duraksama ve geç ışınlanma
+        // fallback'ini kaldırır.
+        final stride = min(dist, 2.35 * stepDt);
+        v.gridX += dx / dist * stride;
+        v.gridY += dy / dist * stride;
+        v.state = VillagerState.moving;
+        v.isWalking = true;
+        v.walkPhase = (v.walkPhase + stepDt * v.speed * 5.5) % (2 * pi);
+        v.lookToward(target.$1, target.$2);
+        continue;
+      }
+      v.gridX = target.$1;
+      v.gridY = target.$2;
+      v.state = VillagerState.idle;
+      v.isWalking = false;
+      v.lookToward(cx, cy);
+    }
+    if (!allArrived) {
+      _foundingCouncilHold = 0.0;
+      return;
+    }
+
+    for (final v in _foundingCouncilTargets.keys) {
+      v.activity = VillagerActivity.listening;
+      v.lookToward(cx, cy);
+    }
+    _foundingCouncilHold += stepDt;
+    if (_foundingCouncilHold < 1.0) return;
+    _foundingCouncilPending = false;
+    _foundingCouncilFormed = true;
+    _foundingCouncilHold = 0.0;
+    _playCutscene(kOpeningCutscene);
+  }
+
+  void _releaseFoundingCouncil() {
+    _foundingCouncilPending = false;
+    _foundingCouncilFormed = false;
+    _foundingCouncilHold = 0.0;
+    _foundingCouncilTargets.clear();
+    for (final v in _villagers) {
+      if (v.activity == VillagerActivity.listening) {
+        v.activity = VillagerActivity.none;
+      }
+      if (v.state != VillagerState.moving) v.state = VillagerState.idle;
+    }
   }
 
   /// Hanenin adını oyuncu koydu — kurucuların hepsine soyad olarak işlenir.
@@ -636,6 +751,57 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     _discoverCallingCraft(migrant, _CraftSource.migrant);
   }
 
+  /// Kademe kervanından oyuncunun seçtiği uzman. Normal göçten farklı olarak
+  /// mesleği rastgele değildir; boş yatak varsa yerleşir, yoksa köyün eşiğinde
+  /// evsiz başlar ve saz yatağı döngüsüne katılır. Seçim boşa düşmez.
+  VillagerEntity _spawnSpecialist(VillagerType type) {
+    BuildingEntity? house;
+    for (final b in _buildings) {
+      final f = b.fn;
+      if (f == null || f.role != BuildingRole.housing) continue;
+      final occ = _villagers.where((v) => v.homeBuilding == b).length;
+      if (occ < f.housingCapacity) {
+        house = b;
+        break;
+      }
+    }
+
+    final edge = _rng.nextInt(4);
+    late double sx, sy;
+    switch (edge) {
+      case 0:
+        sx = _rng.nextDouble() * (kCols - 4) + 2;
+        sy = 1;
+      case 1:
+        sx = kCols - 2.0;
+        sy = _rng.nextDouble() * (kRows - 4) + 2;
+      case 2:
+        sx = _rng.nextDouble() * (kCols - 4) + 2;
+        sy = kRows - 2.0;
+      default:
+        sx = 1;
+        sy = _rng.nextDouble() * (kRows - 4) + 2;
+    }
+    final (lx, ly) = _nearestLand(sx, sy);
+    final pseed = _rng.nextInt(0x7FFFFFFF);
+    final male = _rng.nextBool();
+    final specialist = VillagerEntity(
+      type: type,
+      name: randomVillagerName(_rng, male: male),
+      surname: randomVillagerSurname(_rng),
+      male: male,
+      personalitySeed: pseed,
+      startCol: lx,
+      startRow: ly,
+      lifespanDays: _rollLifespan(),
+      ageDays: 24.0 + _rng.nextDouble() * 24.0,
+    );
+    specialist.homeBuilding = house;
+    _villagers.add(specialist);
+    pushPolicyMorale(-0.02, 1.5);
+    return specialist;
+  }
+
   /// DIŞARIYA NİKÂH — yalnız kalmış bir yetişkine dışarıdan eş çağırır.
   ///
   /// Köy TEK SOYLA kurulur ve soy erkek üzerinden taşınır; yeni hane yalnız
@@ -790,13 +956,18 @@ extension _SceneBuildingSpawn on _VillageSceneState {
   void _onBuildingCompleted(BuildOrder o) {
     final building = _buildings.firstWhere(
       (b) => b.col == o.col && b.row == o.row && b.type == o.type,
-      orElse: () => BuildingEntity(type: o.type, col: o.col, row: o.row),
+      orElse: () => BuildingEntity(
+        type: o.type,
+        col: o.col,
+        row: o.row,
+        design: o.design,
+      ),
     );
     final footprint = kBuildingMeta[o.type]!;
     // Doğrudan kurulan/dev/referans yapılar `_doPlace` kapısını atlar;
     // tamamlanma kancası ikinci emniyet ağıdır. Bina ve spawn-pop FX'i
     // aynı tile'daki eski dekorla hiçbir zaman birlikte yaşamaz.
-    _clearDecorFootprint(o.col, o.row, footprint.cols, footprint.rows);
+    _claimGroundFootprint(o.col, o.row, footprint.cols, footprint.rows);
     // _BuildingDrawable spawn-pop animasyonu (ilk ~0.6s scale + toz) için.
     building.spawnTime = _time;
 
@@ -834,6 +1005,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           _showNotification(
             '🔥 İlk ateş yandı. Yakıtı odunla beslenir; stokta biraz odun bırak.',
           );
+          _beginFoundingReedBedWork();
         } else {
           _showNotification('Ateş yakıldı! Köy kurulmaya başlıyor...');
         }
@@ -843,7 +1015,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       case BuildingType.stoneHouseBlue:
       case BuildingType.stoneHouseGreen:
       case BuildingType.manor:
-        // Yeni barınak — evsizleri kapasitesi kadar içine al. Çadır 1, ev 2,
+        // Yeni barınak — evsizleri kapasitesi kadar içine al. Çadır 2, ev 2,
         // taş konut 3, konak 4 (housingCapacity).
         final cap = building.fn?.housingCapacity ?? 0;
         int assigned = 0;
@@ -858,15 +1030,6 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           final where = o.type == BuildingType.tent ? 'çadıra' : 'eve';
           _showNotification('$assigned köylü $where yerleşti.');
         }
-        // Ateş bir başlangıç noktasıdır; köy, ilk barınak tamamlanınca gerçek
-        // bir yerleşime dönüşür. İsim istemini ateş anından buraya taşıyoruz.
-        if (o.type == BuildingType.tent &&
-            _charterTier == 0 &&
-            _villageName == 'Köy' &&
-            !_villageNamePromptOpen) {
-          setStateHere(() => _villageNamePromptOpen = true);
-        }
-
       case BuildingType.lumberCamp:
         // (Oduncu artık atanmış köylü — _syncJobWorkforce kampa en yakın boş
         // köylüyü oduncu yapar; bölge yönetimi _tickLumberCampManage'de.)
