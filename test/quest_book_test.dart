@@ -328,6 +328,19 @@ void main() {
     expect(open.first.active, isTrue, reason: 'ilk görev vurgulanmalı');
   });
 
+  test('yıl kapısı hedefi boş bırakmak yerine sıradaki meseleyi verir', () {
+    final ctx = _ctx(charterTier: 3, dayCount: 17); // 2. yıl
+    final done = {
+      for (final q in QuestBook.all)
+        if (q.tier <= 3 && q.minYear <= 2) q.id,
+    };
+
+    expect(QuestBook.activeQuests(ctx, done), isEmpty);
+    final upcoming = QuestBook.upcomingQuest(ctx, done);
+    expect(upcoming?.id, 'roads');
+    expect(upcoming?.minYear, 3);
+  });
+
   // ── KURULUŞ KADEMESİ ───────────────────────────────────────────────────────
   // Buradaki sözleşme bir sayı değil bir TASARIM: erken oyunun boş hissetmesinin
   // sebebi kuruluşun beş "bina dik" görevinden ibaret olmasıydı. Sonraki

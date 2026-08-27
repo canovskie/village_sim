@@ -24,6 +24,12 @@ extension _SceneUiOverlays on _VillageSceneState {
     if (!_completedQuests.contains('lumber')) {
       return '6 · İlk odun zinciri kuruluyor';
     }
+    if (!_completedQuests.contains('well')) return '7 · Kuyu yeri bekleniyor';
+    if (!_completedQuests.contains('farm')) return '8 · Tarla alanı bekleniyor';
+    if (!_completedQuests.contains('tentIllness')) {
+      return '9 · Çadırın sonucu sahneleniyor';
+    }
+    if (!_completedQuests.contains('house')) return '10 · İlk dam kuruluyor';
     return '✓ Doğal kuruluş tamamlandı';
   }
 
@@ -39,6 +45,10 @@ extension _SceneUiOverlays on _VillageSceneState {
         ('Gece', _completedQuests.contains('firstNight')),
         ('Çadır', _completedQuests.contains('tent')),
         ('Odun', _completedQuests.contains('lumber')),
+        ('Kuyu', _completedQuests.contains('well')),
+        ('Tarla', _completedQuests.contains('farm')),
+        ('Hastalık', _completedQuests.contains('tentIllness')),
+        ('Ev', _completedQuests.contains('house')),
       ];
 
       Future<void> restartFresh() async {

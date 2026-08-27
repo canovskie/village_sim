@@ -218,6 +218,9 @@ extension _SceneLaw on _VillageSceneState {
       _lawRitual = null;
       // Köy kararı DUYSUN — mühür anının gövde karşılığı (bkz. scene_reactions).
       _announceLawInVillage(l);
+      // İlk imza davranışı bildirim sönmeden sokağa insin; sonra ortak motor
+      // hükmü günler boyunca aralıklı olarak yeniden oynatır.
+      _lawBehaviorNextSim = _time + 2.0;
     });
     _chronicle(
       '${l.title} deftere girdi.',

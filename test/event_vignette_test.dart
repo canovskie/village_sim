@@ -160,7 +160,7 @@ void main() {
 
     var choiceSeen = false;
     for (final e in EventSystem.events) {
-      // Ağır kararların arasında gerçek oyunda 0,65 gün sakinleşme süresi var.
+      // Ağır kararların arasında gerçek oyunda kısa bir sakinleşme süresi var.
       // İkinci ve sonraki ağır kararı art arda zorlamak yerine temiz köyde
       // aynı gerçek kuyruk/modal yolunu oynat. Otomatik olaylar aynı sahnede
       // kalır; gereksiz dokuz ayrı asset kurulumu tam süiti boğmaz.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/resources.dart';
 import '../systems/event_system.dart';
 import 'app_ui.dart';
 import 'event_artwork.dart';
@@ -16,12 +17,14 @@ class EventChoiceModal extends StatelessWidget {
   final EventOutcome event;
   final void Function(EventChoice) onChoose;
   final VoidCallback? onDismiss;
+  final ResourceBundle? stockpile;
 
   const EventChoiceModal({
     super.key,
     required this.event,
     required this.onChoose,
     this.onDismiss,
+    this.stockpile,
   });
 
   Color get _accent => switch (event.category) {
@@ -61,7 +64,9 @@ class EventChoiceModal extends StatelessWidget {
         choice: c,
         accent: _accent,
         compact: compact,
-        onTap: () => onChoose(c),
+        onTap: stockpile == null || c.canAfford(stockpile!)
+            ? () => onChoose(c)
+            : null,
       ),
       if (c != event.choices!.last) const SizedBox(height: 9),
     ],
@@ -78,7 +83,9 @@ class EventChoiceModal extends StatelessWidget {
             choice: event.choices![i],
             accent: _accent,
             compact: true,
-            onTap: () => onChoose(event.choices![i]),
+            onTap: stockpile == null || event.choices![i].canAfford(stockpile!)
+                ? () => onChoose(event.choices![i])
+                : null,
           ),
         ),
         if (i != event.choices!.length - 1) const SizedBox(height: 7),
@@ -237,7 +244,7 @@ class EventChoiceModal extends StatelessWidget {
 class _ChoiceCard extends StatefulWidget {
   final EventChoice choice;
   final Color accent;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
   final bool compact;
   const _ChoiceCard({
     required this.choice,
@@ -257,99 +264,106 @@ class _ChoiceCardState extends State<_ChoiceCard> {
     final c = widget.choice;
     final accent = widget.accent;
     final deltas = c.deltaSummary();
+    final enabled = widget.onTap != null;
     return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
+      onEnter: (_) {
+        if (enabled) setState(() => _hover = true);
+      },
       onExit: (_) => setState(() => _hover = false),
-      cursor: SystemMouseCursors.click,
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedContainer(
+        child: AnimatedOpacity(
           duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-          padding: widget.compact
-              ? const EdgeInsets.fromLTRB(10, 8, 10, 8)
-              : const EdgeInsets.fromLTRB(12, 10, 12, 11),
-          decoration: BoxDecoration(
-            color: _hover
-                ? Color.alphaBlend(
-                    accent.withValues(alpha: 0.14),
-                    AppUi.surface2,
-                  )
-                : AppUi.surface1,
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(
-              color: _hover ? accent : AppUi.line,
-              width: _hover ? 1.5 : 1,
+          opacity: enabled ? 1.0 : 0.46,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            padding: widget.compact
+                ? const EdgeInsets.fromLTRB(10, 8, 10, 8)
+                : const EdgeInsets.fromLTRB(12, 10, 12, 11),
+            decoration: BoxDecoration(
+              color: _hover
+                  ? Color.alphaBlend(
+                      accent.withValues(alpha: 0.14),
+                      AppUi.surface2,
+                    )
+                  : AppUi.surface1,
+              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+              border: Border.all(
+                color: _hover ? accent : AppUi.line,
+                width: _hover ? 1.5 : 1,
+              ),
+              boxShadow: _hover
+                  ? [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                      ),
+                    ]
+                  : null,
             ),
-            boxShadow: _hover
-                ? [
-                    BoxShadow(
-                      color: accent.withValues(alpha: 0.25),
-                      blurRadius: 10,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      c.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppUi.bodyHi.copyWith(
-                        fontSize: widget.compact ? 12.5 : 13,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ),
-                  GameIcon(
-                    GameIconData.chevron,
-                    size: 14,
-                    color: _hover ? accent : AppUi.textLo,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              Padding(
-                padding: const EdgeInsets.only(left: 13),
-                child: Text(
-                  c.detail,
-                  maxLines: widget.compact ? 2 : null,
-                  overflow: widget.compact ? TextOverflow.ellipsis : null,
-                  style: AppUi.body.copyWith(
-                    fontSize: widget.compact ? 10.5 : 11,
-                    height: 1.35,
-                  ),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        c.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppUi.bodyHi.copyWith(
+                          fontSize: widget.compact ? 12.5 : 13,
+                        ),
+                      ),
+                    ),
+                    GameIcon(
+                      GameIconData.chevron,
+                      size: 14,
+                      color: _hover ? accent : AppUi.textLo,
+                    ),
+                  ],
                 ),
-              ),
-              if (deltas.isNotEmpty &&
-                  (!widget.compact || deltas.length <= 3)) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: 5),
                 Padding(
                   padding: const EdgeInsets.only(left: 13),
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: deltas
-                        .map((d) => _deltaChip(d.$1, d.$2))
-                        .toList(),
+                  child: Text(
+                    c.detail,
+                    maxLines: widget.compact ? 2 : null,
+                    overflow: widget.compact ? TextOverflow.ellipsis : null,
+                    style: AppUi.body.copyWith(
+                      fontSize: widget.compact ? 10.5 : 11,
+                      height: 1.35,
+                    ),
                   ),
                 ),
+                if (deltas.isNotEmpty &&
+                    (!widget.compact || deltas.length <= 3)) ...[
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 13),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: deltas
+                          .map((d) => _deltaChip(d.$1, d.$2))
+                          .toList(),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

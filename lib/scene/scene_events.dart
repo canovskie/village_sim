@@ -5,8 +5,8 @@ part of '../main.dart';
 /// part of main.dart — State'in tüm private alanlarına erişim.
 extension _SceneEvents on _VillageSceneState {
   /// Omen (mayalanma) süresi aralığı (sn) — olay vurmadan önceki diegetik uyarı.
-  static const double _kOmenMin = 4.0;
-  static const double _kOmenMax = 7.0;
+  static const double _kOmenMin = GameplayPacing.omenMinSimSeconds;
+  static const double _kOmenMax = GameplayPacing.omenMaxSimSeconds;
 
   /// Olay zamanlayıcısı + omen ilerlemesi. scene_tick'in ana döngüsünden çağrılır
   /// (eski doğrudan `_triggerRandomEvent` yerine — artık olay önce mayalanır).
@@ -39,8 +39,10 @@ extension _SceneEvents on _VillageSceneState {
       // ikisini birden sertleştirmek geç oyunu cozy çizginin dışına atardı.
       final tempo = pressureForDay(_dayCount).eventTempo; // 1.0 → 0.65
       _eventTimer =
-          (kEventMinInterval +
-              _rng.nextDouble() * (kEventMaxInterval - kEventMinInterval)) *
+          (GameplayPacing.eventMinSimSeconds +
+              _rng.nextDouble() *
+                  (GameplayPacing.eventMaxSimSeconds -
+                      GameplayPacing.eventMinSimSeconds)) *
           tempo;
     }
   }
@@ -80,6 +82,9 @@ extension _SceneEvents on _VillageSceneState {
     );
     _omenEvent = e;
     _omenLeft = _kOmenMin + _rng.nextDouble() * (_kOmenMax - _kOmenMin);
+    if (e.id == EventIds.caravan && !_hasCaravanInWorld) {
+      _spawnMerchant(VisitorKind.caravan, true);
+    }
     _playOmen(e);
   }
 
@@ -206,18 +211,22 @@ extension _SceneEvents on _VillageSceneState {
 
   /// Karar olayını KUYRUĞA koyar — KAPIDA KUYRUK modeli: modal açılmaz, sim
   /// akmaya devam eder. HUD'a karar mührü iner, mühlet şiddete göre erir:
-  ///   major (yangın/salgın) → günün %20'si   (~48 sn 1× hızda)
-  ///   minor (kurt vb.)      → günün %30'u    (~72 sn 1× hızda)
-  /// Sayılar "acele ettirmesin ama dünya nefesini tutmasın" dengesi: modal
-  /// dönemde süre sonsuzdu, sıfıra da inemez — kayıp her zaman haber verilir.
+  ///   major (yangın/salgın) → ~24 sn
+  ///   minor (kurt vb.)      → ~30 sn
+  /// Karar görünür kalır ama oyuncunun gündemini bir dakikadan uzun işgal etmez.
   void _queueChoiceEvent(EventOutcome e) {
     _requestPacedChoice(e);
   }
 
   /// Merkezi ritim kapısı bu olaya sıra verdiğinde görünür karar mührünü kurar.
   void _activateChoiceEvent(EventOutcome e) {
-    final grace =
-        kGameDaySeconds * (e.severity == EventSeverity.major ? 0.20 : 0.30);
+    // Kervan olayı bir metin değil, gerçek bir ziyaret grubudur. Karar mührü
+    // düşmeden araba ve yükçüler yoldan görünür.
+    if (e.id == EventIds.caravan && !_hasCaravanInWorld) {
+      _spawnMerchant(VisitorKind.caravan, true);
+    }
+    if (e.id == EventIds.caravan) _settleActiveCaravan();
+    final grace = e.severity == EventSeverity.major ? 24.0 : 30.0;
     // Modal/mühür/bildirim aynı cümleyi konuşsun: varyant burada materyalize.
     final shown = e.withMessage(e.messageFor(_eventSeed(e)));
     setStateHere(() {
@@ -364,6 +373,10 @@ extension _SceneEvents on _VillageSceneState {
     EventChoice c, {
     bool timedOut = false,
   }) {
+    if (!timedOut && !c.canAfford(_stockpile)) {
+      _showNotification('Bu karar için köyün kaynağı yetmiyor.');
+      return;
+    }
     if (base.id == EventIds.specialistCaravan) {
       _acceptSpecialistChoice(c);
     }
@@ -399,6 +412,7 @@ extension _SceneEvents on _VillageSceneState {
     // kaçış). _attachFxTargets'tan SONRA — yangın hedefi artık biliniyor.
     // Kimliğe bakar, buton metnine DEĞİL (metin serbestçe yeniden yazılabilsin).
     _stageEventResponse(base, choiceId: c.id);
+    _startEventAftermath(base, c);
     // Vakanüvis: kararın kuru izi ("Kova zinciri kuruldu. Ev kurtarıldı.").
     // Zaman aşımında iz "söz gelmedi" diye başlar — suskunluk da bir karardır
     // ve güncede öyle okunur.
@@ -505,14 +519,41 @@ extension _SceneEvents on _VillageSceneState {
     switch (base.id) {
       // ── Pozitif — köye gelen iyilik dünya-içi kutlamayla karşılanır ──────────
       case EventIds.bard:
-        _stageCelebration(music: true, dance: true, gather: 7);
+        if (choiceId == 'hostBard') {
+          _stageCelebration(music: true, dance: true, gather: 7);
+        } else {
+          _stageCelebration(music: true, gather: 3);
+        }
       case EventIds.caravan:
-        _spawnMerchant(); // olayla birlikte fiziksel tüccar da köşeden gelsin
-        _stageCelebration(atMarket: true, gather: 6);
+        if (!_hasActiveCaravan) _spawnMerchant(VisitorKind.caravan, true);
+        if (choiceId == 'buyProvisions') {
+          _stageGovernanceBeat(
+            GovernanceBeatKind.warehouseDuty,
+            'Kervan erzak teslimatı',
+          );
+          _stageCelebration(atMarket: true, gather: 5);
+        } else {
+          _stageCelebration(atMarket: true, gather: 3);
+        }
       case EventIds.bounty:
-        _stageCelebration(dance: true, gather: 6);
+        if (choiceId == 'storeBounty') {
+          _stageGovernanceBeat(
+            GovernanceBeatKind.warehouseDuty,
+            'Bereketi ambara kaldırma',
+          );
+        } else {
+          _stageCelebration(dance: true, gather: 7);
+        }
       case EventIds.accord:
         _stageReconciliation();
+        _stageGovernanceBeat(
+          choiceId == 'witnessAccord'
+              ? GovernanceBeatKind.councilDuty
+              : GovernanceBeatKind.neighborVisit,
+          choiceId == 'witnessAccord'
+              ? 'Aleni sulh'
+              : 'Haneler arası özel sulh',
+        );
       // ── Negatif — tehdide amaçlı tepki ──────────────────────────────────────
       case EventIds.beastRaid:
         if (choiceId == 'guards') {
@@ -565,21 +606,26 @@ extension _SceneEvents on _VillageSceneState {
           _plagueToll(healer: false); // şifacı yok → salgın en zayıfları alır
         }
       case EventIds.drought:
-        _rallyToward(
-          tx,
-          ty,
-          count: 4,
-          emotion: NpcEmotion.fear,
-          dwell: 5,
-        ); // kuyu
+        if (choiceId == 'irrigate') {
+          _rallyToward(tx, ty, count: 4, emotion: NpcEmotion.fear, dwell: 5);
+        } else {
+          _stageGovernanceBeat(GovernanceBeatKind.homeDuty, 'Su karnesi');
+        }
       case EventIds.storm:
-        _rallyToward(
-          center.$1,
-          center.$2,
-          count: 5,
-          emotion: NpcEmotion.fear,
-          dwell: 5,
-        ); // barınağa koş
+        if (choiceId == 'braceRoofs') {
+          _stageGovernanceBeat(
+            GovernanceBeatKind.repairDuty,
+            'Çatıları berkitme',
+          );
+        } else {
+          _rallyToward(
+            center.$1,
+            center.$2,
+            count: 5,
+            emotion: NpcEmotion.fear,
+            dwell: 5,
+          );
+        }
     }
   }
 

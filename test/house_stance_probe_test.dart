@@ -30,7 +30,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
 
     kProbeOn = false;
     // KAYBETME EŞİĞİ bayraklarını da sıfırla — bunlar GLOBAL. collapse_probe
@@ -48,6 +50,7 @@ void main() {
     kProbeHouseName = '';
     kProbeHousesWithholding = 0;
     kProbeHouseStash = 0;
+    kProbeHouseReleased = 0;
     kProbeHouseIdled = 0;
     kDevSpeedBoostOverride = 0;
     kCaptureMode = false;
@@ -61,31 +64,38 @@ void main() {
 
     kCaptureMode = true;
     kCaptureSceneReady = false;
-    // Karar isteyen olay modali simi DONDURUR (bkz. kProbePause) — süit
-    // yüklüyken bu pencerede pekâlâ bir olay patlıyor ve dünya ilerlemiyor.
-    // Prova köyünde olay yok: ölçtüğümüz şey hane karşılığı, olay kuyruğu değil.
+    // Prova köyünde olay/heyet yok: ölçtüğümüz şey hane karşılığı, dış karar
+    // akışları değil.
     kProbeNoEvents = true;
+    kProbeNoImperial = true;
 
     var waitedMs = 0;
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'houseStance'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'houseStance'),
+        ),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         waitedMs += 50;
       }
     });
     await tester.pump();
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
-            'bu testin hane karşılığıyla ilgisi YOK, sahne hiç ayağa kalkmadı.');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason:
+          'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
+          'bu testin hane karşılığıyla ilgisi YOK, sahne hiç ayağa kalkmadı.',
+    );
   }
 
   Future<void> shutdown(WidgetTester tester) async {
     kProbeHouseWithhold = false;
     kProbeHouseAppease = false;
     kProbeNoEvents = false;
+    kProbeNoImperial = false;
     kDevSpeedBoostOverride = 0;
     await tester.pumpWidget(const SizedBox());
   }
@@ -98,33 +108,49 @@ void main() {
     }
   }
 
-  testWidgets('küstürülen hane GERÇEKTEN elini çeker ve ürününü saklar',
-      (tester) async {
+  testWidgets('küstürülen hane GERÇEKTEN elini çeker ve ürününü saklar', (
+    tester,
+  ) async {
     await boot(tester);
     kDevSpeedBoostOverride = 14.0;
 
     // Sakin köy: kimse bir şey esirgemiyor olmalı.
     await run(tester, 4);
-    expect(kProbeHousesWithholding, 0,
-        reason: 'oturmuş referans köyde esirgeyen hane olmamalı — merdiven '
-            'kendiliğinden tırmanıyorsa eşikler çok alçak');
+    expect(
+      kProbeHousesWithholding,
+      0,
+      reason:
+          'oturmuş referans köyde esirgeyen hane olmamalı — merdiven '
+          'kendiliğinden tırmanıyorsa eşikler çok alçak',
+    );
 
     // En nüfuzlu haneyi küstür.
     kProbeHouseWithhold = true;
     await run(tester, 8);
 
     expect(kProbeHouseName, isNotEmpty, reason: 'küstürülecek hane bulunamadı');
-    expect(kProbeHousesWithholding, greaterThan(0),
-        reason: 'hane küstürüldü ama hiçbir şey esirgemiyor — merdiven '
-            'canlı simde dönmüyor');
-    expect(kProbeHouseIdled, greaterThan(0),
-        reason: 'EMEK kolu ölü: hane elini çekti ama kimse işten çekilmedi');
+    expect(
+      kProbeHousesWithholding,
+      greaterThan(0),
+      reason:
+          'hane küstürüldü ama hiçbir şey esirgemiyor — merdiven '
+          'canlı simde dönmüyor',
+    );
+    expect(
+      kProbeHouseIdled,
+      greaterThan(0),
+      reason: 'EMEK kolu ölü: hane elini çekti ama kimse işten çekilmedi',
+    );
 
     // Ürün kolu: saklanan yiyecek zamanla birikmeli.
     await run(tester, 25);
-    expect(kProbeHouseStash, greaterThan(0),
-        reason: 'ÜRÜN kolu ölü: esirgeyen hane hiçbir şey saklamadı '
-            '(yiyecek girişleri _deliverFoodFrom üzerinden geçmiyor olabilir)');
+    expect(
+      kProbeHouseStash,
+      greaterThan(0),
+      reason:
+          'ÜRÜN kolu ölü: esirgeyen hane hiçbir şey saklamadı '
+          '(yiyecek girişleri _deliverFoodFrom üzerinden geçmiyor olabilir)',
+    );
 
     await shutdown(tester);
   });
@@ -136,39 +162,51 @@ void main() {
     kProbeHouseWithhold = true;
     await run(tester, 25);
     final stashed = kProbeHouseStash;
-    expect(kProbeHousesWithholding, greaterThan(0),
-        reason: 'ön koşul kurulamadı — hane esirgemeye başlamadı');
+    expect(
+      kProbeHousesWithholding,
+      greaterThan(0),
+      reason: 'ön koşul kurulamadı — hane esirgemeye başlamadı',
+    );
 
     // Hüküm: gönlünü al (dilekçenin "Gönüllerini al" seçeneğiyle aynı yol).
     kProbeHouseAppease = true;
     await run(tester, 10);
 
-    expect(kProbeHousesWithholding, 0,
-        reason: 'gönlü alınan hane hâlâ esirgiyor — hüküm merdivenden en az '
-            'iki basamak indirmeli, yoksa karar anlamsız olur');
-    expect(kProbeHouseIdled, 0,
-        reason: 'hane razı oldu ama üyeleri hâlâ işe çıkmıyor');
+    expect(
+      kProbeHousesWithholding,
+      0,
+      reason:
+          'gönlü alınan hane hâlâ esirgiyor — hüküm merdivenden en az '
+          'iki basamak indirmeli, yoksa karar anlamsız olur',
+    );
+    expect(
+      kProbeHouseIdled,
+      0,
+      reason: 'hane razı oldu ama üyeleri hâlâ işe çıkmıyor',
+    );
 
     // Ambar geri akar (kademeli — bir çırpıda değil).
     //
-    // TUZAK: sim, karar bekleyen bir modal (olay/sinematik/imparatorluk/zorlanmış
-    // dilekçe) açıldığında DURUR — harness pump'lamaya devam eder ama dünya
-    // ilerlemez. Prova köyü strese soktuğu için bu pencerede pekâlâ bir olay
-    // patlayabiliyor (ilk koşuda `olay:houseFire` yakalandı) ve test, ambarın
-    // akmamasını hane karşılığının hatası sanıp yanlış yerden düşüyordu.
-    // Çözüm: bütçeyi pencerelere böl, donmayı DONMA olarak raporla.
+    // Anlık stash fotoğrafı yeterli değil: 14× hızda 20 gerçek saniye yaklaşık
+    // 4,7 oyun günü eder. Hane ürünü geri verip çok sonra yeniden küserse stash
+    // tekrar büyüyebilir. Tek doğruluk kaynağı köy ambarına gerçekten dönen
+    // kümülatif miktardır.
     if (stashed > 0) {
       var drained = false;
       for (var i = 0; i < 8 && !drained; i++) {
         await run(tester, 20);
-        drained = kProbeHouseStash < stashed;
+        drained = kProbeHouseReleased > 0;
       }
-      expect(drained, isTrue,
-          reason: kProbePause.isNotEmpty
-              ? 'sim donuk ("$kProbePause") — dünya ilerlemedi, bu bulgunun '
+      expect(
+        drained,
+        isTrue,
+        reason: kProbePause.isNotEmpty
+            ? 'sim donuk ("$kProbePause") — dünya ilerlemedi, bu bulgunun '
                   'hane karşılığıyla ilgisi yok'
-              : 'razı hane ambarını açmadı ($stashed → $kProbeHouseStash) — '
-                  'barışın karşılığı görünmüyor');
+            : 'razı hane ambarını açmadı (saklı $stashed → '
+                  '$kProbeHouseStash, dönen $kProbeHouseReleased) — '
+                  'barışın karşılığı görünmüyor',
+      );
     }
 
     await shutdown(tester);

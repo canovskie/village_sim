@@ -5,6 +5,8 @@
 /// bildirimler bu sisteme hiç girmez ve simülasyonu bloke etmez.
 library;
 
+import 'gameplay_pacing.dart';
+
 /// Oyuncudan anlamlı bir hüküm isteyen ağır karar türleri.
 enum HeavyDecisionKind { petition, majorEvent, imperial, crimeVerdict }
 
@@ -92,8 +94,8 @@ class DecisionPacingMetrics {
 
 /// Merkezi ve deterministik ağır-karar kuyruğu.
 class DecisionPacing {
-  /// Hedef nefes payının ortası: 0,55–0,75 gün bandının merkezi.
-  static const double defaultQuietDays = 0.65;
+  /// İki ağır karar arasında küçük köy gündemlerine bırakılan nefes payı.
+  static const double defaultQuietDays = GameplayPacing.heavyDecisionQuietDays;
 
   final double quietDays;
   final List<DecisionRequest> _queue = [];

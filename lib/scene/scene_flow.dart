@@ -100,10 +100,9 @@ extension _SceneFlow on _VillageSceneState {
 
   // ── KADEMELİ UYANIŞ ────────────────────────────────────────────────────────
   //
-  // Eskiden bütün sistemler SABİT bir saatle açılıyordu: ilk dilekçe 1. günde,
-  // ilk olay ~1.5. günde. Kuruluş 12 mikro adıma bölününce bu iki tetik
-  // öğreticinin tam ortasına düşer oldu — oyuncu daha "sepeti kime vereyim"i
-  // çözerken karşısına bir divan kararı çıkıyordu.
+  // Eskiden bütün sistemler sabit bir gün sayısıyla açılıyordu. Kuruluş uzayınca
+  // bu tetikler öğreticinin ortasına düşüyordu. Şimdi zamanlayıcılar kısa ama
+  // ancak köyün kuruluş temeli tamamlanınca işlemeye başlıyor.
   //
   // Artık kapı ZAMAN değil KÖYÜN HÂLİ: yönetişim (dilekçe/olay) ancak köy
   // kendi ayakları üstünde durunca (kuruluş kademesi geçilince) uyanır. Suç
@@ -241,8 +240,26 @@ extension _SceneFlow on _VillageSceneState {
 
   void _refreshCurrentStep(QuestContext ctx) {
     final open = QuestBook.activeQuests(ctx, _completedQuests);
-    _stepCache = open.isEmpty ? null : open.first;
+    if (open.isNotEmpty) {
+      _stepCache = open.first;
+    } else {
+      final upcoming = QuestBook.upcomingQuest(ctx, _completedQuests);
+      final speaker = upcoming?.speaker;
+      _stepCache = upcoming == null
+          ? null
+          : QuestState(
+              upcoming,
+              false,
+              true,
+              speakerName: speaker == null ? null : ctx.speakerNames[speaker],
+            );
+    }
     _refreshStepTarget();
+  }
+
+  bool get _currentStepYearLocked {
+    final q = _currentStep?.quest;
+    return q != null && q.minYear > yearOf(_dayCount);
   }
 
   /// ADIMIN DÜNYA HEDEFİ — yalnız "Göster" kamerasının gideceği yer.

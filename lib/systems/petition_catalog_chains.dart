@@ -254,12 +254,13 @@ final List<_PetitionDef> _kChainPetitions = [
       title: 'Odun Azalıyor',
       tone: PetitionTone.ominous,
       estate: Estate.laborers,
-      stakes: 'Altın verirsen ateş güvende; güvenirsen ocak riske girer.',
+      stakes:
+          'Kapıdaki yük hemen gelir; dış pazara giden ulaksa zamanında dönerse ocağı kurtarır.',
       bodyPool: [
         '“Efendim, odunluğun dibi göründü; kalanı iki geceyi ancak çıkarır. Balta sesini '
             'duyuyorsun, boş durmuyoruz; ama ıslak odun yanmaz, kurutmak zaman ister. '
-            'Bugün geçen kervanın yükünde kuru kereste var. Bedelini keseden ödersen '
-            'bu gece ocağa iner. Sen bilirsin.”',
+            'Kapıda kervan varsa yükünü sorarız; yoksa pazara ulak çıkarırız. Ulak '
+            'dönene kadar közü bizim tutmamız gerekecek. Sen bilirsin.”',
         '“{ad} benim, ormanı ben kesiyorum. Yakın hattı bitirdik, artık uzağa gidiyoruz; '
             'bir yük odun için yarım gün yol var. Yetiştiririz de, bir gece açık verirsek '
             'ocak söner. Riski söylemiş olayım.”',
@@ -278,7 +279,30 @@ final List<_PetitionDef> _kChainPetitions = [
           ],
           goldDelta: -6,
           woodDelta: 8,
+          presence: DecisionPresence.activeCaravan,
           estateMood: [(Estate.laborers, 0.05)],
+        ),
+        PetitionOption(
+          label: 'Dış pazara ulak gönder',
+          detail:
+              'Bir köylü keseyle yola çıkar. Kereste yaklaşık yarım gün sonra gelir.',
+          resolutionPool: [
+            '🛤 {ad} dış pazara kereste almaya gönderildi; odun henüz ambarda değil.',
+            '🛤 Kese {ad-in} eline verildi. Köy, pazar yolundan dönüşünü bekliyor.',
+          ],
+          goldDelta: -5,
+          process: DecisionProcessSpec(
+            kind: DecisionProcessKind.marketWoodRun,
+            title: 'Pazar yolu',
+            departureText: 'Dış pazara kereste almaya gidiyor',
+            completionText:
+                '🪵 Pazar ulağı kuru keresteyle döndü; yük ambara indirildi.',
+            completionAnnal:
+                'Dış pazara gönderilen ulak kereste yüküyle köye döndü.',
+            durationDays: 0.55,
+            woodOnComplete: 10,
+          ),
+          estateMood: [(Estate.laborers, 0.04)],
         ),
         PetitionOption(
           label: 'Oduncular yetiştirir',
@@ -308,8 +332,9 @@ final List<_PetitionDef> _kChainPetitions = [
           'Acil odun altın ister; beklemek köyü bir gece daha karanlıkta bırakır.',
       bodyPool: [
         '“Efendim, ocak söndü. Külü karıştırdım, tek bir kor bulamadım. Çocuklar üç '
-            'battaniyenin altında ve hâlâ titriyorlar. Kapıdaki kervanda kuru odun var; '
-            'ya bedelini ödeyeceğiz, ya bu geceyi karanlıkta geçireceğiz.”',
+            'battaniyenin altında ve hâlâ titriyorlar. Kapıda kervan varsa yükünü '
+            'alabiliriz; yoksa iki kişiyi gece pazarına koştururuz. Her ikisinin de '
+            'bedeli var; beklemekse soğuğun bedeli.”',
         '“Ateşçi sabaha kadar körükledi, olmadı; yakacak bir şey yoktu ki. Köyün '
             'ortasında kara bir daire kaldı, hepsi bu. İnsanlar oraya bakıp duruyor. Bir '
             'şey yap.”',
@@ -328,7 +353,32 @@ final List<_PetitionDef> _kChainPetitions = [
           ],
           goldDelta: -10,
           woodDelta: 8,
+          presence: DecisionPresence.activeCaravan,
           estateMood: [(Estate.hearth, 0.06)],
+        ),
+        PetitionOption(
+          label: 'Gece pazarına iki kişi gönder',
+          detail:
+              'Altın şimdi çıkar; iki köylü acil yakacakla gün doğmadan döner.',
+          resolutionPool: [
+            '🏃 İki köylü gece pazarına koştu. Sönük ocak dönüş yolunu bekliyor.',
+            '🏃 Kese hazırlandı; {ad} yanına bir yol arkadaşı alıp karanlığa çıktı.',
+          ],
+          goldDelta: -8,
+          process: DecisionProcessSpec(
+            kind: DecisionProcessKind.emergencyWoodRun,
+            title: 'Gece pazarı',
+            departureText: 'Acil yakacak için gece pazarına gidiyor',
+            completionText:
+                '🔥 Gece pazarından yakacak geldi; odun ocağın yanına taşındı.',
+            completionAnnal:
+                'Gece pazarına gönderilenler yakacakla dönüp ocağı kurtardı.',
+            durationDays: 0.35,
+            woodOnComplete: 9,
+          ),
+          moraleAmount: -0.01,
+          moraleDays: 1,
+          estateMood: [(Estate.hearth, 0.03)],
         ),
         PetitionOption(
           label: 'Oduncuları bekle',

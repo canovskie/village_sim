@@ -104,6 +104,104 @@ void main() {
     // geri getirirse köylü boş elle hayalet taşıyıcı olarak (0,0)'a yürür.
     final baseline = kProbeWorldJson;
 
+    // Yolda olan karar ve olayın sokaktaki kalıcı izi yükleme hilesiyle
+    // silinmemeli. Çok ileri son tarihler kullanılır; test pump'ı tamamlamadan
+    // süreç doğal olarak bitmesin.
+    final governanceWorld = Map<String, dynamic>.from(
+      jsonDecode(baseline) as Map<String, dynamic>,
+    );
+    final now = (governanceWorld['time'] as num).toDouble();
+    governanceWorld['decisionProcesses'] = [
+      {
+        'id': 'test.market.1',
+        'kind': 'marketWoodRun',
+        'title': 'Pazar yolu',
+        'actorName': 'Test ulağı',
+        'startedSim': now,
+        'dueSim': now + 1000,
+        'completionText': 'Döndü',
+        'completionAnnal': 'Ulak döndü.',
+        'food': 0,
+        'wood': 10,
+        'stone': 0,
+        'iron': 0,
+        'gold': 0,
+      },
+    ];
+    governanceWorld['governanceAftermath'] = [
+      {
+        'id': 'storm',
+        'kind': 'repairDuty',
+        'source': 'Çatıları berkitme',
+        'untilSim': now + 1000,
+        'nextBeatSim': now + 500,
+      },
+    ];
+    governanceWorld['lawBehaviorNextSim'] = now + 700;
+    governanceWorld['lawBehaviorCursor'] = 3;
+    governanceWorld['merchants'] = [
+      {
+        'name': 'Kervan Başı',
+        'male': true,
+        'type': 'merchant',
+        'visitorKind': 'caravan',
+        'phase': 'browsing',
+        'groupId': 77,
+        'leader': true,
+        'cart': false,
+        'x': 20.0,
+        'y': 20.0,
+        'browseX': 20.0,
+        'browseY': 20.0,
+        'exitX': 2.0,
+        'exitY': 20.0,
+        'browseLeft': 800.0,
+        'greetingLeft': 0.0,
+      },
+    ];
+    kProbeSaveError = 'koşmadı';
+    kProbeRestoreJson = jsonEncode(governanceWorld);
+    for (var i = 0; i < 40 && kProbeRestoreJson.isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(kProbeSaveError, '', reason: 'yönetişim süreci kaydı açılamadı');
+    kProbeSaveRoundtrip = true;
+    for (var i = 0; i < 40 && kProbeSaveRoundtrip; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final recapturedGovernance = Map<String, dynamic>.from(
+      jsonDecode(kProbeWorldJson) as Map<String, dynamic>,
+    );
+    expect(recapturedGovernance['decisionProcesses'], hasLength(1));
+    expect(recapturedGovernance['governanceAftermath'], hasLength(1));
+    expect(recapturedGovernance['lawBehaviorCursor'], 3);
+    final recapturedVisitors = recapturedGovernance['merchants'] as List;
+    expect(recapturedVisitors, hasLength(1));
+    expect((recapturedVisitors.first as Map)['visitorKind'], 'caravan');
+    expect((recapturedVisitors.first as Map)['phase'], 'browsing');
+
+    // 4× bekleme kaçışı kayıt/yükleme sırasında 2×'e düşmemeli.
+    final speedWorld = Map<String, dynamic>.from(
+      jsonDecode(baseline) as Map<String, dynamic>,
+    );
+    speedWorld['speedIdx'] = 2;
+    speedWorld['timeScale'] = 4.0;
+    kProbeSaveError = 'koşmadı';
+    kProbeRestoreJson = jsonEncode(speedWorld);
+    for (var i = 0; i < 40 && kProbeRestoreJson.isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(kProbeSaveError, '', reason: '4× hız kaydı açılamadı');
+    kProbeSaveRoundtrip = true;
+    for (var i = 0; i < 40 && kProbeSaveRoundtrip; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final recapturedSpeed = Map<String, dynamic>.from(
+      jsonDecode(kProbeWorldJson) as Map<String, dynamic>,
+    );
+    expect(recapturedSpeed['timeScale'], 4.0);
+    expect(recapturedSpeed['speedIdx'], 2);
+
     // Görsel tasarım bina türünden bağımsız kalıcıdır: aynı ahşap ev kiremitli
     // olarak kaydedilip yeniden açıldığında seçimi kaybolmamalı.
     final designedWorld = Map<String, dynamic>.from(

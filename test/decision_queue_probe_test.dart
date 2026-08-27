@@ -44,7 +44,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
 
     kProbeOn = false;
     // Kapanış/kesinti sistemlerinin GLOBAL bayrakları — başka bir prova
@@ -87,18 +89,22 @@ void main() {
 
     var waitedMs = 0;
     await tester.runAsync(() async {
-      await tester.pumpWidget(MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: slot),
-      ));
+      await tester.pumpWidget(
+        MaterialApp(home: VillageScene(referenceVillage: true, slotId: slot)),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         waitedMs += 50;
       }
     });
     await tester.pump();
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
-            'bu bulgunun kuyrukla ilgisi YOK, sahne hiç ayağa kalkmadı.');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason:
+          'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
+          'bu bulgunun kuyrukla ilgisi YOK, sahne hiç ayağa kalkmadı.',
+    );
   }
 
   Future<void> shutdown(WidgetTester tester) async {
@@ -135,24 +141,35 @@ void main() {
     for (var i = 0; i < 30 && kProbeChoiceWaiting.isEmpty; i++) {
       await run(tester, 1);
     }
-    expect(kProbeChoiceWaiting, EventIds.houseFire,
-        reason: kProbePause.isNotEmpty
-            ? 'sim donuk ("$kProbePause") — olay kuyruğa hiç düşemedi'
-            : 'olay vurdu ama kuyruğa girmedi — vuruş yolu hâlâ modal '
+    expect(
+      kProbeChoiceWaiting,
+      EventIds.houseFire,
+      reason: kProbePause.isNotEmpty
+          ? 'sim donuk ("$kProbePause") — olay kuyruğa hiç düşemedi'
+          : 'olay vurdu ama kuyruğa girmedi — vuruş yolu hâlâ modal '
                 'bekliyor ya da bastırma muafiyeti (kProbeChoiceQueueArmed) '
-                'delik');
+                'delik',
+    );
 
     // Kuyruk beklerken sim DONMAMALI — kesintisiz akışın ilk yarısı.
-    expect(kProbePause, isEmpty,
-        reason: 'karar kuyruğu simi dondurdu ("$kProbePause") — kapıda '
-            'kuyruğun bütün amacı buydu');
+    expect(
+      kProbePause,
+      isEmpty,
+      reason:
+          'karar kuyruğu simi dondurdu ("$kProbePause") — kapıda '
+          'kuyruğun bütün amacı buydu',
+    );
 
     // 2) Mühür ekranda: oyuncunun kararı kaybolmadı, bekliyor.
     await tester.pump();
-    expect(find.text('KARAR'), findsOneWidget,
-        reason: 'olay kuyrukta ama HUD karar mührü yok — oyuncuya görünmeyen '
-            'kuyruk, sessizce dolan mühlet demektir (kayıp haber verilir '
-            'kuralı delinir)');
+    expect(
+      find.text('KARAR'),
+      findsOneWidget,
+      reason:
+          'olay kuyrukta ama HUD karar mührü yok — oyuncuya görünmeyen '
+          'kuyruk, sessizce dolan mühlet demektir (kayıp haber verilir '
+          'kuralı delinir)',
+    );
 
     // Bundan sonra rastgele olaylar sussun: zaman aşımı asserti kuyruğun
     // BOŞALDIĞINI da ölçüyor; peşinden gelen ikinci bir olay onu kirletirdi.
@@ -164,24 +181,36 @@ void main() {
     for (var i = 0; i < 30 && kProbeChoiceTimeouts == 0; i++) {
       await run(tester, 1);
     }
-    expect(kProbeChoiceTimeouts, greaterThan(0),
-        reason: 'mühlet hiç dolmadı — ya sim aslında donuk ya da '
-            '_tickChoiceDeadline hiç çağrılmıyor (bekleyen: '
-            '"$kProbeChoiceWaiting")');
-    expect(kProbeChoiceWaiting, isEmpty,
-        reason: 'zaman aşımı koştu ama kuyruk boşalmadı — olay hem çözülmüş '
-            'hem bekliyor görünür (mühür yalan söyler)');
+    expect(
+      kProbeChoiceTimeouts,
+      greaterThan(0),
+      reason:
+          'mühlet hiç dolmadı — ya sim aslında donuk ya da '
+          '_tickChoiceDeadline hiç çağrılmıyor (bekleyen: '
+          '"$kProbeChoiceWaiting")',
+    );
+    expect(
+      kProbeChoiceWaiting,
+      isEmpty,
+      reason:
+          'zaman aşımı koştu ama kuyruk boşalmadı — olay hem çözülmüş '
+          'hem bekliyor görünür (mühür yalan söyler)',
+    );
 
     // 4) Mühür de indi: çözülen kararın rozeti ekranda kalmamalı.
     await tester.pump();
-    expect(find.text('KARAR'), findsNothing,
-        reason: 'karar çözüldü ama mühür hâlâ ekranda');
+    expect(
+      find.text('KARAR'),
+      findsNothing,
+      reason: 'karar çözüldü ama mühür hâlâ ekranda',
+    );
 
     await shutdown(tester);
   });
 
-  testWidgets('mühleti dolan dilekçe donmaz: kapıda beklemeye geçer',
-      (tester) async {
+  testWidgets('mühleti dolan dilekçe donmaz: kapıda beklemeye geçer', (
+    tester,
+  ) async {
     await boot(tester, 'decisionQueuePetition');
     kProbePetitionQueueArmed = true;
     // Olaylar sussun — ölçülen şey dilekçe eskalasyonu.
@@ -194,22 +223,32 @@ void main() {
     for (var i = 0; i < 70 && !kProbePetitionOverdueSeen; i++) {
       await run(tester, 1);
     }
-    expect(kProbePetitionOverdueSeen, isTrue,
-        reason: kProbePause.isNotEmpty
-            ? 'sim donuk ("$kProbePause") — dilekçe mühleti hiç eriyemedi'
-            : 'mühlet doldu ama kapıda-bekleme eskalasyonu hiç tetiklenmedi '
+    expect(
+      kProbePetitionOverdueSeen,
+      isTrue,
+      reason: kProbePause.isNotEmpty
+          ? 'sim donuk ("$kProbePause") — dilekçe mühleti hiç eriyemedi'
+          : 'mühlet doldu ama kapıda-bekleme eskalasyonu hiç tetiklenmedi '
                 '(bekleyen dilekçe: "$kProbePendingPetition") — bekletmenin '
-                'bedeli kağıt üstünde kaldı');
+                'bedeli kağıt üstünde kaldı',
+    );
 
     // Donma YOK — eski zorunlu huzurun tek mirası koyu scrim'di, donması değil.
-    expect(kProbePause, isEmpty,
-        reason: 'dilekçe eskalasyonu simi dondurdu ("$kProbePause")');
+    expect(
+      kProbePause,
+      isEmpty,
+      reason: 'dilekçe eskalasyonu simi dondurdu ("$kProbePause")',
+    );
 
     // Mühür kalıcı-kızarık durumda ve bedeli söylüyor.
     await tester.pump();
-    expect(find.textContaining('kapıda bekliyor'), findsOneWidget,
-        reason: 'gecikmiş dilekçenin mührü bedel uyarısını göstermiyor — '
-            'rampa görünmezse kayıp sessizleşir');
+    expect(
+      find.textContaining('kapıda bekliyor'),
+      findsOneWidget,
+      reason:
+          'gecikmiş dilekçenin mührü bedel uyarısını göstermiyor — '
+          'rampa görünmezse kayıp sessizleşir',
+    );
 
     await shutdown(tester);
   });
@@ -222,22 +261,44 @@ void main() {
   // pasif şıkkı sona koy ve id'sini buradaki listeye ekle.
 
   test('zaman aşımı sözleşmesi: her karar olayının pasif seçeneği sonda', () {
-    const passiveIds = {'endure', 'hide', 'letBurn'};
-    final choiceEvents =
-        EventSystem.events.where((e) => e.needsChoice).toList();
-    expect(choiceEvents, isNotEmpty,
-        reason: 'katalogda tek bir karar olayı bile yok — sözleşmenin '
-            'bekçilediği şey ortadan kalkmış');
+    const passiveIds = {
+      'rationWater',
+      'endure',
+      'hide',
+      'waitStorm',
+      'letBurn',
+      'hearOneSong',
+      'quickTrade',
+      'harvestFeast',
+      'letAccordStand',
+    };
+    final choiceEvents = EventSystem.events
+        .where((e) => e.needsChoice)
+        .toList();
+    expect(
+      choiceEvents,
+      isNotEmpty,
+      reason:
+          'katalogda tek bir karar olayı bile yok — sözleşmenin '
+          'bekçilediği şey ortadan kalkmış',
+    );
     for (final e in choiceEvents) {
       final t = e.timeoutChoice;
       expect(t, isNotNull);
-      expect(t!.id, e.choices!.last.id,
-          reason: '${e.id}: timeoutChoice son seçenek değil');
-      expect(passiveIds.contains(t.id), isTrue,
-          reason: '${e.id}: mühlet dolunca köy "${t.label}" (${t.id}) '
-              'seçeneğini kendi yaşayacak — bu pasif şık gibi durmuyor. '
-              'Pasifse id\'sini passiveIds listesine ekle; değilse şık '
-              'sırasını düzelt (pasif SONA).');
+      expect(
+        t!.id,
+        e.choices!.last.id,
+        reason: '${e.id}: timeoutChoice son seçenek değil',
+      );
+      expect(
+        passiveIds.contains(t.id),
+        isTrue,
+        reason:
+            '${e.id}: mühlet dolunca köy "${t.label}" (${t.id}) '
+            'seçeneğini kendi yaşayacak — bu pasif şık gibi durmuyor. '
+            'Pasifse id\'sini passiveIds listesine ekle; değilse şık '
+            'sırasını düzelt (pasif SONA).',
+      );
     }
   });
 }

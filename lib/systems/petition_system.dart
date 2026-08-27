@@ -2,6 +2,7 @@ import 'dart:math';
 import '../text/voice.dart';
 import '../world/season.dart';
 import 'estate_system.dart';
+import 'governance_action.dart';
 import 'law_compass.dart';
 
 part 'petition_catalog.dart';
@@ -125,6 +126,12 @@ class PetitionOption {
   /// sevindirip diğerini küstürür.
   final List<(Estate, double)> estateMood;
 
+  /// Metinde adı geçen dış aktörün dünyada gerçekten bulunma şartı.
+  final DecisionPresence presence;
+
+  /// Anlık stok artışı yerine sahnede başlayıp daha sonra tamamlanan iş.
+  final DecisionProcessSpec? process;
+
   const PetitionOption({
     required this.label,
     required this.detail,
@@ -143,6 +150,8 @@ class PetitionOption {
     this.setsFlags = const [],
     this.clearsFlags = const [],
     this.estateMood = const [],
+    this.presence = DecisionPresence.none,
+    this.process,
   });
 
   /// Bu seçeneğin metinlerini bağlamla doldurur (bkz. [Petition.spoken]).
@@ -168,6 +177,8 @@ class PetitionOption {
     setsFlags: setsFlags,
     clearsFlags: clearsFlags,
     estateMood: estateMood,
+    presence: presence,
+    process: process,
   );
 
   /// UI etki chip'leri — (ikon, etiket) çiftleri.
@@ -182,6 +193,15 @@ class PetitionOption {
     res('🪨', stoneDelta);
     res('⛏️', ironDelta);
     res('★', goldDelta);
+    final delayed = process;
+    if (delayed != null) {
+      res('🌾', delayed.foodOnComplete);
+      res('🪵', delayed.woodOnComplete);
+      res('🪨', delayed.stoneOnComplete);
+      res('⛏️', delayed.ironOnComplete);
+      res('★', delayed.goldOnComplete);
+      out.add(('⏳', '${delayed.durationDays.toStringAsFixed(1)} gün'));
+    }
     if (moraleAmount != 0) {
       final pct = (moraleAmount * 100).round();
       out.add(('😊', '${pct > 0 ? '+' : ''}$pct%'));

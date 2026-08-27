@@ -82,6 +82,17 @@ class DayNightCycle {
     if (wasNight) onMorning?.call();
   }
 
+  /// Kuruluş öğreticisi için gün batımını hemen başlatır. Oyuncu yatak yerini
+  /// seçtikten sonra öğleden akşama kadar boş ekran seyretmez; normal köy
+  /// geceleri ve toplam gün süresi değişmez.
+  void skipToNightfall() {
+    timeOfDay = 0.82;
+    if (_wasNight) return;
+    _wasNight = true;
+    _nightClarityTarget = _rng.nextDouble() < 0.30 ? 1.0 : 0.0;
+    onNightFall?.call();
+  }
+
   void _emitDayNightEdges() {
     final light = dayLight;
     if (!_wasNight && light < kNightThreshold) {

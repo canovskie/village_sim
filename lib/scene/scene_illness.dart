@@ -160,8 +160,9 @@ extension _SceneIllness on _VillageSceneState {
 
   /// Kuruluş dersinin kontrollü hastalığı.
   ///
-  /// Bütün kurucular çadıra girdikten sonra en az bir çadır gecesi geçer;
-  /// odun, su ve tarla temeli de hazırsa sağlıklı bir çadır sakini ateşlenir.
+  /// Bütün kurucular çadıra girdikten, odun, su ve tarla temeli hazır olduktan
+  /// sonra sağlıklı bir çadır sakini ateşlenir. Oyuncu bütün kararları verdikten
+  /// sonra sırf gün sayacı dönsün diye bekletilmez.
   /// Bu hastalık normal iyileşme döngüsünü kullanır fakat ölüm zarı atmaz.
   /// Aynı anda marangozluk açılır: oyuncuya "ev gerek" deyip kilitli bir ev
   /// kartı göstermek öğretmek değil, yolu kapatmak olurdu.
@@ -171,12 +172,6 @@ extension _SceneIllness on _VillageSceneState {
     }
     const foundations = {'firstNight', 'tent', 'lumber', 'well', 'farm'};
     if (!foundations.every(_completedQuests.contains)) return;
-    if (_foundingTentsReadyDay == 0) {
-      _foundingTentsReadyDay = _dayCount;
-      return;
-    }
-    if (_dayCount <= _foundingTentsReadyDay) return;
-
     final candidates = _villagers.where((v) {
       final home = v.homeBuilding;
       return !v.isDying &&
@@ -187,8 +182,34 @@ extension _SceneIllness on _VillageSceneState {
           home is BuildingEntity &&
           home.type == BuildingType.tent;
     }).toList();
-    if (candidates.isEmpty) return;
-    final chosen = candidates.first;
+    final chosen = candidates.firstOrNull;
+
+    // Marangozluğu önce aç: bütün uygun kurucular zaten hastaysa kontrollü
+    // hastalığı üstlerine ikinci kez bindirmeden görev yine ilerleyebilsin.
+    final builder =
+        _villagers
+            .where((v) => !identical(v, chosen) && !v.isDying)
+            .firstOrNull ??
+        chosen;
+    if (builder != null) {
+      final currentMastery = builder.mastery[Craft.carpentry] ?? 0.0;
+      if (currentMastery < 22.0) builder.mastery[Craft.carpentry] = 22.0;
+    }
+    _knownCrafts.add(Craft.carpentry);
+    _foundingTentIllnessTriggered = true;
+
+    if (chosen == null) {
+      _showNotification(
+        '🤒 Çadırdaki hastalık kalıcı dam ihtiyacını gösterdi. Köy Evi artık kurulabilir.',
+      );
+      _chronicle(
+        'Çadırdaki hastalık köyü kalıcı dam için marangozluğa yöneltti.',
+        icon: '🤒',
+        kind: ChronicleKind.crisis,
+        milestone: true,
+      );
+      return;
+    }
 
     chosen.sickDays = 2.0;
     chosen.tutorialIllness = true;
@@ -197,18 +218,6 @@ extension _SceneIllness on _VillageSceneState {
     chosen.chatBubbleIcon = '🤒';
     chosen.chatBubbleTime = 5.0;
     _illnessSeen++;
-    _foundingTentIllnessTriggered = true;
-
-    // Kuruluş ekibinden sağlıklı bir el marangozluğu üstlensin; bilginin
-    // sonraki zanaat-kaybı kontrollerinde de gerçek bir taşıyıcısı olsun.
-    final builder = _villagers.firstWhere(
-      (v) => !identical(v, chosen) && !v.isDying,
-      orElse: () => chosen,
-    );
-    final currentMastery = builder.mastery[Craft.carpentry] ?? 0.0;
-    if (currentMastery < 22.0) builder.mastery[Craft.carpentry] = 22.0;
-    _knownCrafts.add(Craft.carpentry);
-
     AudioManager.instance.playSfx(Sfx.cough);
     _showNotification(
       '🤒 ${chosen.name} çadırda ateşlendi — bez duvar yetmedi. Köy Evi artık kurulabilir.',

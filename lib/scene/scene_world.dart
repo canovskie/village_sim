@@ -366,11 +366,17 @@ extension _SceneWorld on _VillageSceneState {
     _petitionModalOpen = false;
     _petitionOverdue = false;
     _petitionOverdueTimer = 0;
-    _petitionTimer = 1.0 * kGameDaySeconds;
+    _petitionTimer = GameplayPacing.firstPetitionSimSeconds;
     _petitionDeadline = 0;
     _petitionFollowUps.clear();
     _petitionCooldowns.clear();
     _villageMemory.clear();
+    _villagePulse = null;
+    _villagePulseOpen = false;
+    _villagePulseNextReal = GameplayPacing.firstPulseRealSeconds;
+    _villagePulseLastKind = null;
+    _villagePulseLastActor = null;
+    _villagePulseEchoes.clear();
     // Yeni köy hiçbir zanaat bilmez — yalnız ortak survival kiti açık. Gerisi
     // köyün insanlarından organik doğar (çağrı/birikim/dışarıdan).
     _knownCrafts.clear();
@@ -382,6 +388,10 @@ extension _SceneWorld on _VillageSceneState {
     _policies.inkDryUntilSim = 0;
     _inkDryTotal = 0;
     _governanceLegacy = 0;
+    _decisionProcesses.clear();
+    _governanceAftermath.clear();
+    _lawBehaviorNextSim = 0;
+    _lawBehaviorCursor = 0;
 
     _stockpile.clear();
     // Başlangıç kaynak paketi — kuruluşta kaynak bekleme boşluğu olmasın.
@@ -405,10 +415,12 @@ extension _SceneWorld on _VillageSceneState {
     _firstReedBedShown = false;
     _foundingFirstNightFastForwarded = false;
     _foundingFirstNightSleepGlimpse = 0.0;
+    _foundingFirstNightWaitReal = 0.0;
+    _foundingBedWorkElapsed = 0.0;
     _foundingTentsReadyDay = 0;
     _foundingTentIllnessTriggered = false;
     // Olay & gün durumunu sıfırla
-    _eventTimer = kEventFirstDelay;
+    _eventTimer = GameplayPacing.firstEventSimSeconds;
     _eventMorale = 0.0;
     _eventMoraleLeft = 0.0;
     _eventLabel = null;

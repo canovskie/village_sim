@@ -37,6 +37,7 @@ extension _SceneReed on _VillageSceneState {
   /// vardığında [_tickFoundingReedBedWork] tarafından görünür olur.
   void _beginFoundingReedBedWork() {
     if (_firepitBuilding == null || _foundingBedTargets.isNotEmpty) return;
+    _foundingBedWorkElapsed = 0.0;
     for (final v in _villagers) {
       if (v.isDying || v.homeBuilding != null || _villagerHasBed(v)) continue;
       if (_reedBeds.length + _foundingBedTargets.length >= _kMaxReedBeds) {
@@ -54,8 +55,11 @@ extension _SceneReed on _VillageSceneState {
     );
   }
 
-  void _tickFoundingReedBedWork() {
+  void _tickFoundingReedBedWork(double dt) {
     if (_foundingBedTargets.isEmpty) return;
+    _foundingBedWorkElapsed += dt;
+    final travelTimedOut =
+        _foundingBedWorkElapsed >= GameplayPacing.foundingBedTravelSimSeconds;
     final completed = <VillagerEntity>[];
     var bedsAdded = false;
     for (final entry in _foundingBedTargets.entries) {
@@ -65,7 +69,7 @@ extension _SceneReed on _VillageSceneState {
         completed.add(v);
         continue;
       }
-      if (_dist(v.gridX, v.gridY, slot.$1, slot.$2) < 0.8) {
+      if (_dist(v.gridX, v.gridY, slot.$1, slot.$2) < 0.8 || travelTimedOut) {
         // Çiçek/çakıl serime engel değildir; yatağın zemini sahiplenmesiyle
         // alçak dekor temizlenir. Fiziksel dekor slot seçiminde zaten elenir.
         _clearDecorTile(slot.$1.floor(), slot.$2.floor());
@@ -86,6 +90,7 @@ extension _SceneReed on _VillageSceneState {
       _pathContext.bumpVersion();
     }
     if (_foundingBedTargets.isNotEmpty || _reedBeds.isEmpty) return;
+    _foundingBedWorkElapsed = 0.0;
     final stillWithoutBed = _villagers.any(
       (v) => !v.isDying && v.homeBuilding == null && !_villagerHasBed(v),
     );
@@ -98,6 +103,14 @@ extension _SceneReed on _VillageSceneState {
       'Kurucular ilk gece için saz yataklarını kendi elleriyle serdi.',
       icon: '🛏',
     );
+    // Oyun öğle vakti başlar; doğal gün batımını beklemek bu noktada yaklaşık
+    // 86 saniyelik boşluk yaratıyordu. Kuruluşun tek gecesini hemen sahnele.
+    if (_dayCount == 1 && !_completedQuests.contains('firstNight')) {
+      _cycle.skipToNightfall();
+      _lastTimeOfDay = _cycle.timeOfDay;
+    } else {
+      _assignSleepTargets();
+    }
   }
 
   /// Şu an saz işi var mı? (sahipsiz yatak / kurulabilir yatak / biçilebilir
@@ -150,7 +163,7 @@ extension _SceneReed on _VillageSceneState {
         _foundingBedTargets.isEmpty) {
       _beginFoundingReedBedWork();
     }
-    _tickFoundingReedBedWork();
+    _tickFoundingReedBedWork(dt);
     if (_foundingBedTargets.isNotEmpty) return;
 
     _reedScan += dt;
@@ -235,11 +248,26 @@ extension _SceneReed on _VillageSceneState {
     if (_dayCount != 1 || _completedQuests.contains('firstNight')) {
       _foundingFirstNightFastForwarded = true;
       _foundingFirstNightSleepGlimpse = 0.0;
+      _foundingFirstNightWaitReal = 0.0;
       return;
     }
     if (!_completedQuests.contains('firepit') || _villagers.isEmpty) return;
 
     final sleepers = _villagers.where((v) => !v.isDying).toList();
+    final everyoneHasOwnReedBed =
+        sleepers.isNotEmpty && sleepers.every((v) => _bedOf(v) != null);
+    if (!everyoneHasOwnReedBed) {
+      _foundingFirstNightWaitReal = 0.0;
+      return;
+    }
+    // Yataklar hazır olur olmaz kuruluş gecesi başlatılır. Eski/yüklenmiş bir
+    // köy bu kenarı kaçırmışsa burada da güvenceye al.
+    if (_cycle.dayLight >= kNightThreshold) {
+      _cycle.skipToNightfall();
+      _lastTimeOfDay = _cycle.timeOfDay;
+    }
+    _foundingFirstNightWaitReal += realDt.clamp(0.0, 0.1);
+
     final everyoneOnOwnReedBed =
         sleepers.isNotEmpty &&
         sleepers.every((v) {
@@ -249,6 +277,16 @@ extension _SceneReed on _VillageSceneState {
         });
     if (!everyoneOnOwnReedBed) {
       _foundingFirstNightSleepGlimpse = 0.0;
+      if (_foundingFirstNightWaitReal <
+          GameplayPacing.foundingFirstNightSettleRealSeconds) {
+        return;
+      }
+      // Bir köylünün yol bulması/uyku state'i öğreticiyi rehin alamaz. Yataklar
+      // gerçekten kuruldu; kısa gece gösterildikten sonra akış sabaha geçer.
+      _showNotification(
+        '🛏 Kurucular yerleşti. İlk gecenin ardından gün ağardı.',
+      );
+      _completeFoundingFirstNight();
       return;
     }
 
@@ -257,8 +295,13 @@ extension _SceneReed on _VillageSceneState {
     _foundingFirstNightSleepGlimpse += realDt.clamp(0.0, 0.1);
     if (_foundingFirstNightSleepGlimpse < 1.0) return;
 
+    _completeFoundingFirstNight();
+  }
+
+  void _completeFoundingFirstNight() {
     _foundingFirstNightFastForwarded = true;
     _foundingFirstNightSleepGlimpse = 0.0;
+    _foundingFirstNightWaitReal = 0.0;
     _dayCount++;
     _applyLawUpkeep();
     _cycle.skipNightToMorning();

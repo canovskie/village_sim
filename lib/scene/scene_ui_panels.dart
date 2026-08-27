@@ -105,6 +105,7 @@ extension _SceneUiPanels on _VillageSceneState {
     return Positioned.fill(
       child: EventChoiceModal(
         event: _pendingChoice!,
+        stockpile: _stockpile,
         onChoose: (c) => _applyEventChoice(_pendingChoice!, c),
         // Boşluğa dokun = mühre geri in (kapıda kuyruk; mühlet akmayı sürdürür).
         onDismiss: _dismissChoiceModal,

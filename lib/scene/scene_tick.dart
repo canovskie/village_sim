@@ -95,17 +95,15 @@ extension _SceneTick on _VillageSceneState {
       _imperialAlertSub = 'Sancak göründü. Vergi kolonu köyün üstüne yürüyor.';
       _imperialAlertLeft = _VillageSceneState._kImperialAlertDur;
     }
-    // SİMİ DURDURAN: dağılma, sinematik, imparatorluk pazarlığı ve kuruluşun
-    // oyuncuya karar vermeyi öğreten ilk kaynak hükmü (`woodLow`).
-    // Olay kararı ve dilekçe artık DONDURMAZ — kapıda kuyruk: mühür bekler,
+    // SİMİ DURDURAN: yalnız dağılma, sinematik ve imparatorluk pazarlığı.
+    // Olay kararı ve bütün dilekçeler DONDURMAZ — kapıda kuyruk: mühür bekler,
     // mühlet erir, dünya yaşamaya devam eder (bkz. scene_events/_petitions).
     // Time scale × dev speed boost uygulanır. Boost denge testi için 1-30x
     // arası DevPanel slider'ından gelir; normal oyunda 1.0.
     final effectiveScale =
         (_collapsed || // köy dağıldı → dünya durur
             _activeCutscene != null ||
-            _imperialDemand != null ||
-            _petitionNeedsPlayerVerdict)
+            _imperialDemand != null)
         ? 0.0
         : _timeScale *
               (kDevSpeedBoostOverride > 0
@@ -1037,6 +1035,9 @@ extension _SceneTick on _VillageSceneState {
     // tablo köylülere işlenir. Rejimden SONRA gelmeli: aynı karede biriken
     // huzursuzluk aynı karede sokağa yansısın.
     _tickPressure(dt);
+    // Yasa/olay/kararların fiziksel işleri akıldan önce niyet dayatır; aynı
+    // karede hakem tarafından sıradan gezintiye çevrilmez.
+    _tickGovernanceActions(dt);
     // ALGI — hafızalar söner, ölüm tanıklıkları yakalanır. Akıldan ÖNCE:
     // gördüğü şey aynı karede kararına girsin.
     _tickPerception(dt);

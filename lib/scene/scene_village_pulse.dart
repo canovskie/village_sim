@@ -8,7 +8,15 @@ part of '../main.dart';
 ///   • tek cümle + iki kısa karar taşır;
 ///   • oyuncu dokunmazsa kişi kendi kararını verir;
 ///   • önemli sonuç 1-3 oyun günü sonra yeniden hatırlanır.
-enum _VillagePulseKind { sharedMeal, doorstepGarden, calling, reconcile, care }
+enum _VillagePulseKind {
+  sharedMeal,
+  doorstepGarden,
+  calling,
+  reconcile,
+  care,
+  rest,
+  mending,
+}
 
 class _VillagePulse {
   final _VillagePulseKind kind;
@@ -21,7 +29,7 @@ class _VillagePulse {
     required this.kind,
     required this.actor,
     this.other,
-    this.totalReal = 22.0,
+    this.totalReal = GameplayPacing.pulseDecisionRealSeconds,
     double? remainingReal,
   }) : remainingReal = remainingReal ?? totalReal;
 }
@@ -61,7 +69,7 @@ extension _SceneVillagePulse on _VillageSceneState {
       if (active.actor.isDying || !_villagers.contains(active.actor)) {
         _villagePulse = null;
         _villagePulseOpen = false;
-        _villagePulseNextReal = 18 + _rng.nextDouble() * 16;
+        _villagePulseNextReal = _nextVillagePulseDelay();
         return;
       }
       if (_villagePulseUiBusy) return;
@@ -99,7 +107,11 @@ extension _SceneVillagePulse on _VillageSceneState {
   void _startVillagePulse() {
     final drafts = _villagePulseDrafts();
     if (drafts.isEmpty) {
-      _villagePulseNextReal = 14 + _rng.nextDouble() * 12;
+      _villagePulseNextReal =
+          GameplayPacing.pulseRetryMinRealSeconds +
+          _rng.nextDouble() *
+              (GameplayPacing.pulseRetryMaxRealSeconds -
+                  GameplayPacing.pulseRetryMinRealSeconds);
       return;
     }
 
@@ -120,7 +132,9 @@ extension _SceneVillagePulse on _VillageSceneState {
 
     // Tek-seferlik kişisel gündemleri daha doğarken mühürle. Oyuncu görmezden
     // gelse bile aynı kişi iki dakika sonra aynı isteği yeniden söylemez.
-    if (d.kind != _VillagePulseKind.sharedMeal) {
+    if (d.kind == _VillagePulseKind.doorstepGarden ||
+        d.kind == _VillagePulseKind.calling ||
+        d.kind == _VillagePulseKind.reconcile) {
       _villageMemory.add(_villagePulseMemoryKey(d.kind, d.actor, d.other));
     }
   }
@@ -147,6 +161,17 @@ extension _SceneVillagePulse on _VillageSceneState {
       out.add(_VillagePulseDraft(_VillagePulseKind.sharedMeal, v));
     }
 
+    // Her köyde tekrar üretilebilen iki farklı gündem. Kişisel tek-seferlik
+    // hikâyeler tükendiğinde havuz yalnız "ortak sofra"ya çökmesin.
+    final everyday = [...alive]..shuffle(_rng);
+    if (everyday.isNotEmpty) {
+      out.add(_VillagePulseDraft(_VillagePulseKind.rest, everyday.first));
+    }
+    final damaged = _buildings.where((b) => b.damage > 0.08).toList();
+    if (damaged.isNotEmpty && alive.isNotEmpty) {
+      out.add(_VillagePulseDraft(_VillagePulseKind.mending, everyday.last));
+    }
+
     for (final v in alive) {
       final home = v.homeBuilding;
       if (home is BuildingEntity &&
@@ -162,10 +187,7 @@ extension _SceneVillagePulse on _VillageSceneState {
           )) {
         out.add(_VillagePulseDraft(_VillagePulseKind.calling, v));
       }
-      if (v.sickDays > 0.3 &&
-          !_villageMemory.contains(
-            _villagePulseMemoryKey(_VillagePulseKind.care, v),
-          )) {
+      if (v.sickDays > 0.3) {
         out.add(_VillagePulseDraft(_VillagePulseKind.care, v));
       }
       for (final e in v.grudges.entries) {
@@ -234,6 +256,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => '🛠️',
     _VillagePulseKind.reconcile => '🤝',
     _VillagePulseKind.care => '🍯',
+    _VillagePulseKind.rest => '🌤',
+    _VillagePulseKind.mending => '🔨',
   };
 
   String _villagePulseTitle(_VillagePulse p) => switch (p.kind) {
@@ -242,6 +266,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => 'Eli başka işe gidiyor',
     _VillagePulseKind.reconcile => 'Eski kırgınlık',
     _VillagePulseKind.care => 'Hastaya bir el',
+    _VillagePulseKind.rest => 'Bir nefeslik pay',
+    _VillagePulseKind.mending => 'Çatıda ilk çatlak',
   };
 
   String _villagePulseBody(_VillagePulse p) => switch (p.kind) {
@@ -255,6 +281,10 @@ extension _SceneVillagePulse on _VillageSceneState {
       '${p.actor.name} ile ${p.other!.name} aynı sofraya oturursa aralarındaki buz eriyebilir.',
     _VillagePulseKind.care =>
       '${p.actor.name} hastalığı ağır geçiriyor. Bir kaşık bal gücünü çabuk toplamasını sağlar.',
+    _VillagePulseKind.rest =>
+      '${p.actor.name} günlerdir aynı işi sürdürüyor. Bugün erkenden ocağa dönmek istiyor.',
+    _VillagePulseKind.mending =>
+      '${p.actor.name} yıpranan yapılardan birini bugün onarmak istiyor.',
   };
 
   String _villagePulsePrimaryLabel(_VillagePulse p) => switch (p.kind) {
@@ -263,6 +293,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => 'Çağrısını izlesin',
     _VillagePulseKind.reconcile => 'Aynı sofraya çağır',
     _VillagePulseKind.care => 'Bir kaşık bal ver',
+    _VillagePulseKind.rest => 'Bugünü kısa tutsun',
+    _VillagePulseKind.mending => 'Sağlam onarım yap',
   };
 
   String? _villagePulsePrimarySub(_VillagePulse p) => switch (p.kind) {
@@ -271,6 +303,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => 'Mesleği değişir',
     _VillagePulseKind.reconcile => '2 yiyecek',
     _VillagePulseKind.care => '1 bal',
+    _VillagePulseKind.rest => 'Moral kazanır',
+    _VillagePulseKind.mending => '2 odun',
   };
 
   String _villagePulseSecondaryLabel(_VillagePulse p) => switch (p.kind) {
@@ -279,6 +313,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => 'Köyün işi önce',
     _VillagePulseKind.reconcile => 'Karışma',
     _VillagePulseKind.care => 'Köy halkı baksın',
+    _VillagePulseKind.rest => 'İşini tamamlasın',
+    _VillagePulseKind.mending => 'Eldekiyle yamasın',
   };
 
   String? _villagePulseSecondarySub(_VillagePulse p) => switch (p.kind) {
@@ -287,6 +323,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => 'Şimdiki işinde kalır',
     _VillagePulseKind.reconcile => 'Kırgınlık sürer',
     _VillagePulseKind.care => 'Yavaş iyileşir',
+    _VillagePulseKind.rest => 'Üretim sürer',
+    _VillagePulseKind.mending => 'Küçük onarım',
   };
 
   bool _villagePulsePrimaryEnabled(_VillagePulse p) => switch (p.kind) {
@@ -295,6 +333,8 @@ extension _SceneVillagePulse on _VillageSceneState {
     _VillagePulseKind.calling => true,
     _VillagePulseKind.reconcile => _stockpile.food >= 2,
     _VillagePulseKind.care => _stockpile.honey >= 1,
+    _VillagePulseKind.rest => true,
+    _VillagePulseKind.mending => _stockpile.wood >= 2,
   };
 
   // ── Karar + dünya sonucu ─────────────────────────────────────────────────
@@ -323,9 +363,7 @@ extension _SceneVillagePulse on _VillageSceneState {
 
     _villagePulse = null;
     _villagePulseOpen = false;
-    _villagePulseNextReal = autonomous
-        ? 18 + _rng.nextDouble() * 20
-        : 32 + _rng.nextDouble() * 24;
+    _villagePulseNextReal = _nextVillagePulseDelay();
 
     switch (p.kind) {
       case _VillagePulseKind.sharedMeal:
@@ -478,8 +516,48 @@ extension _SceneVillagePulse on _VillageSceneState {
             '🌿 Köylüler ${actor.name} için kapıyı boş bırakmadı.',
           );
         }
+
+      case _VillagePulseKind.rest:
+        if (primary) {
+          actor.feel(NpcEmotion.joy, 6.0, moodDelta: 0.09);
+          actor.glanceAround(duration: 5.0);
+          _lifeEvent(actor, 'Bir gün işini erken bırakıp ocakta soluklandı.');
+          _showNotification(
+            '🌤 ${actor.name} bugün işini erken bıraktı; yüzü biraz açıldı.',
+          );
+        } else {
+          actor.feel(NpcEmotion.content, 3.0, moodDelta: -0.02);
+          _showNotification(
+            '🌤 ${actor.name} işi bitirdi, dinlenmeyi yarına bıraktı.',
+          );
+        }
+
+      case _VillagePulseKind.mending:
+        final damaged = _buildings.where((b) => b.damage > 0.0).toList()
+          ..sort((a, b) => b.damage.compareTo(a.damage));
+        if (damaged.isEmpty) return;
+        final building = damaged.first;
+        if (primary) {
+          _stockpile.wood -= 2;
+          building.damage = max(0.0, building.damage - 0.35);
+          actor.feel(NpcEmotion.content, 4.0, moodDelta: 0.06);
+          _showNotification(
+            '🔨 ${actor.name} en yıpranmış yapıyı sağlam keresteyle onardı.',
+          );
+        } else {
+          building.damage = max(0.0, building.damage - 0.10);
+          _showNotification(
+            '🔨 ${actor.name} çatlağı eldeki parçalarla geçici olarak kapattı.',
+          );
+        }
     }
   }
+
+  double _nextVillagePulseDelay() =>
+      GameplayPacing.pulseNextMinRealSeconds +
+      _rng.nextDouble() *
+          (GameplayPacing.pulseNextMaxRealSeconds -
+              GameplayPacing.pulseNextMinRealSeconds);
 
   int _plantPulseGarden(VillagerEntity actor, int wanted) {
     final home = actor.homeBuilding;

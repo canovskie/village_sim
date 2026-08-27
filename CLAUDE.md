@@ -19,7 +19,7 @@ dağılabilir, koşu kaybedilebilir. Oynanışın omurgası kaynak yönetimi de�
 ### Koşunun yayı (baştan sona)
 
 ```
-KURULUŞ            → 12 mikro adım, parmakla gösteren öğretici (scene_guide)
+KURULUŞ            → 8 mikro adım, parmakla gösteren öğretici (scene_guide)
    ↓
 ORTA OYUN          → Tüzük merdiveni 6 kademe + 7 ders kartı (scene_lessons)
    ↓  her yıl baskı artar (systems/village_year.dart — TEK KAYNAK)

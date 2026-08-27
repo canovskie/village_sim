@@ -206,6 +206,35 @@ void main() {
     expect(find.byType(Scrollable), findsNothing);
   });
 
+  testWidgets('dünyada karşılığı olmayan dilekçe seçeneği nedenini gösterir', (
+    tester,
+  ) async {
+    var chosen = false;
+    await _pumpPhone(
+      tester,
+      PetitionModal(
+        petition: _petition,
+        onChoose: (_) => chosen = true,
+        blockedReason: (option) => option == _petition.options.first
+            ? 'Köyde kervan yok — bu yük satın alınamaz'
+            : null,
+        onDismiss: () {},
+      ),
+    );
+
+    expect(
+      find.text('Köyde kervan yok — bu yük satın alınamaz'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Paylaştır'));
+    await tester.pump();
+    expect(chosen, isFalse);
+
+    await tester.tap(find.text('Ambarda tut'));
+    await tester.pump();
+    expect(chosen, isTrue);
+  });
+
   testWidgets('altı seçenekli yargı telefonda kaydırmadan tek ekrana sığıyor', (
     tester,
   ) async {

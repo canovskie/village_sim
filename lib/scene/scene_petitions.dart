@@ -15,8 +15,10 @@ part of '../main.dart';
 /// Bağımlı sistemler: PetitionSystem (üretim), pushPolicyMorale (geçici moral),
 /// _applyPolicySideChannels + _policies (yasa yürürlüğe), _attachFxTargets (fx).
 extension _ScenePetitions on _VillageSceneState {
-  /// İki dilekçe arası bekleme (sn) — ~1.5 oyun günü.
-  static const double _kPetitionInterval = 1.5 * kGameDaySeconds;
+  /// İki dilekçe arası bekleme. Küçük Köy Nabzı arayı doldurur; dilekçe orta
+  /// ağırlıktaki yönetişim kararını yaklaşık dakikada bir taşır.
+  static const double _kPetitionInterval =
+      GameplayPacing.petitionIntervalSimSeconds;
 
   /// Mühlet (sn) — ~2 oyun günü sakin yanıt penceresi; dolunca zorunlu huzur.
   static const double _kPetitionGrace = 2.0 * kGameDaySeconds;
@@ -27,6 +29,8 @@ extension _ScenePetitions on _VillageSceneState {
   /// Çözülen dilekçenin tekrar random çıkmaması için hafıza cooldown'u.
   static const double _kPetitionRepeatCooldown = 4.0 * kGameDaySeconds;
 
+  /// İlk odun hükmü oyuncunun cevap vermesini zorunlu tutar; ancak diğer bütün
+  /// dilekçeler gibi dünya akmaya devam eder. Bu getter yalnız UI/ret kapısıdır.
   bool get _petitionNeedsPlayerVerdict =>
       _pendingPetition != null &&
       petitionRequiresPlayerVerdict(_pendingPetition!.id, _charterTier);
@@ -36,9 +40,12 @@ extension _ScenePetitions on _VillageSceneState {
     final woodcutters = _villagers
         .where((v) => !v.isDying && v.job?.role == JobRole.woodcutter)
         .length;
+    final caravan = _hasActiveCaravan
+        ? 'kervan pazar/han önünde'
+        : 'köyde kervan yok';
     return 'Şu an: ${_stockpile.wood} odun · ${_stockpile.gold} altın · '
-        'ocak %$fire · $woodcutters çalışan oduncu. Satın almak hemen güvence '
-        'verir; odunculara güvenmek keseyi korur ama ocağı riske bırakır.';
+        'ocak %$fire · $woodcutters çalışan oduncu · $caravan. Kapıdaki yük '
+        'hemen iner; dış pazar ulağıysa dönüşte mal getirir.';
   }
 
   void _tickPetitions(double dt) {
@@ -184,6 +191,12 @@ extension _ScenePetitions on _VillageSceneState {
     VillagerEntity? author,
     Map<String, String> extra = const {},
   }) {
+    // Kervan hakkında konuşan zincir, metni açılmadan önce dünyadaki kervanı
+    // doğurur. Başka bir yolcu köydeyse de ayrı grup olarak gelebilir.
+    if (rawPetition.id == 'roadCaravan') {
+      if (!_hasCaravanInWorld) _spawnMerchant(VisitorKind.caravan, true);
+      _settleActiveCaravan();
+    }
     // Dilekçenin sesi ÇAN DEĞİL, boğaz temizleme: köy kapına gelmiştir, biri
     // öne çıkıp söze başlar. Çan buradan alındı çünkü aynı çan görevi de,
     // mührü de, reddi de karşılıyordu — oyunun bütün önemli anları aynı
@@ -537,6 +550,11 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// Oyuncu bir seçeneği seçti: deltaları + morali + yasayı + fx'i uygula.
   void _resolvePetition(Petition p, PetitionOption o) {
+    final blocked = _petitionOptionBlockReason(o);
+    if (blocked != null) {
+      _showNotification(blocked);
+      return;
+    }
     setStateHere(() {
       final oral = !_lawmakingUnlocked;
       final optionIndex = p.options.indexOf(o).clamp(0, p.options.length - 1);
@@ -660,6 +678,10 @@ extension _ScenePetitions on _VillageSceneState {
     }
     if (o.goldDelta != 0) {
       _stockpile.gold = (_stockpile.gold + o.goldDelta).clamp(0, 1 << 30);
+    }
+    _startDecisionProcess(p, o, author);
+    if (o.presence == DecisionPresence.activeCaravan) {
+      _stageCaravanDelivery(p.title);
     }
     if (o.moraleAmount != 0 && o.moraleDays > 0) {
       pushPolicyMorale(o.moraleAmount, o.moraleDays);
@@ -1320,6 +1342,7 @@ extension _ScenePetitions on _VillageSceneState {
             ? _woodLowDecisionContext
             : null,
         onChoose: (o) => _resolvePetition(_pendingPetition!, o),
+        blockedReason: _petitionOptionBlockReason,
         onDismiss: _dismissPetition,
         kicker: oral ? 'OCAK BAŞI SÖZÜ' : 'DİLEKÇE',
         dismissHint: oral

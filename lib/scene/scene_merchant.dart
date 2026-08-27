@@ -133,8 +133,8 @@ extension _SceneMerchant on _VillageSceneState {
 
   /// Geriye dönük isim korunuyor: artık tek tüccar değil, seçilen profile göre
   /// bütün bir dış dünya grubu doğurur.
-  void _spawnMerchant([VisitorKind? forcedKind]) {
-    if (_merchants.isNotEmpty) return;
+  void _spawnMerchant([VisitorKind? forcedKind, bool allowAdditional = false]) {
+    if (_merchants.isNotEmpty && !allowAdditional) return;
 
     final hasRoad = _roadSystem.count >= 8;
     final hasHan = _firstBuildingOf(BuildingType.caravanserai) != null;
@@ -244,6 +244,25 @@ extension _SceneMerchant on _VillageSceneState {
     }
 
     _announceVisitor(kind, groupId);
+  }
+
+  /// Omen boyunca yoldan gelen kervanı karar açılırken pazar/han durağına
+  /// ulaştırır. Karar kartı “geldi” dediğinde araba hâlâ harita kenarında olmaz.
+  void _settleActiveCaravan() {
+    for (final m in _merchants) {
+      if (m.visitorKind != VisitorKind.caravan || m.finished) continue;
+      if (m.phase != MerchantPhase.entering) continue;
+      m.gridX = m.browseX;
+      m.gridY = m.browseY;
+      m.renderX = m.browseX;
+      m.renderY = m.browseY;
+      m.targetCol = m.browseX;
+      m.targetRow = m.browseY;
+      m.isWalking = false;
+      m.phase = MerchantPhase.greeting;
+      m.greetingLeft = 3.0;
+      m.waveTime = VillagerEntity.kWaveDuration;
+    }
   }
 
   void _addVisitor({

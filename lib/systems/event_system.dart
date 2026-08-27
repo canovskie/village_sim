@@ -118,6 +118,10 @@ class EventChoice {
   final double duration;
   final EventEffect? effect;
 
+  /// true ise negatif kaynak deltaları olay kaybı değil oyuncunun ödediği
+  /// müdahale bedelidir; stok yetmiyorsa seçenek seçilemez.
+  final bool requiresResources;
+
   /// Bu seçenek için kısa "sonuç" mesajı — banner'da gösterilir.
   final String resolutionMessage;
 
@@ -136,7 +140,17 @@ class EventChoice {
     this.moraleModifier = 0,
     this.duration = 0,
     this.effect,
+    this.requiresResources = false,
   });
+
+  bool canAfford(ResourceBundle stock) =>
+      !requiresResources ||
+      (stock.food >= -foodDelta &&
+          stock.gold >= -goldDelta &&
+          stock.wood >= -woodDelta &&
+          stock.stone >= -stoneDelta &&
+          stock.iron >= -ironDelta &&
+          stock.coal >= -coalDelta);
 
   /// UI önizlemesi için kompakt etki listesi (banner deltaSummary ile aynı şema).
   List<(String, String)> deltaSummary() {
@@ -338,6 +352,45 @@ class EventSystem {
         farmGrowthMul: 0.4,
         duration: 45,
       ),
+      choices: [
+        EventChoice(
+          id: 'irrigate',
+          label: 'Kuyuyu tarlaya çevir',
+          detail: '8 altın, 5 odun. Ekinin çoğu kurtulur.',
+          resolutionMessage:
+              'Kova sırası kuyudan tarlaya döndü. Toprak suyu çekti, başağın çoğu ayakta kaldı.',
+          annal: 'Kuyu tarlaya çevrildi. Ekinin çoğu kurtarıldı.',
+          foodDelta: -5,
+          goldDelta: -8,
+          woodDelta: -5,
+          requiresResources: true,
+          moraleModifier: -0.05,
+          duration: 25,
+          effect: EventEffect(
+            fx: EventFx.droughtHaze,
+            screenTint: Color(0x18FFB04A),
+            farmGrowthMul: 0.75,
+            duration: 25,
+          ),
+        ),
+        EventChoice(
+          id: 'rationWater',
+          label: 'Suyu hanelere ayır',
+          detail: 'Ekin açıkta kalır: yiyecek -15, moral -20%.',
+          resolutionMessage:
+              'Kovalar kapılara ayrıldı. Kimse susuz kalmadı ama tarla güneşe bırakıldı.',
+          annal: 'Su hanelere ayrıldı. Tarla güneşe bırakıldı.',
+          foodDelta: -15,
+          moraleModifier: -0.20,
+          duration: 45,
+          effect: EventEffect(
+            fx: EventFx.droughtHaze,
+            screenTint: Color(0x26FFB04A),
+            farmGrowthMul: 0.4,
+            duration: 45,
+          ),
+        ),
+      ],
     ),
     EventOutcome(
       id: EventIds.plague,
@@ -371,6 +424,7 @@ class EventSystem {
               'Kervanın şifacısı kapı kapı dolaştı, kaynattığı otu her ocağa bıraktı. Öksürük seyrekleşti.',
           annal: 'Kervanın şifacısı çağrıldı. Hastalık erken kırıldı.',
           goldDelta: -20,
+          requiresResources: true,
           moraleModifier: -0.10,
           duration: 20,
           effect: EventEffect(
@@ -425,6 +479,7 @@ class EventSystem {
               'Meşaleler ağaç hattına dayandı. Uluma uzaklaştı, sürü ağılda kaldı.',
           annal: 'Muhafızlar gönderildi. Sürü kurtarıldı.',
           foodDelta: -5,
+          requiresResources: true,
         ),
         EventChoice(
           id: 'hide',
@@ -466,6 +521,45 @@ class EventSystem {
         builderMul: 0.0,
         duration: 20,
       ),
+      choices: [
+        EventChoice(
+          id: 'braceRoofs',
+          label: 'Damları bağla',
+          detail: '7 odun. İnşaat yavaşlar ama çatıların çoğu tutulur.',
+          resolutionMessage:
+              'Kirişler halatla bağlandı. Rüzgâr damları sarstı ama köyün üstünü açamadı.',
+          annal: 'Damlar fırtınadan önce bağlandı. Çatılar tutuldu.',
+          woodDelta: -7,
+          requiresResources: true,
+          moraleModifier: -0.03,
+          duration: 16,
+          effect: EventEffect(
+            fx: EventFx.storm,
+            screenTint: Color(0x28203040),
+            rainBoost: 1.0,
+            builderMul: 0.65,
+            duration: 16,
+          ),
+        ),
+        EventChoice(
+          id: 'waitStorm',
+          label: 'Herkesi içeri al',
+          detail: 'Kimse çatıya çıkmaz: odun -16, moral -10%.',
+          resolutionMessage:
+              'Kapılar kapandı. Fırtına geçince avlu sökülmüş keresteyle doluydu.',
+          annal: 'Fırtına içeride beklendi. Kereste rüzgâra gitti.',
+          woodDelta: -16,
+          moraleModifier: -0.10,
+          duration: 20,
+          effect: EventEffect(
+            fx: EventFx.storm,
+            screenTint: Color(0x33203040),
+            rainBoost: 1.0,
+            builderMul: 0.0,
+            duration: 20,
+          ),
+        ),
+      ],
     ),
     EventOutcome(
       id: EventIds.houseFire,
@@ -499,6 +593,7 @@ class EventSystem {
           annal: 'Kova zinciri kuruldu. Ev kurtarıldı.',
           woodDelta: -10,
           foodDelta: -4,
+          requiresResources: true,
           moraleModifier: -0.05,
           duration: 18,
         ),
@@ -537,6 +632,31 @@ class EventSystem {
       moraleModifier: 0.12,
       duration: 40,
       weight: 0.9,
+      choices: [
+        EventChoice(
+          id: 'hostBard',
+          label: 'Ozana sofra kur',
+          detail: '4 yiyecek. Türkü uzar, köyün neşesi kalır.',
+          resolutionMessage:
+              'Sofra ateşin çevresine kuruldu. Ozan ikinci türküyü söyledi, meydan gece yarısına kadar dağılmadı.',
+          annal: 'Ozana sofra kuruldu. Meydanda iki türkü söylendi.',
+          foodDelta: -4,
+          requiresResources: true,
+          moraleModifier: 0.18,
+          duration: 50,
+          effect: EventEffect(fx: EventFx.festival, duration: 22),
+        ),
+        EventChoice(
+          id: 'hearOneSong',
+          label: 'Bir türkü dinle',
+          detail: 'Kısa bir mola. Küçük moral artışı.',
+          resolutionMessage:
+              'Köylüler bir türkü boyunca işi bıraktı. Son tel sustuğunda herkes yeniden tezgâhına döndü.',
+          annal: 'Ozan bir türkü söyledi, sonra yoluna gitti.',
+          moraleModifier: 0.06,
+          duration: 24,
+        ),
+      ],
     ),
     EventOutcome(
       id: EventIds.caravan,
@@ -558,6 +678,33 @@ class EventSystem {
       moraleModifier: 0.05,
       duration: 30,
       weight: 0.8,
+      choices: [
+        EventChoice(
+          id: 'buyProvisions',
+          label: 'Erzak satın al',
+          detail: '8 altın. Yiyecek +18.',
+          resolutionMessage:
+              'Kese açıldı, çuvallar ambara taşındı. Kervan köyden hafiflemiş ayrıldı.',
+          annal: 'Kervandan erzak alındı. Ambar çuvalla doldu.',
+          goldDelta: -8,
+          foodDelta: 18,
+          requiresResources: true,
+          moraleModifier: 0.04,
+          duration: 24,
+        ),
+        EventChoice(
+          id: 'quickTrade',
+          label: 'Tezgâhı bir gün aç',
+          detail: 'Kısa ticaret: altın +10, yiyecek +4.',
+          resolutionMessage:
+              'Tezgâhlar akşama kadar açık kaldı. Kervan giderken köyün kesesi biraz ağırdı.',
+          annal: 'Kervanla kısa ticaret yapıldı.',
+          goldDelta: 10,
+          foodDelta: 4,
+          moraleModifier: 0.05,
+          duration: 30,
+        ),
+      ],
     ),
     EventOutcome(
       id: EventIds.bounty,
@@ -583,6 +730,38 @@ class EventSystem {
         farmGrowthMul: 1.5,
         duration: 30,
       ),
+      choices: [
+        EventChoice(
+          id: 'storeBounty',
+          label: 'Hasadı ambara kaldır',
+          detail: '4 odunla raf kur: yiyecek +24.',
+          resolutionMessage:
+              'Yeni raflar duvara dayandı. Başak çuvala girdi, ambar kışa ağırlaştı.',
+          annal: 'Bereketli hasat yeni raflara kaldırıldı.',
+          foodDelta: 24,
+          woodDelta: -4,
+          requiresResources: true,
+          moraleModifier: 0.05,
+          duration: 24,
+          effect: EventEffect(
+            fx: EventFx.harvestBounty,
+            farmGrowthMul: 1.35,
+            duration: 24,
+          ),
+        ),
+        EventChoice(
+          id: 'harvestFeast',
+          label: 'Hasat sofrası kur',
+          detail: 'Yiyecek +10, moral +15%.',
+          resolutionMessage:
+              'İlk çuvallar ambara değil sofraya açıldı. Köy bir gece boyunca hasadı kutladı.',
+          annal: 'Hasadın ilk payıyla meydanda sofra kuruldu.',
+          foodDelta: 10,
+          moraleModifier: 0.15,
+          duration: 45,
+          effect: EventEffect(fx: EventFx.festival, duration: 22),
+        ),
+      ],
     ),
     EventOutcome(
       id: EventIds.accord,
@@ -602,6 +781,30 @@ class EventSystem {
       moraleModifier: 0.10,
       duration: 40,
       weight: 0.6,
+      choices: [
+        EventChoice(
+          id: 'witnessAccord',
+          label: 'Barışı meydanda duyur',
+          detail: '2 yiyecek. İki hane aynı sofraya oturur.',
+          resolutionMessage:
+              'Ekmeği meydanda böldüler. Barış iki kişinin sözü olmaktan çıkıp köyün şahitliğine geçti.',
+          annal: 'Hanelerin barışı meydanda duyuruldu.',
+          foodDelta: -2,
+          requiresResources: true,
+          moraleModifier: 0.15,
+          duration: 45,
+        ),
+        EventChoice(
+          id: 'letAccordStand',
+          label: 'Aralarında bırakalım',
+          detail: 'Barış sessizce yerleşir: moral +10%.',
+          resolutionMessage:
+              'Kimse tören kurmadı. İki kapı ertesi sabah yine birbirine selam verdi.',
+          annal: 'İki hane kendi arasında barıştı.',
+          moraleModifier: 0.10,
+          duration: 40,
+        ),
+      ],
     ),
   ];
 

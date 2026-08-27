@@ -284,8 +284,7 @@ extension _SceneSave on _VillageSceneState {
       'zoom': _zoom,
       'cameraGuideSeen': _cameraGuideSeen,
       'speedIdx': _speedIdx,
-      // 4× kaldırıldı. Değeri ayrıca yazmak eski indeks düzeninden (0/1/2/3)
-      // yeni düzene (0/1/2) güvenli göç sağlar.
+      // Değeri ayrıca yazmak indeks düzeninden bağımsız güvenli göç sağlar.
       'timeScale': _timeScale,
       'morale': _morale,
       'avgIndividualMorale': _avgIndividualMorale,
@@ -293,9 +292,24 @@ extension _SceneSave on _VillageSceneState {
       'hasFire': _hasFire,
       'charterTier': _charterTier,
       'governanceLegacy': _governanceLegacy,
+      'merchantTimer': _merchantTimer,
+      'merchantTradeCd': _merchantTradeCd,
+      // Kararın dünyada süren işleri ve olayların tekrarlanan davranış izi.
+      // Bunlar UI efekti değil: yükleyerek ulağı erken döndürmek ya da olayın
+      // köydeki sonucunu silmek mümkün olmamalı.
+      'decisionProcesses': [
+        for (final process in _decisionProcesses) process.toJson(),
+      ],
+      'governanceAftermath': [
+        for (final aftermath in _governanceAftermath) aftermath.toJson(),
+      ],
+      'lawBehaviorNextSim': _lawBehaviorNextSim,
+      'lawBehaviorCursor': _lawBehaviorCursor,
       'lastPopMilestone': _lastPopMilestone,
       'firstReedBedShown': _firstReedBedShown,
       'foundingFirstNightFastForwarded': _foundingFirstNightFastForwarded,
+      'foundingBedWorkElapsed': _foundingBedWorkElapsed,
+      'foundingFirstNightWaitReal': _foundingFirstNightWaitReal,
       'foundingTentsReadyDay': _foundingTentsReadyDay,
       'foundingTentIllnessTriggered': _foundingTentIllnessTriggered,
       'firepit': bRef(_firepitBuilding),
@@ -401,6 +415,30 @@ extension _SceneSave on _VillageSceneState {
       // ── Varlıklar ──
       'buildings': [for (final b in _buildings) _buildingToJson(b)],
       'villagers': [for (final v in _villagers) _villagerToJson(v, bRef, vRef)],
+      // Ziyaretçi nüfus değildir ama kararın dünya kanıtıdır. Kervan varken
+      // kaydedip yüklemek “köyde kervan yok” diye seçeneği kapatmamalı.
+      'merchants': [
+        for (final m in _merchants)
+          if (!m.finished)
+            {
+              'name': m.name,
+              'male': m.isMale,
+              'type': m.type.name,
+              'visitorKind': m.visitorKind.name,
+              'phase': m.phase.name,
+              'groupId': m.groupId,
+              'leader': m.isGroupLeader,
+              'cart': m.hasCart,
+              'x': m.gridX,
+              'y': m.gridY,
+              'browseX': m.browseX,
+              'browseY': m.browseY,
+              'exitX': m.exitX,
+              'exitY': m.exitY,
+              'browseLeft': m.browseLeft,
+              'greetingLeft': m.greetingLeft,
+            },
+      ],
       'orders': [for (final o in _orders) _orderToJson(o)],
       'roadOrders': [for (final o in _roadOrders) _roadOrderToJson(o)],
       'roads': [for (final t in _roadSystem.all) _roadTileToJson(t)],
@@ -895,6 +933,7 @@ extension _SceneSave on _VillageSceneState {
     _clearRoadDrag();
     _cows.clear();
     _villagers.clear();
+    _merchants.clear();
     _foundingCouncilPending = false;
     _foundingCouncilFormed = false;
     _foundingCouncilHold = 0.0;
@@ -952,6 +991,10 @@ extension _SceneSave on _VillageSceneState {
     _impGrudge = false;
     _impFilmsShown.clear();
     _policyMoraleEffects.clear();
+    _decisionProcesses.clear();
+    _governanceAftermath.clear();
+    _lawBehaviorNextSim = 0;
+    _lawBehaviorCursor = 0;
     // Düğün kur state'i geçici — önceki oyundan sızmasın (çift _villagers
     // yeniden kurulduğunda eski ref'ler geçersiz). _weddingCouple aşağıda
     // pending'e göre yeniden bağlanır.
@@ -993,12 +1036,17 @@ extension _SceneSave on _VillageSceneState {
     final savedScale = w['timeScale'];
     if (savedScale is num) {
       final scale = savedScale.toDouble();
-      _speedIdx = scale <= 0 ? 2 : (scale >= 1.5 ? 1 : 0);
+      _speedIdx = scale <= 0
+          ? 3
+          : scale >= 3.0
+          ? 2
+          : scale >= 1.5
+          ? 1
+          : 0;
     } else {
-      // Eski düzen: 0=1×, 1=2×, 2=4×, 3=duraklat. 4× kayıt 2×'e iner;
-      // eski duraklatılmış kayıt yeni duraklat indeksine taşınır.
+      // Eski ve yeni indeks düzeni aynıdır: 0=1×, 1=2×, 2=4×, 3=duraklat.
       final old = _i(w['speedIdx']);
-      _speedIdx = old == 3 ? 2 : (old >= 1 ? 1 : 0);
+      _speedIdx = old.clamp(0, 3);
     }
     _timeScale = _VillageSceneState._speedSteps[_speedIdx];
     _morale = _d(w['morale'], 0.5);
@@ -1007,6 +1055,22 @@ extension _SceneSave on _VillageSceneState {
     _hasFire = _b(w['hasFire']);
     _charterTier = _i(w['charterTier']);
     _governanceLegacy = _d(w['governanceLegacy']);
+    _merchantTimer = _d(w['merchantTimer'], 0.7 * kGameDaySeconds);
+    _merchantTradeCd = _d(w['merchantTradeCd']);
+    for (final raw in (w['decisionProcesses'] as List? ?? const [])) {
+      final process = DecisionProcess.fromJson(raw);
+      if (process != null && process.dueSim > 0) {
+        _decisionProcesses.add(process);
+      }
+    }
+    for (final raw in (w['governanceAftermath'] as List? ?? const [])) {
+      final aftermath = GovernanceAftermath.fromJson(raw);
+      if (aftermath != null && aftermath.untilSim > _time) {
+        _governanceAftermath.add(aftermath);
+      }
+    }
+    _lawBehaviorNextSim = _d(w['lawBehaviorNextSim']);
+    _lawBehaviorCursor = _i(w['lawBehaviorCursor']);
     _lastPopMilestone = _i(w['lastPopMilestone']);
     _firstReedBedShown = _b(w['firstReedBedShown']);
     final hasFirstNightFastForward = w.containsKey(
@@ -1014,6 +1078,8 @@ extension _SceneSave on _VillageSceneState {
     );
     _foundingFirstNightFastForwarded = _b(w['foundingFirstNightFastForwarded']);
     _foundingFirstNightSleepGlimpse = 0.0;
+    _foundingBedWorkElapsed = _d(w['foundingBedWorkElapsed']);
+    _foundingFirstNightWaitReal = _d(w['foundingFirstNightWaitReal']);
     final hasFoundingShelterFlow = w.containsKey('foundingTentsReadyDay');
     _foundingTentsReadyDay = _i(w['foundingTentsReadyDay']);
     _foundingTentIllnessTriggered = _b(w['foundingTentIllnessTriggered']);
@@ -1168,9 +1234,54 @@ extension _SceneSave on _VillageSceneState {
       }
     }
 
+    // 5b) Dış dünya ziyaretçileri — sakine bağlanmazlar, kendi grup/evreleri
+    // ile dönerler. Eski kayıtta alan yoksa liste boş kalır ve doğal timer yeni
+    // ziyaret üretir.
+    for (final raw in (w['merchants'] as List? ?? const [])) {
+      final j = Map<String, dynamic>.from(raw as Map);
+      final m = MerchantEntity(
+        startCol: _d(j['x']),
+        startRow: _d(j['y']),
+        browseX: _d(j['browseX']),
+        browseY: _d(j['browseY']),
+        exitX: _d(j['exitX']),
+        exitY: _d(j['exitY']),
+        groupId: _i(j['groupId']),
+        visitorKind: _enumByName(
+          VisitorKind.values,
+          j['visitorKind'],
+          VisitorKind.caravan,
+        ),
+        isGroupLeader: _b(j['leader']),
+        hasCart: _b(j['cart']),
+        browseLeft: _d(j['browseLeft'], 30),
+        greetingLeft: _d(j['greetingLeft'], 3),
+        visualType: _enumByName(
+          VillagerType.values,
+          j['type'],
+          VillagerType.merchant,
+        ),
+        male: j['male'] as bool? ?? true,
+        name: j['name'] as String? ?? 'Yolcu',
+      );
+      m.phase = _enumByName(
+        MerchantPhase.values,
+        j['phase'],
+        MerchantPhase.entering,
+      );
+      m.gridX = _d(j['x']);
+      m.gridY = _d(j['y']);
+      m.renderX = m.gridX;
+      m.renderY = m.gridY;
+      _merchants.add(m);
+    }
+
     // 5a) Köy Nabzı — aktör referansları ancak köylüler kurulduktan sonra
     // çözülebilir. Geçersiz/ölmüş indeks sessizce düşer; yeni hikâye zamanla gelir.
-    _villagePulseNextReal = _d(w['villagePulseNextReal'], 38.0);
+    _villagePulseNextReal = _d(
+      w['villagePulseNextReal'],
+      GameplayPacing.firstPulseRealSeconds,
+    );
     final pulseRaw = w['villagePulse'];
     if (pulseRaw is Map) {
       final j = Map<String, dynamic>.from(pulseRaw);
@@ -1185,8 +1296,14 @@ extension _SceneSave on _VillageSceneState {
           kind: kind,
           actor: _villagers[ai],
           other: oi >= 0 && oi < _villagers.length ? _villagers[oi] : null,
-          totalReal: _d(j['totalReal'], 22.0),
-          remainingReal: _d(j['remainingReal'], 12.0),
+          totalReal: _d(
+            j['totalReal'],
+            GameplayPacing.pulseDecisionRealSeconds,
+          ),
+          remainingReal: _d(
+            j['remainingReal'],
+            GameplayPacing.pulseDecisionRealSeconds,
+          ),
         );
       }
     }
@@ -1464,7 +1581,10 @@ extension _SceneSave on _VillageSceneState {
       _petitionExtra = const {};
     }
 
-    _petitionTimer = _d(w['petitionTimer'], 1.0 * kGameDaySeconds);
+    _petitionTimer = _d(
+      w['petitionTimer'],
+      GameplayPacing.firstPetitionSimSeconds,
+    );
     _petitionDeadline = _d(w['petitionDeadline']);
     _petitionModalOpen = _b(w['petitionModalOpen']) && _pendingPetition != null;
     if (_pendingPetition != null &&
@@ -1612,7 +1732,7 @@ extension _SceneSave on _VillageSceneState {
     }
 
     // 10) Olay / politika moral / ambient.
-    _eventTimer = _d(w['eventTimer'], kEventFirstDelay);
+    _eventTimer = _d(w['eventTimer'], GameplayPacing.firstEventSimSeconds);
     _eventMorale = _d(w['eventMorale']);
     _eventMoraleLeft = _d(w['eventMoraleLeft']);
     _eventLabel = w['eventLabel'] as String?;

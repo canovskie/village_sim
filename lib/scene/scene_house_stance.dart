@@ -79,9 +79,13 @@ extension _SceneHouseStance on _VillageSceneState {
     }
     if (kProbeHouseAppease) {
       kProbeHouseAppease = false;
-      final sn = _withholdingHouseSurname;
+      // Prova başta seçtiği haneyi sonuna kadar izlemeli. Uzun sim sırasında
+      // başka bir hane daha kötü duruma düşebilir; genel "en kötü hane"
+      // seçicisini kullanmak hükmü yanlış haneye gönderip izlenen ambarı
+      // kapalı bırakıyordu.
+      final sn = kProbeHouseName.isEmpty ? null : kProbeHouseName;
       if (sn != null) {
-        _appeaseWithholdingHouse(null);
+        _appeaseWithholdingHouse(null, targetSurname: sn);
         for (final v in _villagers) {
           if (v.surname == sn) v.morale = 0.85;
         }
@@ -94,8 +98,9 @@ extension _SceneHouseStance on _VillageSceneState {
     // toplamı "barıştırdığım hane ambarını açtı mı" sorusuna yalan söylüyordu.
     kProbeHousesWithholding = _withholdingHouses.length;
     kProbeHouseStash = kProbeHouseName.isEmpty
-        ? [for (final s in _houses.surnames) _houses.stashOf(s)]
-            .fold(0, (a, b) => a + b)
+        ? [
+            for (final s in _houses.surnames) _houses.stashOf(s),
+          ].fold(0, (a, b) => a + b)
         : _houses.stashOf(kProbeHouseName);
     var idle = 0;
     for (final v in _villagers) {
@@ -126,9 +131,11 @@ extension _SceneHouseStance on _VillageSceneState {
   /// Bir hanenin duruş değişimini köyün ağzından söyler + vakanüvise düşürür.
   void _announceStance(HouseSnapshot s, {required bool worse}) {
     final head = _headOfSurname(s.surname);
-    final ctx = _voice(head,
-        seed: _stableSeed('duruş${s.surname}${s.stance.name}', _dayCount),
-        extra: {'hane': s.surname});
+    final ctx = _voice(
+      head,
+      seed: _stableSeed('duruş${s.surname}${s.stance.name}', _dayCount),
+      extra: {'hane': s.surname},
+    );
     final pool = switch (s.stance) {
       HouseStance.loyal => _kStanceLoyal,
       HouseStance.content => _kStanceCooled,
@@ -141,17 +148,23 @@ extension _SceneHouseStance on _VillageSceneState {
     // Yalnız ESİRGEME basamakları vakanüvise düşer — serzeniş günlük bir şey,
     // kroniği doldurmasın.
     if (s.stance.withholds || (!worse && s.stance == HouseStance.content)) {
-      _chronicle(Voice.say(_kStanceAnnal, ctx), icon: s.stance.icon, kind: ChronicleKind.crisis);
+      _chronicle(
+        Voice.say(_kStanceAnnal, ctx),
+        icon: s.stance.icon,
+        kind: ChronicleKind.crisis,
+      );
     }
-    logDev('hane duruş: ${s.surname} → ${s.stance.name} '
-        '(hâl ${s.mood.toStringAsFixed(2)}, pay ${s.swayShare.toStringAsFixed(2)})');
+    logDev(
+      'hane duruş: ${s.surname} → ${s.stance.name} '
+      '(hâl ${s.mood.toStringAsFixed(2)}, pay ${s.swayShare.toStringAsFixed(2)})',
+    );
   }
 
   /// Bir soyadın reisi — duruş cümlelerinin ağzı. Canlı üye yoksa null.
   VillagerEntity? _headOfSurname(String surname) {
     final members = [
       for (final v in _villagers)
-        if (!v.isDying && v.surname == surname) v
+        if (!v.isDying && v.surname == surname) v,
     ];
     return headOfHouse(members);
   }
@@ -193,12 +206,17 @@ extension _SceneHouseStance on _VillageSceneState {
     var total = 0;
     for (final e in back.entries) {
       total += e.value;
+      if (kCaptureMode && e.key == kProbeHouseName) {
+        kProbeHouseReleased += e.value;
+      }
       // Kapağını ilk açan haneyi köy duysun (tek satır, en büyük pay yeter).
       if (e.value >= 3 && _stashOpenedCd <= 0) {
         _stashOpenedCd = 90.0;
-        final ctx = _voice(_headOfSurname(e.key),
-            seed: _stableSeed('ambar${e.key}', _dayCount),
-            extra: {'hane': e.key});
+        final ctx = _voice(
+          _headOfSurname(e.key),
+          seed: _stableSeed('ambar${e.key}', _dayCount),
+          extra: {'hane': e.key},
+        );
         _showNotification('🫓 ${Voice.say(_kStashOpened, ctx)}');
       }
     }
@@ -247,9 +265,11 @@ extension _SceneHouseStance on _VillageSceneState {
   /// diegetik cevabı. `true` dönerse atama YAPILMAZ.
   bool _refuseAssignment(VillagerEntity v, JobRole role) {
     if (role == JobRole.none || !_houseWithholdsLabor(v)) return false;
-    final ctx = _voice(v,
-        seed: _stableSeed('ret${v.name}', _dayCount),
-        extra: {'hane': v.surname});
+    final ctx = _voice(
+      v,
+      seed: _stableSeed('ret${v.name}', _dayCount),
+      extra: {'hane': v.surname},
+    );
     _showNotification('✋ ${Voice.say(_kLaborRefusal, ctx)}');
     return true;
   }
@@ -264,9 +284,7 @@ extension _SceneHouseStance on _VillageSceneState {
 
   /// Reis masaya oturmuyor — divanda sandalyesi boş kalır.
   bool _houseBoycottsCouncil(String surname) =>
-      !_godMode &&
-      surname.isNotEmpty &&
-      _houses.withholdingOf(surname).council;
+      !_godMode && surname.isNotEmpty && _houses.withholdingOf(surname).council;
 
   /// Masayı boykot eden hane sayısı — divan başlığı "kaç sandalye boş" desin.
   int get _councilBoycottCount {
@@ -279,8 +297,10 @@ extension _SceneHouseStance on _VillageSceneState {
 
   /// Köyde şu an bir şey esirgeyen haneler (en sert önce — snapshot zaten
   /// esirgeyeni başa alır). Dilekçe kapısı + panel rozeti buradan okur.
-  List<HouseSnapshot> get _withholdingHouses =>
-      [for (final s in _houses.snapshot()) if (s.stance.withholds) s];
+  List<HouseSnapshot> get _withholdingHouses => [
+    for (final s in _houses.snapshot())
+      if (s.stance.withholds) s,
+  ];
 
   /// Hane karşılığı dilekçesinin konusu olan hane — en sert esirgeyen.
   /// null = herkes veriyor, dilekçe ateşlenmez.
@@ -301,13 +321,21 @@ extension _SceneHouseStance on _VillageSceneState {
 
   /// GÖNLÜNÜ AL — hanenin hâli sıçrar, esirgeme çözülür, ambarını açar.
   /// Kese bedeli seçeneğin `goldDelta`'sında (tek kaynak: dilekçe tanımı).
-  void _appeaseWithholdingHouse(VillagerEntity? author) {
-    final surname = author?.surname ?? _withholdingHouseSurname;
+  void _appeaseWithholdingHouse(
+    VillagerEntity? author, {
+    String? targetSurname,
+  }) {
+    final surname =
+        targetSurname ?? author?.surname ?? _withholdingHouseSurname;
     if (surname == null || surname.isEmpty) return;
     // Merdivenin en az iki basamak inmesini garantileyecek kadar — "gönlünü
     // aldım ama hâlâ elini çekiyor" hissi kararı anlamsız kılardı.
     _houses.nudge(surname, moodDelta: 0.34);
-    _chronicle('$surname Hanesi ile arası düzeltildi.', icon: '🤝', kind: ChronicleKind.decision);
+    _chronicle(
+      '$surname Hanesi ile arası düzeltildi.',
+      icon: '🤝',
+      kind: ChronicleKind.decision,
+    );
     logDev('hane hükmü: $surname gönlü alındı (+0.34 hâl)');
     // Hanenin insanları da bunu hissetsin — moral gövde dilinden okunur.
     for (final v in _villagers) {
@@ -327,7 +355,11 @@ extension _SceneHouseStance on _VillageSceneState {
     _houses.drainSway(surname, 1.6);
     _houses.nudge(surname, moodDelta: -0.10);
     _unrest = (_unrest + 0.06).clamp(0.0, 1.0);
-    _chronicle('$surname Hanesi\'nin sözü meclis önünde kesildi.', icon: '⚖', kind: ChronicleKind.decision);
+    _chronicle(
+      '$surname Hanesi\'nin sözü meclis önünde kesildi.',
+      icon: '⚖',
+      kind: ChronicleKind.decision,
+    );
     logDev('hane hükmü: $surname beli kırıldı (−1.6 nüfuz)');
     for (final v in _villagers) {
       if (v.isDying || v.surname != surname) continue;

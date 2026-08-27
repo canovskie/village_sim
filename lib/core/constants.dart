@@ -123,11 +123,8 @@ const double kFoodPerVillagerPerDay = 8.0; // köylü başına günlük tüketim
 const int kStarveRampFood = 10; // bu eşiğin altında açlık reaksiyonu
 
 // ─── Rastgele olaylar ─────────────────────────────────────────────────────────
-// Bir oyun günü = 240 sn. Olaylar NADİR ve özel olmalı — sürekli bombardıman
-// değil. ~1.5 günde ilk olay, sonra her 3-6 günde bir (ort. ~4.5 gün).
-const double kEventFirstDelay = 360.0; // kuruluştan ilk olaya kadar (~1.5 gün)
-const double kEventMinInterval = 720.0; // olaylar arası en kısa süre (3 gün)
-const double kEventMaxInterval = 1440.0; // olaylar arası en uzun süre (6 gün)
+// Olay ritmi `systems/gameplay_pacing.dart` altında tek sözleşmedir. Burada
+// yalnız banner'ın görsel ömrü kalır.
 const double kEventBannerDuration = 6.0; // banner kart ekranda kalma süresi
 
 // ─── Saz / yatak ──────────────────────────────────────────────────────────────

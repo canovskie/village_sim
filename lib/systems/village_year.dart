@@ -131,7 +131,7 @@ EraPressure pressureForYear(int year) {
     imperialAppetite: 1.0 + 0.20 * step,
     // 1.0 → 0.55. Taban aralık ~3-8 gün; son yılda ~1,7-4,4 güne iner.
     imperialTempo: 1.0 - 0.09 * step,
-    // 1.0 → 0.65. Taban 3-6 gün → son yılda ~2-4 gün.
+    // 1.0 → 0.65. Taban 80-120 sn → son yılda yaklaşık 52-78 sn.
     eventTempo: 1.0 - 0.07 * step,
     petitionTempo: 1.0 - 0.06 * step,
     // 1.0 → 1.35. Vergiden (2.0×) bilerek DAHA YUMUŞAK: kış zaten hazırlık

@@ -34,4 +34,23 @@ void main() {
     expect(cycle.timeOfDay, closeTo(0.32, 0.001));
     expect(mornings, 2);
   });
+
+  test(
+    'kuruluş yatağı hazır olunca gün batımı beklemeden gece kenarı doğar',
+    () {
+      final cycle = DayNightCycle(timeOfDay: 0.45);
+      var nights = 0;
+      cycle.onNightFall = () => nights++;
+
+      cycle.skipToNightfall();
+
+      expect(cycle.timeOfDay, 0.82);
+      expect(cycle.dayLight, lessThan(0.35));
+      expect(nights, 1);
+
+      // Aynı kuruluş geçişi yanlışlıkla iki gece üretmez.
+      cycle.skipToNightfall();
+      expect(nights, 1);
+    },
+  );
 }

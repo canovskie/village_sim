@@ -3,7 +3,7 @@ import 'package:village_sim/systems/decision_pacing.dart';
 
 void main() {
   group('DecisionPacing sessizlik sözleşmesi', () {
-    test('normal ağır kararlar 0,65 günlük sessizliği ihlal etmez', () {
+    test('normal ağır kararlar tanımlı kısa sessizliği ihlal etmez', () {
       final pacing = DecisionPacing();
       final first = pacing.request(HeavyDecisionKind.petition, atDay: 0);
       expect(first.activated, isTrue);
@@ -11,9 +11,10 @@ void main() {
 
       final second = pacing.request(HeavyDecisionKind.majorEvent, atDay: 0.11);
       expect(second.activated, isFalse);
-      expect(pacing.advanceTo(0.749), isNull);
-      expect(pacing.advanceTo(0.75)?.id, second.request.id);
-      expect(pacing.metrics.lastGapDays, closeTo(0.75, 1e-9));
+      const opensAt = 0.10 + DecisionPacing.defaultQuietDays;
+      expect(pacing.advanceTo(opensAt - 0.001), isNull);
+      expect(pacing.advanceTo(opensAt)?.id, second.request.id);
+      expect(pacing.metrics.lastGapDays, closeTo(opensAt, 1e-9));
     });
 
     test('acil normal sessizliği aşar; acilin ardından ikinci acil bekler', () {
@@ -44,8 +45,9 @@ void main() {
         isFalse,
         reason: 'bir acilin ardından ikinci ağır karar üstüne açılmamalı',
       );
-      expect(pacing.advanceTo(2.899), isNull);
-      expect(pacing.advanceTo(2.90)?.id, verdict.request.id);
+      const opensAt = 2.25 + DecisionPacing.defaultQuietDays;
+      expect(pacing.advanceTo(opensAt - 0.001), isNull);
+      expect(pacing.advanceTo(opensAt)?.id, verdict.request.id);
     });
   });
 
@@ -57,11 +59,12 @@ void main() {
     String? seenActive;
     double? activeSince;
 
-    // 96 gün = 6 oyun yılı. Her 0,31 günde bir ağır karar adayı üretmek,
-    // geç oyun ham timer'larının yaratacağı baskıdan daha saldırgandır.
+    // 96 gün = 6 oyun yılı. Her 0,19 günde bir ağır karar adayı üretmek,
+    // çözüm + kısa nefes penceresinden daha sık olduğu için kuyruğu gerçekten
+    // doldurur; test yalnız rahat aralıkta çalışan sahte bir güvence olmaz.
     for (var step = 0; step <= 9600; step++) {
       final day = step / 100;
-      if (day <= 96 && step % 31 == 0) {
+      if (day <= 96 && step % 19 == 0) {
         final kind = HeavyDecisionKind.values[submitted % 2];
         pacing.request(kind, atDay: day);
         submitted++;

@@ -447,6 +447,17 @@ class QuestBook {
     return res;
   }
 
+  /// Açık kademede yapılabilir iş kalmadıysa sıradaki yıl kapılı meseleyi
+  /// görünür tutar. Oyuncu hedefin kaybolduğunu değil, neye hazırlandığını görür.
+  static Quest? upcomingQuest(QuestContext ctx, Set<String> completed) {
+    for (final q in all) {
+      if (completed.contains(q.id)) continue;
+      if (q.tier > ctx.charterTier) continue;
+      if (q.minYear > ctx.year) return q;
+    }
+    return null;
+  }
+
   // ── Görev havuzu ──────────────────────────────────────────────────────────
   static const List<Quest> all = [
     // ── Tier 0 — Yeni Ocak (KURULUŞ) ─────────────────────────────────────

@@ -1,6 +1,6 @@
 # DURUM — projenin o anki hâli
 
-**Son güncelleme: 23 Ağustos 2026.**
+**Son güncelleme: 27 Ağustos 2026.**
 
 Bu dosya ESKİR. Kalıcı kurallar için [CLAUDE.md](CLAUDE.md), "bu iş nerede
 yaşıyor" için `lib/main.dart` başındaki HARİTA yorumu. Burası yalnız üç
@@ -15,16 +15,16 @@ Boş bir liste iyi haber değil, bakımsız bir belgedir.
 
 | | |
 |---|---|
-| Kaynak | 300 dosya, 125.450 satır (`lib/`) |
-| Test | 100 dosya, 15.880 satır, **827 test** (~13 dk) |
+| Kaynak | 307 dosya, 129.888 satır (`lib/`) |
+| Test | 109 dosya, 17.210 satır, **865 test** (~7 dk) |
 | `flutter analyze` | temiz |
 | Varlıklar | 136 MB (85 MB'ı `assets/buildings`) |
-| İçerik | 31 bina, 11 meslek, 8 kaynak, 34 hüküm, 10 suç türü |
+| İçerik | 31 bina, 11 meslek, 8 kaynak, 38 hüküm, 10 suç türü |
 
-En büyük dosyalar: `character_renderer` (3316), `main.dart` (2745),
+En büyük dosyalar: `character_renderer` (3316), `main.dart` (2819),
 `game_painter` (2493), `ui_gallery_capture_main` (2456),
 `village_ledger` (2401), `scene_crime` (2128), `law_book_panel` (2000),
-`scene_tick` (1917).
+`scene_tick` (1913).
 
 ---
 
@@ -33,7 +33,16 @@ En büyük dosyalar: `character_renderer` (3316), `main.dart` (2745),
 Bunların hepsi kurulu, bağlı ve testli.
 
 **Koşunun yayı**
-- Kuruluş sinematiği + 12 mikro adımlık kuruluş + parmakla gösteren öğretici
+- Kuruluş sinematiği + 8 mikro adımlık kuruluş + parmakla gösteren öğretici
+- **Bekletmeyen oynanış temposu** — kuruluş yatağı/yatma akışlarına 6–8 sn
+  emniyet supabı; gündüzden ilk geceye doğrudan geçiş; ilk hastalığın ertesi
+  günü beklememesi; 1×/2×/**4×**/duraklat hızları. Karar yokluğunda ilk köy
+  nabzı 8 sn, devamı 10–15 sn; nabza dinlenme ve bakım-onarım eklendi.
+  Olayların dokuzu da iki gerçek seçenekli (kaynak isteyen müdahale + her zaman
+  uygulanabilen pasif yol), ilk olay/dilekçe ~40 sn, sonrakiler ~1–2 dk.
+  Dilekçe açıkken dünya akmayı sürdürüyor; yıl kilitli görev HUD'da hazırlık
+  hedefi olarak kalıyor. Gerçek sahne provası kuruluşun 15 sn altında ilk
+  sabaha ulaştığını doğruluyor *(2026-08-27)*
 - Tüzük merdiveni: 6 kimlik kademesi, ~40 görev (geç kademeler kararla ölçülür)
 - **Orta oyun dersleri** — 7 sistemin kart öğreticisi *(2026-08-08)*
 - **Yıl omurgası** — eskalasyonun tek kaynağı; vergi/olay/kış yılla sertleşir *(2026-08-08)*
@@ -63,7 +72,7 @@ Bunların hepsi kurulu, bağlı ve testli.
   Sıradaki dilimler: baloncuk borcu (7 emoji) → sokak görünürlüğü →
   gün koreografisi → ritüel takvimi.
 - Dilekçe/Divan/Meclis + governanceLegacy mirası
-- Kanunname: 34 hüküm, altıgen petek UI, mühür töreni
+- Kanunname: 38 hüküm, altıgen petek UI, mühür töreni
 - Politik pusula → 4 rejim (kimlik seçilmez, kazanılır) + huzursuzluk/kriz
 - Haneler: duruş merdiveni (sadık→razı→serzeniş→el çekti→ambar→kopuş) +
   oyuncunun proaktif eylemleri (bağış/ceza/nikâh/sürgün/entrika)
@@ -74,6 +83,14 @@ Bunların hepsi kurulu, bağlı ve testli.
   sahneliydi, KAZANÇ bildirimdi *(2026-08-08)*
 - **Kararın izi** — verilen her dilekçe kararı ve mühür günceye düşer; KRONİK
   süzgeci (kararlar/yaşam/sıkıntı), mühür günü, 14 eksik hafıza izi *(2026-08-08)*
+- **Dünya kanıtlı yönetişim** — “kervandan al” şıkları yalnız gerçek kervan
+  pazar/han önündeyse açılıyor; yoksa kart nedenini gösteriyor. Alternatif dış
+  pazar kararları bir ulağı fiziksel olarak yola çıkarıyor, kaynak ancak dönüşte
+  geliyor. Kervan grubu/evresi kayıt yüklemede korunuyor. Dokuz olayın 18 karar
+  kolu 0,8–2,5 gün ayrı NPC işi bırakıyor; 38 hükmün her biri kendi adıyla
+  tekrarlanan sokak eylemine sahip (su, tarla, nöbet, ambar, ibadet, hane vb.).
+  Süren işler ve olay izleri kayıtlı; saf sözleşme + mobil kilit + gerçek
+  save/load testleriyle korunuyor *(2026-08-27)*
 
 **Yaşayan köy**
 - NPC beyni 6 fazın tamamı (WorldPressure → Mind/Bid → Algı/Hafıza/Dedikodu →

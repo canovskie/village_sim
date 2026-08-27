@@ -62,6 +62,22 @@ void main() {
         find.text('Sabit tohum yok · otomasyon yok · ekonomi/AI doğal'),
         findsOneWidget,
       );
+      for (final checkpoint in const [
+        '○ Ocak',
+        '○ Gece',
+        '○ Çadır',
+        '○ Odun',
+        '○ Kuyu',
+        '○ Tarla',
+        '○ Hastalık',
+        '○ Ev',
+      ]) {
+        expect(
+          find.text(checkpoint),
+          findsOneWidget,
+          reason: '$checkpoint doğal kuruluş testerında izlenmiyor',
+        );
+      }
 
       await tester.tap(find.byTooltip('Gözlem panelini gizle'));
       await tester.pump();

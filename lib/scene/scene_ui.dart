@@ -683,12 +683,10 @@ extension _SceneUi on _VillageSceneState {
         child: ListenableBuilder(
           listenable: _frame,
           builder: (_, _) {
-            final ctx = _questContext();
-            final quests = QuestBook.activeQuests(ctx, _completedQuests);
             final tier = QuestBook.tierOf(_charterTier);
-            final active =
-                quests.where((q) => q.active).firstOrNull ?? quests.firstOrNull;
+            final active = _currentStep;
             if (active == null) return const SizedBox.shrink();
+            final yearLocked = _currentStepYearLocked;
             // Kart kuruluşta AÇIK gelir (oyuncunun "nasıl"ı okuması gereken tek
             // yer burası); köy kurulunca ince banda döner. Oyuncu elle
             // dokunduysa karar onun, otomatiğe geri dönmez.
@@ -707,12 +705,16 @@ extension _SceneUi on _VillageSceneState {
             final waitOrder = _foundingWaitOrder;
             return QuestTracker(
               icon: questGlyph(active.quest.id),
-              activeLabel: active.quest.label,
+              activeLabel: yearLocked
+                  ? '${active.quest.minYear}. yıl: ${active.quest.label}'
+                  : active.quest.label,
               tierName: tier.name,
               done: _completedQuests.length,
               total: QuestBook.all.length,
               onOpen: () => _openLedger(LedgerSection.tuzuk),
-              hint: active.quest.hint,
+              hint: yearLocked
+                  ? 'Bu mesele ${active.quest.minYear}. yılda açılacak. Şimdi köyü bu hedefe hazırlayabilirsin.'
+                  : active.quest.hint,
               speakerName: active.speakerName,
               expanded: expanded,
               onToggleExpand: () =>
@@ -720,7 +722,7 @@ extension _SceneUi on _VillageSceneState {
               // Yer seçildiyse oyuncu öğreticinin istediği eylemi yaptı:
               // aynı yeri tekrar göstermek yerine inşaat bekleyişini geçir.
               // Bekleyen şantiye yokken "Göster" kuruluş boyunca kullanılır.
-              onShow: _charterTier == 0 && waitOrder == null
+              onShow: !yearLocked && _charterTier == 0 && waitOrder == null
                   ? () => setStateHere(_guideShow)
                   : null,
               onSkipWait: waitOrder == null ? null : _skipFoundingBuildWait,

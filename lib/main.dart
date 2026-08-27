@@ -38,6 +38,7 @@
 //  ── YÖNETİŞİM ─────────────────────────────────────────────────────────────
 //   scene_law            KANUNNAME: kapılar + mühür + günlük idame
 //   scene_petitions      dilekçe/meclis + karar motoru (_applyDecisionEffects)
+//   scene_governance_action kararın dünya kanıtı: kervan/süreç/olay+yasa izi
 //   scene_regime         pusula → rejim kimliği; scene_estates hane/zümre dengesi
 //   scene_house_actions  oyuncunun hanelere proaktif müdahalesi
 //
@@ -49,6 +50,7 @@
 //   scene_reckoning      HESAPLAŞMA: 6. yılda sancak/berat/ilhak, koşu biter
 //   (eskalasyonun tek kaynağı systems/village_year.dart — sistemler kendi
 //    içinde "gün N'den sonra" DEMEZ, oradan okur)
+//   gameplay_pacing     boş bekleme sınırı + küçük/orta/büyük karar ritmi
 //
 //  ── OLAYLAR & HİKÂYE ──────────────────────────────────────────────────────
 //   scene_events         rastgele olay + fx; scene_imperial dış tehdit
@@ -145,6 +147,8 @@ import 'systems/estate_system.dart';
 import 'systems/event_system.dart';
 import 'systems/founding_choice.dart';
 import 'systems/founding_site.dart';
+import 'systems/gameplay_pacing.dart';
+import 'systems/governance_action.dart';
 import 'systems/hay_processor.dart';
 import 'systems/hearth_warmth.dart';
 import 'systems/house_action.dart';
@@ -255,6 +259,7 @@ part 'scene/scene_flow.dart';
 part 'scene/scene_forage.dart';
 part 'scene/scene_funeral.dart';
 part 'scene/scene_guide.dart';
+part 'scene/scene_governance_action.dart';
 part 'scene/scene_harman.dart';
 part 'scene/scene_house_actions.dart';
 part 'scene/scene_house_stance.dart';
@@ -613,6 +618,11 @@ String kProbeHouseName = '';
 /// Şu an bir şey esirgeyen hane sayısı + o hanelerin ambarlarında saklı toplam.
 int kProbeHousesWithholding = 0;
 int kProbeHouseStash = 0;
+
+/// İzlenen hanenin barıştan sonra köy ambarına gerçekten geri verdiği toplam.
+/// Anlık stash fotoğrafından ayrıdır: hane günler sonra yeniden küserse daha
+/// önce görünür biçimde geri akan ürünü inkâr etmez.
+int kProbeHouseReleased = 0;
 
 /// Hanesi elini çektiği için işsiz kalan köylü sayısı (o andaki fotoğraf).
 int kProbeHouseIdled = 0;
@@ -1014,8 +1024,15 @@ class _VillageSceneState extends State<VillageScene>
   final List<VillagerEntity> _villagers = [];
 
   /// Gezgin tüccarlar — köyün sakini DEĞİL, arada gelip giden ambiyans (bkz.
-  /// scene_merchant). Nüfusa/eve/dilekçeye karışmaz; kayda yazılmaz.
+  /// scene_merchant). Nüfusa/eve/dilekçeye karışmaz; fiziksel varlık şartlı
+  /// kararlar doğru kalsın diye ziyaret evresiyle birlikte kayda yazılır.
   final List<MerchantEntity> _merchants = [];
+
+  /// Kararın sayı olarak değil, köyde süren bir iş olarak yaşayan karşılığı.
+  final List<DecisionProcess> _decisionProcesses = [];
+  final List<GovernanceAftermath> _governanceAftermath = [];
+  double _lawBehaviorNextSim = 0;
+  int _lawBehaviorCursor = 0;
 
   /// Sonraki tüccar ziyaretine kalan süre (sim-saniye). _tickMerchants yönetir.
   double _merchantTimer = 0.7 * kGameDaySeconds;
@@ -1318,11 +1335,16 @@ class _VillageSceneState extends State<VillageScene>
   /// yürüdüğünde dünyaya eklenir; kuruluşta artık otomatik belirmez.
   final Map<VillagerEntity, (double, double)> _foundingBedTargets = {};
 
+  /// Kuruluş koreografisi için emniyet supabı. Yol bulamayan tek kurucu bütün
+  /// öğreticiyi tutamaz; süre dolunca ayrılmış yataklar serilmiş sayılır.
+  double _foundingBedWorkElapsed = 0.0;
+
   /// Kurucuların saz yatakta geçirdiği ilk gece bir kez kısaltılır. Gece ancak
   /// herkes gerçekten yatağa uzandıktan sonra şafağa sarar; sonraki geceler bu
   /// bayrak yüzünden normal çevrimde kalır.
   bool _foundingFirstNightFastForwarded = false;
   double _foundingFirstNightSleepGlimpse = 0.0;
+  double _foundingFirstNightWaitReal = 0.0;
 
   double _workScan = 0; // _tickWork throttle sayacı (meslek iş döngüleri)
   double _weaponCraftTimer = 0;
@@ -1629,7 +1651,7 @@ class _VillageSceneState extends State<VillageScene>
   bool _wasStarving = false; // açlığa giriş tespiti (bir kerelik reaksiyon)
 
   // ── Rastgele olaylar ───────────────────────────────────────────────────────
-  double _eventTimer = kEventFirstDelay; // bir sonraki olaya kalan süre
+  double _eventTimer = GameplayPacing.firstEventSimSeconds;
   double _eventMorale = 0.0; // aktif geçici moral etkisi (+/−)
   double _eventMoraleLeft = 0.0; // o etkinin kalan süresi (sn)
   String? _eventLabel; // aktif geçici olayın HUD etiketi
@@ -1684,8 +1706,7 @@ class _VillageSceneState extends State<VillageScene>
   bool _petitionOverdue = false;
   // Gecikme sayacı — her dolan oyun gününde bedel yinelenir.
   double _petitionOverdueTimer = 0;
-  double _petitionTimer =
-      1.0 * kGameDaySeconds; // ilk dilekçe ~1 oyun günü sonra
+  double _petitionTimer = GameplayPacing.firstPetitionSimSeconds;
   double _petitionDeadline = 0;
   // Zincir: tetiklenmiş takip dilekçeleri (id + ne zaman geleceği sim time).
   /// Zincirin bir sonraki halkası: ne zaman, hangi dilekçe ve KİMİN ağzından.
@@ -1707,7 +1728,7 @@ class _VillageSceneState extends State<VillageScene>
   // Aktif gündem tek kişiye bağlıdır; modal açmaz, süresi dolarsa köylü kendi
   // kararını verir. Sonuç yankıları sim zamanında 1-3 gün sonra geri gelir.
   _VillagePulse? _villagePulse;
-  double _villagePulseNextReal = 38.0;
+  double _villagePulseNextReal = GameplayPacing.firstPulseRealSeconds;
   bool _villagePulseOpen = false;
   _VillagePulseKind? _villagePulseLastKind;
   VillagerEntity? _villagePulseLastActor;
@@ -1824,7 +1845,7 @@ class _VillageSceneState extends State<VillageScene>
   // Yasa/rejim/mevsim/huzursuzluk → TEK davranış tablosu. Rutin, iş, suç,
   // devriye, gövde dili ve meşale artık yasaya değil buraya bakar; yani mühür
   // basmak aşağıda gözle görülen bir değişiklik demek. `_recomputePressure`
-  // ucuz (34 hüküm üstünde tek geçiş) ama her kare gereksiz — 1 sn'de bir ve
+  // ucuz (38 hüküm üstünde tek geçiş) ama her kare gereksiz — 1 sn'de bir ve
   // mühür/yemin/mevsim değişiminde tazelenir.
   WorldPressure _pressure = WorldPressure.neutral;
   double _pressureScan = 0;
@@ -2175,8 +2196,9 @@ class _VillageSceneState extends State<VillageScene>
   // ── Zaman yönetimi ─────────────────────────────────────────────────────────
   // Simülasyon hızı çarpanı. 0.0 = duraklatılmış (sahne animasyonları da
   // donar, sadece UI canlı kalır), 1×/2× hızlandırma. HUD'daki tek butona
-  // basınca cycle eder.
-  static const List<double> _speedSteps = [1.0, 2.0, 0.0];
+  // basınca cycle eder. 4× yalnız beklemeyi geçirmek isteyen oyuncunun kaçışı;
+  // küçük karar ritmi gerçek zamanda ayrıca korunur.
+  static const List<double> _speedSteps = GameplayPacing.speedSteps;
   int _speedIdx = 0;
   double _timeScale = 1.0;
 

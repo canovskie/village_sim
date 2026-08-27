@@ -26,6 +26,7 @@ class PetitionModal extends StatelessWidget {
   /// moral/nüfus/yiyecek/altını görerek karar versin). null = şerit gizli.
   final ({double morale, int population, int food, int gold})? state;
   final void Function(PetitionOption) onChoose;
+  final String? Function(PetitionOption)? blockedReason;
   final VoidCallback onDismiss;
   final bool mustChoose;
   final String? decisionContext;
@@ -63,6 +64,7 @@ class PetitionModal extends StatelessWidget {
     required this.petition,
     this.state,
     required this.onChoose,
+    this.blockedReason,
     required this.onDismiss,
     this.mustChoose = false,
     this.decisionContext,
@@ -238,6 +240,7 @@ class PetitionModal extends StatelessWidget {
                                 options: petition.options,
                                 accent: _toneAccent,
                                 onChoose: onChoose,
+                                blockedReason: blockedReason,
                                 vertical: true,
                               ),
                             ),
@@ -358,6 +361,7 @@ class PetitionModal extends StatelessWidget {
                             options: petition.options,
                             accent: _toneAccent,
                             onChoose: onChoose,
+                            blockedReason: blockedReason,
                           ),
                           if (onVeto != null) ...[
                             const SizedBox(height: 10),
@@ -877,6 +881,7 @@ class _OptionStrip extends StatefulWidget {
   final List<PetitionOption> options;
   final Color accent;
   final void Function(PetitionOption) onChoose;
+  final String? Function(PetitionOption)? blockedReason;
 
   /// Telefon yatayda pano iki sütuna açılır ve kararlar SAĞ sütunda alt alta
   /// dizilir — dar bir sütunda yatay kart şeridi tek kart bile göstermezdi.
@@ -885,6 +890,7 @@ class _OptionStrip extends StatefulWidget {
     required this.options,
     required this.accent,
     required this.onChoose,
+    this.blockedReason,
     this.vertical = false,
   });
   @override
@@ -910,13 +916,17 @@ class _OptionStripState extends State<_OptionStrip> {
       PetitionOption o, {
       bool dense = false,
       bool gridCompact = false,
-    }) => _OptionCard(
-      option: o,
-      accent: widget.accent,
-      dense: dense,
-      gridCompact: gridCompact,
-      onTap: () => widget.onChoose(o),
-    );
+    }) {
+      final reason = widget.blockedReason?.call(o);
+      return _OptionCard(
+        option: o,
+        accent: widget.accent,
+        dense: dense,
+        gridCompact: gridCompact,
+        blockedReason: reason,
+        onTap: reason == null ? () => widget.onChoose(o) : null,
+      );
+    }
 
     if (widget.vertical) {
       final columns = opts.length > 3 ? 2 : 1;
@@ -999,7 +1009,8 @@ class _OptionStripState extends State<_OptionStrip> {
 class _OptionCard extends StatefulWidget {
   final PetitionOption option;
   final Color accent;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final String? blockedReason;
 
   /// YOĞUN varyant — sahne üstte değil SOLDA, yazı sağda. Telefon yatayda
   /// kararlar dar bir sütuna dizildiği için dikey kart (84dp sahne + 3 satır
@@ -1010,6 +1021,7 @@ class _OptionCard extends StatefulWidget {
     required this.option,
     required this.accent,
     required this.onTap,
+    this.blockedReason,
     this.dense = false,
     this.gridCompact = false,
   });
@@ -1025,17 +1037,22 @@ class _OptionCardState extends State<_OptionCard> {
     final o = widget.option;
     final accent = widget.accent;
     final chips = o.effectChips;
+    final blocked = widget.blockedReason != null;
     return MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
+      onEnter: (_) {
+        if (!blocked) setState(() => _hover = true);
+      },
       onExit: (_) => setState(() => _hover = false),
-      cursor: SystemMouseCursors.click,
+      cursor: blocked ? SystemMouseCursors.forbidden : SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
           decoration: BoxDecoration(
-            color: _hover
+            color: blocked
+                ? AppUi.surface1.withValues(alpha: 0.62)
+                : _hover
                 ? Color.alphaBlend(
                     accent.withValues(alpha: 0.12),
                     AppUi.surface2,
@@ -1057,92 +1074,127 @@ class _OptionCardState extends State<_OptionCard> {
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            child: widget.gridCompact
-                ? _gridBody(o, chips)
-                : widget.dense
-                ? _denseBody(o, chips)
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Üst: eylem sahnesi (kartın başrolü).
-                      Stack(
-                        children: [
-                          OptionSceneCard(scene: optionSceneFor(o), height: 84),
-                          // Alt okunaklılık zemini (başlık sahneye binmesin).
-                          const Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            height: 34,
-                            child: IgnorePointer(
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Color(0x00000000),
-                                      Color(0xCC14171C),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          Positioned(
-                            left: 10,
-                            right: 10,
-                            bottom: 7,
-                            child: Text(
-                              o.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppUi.bodyHi.copyWith(
-                                fontSize: 13.5,
-                                shadows: const [
-                                  Shadow(
-                                    color: Color(0xCC000000),
-                                    blurRadius: 6,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(11, 8, 11, 11),
-                        child: Column(
+            child: Stack(
+              children: [
+                Opacity(
+                  opacity: blocked ? 0.48 : 1,
+                  child: widget.gridCompact
+                      ? _gridBody(o, chips)
+                      : widget.dense
+                      ? _denseBody(o, chips)
+                      : Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              o.detail,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppUi.body.copyWith(
-                                fontSize: 10,
-                                height: 1.35,
-                                color: AppUi.textLo,
-                              ),
+                            // Üst: eylem sahnesi (kartın başrolü).
+                            Stack(
+                              children: [
+                                OptionSceneCard(
+                                  scene: optionSceneFor(o),
+                                  height: 84,
+                                ),
+                                // Alt okunaklılık zemini (başlık sahneye binmesin).
+                                const Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  height: 34,
+                                  child: IgnorePointer(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Color(0x00000000),
+                                            Color(0xCC14171C),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: 10,
+                                  right: 10,
+                                  bottom: 7,
+                                  child: Text(
+                                    o.label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppUi.bodyHi.copyWith(
+                                      fontSize: 13.5,
+                                      shadows: const [
+                                        Shadow(
+                                          color: Color(0xCC000000),
+                                          blurRadius: 6,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            if (chips.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 5,
-                                runSpacing: 5,
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(11, 8, 11, 11),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  for (final d in chips)
-                                    _effectTablet(d.$1, d.$2),
+                                  Text(
+                                    o.detail,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppUi.body.copyWith(
+                                      fontSize: 10,
+                                      height: 1.35,
+                                      color: AppUi.textLo,
+                                    ),
+                                  ),
+                                  if (chips.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 5,
+                                      runSpacing: 5,
+                                      children: [
+                                        for (final d in chips)
+                                          _effectTablet(d.$1, d.$2),
+                                      ],
+                                    ),
+                                  ],
                                 ],
                               ),
-                            ],
+                            ),
                           ],
                         ),
+                ),
+                if (blocked)
+                  Positioned(
+                    left: 7,
+                    right: 7,
+                    bottom: 7,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 5,
                       ),
-                    ],
+                      decoration: BoxDecoration(
+                        color: AppUi.surface0.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: AppUi.rust),
+                      ),
+                      child: Text(
+                        widget.blockedReason!,
+                        textAlign: TextAlign.center,
+                        style: AppUi.label.copyWith(
+                          color: AppUi.rust,
+                          fontSize: 8,
+                        ),
+                      ),
+                    ),
                   ),
+              ],
+            ),
           ),
         ),
       ),
