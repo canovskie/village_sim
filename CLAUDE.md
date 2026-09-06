@@ -22,14 +22,14 @@ dağılabilir, koşu kaybedilebilir. Oynanışın omurgası kaynak yönetimi de�
 KURULUŞ            → 8 mikro adım, parmakla gösteren öğretici (scene_guide)
    ↓
 ORTA OYUN          → Tüzük merdiveni 6 kademe + 7 ders kartı (scene_lessons)
-   ↓  her yıl baskı artar (systems/village_year.dart — TEK KAYNAK)
+   ↓  her yıl baskı artar (systems/run/village_year.dart — TEK KAYNAK)
 5. YIL             → berat ilan edilir, bir yıllık hazırlık penceresi
    ↓
-6. YIL HESAPLAŞMA  → sancak / berat / ilhak (systems/reckoning.dart)
+6. YIL HESAPLAŞMA  → sancak / berat / ilhak (systems/run/reckoning.dart)
 ```
 
 Paralel kaybetme kolu: haneler küser → ayrılır → **köy dağılır**
-(`systems/village_collapse.dart`). İki kapanış da kaydı **mühürler**, silmez.
+(`systems/run/village_collapse.dart`). İki kapanış da kaydı **mühürler**, silmez.
 
 Bir yıl = 4 mevsim = 16 oyun günü ≈ 64 dakika (1× hızda).
 
@@ -53,6 +53,22 @@ Katman sözleşmesi:
 | `lib/world/`, `lib/entities/` | Veri modelleri | |
 | `lib/tools/` | Bağımsız `*_main.dart` giriş noktaları | `flutter run -t lib/tools/x_main.dart` |
 
+**Kavram klasörleri:** `scene/` ve `systems/` aynı alt klasör adlarını paylaşır:
+`world` (dünya & döngü), `player` (oyuncunun eli), `npc` (köylünün içi), `labor`
+(emek), `governance` (yönetişim), `run` (koşunun yayı), `events` (olaylar &
+hikâye), `probe` (test yatakları); ayrıca `systems/platform` (ses + mobil).
+`ui/` kendi kavramlarına bölünür: `core`, `hud`, `ledger`, `events`, `screens`,
+`dev`. **Kök klasöre dosya koyma**; yeni part `part 'scene/<kavram>/scene_x.dart'`
+olarak main.dart'a eklenir. Bir sistemin sahne parçası ile saf çekirdeği aynı
+kavram adının altında yan yana durur.
+
+**Büyük dosya = part'la böl.** Bir dosya ~2000 satırı geçince aynı kütüphanenin
+part'larına ayrılır (örnek: `scene_save` → capture/restore, `scene_crime` →
+act/justice, `game_painter` → ground/lighting, `character_renderer` →
+paints/body/shaded/roles/workers). Extension'a bölünen sınıfın static üyeleri
+kendi extension'ından dışarı görünmez; onları ana extension/sınıfta tut ve
+`_SceneCrime._kX` gibi nitele.
+
 **En önemli tek kural:** yeni mantık `systems/` altına yazılır, `scene_*` onu
 bağlar. Sahneye gömülen bir denge kararı test edilemez ve er geç unutulur.
 
@@ -69,7 +85,7 @@ bozmadan önce kullanıcıya sor.
   kaybetme kolunun önünde görünür bir uyarı rampası olmalı.
 - **Doğal yaşam olayları kaynak bedeli almaz** (doğum/ölüm ücretsiz).
 - **Bina seviyesi/yükseltmesi YOK.** Yapılar yan yana yaşar (çadır ↔ ahşap ev).
-- **Eskalasyonun tek kaynağı `systems/village_year.dart`.** Hiçbir sistem
+- **Eskalasyonun tek kaynağı `systems/run/village_year.dart`.** Hiçbir sistem
   kendi içinde "gün N'den sonra şöyle olsun" demez; oradaki çarpanı okur.
   1. yıl bütün çarpanları 1.0'dır — taban denge korunur.
 - **Kış cezalandırmaz, hazırlığı ödüllendirir.** Ölüm yalnız ihmal birikince.
@@ -134,7 +150,8 @@ Doğrulama değişikliğin riskiyle orantılıdır; her işte bütün kademeler 
 Sözleşmeyi test et, sayıyı değil: "hanelerin rızası en ağır sütundur"
 iyi bir test, "unity 0.34'tür" kötü.
 
-**PROVA testi** (`test/*_probe_test.dart`) — **gerçek sahnede**. En sinsi
+**PROVA testi** (`test/*_probe_test.dart`, `probe` etiketi) — **gerçek
+sahnede**. En sinsi
 hata "kod var ama hiç tetiklenmiyor"dur ve bunu hiçbir birim testi görmez.
 Bir özellik ekranda görünmesi gerekiyorsa, göründüğünü prova testi
 kanıtlamalı.
@@ -158,8 +175,10 @@ referans köyü koşturup sayıya bakınca görüldü.
 
 ```bash
 flutter analyze
-flutter test                              # 659 test, ~4 dk
-flutter test test/reckoning_probe_test.dart
+flutter test --exclude-tags probe         # hızlı birim/widget süiti
+flutter test --tags probe                 # bütün gerçek sahne provaları
+flutter test                              # tam süit: iki katman birlikte
+flutter test test/reckoning_probe_test.dart # tek prova
 
 # Kararsız test avı — [E] satırı testin adını verir
 for i in 1 2 3 4 5; do flutter test --reporter expanded > run$i.log 2>&1; \
@@ -170,7 +189,7 @@ flutter run -t lib/tools/animation_room_main.dart   # sinematik/animasyon deneme
 flutter run -t lib/tools/light_editor_main.dart     # bina ışık noktası editörü
 flutter run -t lib/tools/ui_gallery_capture_main.dart
 
-# Oyun içi: ` (backtick) → dev konsol, Tab → Köy Defteri
+# Oyun içi: HUD böcek düğmesi → dev panel, Tab → Köy Defteri
 ```
 
 **iOS'a atarken:** `flutter build ios --release` + `devicectl install app`.

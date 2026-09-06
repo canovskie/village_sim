@@ -15,7 +15,7 @@ olarak verilen kod parçasını ara.
 - Oyuncu-yüzü ANLATI metni varyant havuzuyla yazılır (`Voice.say`/`Voice.pick`,
   en az 3 varyant). Kısa UI etiketi/künye (rozet, şerit parçası) düz string
   olabilir — defterdeki mevcut üslup bu. Oyun metninde em-dash YASAK.
-- Eskalasyonun TEK kaynağı `systems/village_year.dart`. 1. yıl TÜM çarpanlar
+- Eskalasyonun TEK kaynağı `systems/run/village_year.dart`. 1. yıl TÜM çarpanlar
   1.0 (taban denge korunur).
 - Saf mantık `lib/systems/` altına, sahne bağlama `scene_*` part'ına.
 - Panelde gösterilen sayı = simin okuduğu sayı. Karne ASLA cache'lenmiş kopya
@@ -26,9 +26,9 @@ olarak verilen kod parçasını ara.
 
 ## ✅ UYGULANDI (tekrar yapma, üstüne inşa et)
 
-1. `lib/systems/house_stance.dart` — `HouseStanceX` extension'ına `costHint`
+1. `lib/systems/governance/house_stance.dart` — `HouseStanceX` extension'ına `costHint`
    getter'ı eklendi (basamağın kısa bedel künyesi). `nextRung(...)` zaten vardı.
-2. `lib/ui/village_ledger.dart` — `_houseRow` içindeki
+2. `lib/ui/ledger/village_ledger.dart` — `_houseRow` içindeki
    `if (!s.stance.withholds) return row;` kapısı `!s.stance.audible` yapıldı ve
    `_withholdLine` yerine `_stanceStrip` geldi: serzeniş kehribar (AppUi.gold),
    esirgeyen basamaklar kızıl (AppUi.rust), sona `bir adım ötede: <costHint>`
@@ -41,7 +41,7 @@ Bu ikisi `flutter analyze`'dan temiz geçti.
 ## MADDE 1 (kalan iki parça) — hane uyarı rampası
 
 ### 1a. Hane eylem kartına duruş satırı
-Dosya: `lib/ui/ledger_house_cards.dart`, `_HouseActionCard.build` başlık sütunu
+Dosya: `lib/ui/ledger/ledger_house_cards.dart`, `_HouseActionCard.build` başlık sütunu
 (`'reis ${seat.name} · ...'` Text'inin hemen ALTINA, aynı Column içine):
 
 ```dart
@@ -75,7 +75,7 @@ Not: `ledger_house_cards.dart` `village_ledger.dart`'ın part'ı; `house_stance`
 import'u ana dosyada zaten var, yeni import gerekmez.
 
 ### 1b. Mobil defterde duruş görünürlüğü
-Dosya: `lib/ui/ledger_mobile.dart`, `_MiniTension.build` — soyad `SizedBox`'ının
+Dosya: `lib/ui/ledger/ledger_mobile.dart`, `_MiniTension.build` — soyad `SizedBox`'ının
 hemen ARKASINA (bar'dan önce):
 
 ```dart
@@ -123,10 +123,10 @@ void _easeToBaseSpeed() {
 ```
 
 ### 3b. Çağrı yerleri (ikisi de setStateHere bloğunun DIŞINDA, sonrasında)
-- `lib/scene/scene_events.dart` → `_queueChoiceEvent(...)`: `setStateHere`
+- `lib/scene/events/scene_events.dart` → `_queueChoiceEvent(...)`: `setStateHere`
   bloğundan sonra, `kProbeChoiceWaiting = e.id;` satırının yanına
   `_easeToBaseSpeed();`
-- `lib/scene/scene_petitions.dart` → `_presentPetition(...)`: `setStateHere`
+- `lib/scene/governance/scene_petitions.dart` → `_presentPetition(...)`: `setStateHere`
   bloğundan sonra (`_walkPetitionerToCenter` çağrısından önce)
   `_easeToBaseSpeed();`
 
@@ -151,7 +151,7 @@ yok; çarpım olarak uygulanıyorsa bile prova köyünde `_timeScale` zaten 1.
 ## MADDE 4 — dilekçe temposu: jitter + yıl çarpanı + kuyruk tavanı 2
 
 ### 4a. Yıl çarpanı (saf çekirdek)
-Dosya: `lib/systems/village_year.dart`.
+Dosya: `lib/systems/run/village_year.dart`.
 
 `EraPressure`'a alan ekle (diğer alanların yanına, doc yorumuyla):
 
@@ -172,7 +172,7 @@ petitionTempo: 1.0 - 0.06 * step,
 ```
 
 ### 4b. Jitter (sahne)
-Dosya: `lib/scene/scene_petitions.dart`, `_petitionInterval()`'ı değiştir.
+Dosya: `lib/scene/governance/scene_petitions.dart`, `_petitionInterval()`'ı değiştir.
 ÖNEMLİ: mevcut yorumdaki kullanıcı kararına DOKUNMA — küskün-hane
 hızlandırması (×0.6) reddedilmiş yoldur, GERİ GELMEZ. Yorumun o kısmını koru,
 üstüne şunu anlat:
@@ -204,7 +204,7 @@ double _queuedPresentDelay = 0;
 ```
 
 ### 4d. Tick akışı
-Dosya: `lib/scene/scene_petitions.dart`, `_tickPetitions` içinde.
+Dosya: `lib/scene/governance/scene_petitions.dart`, `_tickPetitions` içinde.
 
 (1) Bekleyen-dilekçe dalını şöyle değiştir (overdue İKEN kuyruk mayalanmaz —
 oyuncu bilerek bekletiyorsa üstüne ikinci sözcü yığılmasın):
@@ -274,7 +274,7 @@ void _brewQueuedPetition(double dt) {
 ```
 
 ### 4e. HUD'da "SIRADA" mührü
-Dosya: `lib/scene/scene_petitions.dart`, `buildDecisionSeals()` içinde,
+Dosya: `lib/scene/governance/scene_petitions.dart`, `buildDecisionSeals()` içinde,
 bekleyen dilekçe mührünün eklendiği `if` bloğunun ARKASINA:
 
 ```dart
@@ -293,7 +293,7 @@ if (_queuedPetition != null) {
 ```
 
 ### 4f. Kayıt + sıfırlama
-Dosya: `lib/scene/scene_save.dart`.
+Dosya: `lib/scene/world/scene_save.dart`.
 - Capture (`'pendingPetition': _pendingPetition?.id,` yanına):
 
 ```dart
@@ -338,7 +338,7 @@ Sorun: `standing` (hesaplaşma iğnesi) 6. yıla kadar hiçbir UI'da yok; oyuncu
 sancak/berat/ilhak yolunda nerede olduğunu göremiyor.
 
 ### 2a. Saf çekirdek
-Dosya: `lib/systems/reckoning.dart` — dosyanın sonuna ekle:
+Dosya: `lib/systems/run/reckoning.dart` — dosyanın sonuna ekle:
 
 ```dart
 /// YILLIK KARNE — kapanış karnesinin ŞİMDİKİ ZAMAN hâli. Aynı beş kalem,
@@ -408,7 +408,7 @@ int _karneYear = 0;
 ```
 
 ### 2c. Pusulanın düşüşü
-Dosya: `lib/scene/scene_reckoning.dart`, `_tickReckoning` içinde İLAN
+Dosya: `lib/scene/run/scene_reckoning.dart`, `_tickReckoning` içinde İLAN
 bloğundan ÖNCE (ilan ve hesaplaşma öncelikli kalsın diye onların ARKASINA
 DEĞİL — sıra: ilan → hesaplaşma → karne; her biri `return` ile ayrışıyor,
 karne bloğunu hesaplaşma bloğunun ARKASINA koy ve `year < kReckoningYear`
@@ -465,7 +465,7 @@ _chronicle(
 ```
 
 ### 2d. Kayıt
-Dosya: `lib/scene/scene_save.dart`.
+Dosya: `lib/scene/world/scene_save.dart`.
 - Capture: `'reckoningHeralded': _reckoningHeralded,` yanına
   `'karneYear': _karneYear,`
 - Restore: `_reckoningHeralded = ...` yanına
@@ -474,7 +474,7 @@ Dosya: `lib/scene/scene_save.dart`.
 ### 2e. Defter yüzeyi (Divan)
 İki parça: gündem satırı (masaüstü + mobil OTOMATİK) ve masaüstü detay bloğu.
 
-**(1) Gündem satırı** — dosya: `lib/scene/scene_divan.dart`, `_divanAgenda()`
+**(1) Gündem satırı** — dosya: `lib/scene/player/scene_divan.dart`, `_divanAgenda()`
 başına (bekleyen dilekçe bloğundan sonra):
 
 ```dart
@@ -501,7 +501,7 @@ if (_karneYear >= 2 && _reckoningVerdict == null) {
 ```
 
 **(2) Masaüstü detay bloğu** — beş kalemin çubuklu dökümü.
-- `lib/ui/village_ledger.dart`: `VillageLedger`'a parametreler ekle
+- `lib/ui/ledger/village_ledger.dart`: `VillageLedger`'a parametreler ekle
   (constructor + final alanlar, varsayılanları boş):
 
 ```dart
@@ -597,7 +597,7 @@ Widget _karneBlock() {
 }
 ```
 
-- `lib/scene/scene_divan.dart` → `buildVillageLedger()`'da parametreleri doldur
+- `lib/scene/player/scene_divan.dart` → `buildVillageLedger()`'da parametreleri doldur
   (⚖ DİVAN grubuna):
 
 ```dart

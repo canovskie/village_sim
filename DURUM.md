@@ -1,193 +1,184 @@
 # DURUM — projenin o anki hâli
 
-**Son güncelleme: 27 Ağustos 2026.**
+**Son güncelleme: 6 Eylül 2026.**
 
-Bu dosya ESKİR. Kalıcı kurallar için [CLAUDE.md](CLAUDE.md), "bu iş nerede
-yaşıyor" için `lib/main.dart` başındaki HARİTA yorumu. Burası yalnız üç
-soruya cevap verir: **ne bitti, ne eksik, ne fazla.**
+Bu dosya değişen proje durumunu anlatır. Kalıcı çalışma kuralları için
+[CLAUDE.md](CLAUDE.md), kod haritası için `lib/main.dart` başındaki HARİTA
+yorumuna bak.
 
-Bir iş bitirdiğinde buradaki satırı taşı. Yeni bir eksik bulduğunda ekle.
-Boş bir liste iyi haber değil, bakımsız bir belgedir.
+## Kısa özet
 
----
+Oynanış omurgası, kayıt sistemi, yaşayan köy simülasyonu ve yönetişim katmanı
+çalışır durumda. Statik analiz temizdir ve tam test süiti geçmektedir. En büyük
+ürün boşluğu içeriktir: rastgele olay motoru hazır olmasına rağmen olay kataloğu
+boş; dilekçe kataloğunda altı gündelik, altı sistem-güdümlü karar ve üç hikâyenin
+on sekiz başlangıç/devam/kapanış girdisi var.
+
+Çalışma ağacı kapsamlı ve henüz commitlenmemiş bir dönüşüm taşımaktadır. Bu
+nedenle yeni işlerde toplu geri alma, bütün depoyu mekanik olarak formatlama ve
+eski dosyaları varsayımla diriltme yapılmamalıdır.
 
 ## Ölçüler
 
-| | |
+| Alan | Güncel durum |
 |---|---|
-| Kaynak | 307 dosya, 129.888 satır (`lib/`) |
-| Test | 109 dosya, 17.210 satır, **865 test** (~7 dk) |
-| `flutter analyze` | temiz |
-| Varlıklar | 136 MB (85 MB'ı `assets/buildings`) |
-| İçerik | 31 bina, 11 meslek, 8 kaynak, 38 hüküm, 10 suç türü |
+| Dart kaynak | 337 dosya, yaklaşık 132 bin satır (`lib/`) |
+| Test | 125 dosya, yaklaşık 18 bin satır (`test/`) |
+| `flutter analyze` | Temiz |
+| Varlıklar | 137 MB; 91 MB `assets/buildings/` |
+| İçerik | 10 suç türü, 30 dilekçe, 0 rastgele olay |
+| Geliştirici araçları | 39 Dart dosyası, 37 ayrı `*_main.dart` giriş noktası |
 
-En büyük dosyalar: `character_renderer` (3316), `main.dart` (2819),
-`game_painter` (2493), `ui_gallery_capture_main` (2456),
-`village_ledger` (2401), `scene_crime` (2128), `law_book_panel` (2000),
-`scene_tick` (1913).
+Test sayısı belgeye sabitlenmez; katalog ve sözleşme testleri geliştikçe sayı
+hızla eskimektedir. Doğru kaynak `flutter test` çıktısıdır.
 
----
+## Çalışan omurga
 
-## ✅ Biten — omurga
+- Kuruluş akışı, görev/tüzük ilerlemesi, yıllık eskalasyon ve altıncı yıl
+  hesaplaşması.
+- 1×/2×/4×/duraklat hızları; karar açıldığında 1× nefes; ağır kararların ortak
+  `DecisionPacing` kuyruğu.
+- Dilekçe, Divan, Kanunname, haneler, rejim, imparatorluk ve günce/köy hafızası.
+- NPC ihtiyaçları, algı/hafıza, gündelik eylemler, meslekler, suç, devriye,
+  hastalık, düğün, cenaze ve hane bağları.
+- Tarım, hayvancılık, taşıma, zanaat, kış, ateş/yakıt ve kaynak ekonomisi.
+- Çoklu kayıt slotu, eski kayıt toleransı, ayarlar, mobil HUD ve geliştirici
+  paneli.
+- Saf sistem testleri, gerçek sahne prova testleri, mobil yerleşim testleri ve
+  capture/tester araçları.
 
-Bunların hepsi kurulu, bağlı ve testli.
+## 6 Eylül kod temizliği ve kavram klasörleri
 
-**Koşunun yayı**
-- Kuruluş sinematiği + 8 mikro adımlık kuruluş + parmakla gösteren öğretici
-- **Bekletmeyen oynanış temposu** — kuruluş yatağı/yatma akışlarına 6–8 sn
-  emniyet supabı; gündüzden ilk geceye doğrudan geçiş; ilk hastalığın ertesi
-  günü beklememesi; 1×/2×/**4×**/duraklat hızları. Karar yokluğunda ilk köy
-  nabzı 8 sn, devamı 10–15 sn; nabza dinlenme ve bakım-onarım eklendi.
-  Olayların dokuzu da iki gerçek seçenekli (kaynak isteyen müdahale + her zaman
-  uygulanabilen pasif yol), ilk olay/dilekçe ~40 sn, sonrakiler ~1–2 dk.
-  Dilekçe açıkken dünya akmayı sürdürüyor; yıl kilitli görev HUD'da hazırlık
-  hedefi olarak kalıyor. Gerçek sahne provası kuruluşun 15 sn altında ilk
-  sabaha ulaştığını doğruluyor *(2026-08-27)*
-- Tüzük merdiveni: 6 kimlik kademesi, ~40 görev (geç kademeler kararla ölçülür)
-- **Orta oyun dersleri** — 7 sistemin kart öğreticisi *(2026-08-08)*
-- **Yıl omurgası** — eskalasyonun tek kaynağı; vergi/olay/kış yılla sertleşir *(2026-08-08)*
-- **Eğlence paketi** — hane uyarı rampası, karar anında 1× nefes, dilekçe temposu/kuyruğu ve yıllık imparatorluk karnesi *(2026-08-14)*
-- **Hesaplaşma** — 6. yılda sancak/berat/ilhak, rejime göre kapanış *(2026-08-08)*
-- **Yaşayan köy showcase görseli** — merkez yerleşim, binalar ve doğal çeper görünür *(2026-08-08)*
-- **Sinematik seyreltmesi** — tam ekran film artık yalnız kuruluş / imparatorluk /
-  hesaplaşma. Nikâh, ilk ateş, kıtlık ve tüzük kademesi filmden çıkarıldı;
-  karşılıkları dünya içinde (şenlik FX, ateş başı toplanma, gövde dili, günce).
-  İmparatorluk filmi üç "ilk kez" anına indi (ilk ziyaret / ilk devşirme /
-  ret sonrası ilk dönüş), her biri koşuda bir kez. `lib/cutscene/` duruyor —
-  animasyon odası hepsini hâlâ oynatabiliyor *(2026-08-10)*
-- Kaybetme eşiği — hane ayrılığı → köy dağılır, kayıt mühürlenir
+- `lib/scene`, `lib/systems`, `lib/ui` düz listeden kavram alt klasörlerine
+  bölündü (world/player/npc/labor/governance/run/events/probe; ui için
+  core/hud/ledger/events/screens/dev). 182 dosya taşındı, tüm import/part
+  yolları ve belgelerdeki yol atıfları güncellendi; davranış değişmedi.
+- Dokuz 2000+ satırlık dosya aynı kütüphanenin part'larına ayrıldı:
+  `character_renderer` (5 part), `game_painter` (ground + lighting),
+  `game_drawables` (villager + building), `village_ledger` (shell + tabs +
+  hero + agenda), `petition_modal` (divan + hero + options + seal),
+  `law_book_panel` (hex + seal ritual), `scene_save` (capture + restore),
+  `scene_crime` (act + justice), `main.dart` (app root + harness bayrakları).
+  Ana dosyaların hiçbiri artık 2400 satırı geçmiyor.
+- Ölü kod silindi: hiç okunmayan 7 işçi hızı sabiti, iki nüfus-yiyecek sabiti,
+  `yearLabel`, `heralded`, `averageQueueWaitDays`, `drawGrounded`,
+  `openAnimationRoom`; kullanılmayan `cupertino_icons` bağımlılığı ve hiçbir
+  koddan referans almayan altı varlık (birch/oak ağaç PNG'leri, iki ambiyans
+  sesi, mevsim detay sayfası, eski at arabası karesi).
+- Doğrulama: `flutter analyze` temiz; `flutter test --exclude-tags probe`
+  915 test geçti. `flutter test --tags probe` koşusunda 23 prova geçti, bir
+  tanesi (living_probe "hırsızlık tam sahne") tam süitte bir kez düştü, tek
+  başına üç koşuda üçü de geçti; süit yüküne bağlı kararsızlık, taşımayla
+  ilgili değil (kod satırı değişmedi, yalnız dosya taşındı).
 
-**Yönetişim (oyunun kalbi)**
-- **Kapıda kuyruk** — SOSYAL DOKU TURU dilim 1/5 *(2026-08-12)*: karar isteyen
-  olay ve dilekçe artık simi DONDURMUYOR ve modal kendiliğinden AÇILMIYOR.
-  Olay vurunca HUD'a KARAR mührü iner (tükenen mühlet halkası; major %20 gün,
-  minor %30), mühlet dolarsa köy PASİF seçeneği kendi yaşar
-  (`EventOutcome.timeoutChoice` sözleşmesi: pasif şık hep SONDA; günceye
-  "Söz gelmedi." düşer). Dilekçede zorunlu huzur donması → "kapıda bekleyen
-  huzur": sözcü merkeze yürür, mühür kalıcı kızarır, bedel GÜN BAŞINA işler
-  (hane −0.03/gün + moral sızıntısı); otomatik ret YOK, karar oyuncunun.
-  Rejim yolları (sessiz düşürme / meclis çözer) aynen. Simi durduran yalnız
-  üç şey kaldı: dağılma, sinematik, imparatorluk pazarlığı.
-  Prova: `decision_queue_probe_test` (kuyruk + akış + eskalasyon + sözleşme).
-  Sıradaki dilimler: baloncuk borcu (7 emoji) → sokak görünürlüğü →
-  gün koreografisi → ritüel takvimi.
-- Dilekçe/Divan/Meclis + governanceLegacy mirası
-- Kanunname: 38 hüküm, altıgen petek UI, mühür töreni
-- Politik pusula → 4 rejim (kimlik seçilmez, kazanılır) + huzursuzluk/kriz
-- Haneler: duruş merdiveni (sadık→razı→serzeniş→el çekti→ambar→kopuş) +
-  oyuncunun proaktif eylemleri (bağış/ceza/nikâh/sürgün/entrika)
-- İmparatorluk: vergici heyeti, pazarlık, itibar, iki tabanlı öşür
-- **Eşik sahnesi** — kazanılan direniş artık dünyada oynuyor: köy tırpan/balta
-  ile heyetle meydan arasına dizilir, heyet bekler, bir hamle yapar, döner.
-  Kronik yıllardır bu cümleyi yazıyordu ama sahnede dizilen kimse yoktu; kayıp
-  sahneliydi, KAZANÇ bildirimdi *(2026-08-08)*
-- **Kararın izi** — verilen her dilekçe kararı ve mühür günceye düşer; KRONİK
-  süzgeci (kararlar/yaşam/sıkıntı), mühür günü, 14 eksik hafıza izi *(2026-08-08)*
-- **Dünya kanıtlı yönetişim** — “kervandan al” şıkları yalnız gerçek kervan
-  pazar/han önündeyse açılıyor; yoksa kart nedenini gösteriyor. Alternatif dış
-  pazar kararları bir ulağı fiziksel olarak yola çıkarıyor, kaynak ancak dönüşte
-  geliyor. Kervan grubu/evresi kayıt yüklemede korunuyor. Dokuz olayın 18 karar
-  kolu 0,8–2,5 gün ayrı NPC işi bırakıyor; 38 hükmün her biri kendi adıyla
-  tekrarlanan sokak eylemine sahip (su, tarla, nöbet, ambar, ibadet, hane vb.).
-  Süren işler ve olay izleri kayıtlı; saf sözleşme + mobil kilit + gerçek
-  save/load testleriyle korunuyor *(2026-08-27)*
+## 6 Eylül haber plaketi
 
-**Yaşayan köy**
-- NPC beyni 6 fazın tamamı (WorldPressure → Mind/Bid → Algı/Hafıza/Dedikodu →
-  Act/Prop → hırsızlık tam sahnesi → basınç/siluet). **Hepsi DONE ve testli.**
-- Kişilik, meslek çağrısı, yaşam evresi, yaşam öyküsü, moral
-- **Baş üstü emoji borcu ödendi** — selam (👋) ve hikâye anlatımı (📖) gövdeye
-  taşındı (`CharGesture.wave` / `.tell`: sağ kolu devralan jest katmanı),
-  göktaşı (🌠) zaten var olan `wonder` postürüne bırakıldı. Baş üstünde
-  yalnız NESNE anlatan işaretler kaldı (🌿 hasta ev, 🕊️ kavgadan çekilme) +
-  sohbetin konu ikonları *(2026-08-08)*
-- Suç + devriye + yargı; çekişme + kan davası; hastalık/veba; düğün/cenaze
-- **Hırsızlık mal korunumu** — çuval/zula sayaçları ayrı stoktaki silahı da
-  kapsıyor; yakalanma, kaçış, gömme ve geri alma yolları malı sızdırmıyor
-  *(2026-08-23)*
+- Geçici bildirimler konu, ton, önem, başlık, gövde ve mevsim/gün damgası
+  taşıyan `VillageNews` modeline bağlandı. Köy halkı, işlik, ambar, hava,
+  asayiş, Divan, yol, imparatorluk ve oyun geri bildirimi ayrı haber diliyle
+  görünür.
+- Eski string bildirimleri otomatik sınıflandırılır; yeni içerik başlık ve
+  önemini açıkça verebilir. Köy olayı ile Divan giriş/sonuçları yapılandırılmış
+  haber üretir.
+- Yayın sırası eş haberleri çoğaltmaz, en fazla iki önemli haberi saklar ve
+  acil haberi aktif sıranın önüne alır. Rutin köy satırları basılmaz, kayda
+  değer gündelik gelişmeler ekran doluyken kuyruğa girmez. Panel açıkken görünmeyen
+  plaketin okuma süresi tüketilmez; panel kapandığında tam süreyle gösterilir.
+- Kayıt, hız ve geçersiz oyuncu eylemi gibi arayüz cevapları büyük haber
+  plaketi yerine küçük geri bildirim fişi kullanır.
+- Plaket konu ikonu, tona bağlı renk, dört kademeli önem izi, sıradaki haber
+  sayısı ve metin uzunluğuna bağlı süre taşır. Eski sabit kurucu galeri ve
+  testlerle uyumlu kalır.
+- Doğrulama: haber modeli/kuyruğu birim testleri, plaket widget testleri,
+  iPhone 11 yerleşimi, oyuncu eylemi geri bildirimi, dilekçe kataloğu ve gerçek
+  sahne karar kuyruğu geçti.
 
-**Üretim & hayatta kalma**
-- Tarım kapalı döngüsü, 11 meslek, zanaat ilerlemesi, hayvancılık
-- Kış: 4 eksenli hazırlık + yün→kışlık zinciri + soğuk çadır
-- Ateş yakıtı, böğürtlen→aşçı zinciri, sazlık yatakları
-- **Taşıyıcı görev yaşam döngüsü** — pickup/teslim/iptal/ölüm/sahne geçişi
-  rezervasyonları atomik temizleniyor; gerçek yük iki elle çiziliyor
-  *(2026-08-23)*
+## 5 Eylül hikâye sürekliliği
 
-**Altyapı**
-- Çoklu slot kayıt/yükleme, ayarlar kalıcılığı *(2026-08-08)*
-- Ses: 3 katman, 30 dosya
-- Mobil "kenar rayı" teması, iOS'a atma zinciri
-- **Dekor nüfusu ve painter cache sözleşmesi** — sahipli kalıcı yüzeyler eski
-  kayıtta sanitize ediliyor; geçici yükler florayı silmiyor; yerinde liste
-  mutasyonu `decorVersion` ile bucket cache'i yeniliyor *(2026-08-23)*
-- **Bina kataloğu yenilemesi** — görseli solda, BuildingMeta ad/alan/maliyet
-  bilgisini sağda birleştiren yatay katalog kayıtları; renk dışı seçili/eksik
-  durumları, iki sütun tam ekran mobil katalog ve 896×414 + 760×360 taşma
-  sözleşmeleri *(2026-08-23)*
-- Dev konsol, dev panel, almanak, 35 capture/prova aracı
+- Bahçe, yapı ustalığı ve iki hane uzlaşması için üç aşamalı, dallanan üç
+  hikâye eklendi. On sekiz katalog girdisi; normal bir yolda üç karar.
+- Aynı iki köylü kayıt/yüklemede korunur. Aktör ölür veya ayrılırsa ayrı,
+  bedelsiz kayıp kapanışı gelir; açık kararda eski bedel harcanmaz.
+- Ortaklıklar sosyal niyet hakemine bağlandı. Bahçe ev çevresinde görünür;
+  gerçek buluşmalar elde eşya ve el işiyle yaşanır; yapı ustalığı gerçek
+  köylü bilgisinde ilerler ve aynı gün tekrar yüklenerek çoğaltılamaz.
+- Son karşılaşmalar üçüncü/beşinci yıl kapılarını bekler; görev paneli aynı
+  insanların geçmişini üretim ağı, zanaat ve hane desteği hedeflerine ekler.
+- Doğrulama: statik analiz ve tam Flutter test süiti geçti. Yeni gerçek sahne
+  provası dallanma, aynı aktörle kayıt/yükleme, yıl kapısı, ayrılık kapanışı,
+  görünür buluşma ve ustalık kazanımını kapsıyor. İki telefon boyutunda tüm
+  yeni kararların erişilebilirliği ayrıca doğrulandı.
+- Akış ve kapsam: [docs/story_threads.md](docs/story_threads.md).
 
----
+## 2 Eylül sağlamlaştırması
 
-## ⚠️ Eksik — öncelik sırasıyla
+- Olay kataloğu motordan ayrılarak `lib/systems/events/event_catalog.dart`
+  sınırına taşındı.
+- `EventSystem` artık olayın `canFire` kapısını gerçekten uygular; sıfır veya
+  negatif ağırlıklı olay seçime girmez.
+- Sahnenin zorunlu kullandığı altı karar katalogda yeniden tek paket altında
+  güvenceye alındı: suç hükmü, asayiş, fidye, odun azlığı, ateşin sönmesi ve
+  düğün.
+- Dilekçe kimlikleri `PetitionIds` altında toplandı. Oynanış çağrıları eksik
+  girdiyi sessizce yutmak yerine `PetitionSystem.requireById` ile açık hata
+  verir.
+- Ateş/asayiş/fidye/düğün kararları dolu masada kaybolmaz; aynı karar iki kez
+  eklenmeden merkezi ağır-karar kuyruğunda bekler.
+- Kayıtta dayanağı kalmayan fidye/yargı payload'ları ve eski katalog
+  isteklerinin hayalet kuyruk kayıtları temizlenir.
+- Katalog bütünlüğü, metin dokuma, olay koşulu ve gerçek sahne karar kuyruğu
+  regresyon testleri geri kuruldu.
 
-### 1. Kararsız (flaky) test
-Bir tam koşuda tek bir hata düştü (`Expected: true / Actual: false`), adı
-yakalanamadı. Ardından **8 temiz tam koşu** geldi; tekrarlanmadı.
-Çözülmedi, yalnız görülmedi. Avlama komutu CLAUDE.md §6'da.
+## Açık işler — öncelik sırasıyla
 
-### 2. Tablet doğrulanmadı
-Referans cihaz iPhone 11 (telefon). Tablet HUD'ı ve köylü paneli hiç
-sınanmadı.
+### 1. Rastgele olay içeriği yok
 
-### 3. Dilekçe katalogları — bütünlük kapandı, denge açık
-`petition_catalog_test` (2026-08-10) katalogun **yapısını** koruyor: ölü
-zincir bağı, öksüz takip halkası, hiçbir köyde açılmayan kapı, iki özdeş şık,
-em-dash. Kurulurken dört ölü dilekçe ve 17 em-dash buldu.
+`EventOutcome`, seçim, zaman aşımı, efekt, koreografi, UI ve kayıt altyapısı
+duruyor; `EventSystem.events` ise boştur. Yeni olaylar tek tek motor dosyasına
+gömülmemeli, `lib/systems/events/` altında içerik paketi olarak eklenmelidir.
+Her seçimli olayın pasif zaman-aşımı kolu ve sahnede görünen karşılığı olmalıdır.
 
-Kalan boşluk **denge**: hangi dilekçe ne sıklıkta geliyor, ağırlıklar köyün
-gündemini doğru mu kuruyor. Bu ölçüm işi, sözleşme işi değil.
+### 2. Dilekçe gündemi dar
 
-### 4. Tek dil
-`AppLanguage` enum'unda `tr` ve `en` var, yalnız `tr` dolu. Türkçe ek motoru
-(`voice.dart`) dile bağlı — İngilizce eklemek metin çevirisi değil, motorun
-ikinci bir gramere açılması demek. Küçük bir iş değil.
+Rastgele havuzda altı kişisel/gündelik dilekçe ile koşullu asayiş kararı vardır.
+Diğer beş katalog girdisi yalnız sahne olaylarının zorunlu karar yüzeyidir.
+Üç kişisel hikâye artık aynı aktörlerle dallanıp üçüncü/beşinci yıl gündemine
+uzanıyor. Daha geniş topluluk, kurum, zümre ve rejim gündemleri içerik ister.
+Önce communal, sonra civic/critical paketleri eklenmelidir; her paket mevcut
+`petition_catalog_test` sözleşmesini geçmelidir.
 
-### 5. Kalan küçük eksikler
-- Ses: `ui_tap` + 2 müzik parçası. **Kullanıcı kararıyla İSTENMEDİ** —
-  yeniden önerme, kanca kodda sessiz duruyor.
-- 55 dosya commit'siz (10 Ağustos itibarıyla): combat/prop/mezar varlıkları,
-  `imperial_defense_test`, `save_roundtrip_test` ve sinematik seyreltmesi.
+### 3. Depo hijyeni tamamlanmadı
 
----
+Çalışma ağacında çok sayıda değiştirilmiş, silinmiş ve yeni dosya vardır.
+`tmp/` ve `.backups/` için yeni dosya üretimi ignore edilmiştir; daha önce Git'e
+alınmış içerikler bilerek otomatik silinmemiştir. Değişiklikler konu bazlı
+commitlere ayrılmadan güvenli geri alma ve code review zor kalacaktır.
 
-## 🗑️ Fazla — silinecek ya da küçültülecek
+### 4. Tablet doğrulaması yok
 
-### 1. `lib/ui/ui_icon.dart` — ölü özellik
-`UiIcon` sınıfı tanımlı, **hiçbir yerden import edilmiyor**. Karşılığı olan
-`assets/ui/icon_*.png` dosyaları da hiç üretilmemiş (klasörde yalnız
-`app_icon.svg` ve iki menü arka planı var). HUD `app_ui.dart`'taki `GameIcon`
-kullanıyor. Ya ikonlar üretilmeli ya dosya silinmeli.
+Telefon için iPhone 11 ve dar pencere sözleşmeleri bulunur. Tablet HUD'ı,
+Köylü paneli ve geniş Divan yerleşimi gerçek cihaz profiliyle doğrulanmamıştır.
 
-### 2. Varlık boyutu — 122 MB  ← büyüyor
-85 MB'ı `assets/buildings`. Mobil için ağır ve **son ölçümden 28 MB arttı**.
-Bina PNG'leri muhtemelen
-gereğinden yüksek çözünürlükte; oyun onları `spriteScale` ile küçültüyor.
-Ölçülmeden dokunulmamalı ama bakılmalı.
+### 5. Tek dil
 
-### 3. `lib/tools/` — 38 dosya, 9.548 satır
-Kaynağın %7,6'sı geliştirici aracı. Çoğu tek seferlik capture harness'ı.
-Silmek şart değil ama hangisinin hâlâ koştuğu bilinmiyor; ölmüş olanlar
-bakım yükü.
+Uygulama Türkçedir. İngilizce eklemek yalnız metin çevirisi değildir;
+`voice.dart` içindeki Türkçe ek/dokuma motorunun dil katmanına ayrılması gerekir.
 
----
+### 6. Varlık ve araç maliyeti
 
-## Reddedilmiş yollar (bir daha önerme)
+`assets/buildings/` tek başına 91 MB'dır. Görseller çözünürlük/kullanım ölçümü
+yapılmadan topluca küçültülmemelidir. `lib/tools/` içindeki 37 giriş noktasının
+da CI veya belgelenmiş manuel akış karşılığı çıkarılmalı; ölü olanlar sonra
+ayıklanmalıdır.
 
-Bunlar denendi ve kullanıcı tarafından geri çevrildi:
+## Korunacak tasarım kararları
 
-- Reveal örtüsü/sis (4 kez) → doğrusu **kamera zoom kısıtı**
-- Kuşbakışı sinematik · Ana menüde mor palet + kukuletalı silüet
-- Yuvarlak ("round") NPC · Bank binası · Ayrı kurulum ekranı
-- İmece/malzeme taşıma/iskele paketi · Selam & Hediye etkileşimleri
-- Menü müziği + `ui_tap` sesi · Kanunname için path/ağaç UI (5 yüzey reddedildi)
+- Sis/reveal yerine kamera zoom sınırı.
+- Tam ekran sinematik yalnız kuruluş, imparatorluk ve hesaplaşma gibi seyrek
+  dönüm noktalarında.
+- Doğal yaşam olayları kaynak bedeli almaz.
+- Simülasyonu yalnız dağılma, sinematik ve imparatorluk pazarlığı durdurur;
+  dilekçe ve normal kararlar dünyayı dondurmaz.
+- Yeni mantık `lib/systems/`, sahne bağlantısı `lib/scene/`, çizim `lib/ui/`
+  sınırını korur.
+- Menü müziği ve `ui_tap` sesi kullanıcı tercihiyle kapsam dışıdır.

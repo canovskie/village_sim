@@ -6,11 +6,13 @@ yönetir ve altı yıl sonra imparatorluğa hesap verir. Türkçe.
 ```bash
 flutter pub get
 flutter run              # oyun
-flutter test             # 677 test, ~4 dk
+flutter test --exclude-tags probe  # hızlı süit
+flutter test --tags probe          # gerçek sahne provaları
+flutter test                       # ikisi birlikte, tam süit
 flutter analyze
 ```
 
-Oyun içi: **Tab** → Köy Defteri · **`** (backtick) → geliştirici konsolu
+Oyun içi: **Tab** → Köy Defteri · HUD'daki böcek düğmesi → geliştirici paneli
 
 ---
 
@@ -35,6 +37,11 @@ Bu dosya kısa tutulur. Gerçek belgeler şunlar:
 Saf mantık `lib/systems/` altında (Flutter yok, test edilebilir), sahneye
 `lib/scene/` altındaki `main.dart` part'ları bağlar, `lib/ui/` yalnız çizer.
 Yeni mantık sahneye gömülmez.
+
+Rastgele olay altyapısı hazırdır ama katalog şu an bilinçli olarak boştur.
+Dilekçeler içerik paketlerine ayrılır; sahne-güdümlü kritik kararlar katalogda
+zorunlu bağımlılık olarak doğrulanır. Üç kişisel hikâye, aynı köylülerle
+üç aşamada dallanır ve geç yıl hedeflerine bağlanır.
 
 ---
 

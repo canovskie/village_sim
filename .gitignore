@@ -51,4 +51,6 @@ app.*.map.json
 
 # Geçici / scratch çalışma dosyaları
 /scratch/
+/tmp/
+/.backups/
 *.tmp
