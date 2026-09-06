@@ -21,10 +21,10 @@ const Map<AnimalKind, int> kAnimalBarnCap = {
 
 /// Türün Türkçe adı (UI butonları).
 String animalKindLabel(AnimalKind k) => switch (k) {
-      AnimalKind.cow => 'İnek',
-      AnimalKind.sheep => 'Koyun',
-      AnimalKind.chicken => 'Tavuk',
-    };
+  AnimalKind.cow => 'İnek',
+  AnimalKind.sheep => 'Koyun',
+  AnimalKind.chicken => 'Tavuk',
+};
 
 /// 4 yönlü facing — sprite-based hayvanlarda hangi sprite seti kullanılacak.
 /// Hareket yönüne göre güncellenir.
@@ -37,10 +37,10 @@ enum AnimalLifeStage { juvenile, adult, elder }
 extension AnimalLifeStageX on AnimalLifeStage {
   /// Sprite çizim ölçeği — yavru küçük, yetişkin tam, yaşlı hafif küçülmüş.
   double get renderScale => switch (this) {
-        AnimalLifeStage.juvenile => 0.55,
-        AnimalLifeStage.adult => 1.0,
-        AnimalLifeStage.elder => 0.92,
-      };
+    AnimalLifeStage.juvenile => 0.55,
+    AnimalLifeStage.adult => 1.0,
+    AnimalLifeStage.elder => 0.92,
+  };
 }
 
 /// Ağıla bağlı serbest dolaşan hayvan. Hunger ↗ zaman; otladıkça (= hareket
@@ -77,6 +77,7 @@ class AnimalEntity {
   // ── Ölüm animasyonu ─────────────────────────────────────────────────────
   /// true → hayvan çöküp solmaya başladı (anlık silme yok; köylüyle simetrik).
   bool isDying = false;
+
   /// 0→1 çöküş/solma ilerlemesi; 1 olunca [deathFinished].
   double deathProgress = 0.0;
   bool get deathFinished => isDying && deathProgress >= 1.0;
@@ -86,26 +87,34 @@ class AnimalEntity {
   double gridY;
   double renderX;
   double renderY;
-  bool   facingRight = true;
+  bool facingRight = true;
+
   /// 4 yönlü facing — sprite-based hayvanlarda kullanılır (sheep). Cow ignore eder.
   AnimalFacing facing4 = AnimalFacing.s;
-  double walkPhase   = 0.0;
-  bool   isWalking   = false;
+  double walkPhase = 0.0;
+  bool isWalking = false;
 
   /// 0 = tamamen tok, 1 = aç. Yürürken otladığı varsayılır.
   double hunger = 0.0;
+
   /// 0..1 — doyduğunda dolar; sağılınca sıfırlanır.
   double milkProgress = 0.0;
+
   /// Çoban tarafından şu anda sağılıyor.
   bool isBeingMilked = false;
+
+  /// Fırtına yaklaşırken rastgele otlamak yerine bağlı olduğu ahır/kümesin
+  /// önüne yöneliyor mu. Geçici davranış; kaydedilmez.
+  bool stormSheltering = false;
 
   // ── Wander state ──────────────────────────────────────────────────────────
   double _wanderTargetX = -1;
   double _wanderTargetY = -1;
-  double _wanderTimer   = 0;
+  double _wanderTimer = 0;
+
   /// > 0 iken hayvan hedefe ulaştı, ot yiyor — yerinde dururur, yeni hedef seçmez.
   /// Gerçek otlatma davranışı: kısa yürüyüş + uzun otlama döngüsü.
-  double _grazeTimer    = 0;
+  double _grazeTimer = 0;
 
   AnimalEntity({
     required this.kind,
@@ -114,10 +123,10 @@ class AnimalEntity {
     required double startCol,
     required double startRow,
     this.isMale = false,
-    this.ageDays = kAnimalAdultDay,   // default: yetişkin doğar (ilk spawn)
+    this.ageDays = kAnimalAdultDay, // default: yetişkin doğar (ilk spawn)
     double? lifespanDays,
-  }) : gridX   = startCol,
-       gridY   = startRow,
+  }) : gridX = startCol,
+       gridY = startRow,
        renderX = startCol,
        renderY = startRow,
        lifespanDays = lifespanDays ?? kAnimalElderDay + 9.0 {
@@ -130,30 +139,31 @@ class AnimalEntity {
   /// Default 1.0. AnimalEntity policy'ye erişmesin diye side channel.
   static double kWanderScale = 1.0;
   static double get _wanderRadius => 2.5 * kWanderScale;
+
   /// Açlık hız çarpanı — `winterFodder` politikası açıkken scene 0.55 yapar
   /// (yem stoku → hayvanlar daha geç acıkır, daha verimli). Default 1.0.
   static double kHungerScale = 1.0;
-  static const double _walkSpeed    = 0.65;         // tile/sn, sakin ama uyuşuk değil
-  static const double _hungerRate   = 1.0 / 70.0;   // 70 sn'de aç
-  static const double _grazeRate    = 1.0 / 30.0;   // 30 sn yürüyüşle doyar
-  static const double _milkRate     = 1.0 / 45.0;   // dolu kalınca 45 sn'de hazır
+  static const double _walkSpeed = 0.65; // tile/sn, sakin ama uyuşuk değil
+  static const double _hungerRate = 1.0 / 70.0; // 70 sn'de aç
+  static const double _grazeRate = 1.0 / 30.0; // 30 sn yürüyüşle doyar
+  static const double _milkRate = 1.0 / 45.0; // dolu kalınca 45 sn'de hazır
   // Idle/otlama sırasında walkPhase yavaşça sürünür — walk frame'ini etkilemez
   // (frame yalnız isWalking iken okunur) ama renderer bunu hayvana özgü nefes
   // fazı olarak kullanır → grazing hayvanlar hep birlikte donmaz, doğal desync.
-  static const double _idleDrift    = 0.6;          // rad/sn, çok yumuşak
+  static const double _idleDrift = 0.6; // rad/sn, çok yumuşak
 
   // ── Yaşam evresi eşikleri (oyun günü) ────────────────────────────────────
   // Hayvanlar köylüden biraz daha kısa ömürlü → sürü yenilenmesi gözle görülür.
-  static const double kAnimalAdultDay = 1.5;    // yavru → yetişkin
+  static const double kAnimalAdultDay = 1.5; // yavru → yetişkin
   // Yaşlı eşiği geniş tutuldu: doğurganlık penceresi (yetişkin→yaşlı) sayaçtan
   // belirgin uzun olsun ki hayvanlar yaşlanmadan rahatça yavrulasın.
-  static const double kAnimalElderDay = 16.0;   // yetişkin → yaşlı
+  static const double kAnimalElderDay = 16.0; // yetişkin → yaşlı
 
   AnimalLifeStage get lifeStage => ageDays < kAnimalAdultDay
       ? AnimalLifeStage.juvenile
       : ageDays < kAnimalElderDay
-          ? AnimalLifeStage.adult
-          : AnimalLifeStage.elder;
+      ? AnimalLifeStage.adult
+      : AnimalLifeStage.elder;
 
   /// Üretim + üreme yalnızca yetişkinde (yaşlı da üretir ama daha az ürer).
   bool get isAdult => ageDays >= kAnimalAdultDay;
@@ -173,10 +183,15 @@ class AnimalEntity {
     fertilityDays = double.nan;
   }
 
-  void update(double dt, Random rng,
-      {Set<(int, int)> waterTiles = const {}}) {
+  void update(
+    double dt,
+    Random rng, {
+    Set<(int, int)> waterTiles = const {},
+    bool seekStormShelter = false,
+  }) {
     // Çöküş animasyonu — solar + yerinde kalır, başka hiçbir şey işlemez.
     if (isDying) {
+      stormSheltering = false;
       deathProgress = (deathProgress + dt / _deathDuration).clamp(0.0, 1.0);
       isWalking = false;
       _smoothRender(dt);
@@ -198,10 +213,21 @@ class AnimalEntity {
     }
 
     if (isBeingMilked) {
+      stormSheltering = false;
       isWalking = false;
       walkPhase += dt * 1.2;
       _smoothRender(dt);
       return;
+    }
+
+    stormSheltering = seekStormShelter;
+    if (seekStormShelter) {
+      // Footprint'in içine değil önündeki kuru banda git: bina tile'ı obstacle
+      // olduğundan merkez hedefi hayvanı duvara iterdi. Kümes 2×2, ahır 3×2.
+      _wanderTargetX = barnCol + (kind == AnimalKind.chicken ? 1.0 : 1.5);
+      _wanderTargetY = barnRow + 2.35;
+      _wanderTimer = 1.0;
+      _grazeTimer = 0;
     }
 
     // Hunger / milk metabolizması — otlarken (duruşta) yer; yürürken aramaz.
@@ -235,8 +261,8 @@ class AnimalEntity {
       _wanderTimer = 8.0 + rng.nextDouble() * 6.0;
     }
 
-    final dx   = _wanderTargetX - gridX;
-    final dy   = _wanderTargetY - gridY;
+    final dx = _wanderTargetX - gridX;
+    final dy = _wanderTargetY - gridY;
     final dist = sqrt(dx * dx + dy * dy);
     if (dist < 0.1) {
       // Vardık → otlama. Yeni hedef freeze bittikten sonra seçilir.
@@ -304,7 +330,12 @@ class AnimalEntity {
   /// İki nokta arasındaki segment üzerinde 6 ara örnek; biri engel tile'a
   /// düşerse path tıkalı sayılır. Bina köşesinden geçişi keser.
   static bool _segmentClear(
-      Set<(int, int)> tiles, double x0, double y0, double x1, double y1) {
+    Set<(int, int)> tiles,
+    double x0,
+    double y0,
+    double x1,
+    double y1,
+  ) {
     const samples = 6;
     for (int i = 1; i <= samples; i++) {
       final t = i / (samples + 1);

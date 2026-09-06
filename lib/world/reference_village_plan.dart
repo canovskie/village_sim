@@ -4,7 +4,7 @@ import 'season.dart';
 
 /// ─── REFERANS KÖYÜN PLANI (saf veri) ─────────────────────────────────────────
 ///
-/// Kurulum mantığı `scene/scene_reference_village.dart`'ta (main.dart'ın part'ı,
+/// Kurulum mantığı `scene/probe/scene_reference_village.dart`'ta (main.dart'ın part'ı,
 /// yani UI'a bağlı); PLAN burada, bağımsız bir kütüphanede durur. Sebep: plan
 /// testlenebilsin — "bütün binalar başlangıç bölgesine sığıyor mu, çakışıyor mu,
 /// kaç yatak var" sorularını sahneyi ayağa kaldırmadan sormak gerekiyor
@@ -75,9 +75,10 @@ const List<(BuildingType, int, int)> kRefLayout = [
   (BuildingType.tent, 6, 2),
   // ── Yönetim & mabet (kuzey) ───────────────────────────────────────────────
   (BuildingType.townhall, 9, 1),
-  (BuildingType.church, 15, 1),
-  (BuildingType.warehouse, 19, 1),
-  (BuildingType.market, 18, 4),
+  (BuildingType.church, 14, 0),
+  (BuildingType.chapel, 6, 4),
+  (BuildingType.warehouse, 20, 1),
+  (BuildingType.market, 19, 5),
   // ── Meydan çevresi ────────────────────────────────────────────────────────
   (BuildingType.well, 13, 9),
   (BuildingType.tavern, 8, 10),
@@ -95,7 +96,7 @@ const List<(BuildingType, int, int)> kRefLayout = [
   (BuildingType.lamppost, 13, 6),
   (BuildingType.lamppost, 10, 11),
   (BuildingType.lamppost, 14, 11),
-  (BuildingType.lamppost, 14, 4),
+  (BuildingType.lamppost, 14, 5),
   (BuildingType.lamppost, 7, 14),
 ];
 

@@ -13,16 +13,6 @@ const double kTileW = 64.0; // piksel sanatı için 2:1 standart (64x32)
 const double kTileH = 32.0;
 const double kCharScale = 0.34;
 
-// ─── İşçi hızları (tile / sn) ────────────────────────────────────────────────
-// Tek yerde toplandı; balance tuning için buradan değiştirin.
-const double kBuilderSpeed = 2.2;
-const double kBuilderWanderSpeed = 1.0;
-const double kWoodcutterSpeed = 2.2;
-const double kLumberCampSpeed = 2.2;
-const double kMinerSpeed = 2.0;
-const double kFisherSpeed = 2.5;
-const double kFarmerSpeed = 3.5;
-
 // ─── Çalışma süreleri (saniye) ───────────────────────────────────────────────
 // İlk odun, erken oyunun "sistem çalışıyor mu?" anıdır. 45 sn'de kesim,
 // kulübeyi kuran oyuncuyu neredeyse bir oyun dakikası sonuçsuz bekletiyordu.
@@ -123,7 +113,7 @@ const double kFoodPerVillagerPerDay = 8.0; // köylü başına günlük tüketim
 const int kStarveRampFood = 10; // bu eşiğin altında açlık reaksiyonu
 
 // ─── Rastgele olaylar ─────────────────────────────────────────────────────────
-// Olay ritmi `systems/gameplay_pacing.dart` altında tek sözleşmedir. Burada
+// Olay ritmi `systems/run/gameplay_pacing.dart` altında tek sözleşmedir. Burada
 // yalnız banner'ın görsel ömrü kalır.
 const double kEventBannerDuration = 6.0; // banner kart ekranda kalma süresi
 

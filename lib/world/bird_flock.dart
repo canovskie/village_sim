@@ -4,7 +4,7 @@ import '../core/constants.dart';
 /// V-formation slot — leader-relative koordinatlar (uçuş yönü = along, sol 90° = perp).
 class Bird {
   final double slotAlong; // 0 = leader, <0 = arkada
-  final double slotPerp;  // ±, leader'ın yan kanatları
+  final double slotPerp; // ±, leader'ın yan kanatları
   final double wingPhaseOffset;
   const Bird({
     required this.slotAlong,
@@ -18,13 +18,17 @@ class Bird {
 class BirdFlock {
   /// Leader (formasyon başı) dünya konumu (tile).
   double leadX, leadY;
+
   /// Normalize uçuş yönü.
   final double dirX, dirY;
+
   /// tile/sn.
   final double speed;
+
   /// Ekran üzerinde gökyüzü yüksekliği — render'da Y offset olarak çekilir (px).
   final double altitude;
   final List<Bird> birds;
+
   /// Spawn fade-in için yaş (sn).
   double age = 0.0;
 
@@ -46,8 +50,7 @@ class BirdFlock {
 
   /// 10 tile dışına çıktıysa öldü → liste temizlemeli.
   bool get isDead =>
-      leadX < -10 || leadX > kCols + 10 ||
-      leadY < -10 || leadY > kRows + 10;
+      leadX < -10 || leadX > kCols + 10 || leadY < -10 || leadY > kRows + 10;
 
   /// Bird'ün dünya konumu. Slot leader-relative; uçuş yönüne göre rotate.
   (double, double) birdWorldPos(Bird b) {
@@ -90,20 +93,28 @@ class BirdFlock {
     // V-formation: leader + her kanat için 2-3 kuş, geriye doğru staggered.
     final wingCount = 2 + rng.nextInt(2);
     final birds = <Bird>[
-      Bird(slotAlong: 0, slotPerp: 0, wingPhaseOffset: rng.nextDouble() * 2 * pi),
+      Bird(
+        slotAlong: 0,
+        slotPerp: 0,
+        wingPhaseOffset: rng.nextDouble() * 2 * pi,
+      ),
     ];
     final spread = 0.55 + rng.nextDouble() * 0.25;
     for (int i = 1; i <= wingCount; i++) {
-      birds.add(Bird(
-        slotAlong: -i * spread * 1.25,
-        slotPerp:  -i * spread,
-        wingPhaseOffset: rng.nextDouble() * 2 * pi,
-      ));
-      birds.add(Bird(
-        slotAlong: -i * spread * 1.25,
-        slotPerp:   i * spread,
-        wingPhaseOffset: rng.nextDouble() * 2 * pi,
-      ));
+      birds.add(
+        Bird(
+          slotAlong: -i * spread * 1.25,
+          slotPerp: -i * spread,
+          wingPhaseOffset: rng.nextDouble() * 2 * pi,
+        ),
+      );
+      birds.add(
+        Bird(
+          slotAlong: -i * spread * 1.25,
+          slotPerp: i * spread,
+          wingPhaseOffset: rng.nextDouble() * 2 * pi,
+        ),
+      );
     }
 
     return BirdFlock(
@@ -114,6 +125,49 @@ class BirdFlock {
       speed: 1.7 + rng.nextDouble() * 1.0, // 1.7-2.7 tile/sn — sakin glide
       altitude: 75.0 + rng.nextDouble() * 50.0,
       birds: birds,
+    );
+  }
+
+  /// Şafakta bir çatıdan topluca kalkan küçük kuş grubu. Ambient V sürüsünden
+  /// daha alçak ve az üyeli başlar; aynı update/render yolunu kullandığı için
+  /// ayrı bir partikül sistemi gerekmez.
+  static BirdFlock spawnFromRoof(
+    Random rng, {
+    required double roofX,
+    required double roofY,
+  }) {
+    final angle = -0.75 + rng.nextDouble() * 1.5;
+    final dx = cos(angle);
+    final dy = sin(angle);
+    return BirdFlock(
+      leadX: roofX,
+      leadY: roofY,
+      dirX: dx,
+      dirY: dy,
+      speed: 2.4 + rng.nextDouble() * 0.7,
+      altitude: 42.0,
+      birds: [
+        Bird(
+          slotAlong: 0,
+          slotPerp: 0,
+          wingPhaseOffset: rng.nextDouble() * 2 * pi,
+        ),
+        Bird(
+          slotAlong: -0.28,
+          slotPerp: -0.24,
+          wingPhaseOffset: rng.nextDouble() * 2 * pi,
+        ),
+        Bird(
+          slotAlong: -0.38,
+          slotPerp: 0.26,
+          wingPhaseOffset: rng.nextDouble() * 2 * pi,
+        ),
+        Bird(
+          slotAlong: -0.62,
+          slotPerp: 0.04,
+          wingPhaseOffset: rng.nextDouble() * 2 * pi,
+        ),
+      ],
     );
   }
 }

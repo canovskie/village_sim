@@ -33,13 +33,14 @@ class ImperialSoldier extends VillagerEntity {
     required this.backOffset,
     required this.sideOffset,
     int? seed,
+    super.visual,
   }) : super(
-          type: VillagerType.guard, // animasyon iskeleti; kostüm görünümü ezer
-          name: commander ? 'İmparatorluk Komutanı' : 'İmparatorluk Askeri',
-          male: true,
-          visualSeed: seed,
-          ageDays: kAdultStartDay, // yetişkin; "çağrı" anı tetiklenmesin
-        ) {
+         type: VillagerType.guard, // animasyon iskeleti; kostüm görünümü ezer
+         name: commander ? 'İmparatorluk Komutanı' : 'İmparatorluk Askeri',
+         male: true,
+         visualSeed: seed,
+         ageDays: kAdultStartDay, // yetişkin; "çağrı" anı tetiklenmesin
+       ) {
     costume = NpcCostume.imperial;
     imperialCommander = commander;
   }
@@ -47,15 +48,24 @@ class ImperialSoldier extends VillagerEntity {
   /// Sahne her tick çağırır — atanmış slot hedefine ([tx],[ty]) yürür. Varışta
   /// [isWalking]=false (yerinde bekler). VillagerEntity.update'in aksine AI yok.
   /// Dönüş: hedefe (yaklaşık) vardı mı.
-  bool stepTo(double dt, double tx, double ty,
-      {double dayLight = 1.0,
-      double rainIntensity = 0.0,
-      double speedMul = 1.0,
-      double arriveD = 0.18}) {
-    isWalking = true;
-    final arrived = moveTowards(tx, ty, dt, arriveD: arriveD, speedScale: speedMul);
-    if (arrived) isWalking = false;
-    smoothMotion(dt);
+  bool stepTo(
+    double dt,
+    double tx,
+    double ty, {
+    double dayLight = 1.0,
+    double rainIntensity = 0.0,
+    double speedMul = 1.0,
+    double arriveD = 0.18,
+  }) {
+    final fromX = gridX, fromY = gridY;
+    final arrived = moveTowards(
+      tx,
+      ty,
+      dt,
+      arriveD: arriveD,
+      speedScale: speedMul,
+    );
+    animateExternalMotion(dt, fromX, fromY);
     // Gece gelirlerse meşale yansın (heyet meşaleli gelir). finished → söner.
     tickTorch(dt, dayLight, rainIntensity, eligibleOverride: !finished);
     return arrived;

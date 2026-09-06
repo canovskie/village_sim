@@ -1,6 +1,6 @@
 /// Dünyanın açılma eğrisi — reach span hedefinin SAF matematiği.
 ///
-/// Reach bir örtü değil kamera kısıtıdır ([[lib/scene/scene_land.dart]]); bu
+/// Reach bir örtü değil kamera kısıtıdır ([[lib/scene/world/scene_land.dart]]); bu
 /// dosya yalnız "ilerlemeye karşılık ne kadar span" sorusunu cevaplar, sahne
 /// katmanına hiç bağlı değildir → testten doğrudan çağrılır.
 library;

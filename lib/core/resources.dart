@@ -11,7 +11,7 @@ enum ResourceKind {
   reed('🌿', 'Saz', 'reed'),
 
   /// Kışlık giysinin hammaddesi — sonbaharda koyundan kırkılır, dokumacı
-  /// giysiye çevirir (bkz. systems/winter.dart, scene_winter.dart). Omurga
+  /// giysiye çevirir (bkz. systems/world/winter.dart, scene_winter.dart). Omurga
   /// kaynağı DEĞİL: HUD'ın ikincil panelinde bal/sazın yanında durur.
   wool('🧶', 'Yün', 'wool'),
   gold('★', 'Altın', 'gold');

@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import '../core/constants.dart';
-import '../systems/decor_population.dart';
-import '../systems/founding_site.dart';
+import '../systems/world/decor_population.dart';
+import '../systems/world/founding_site.dart';
 import 'decor_entity.dart';
 import 'mine_node.dart';
 import 'nature_entity.dart';

@@ -5,10 +5,10 @@ import '../characters/npc_visual.dart';
 import '../characters/personality.dart';
 import '../characters/villager_type.dart';
 import '../core/constants.dart';
-import '../systems/chronicle.dart';
-import '../systems/villager_act.dart';
-import '../systems/villager_memory.dart';
-import '../systems/villager_mind.dart';
+import '../systems/events/chronicle.dart';
+import '../systems/npc/villager_act.dart';
+import '../systems/npc/villager_memory.dart';
+import '../systems/npc/villager_mind.dart';
 import 'villager_job.dart';
 import 'worker_entity.dart';
 
@@ -19,6 +19,28 @@ enum VillagerState {
   walkingToSleep,
   walkingToPickup,
   carrying,
+}
+
+/// Yağmurda yürüyen köylünün zeminde bıraktığı kısa ömürlü tek ayak izi.
+/// Dünya koordinatında tutulur; renderer izometriye çevirir. Geçici ve sınırlı
+/// olduğundan kayda girmez.
+class MudFootprintTrace {
+  static const double lifetime = 3.2;
+
+  final double gridX;
+  final double gridY;
+  final double dirX;
+  final double dirY;
+  final bool leftFoot;
+  double age = 0;
+
+  MudFootprintTrace({
+    required this.gridX,
+    required this.gridY,
+    required this.dirX,
+    required this.dirY,
+    required this.leftFoot,
+  });
 }
 
 /// NPC'nin boş zaman hareket kişiliği — "otlayan inek" tekdüzeliğini kırar.
@@ -201,6 +223,11 @@ class VillagerEntity extends WorkerEntity {
   /// Geçici varlık özelliği — kaydedilmez (askerler kayda yazılmaz).
   NpcCostume costume = NpcCostume.none;
 
+  /// Divan kararından doğan kalıcı kişisel kıyafet. Meslek değişse de sürer ve
+  /// kayda yazılır; böylece kararın sonucu yalnız güncede değil köy yolunda da
+  /// görünür.
+  NpcWardrobe wardrobe = NpcWardrobe.standard;
+
   /// İmparatorluk kostümünde komutan mı — true ise miğfer üstünde uzun kızıl
   /// sorguç + pelerin (heyetin lideri görünür biçimde ayrışır).
   bool imperialCommander = false;
@@ -212,6 +239,13 @@ class VillagerEntity extends WorkerEntity {
   /// Eşik muharebesinde darbe tepkisi. Hareket motoru geri itilmeyi, renderer
   /// kısa gövde sendelemesini çizer; ziyaret bitince temizlenir.
   bool imperialHit = false;
+
+  /// Live battle gauges; absent during ordinary village life.
+  double? battleHealth;
+  double? battleSwing;
+  double battleFall = 0;
+  double? battleResolve;
+  (double, double)? battlePost;
 
   /// NPC kavgasının yönlendirilmiş düello motorunda mı? Eski sinüs tabanlı
   /// yerinde sallanmayı susturur; konum ve vuruşu scene_conflict yönetir.
@@ -412,6 +446,82 @@ class VillagerEntity extends WorkerEntity {
   /// Geçici vurgu (sn) — HUD'dan "evsizleri göster" gibi tetiklenir; painter
   /// bu süre boyunca köylünün etrafına nabız atan bir halka çizer.
   double highlightTimer = 0;
+
+  /// Yük/iş bittikten sonraki kısa doğrulma + alın silme süresi.
+  /// Oynanış state'i değildir; AI kararlarını etkilemez ve kaydedilmez.
+  double exertionCue = 0;
+
+  /// Yağmurda ıslanan köylünün eve girmeden önce üstünü silkeleme süresi.
+  double wetShakeCue = 0;
+  bool _rainedOn = false;
+  bool _shookDryForEntry = false;
+
+  void markWorkFinished() {
+    exertionCue = max(exertionCue, 1.35);
+  }
+
+  /// Oyuncu iş verdiğinde başla onay + işyerine dönme mikro tepkisi.
+  double assignmentNodCue = 0;
+
+  void acknowledgeAssignment(double targetX, double targetY) {
+    assignmentNodCue = 0.85;
+    lookToward(targetX, targetY);
+  }
+
+  /// Demirci üretimi tamamlandığında çekiç vuruşu ve kıvılcım süresi.
+  double smithStrikeCue = 0;
+
+  void strikeAtForge() {
+    smithStrikeCue = 1.0;
+  }
+
+  /// Islak zeminde yürüyüşü kısa ömürlü ayak izlerine örnekler. Her kare iz
+  /// üretmez: mesafe eşiği + 14 iz tavanı kalabalık köyde maliyeti sınırlar.
+  final List<MudFootprintTrace> mudFootprints = [];
+  double _mudSampleX = double.nan;
+  double _mudSampleY = double.nan;
+  bool _nextMudFootLeft = false;
+
+  void tickMudFootprints(double dt, {required bool muddy}) {
+    for (final trace in mudFootprints) {
+      trace.age += dt;
+    }
+    mudFootprints.removeWhere(
+      (trace) => trace.age >= MudFootprintTrace.lifetime,
+    );
+
+    if (!muddy || moveIntensity < 0.16 || isInsideBuilding || isDying) {
+      _mudSampleX = renderX;
+      _mudSampleY = renderY;
+      return;
+    }
+    if (_mudSampleX.isNaN || _mudSampleY.isNaN) {
+      _mudSampleX = renderX;
+      _mudSampleY = renderY;
+      return;
+    }
+    final dx = renderX - _mudSampleX;
+    final dy = renderY - _mudSampleY;
+    final distance = sqrt(dx * dx + dy * dy);
+    if (distance < 0.22) return;
+
+    final nx = dx / distance;
+    final ny = dy / distance;
+    final side = _nextMudFootLeft ? -1.0 : 1.0;
+    mudFootprints.add(
+      MudFootprintTrace(
+        gridX: renderX + -ny * 0.055 * side,
+        gridY: renderY + nx * 0.055 * side,
+        dirX: nx,
+        dirY: ny,
+        leftFoot: _nextMudFootLeft,
+      ),
+    );
+    _nextMudFootLeft = !_nextMudFootLeft;
+    _mudSampleX = renderX;
+    _mudSampleY = renderY;
+    if (mudFootprints.length > 14) mudFootprints.removeAt(0);
+  }
 
   // Porter/carry sistemi
   Object? _pickupItem; // ResourceBox veya HayEntity
@@ -1020,7 +1130,7 @@ class VillagerEntity extends WorkerEntity {
 
   /// KIŞLIK GİYSİ — dokumacının ürettiği yün giysiyi giyiyor mu.
   ///
-  /// Üşümeyi bitirmez, yavaşlatır (bkz. systems/winter.dart kCoatChillRelief):
+  /// Üşümeyi bitirmez, yavaşlatır (bkz. systems/world/winter.dart kCoatChillRelief):
   /// bitirseydi bir kış dokuyan köy mevsimi tamamen çözer, ocağın ve damın
   /// anlamı kalmazdı. Kayıtta tutulur — köyün emeği yüklenince kaybolmasın.
   bool hasCoat = false;
@@ -1223,6 +1333,14 @@ class VillagerEntity extends WorkerEntity {
     // Ölüyor — AI/hareket donar (renderer çöküşü çizer, scene timer'ı sayar).
     if (isDying) return;
 
+    if (exertionCue > 0) exertionCue = max(0.0, exertionCue - dt);
+    if (wetShakeCue > 0) wetShakeCue = max(0.0, wetShakeCue - dt);
+    if (assignmentNodCue > 0) {
+      assignmentNodCue = max(0.0, assignmentNodCue - dt);
+    }
+    if (smithStrikeCue > 0) smithStrikeCue = max(0.0, smithStrikeCue - dt);
+    if (!isInsideBuilding && rainIntensity > 0.35) _rainedOn = true;
+
     // Sürgün — AI donar; köylü kenara yürür, varınca sahne onu kaldırır. Ölüm
     // çöküşü DEĞİL: köyden çıkıp gidiyor (bkz. startLeaving / _exileVillager).
     if (isLeaving) {
@@ -1333,6 +1451,7 @@ class VillagerEntity extends WorkerEntity {
         _pickupX = _pickupY = _deliverX = _deliverY = 0;
         state = VillagerState.idle;
         idleTimer = 0.4 + rng.nextDouble() * 1.5;
+        markWorkFinished();
         isWalking = false;
         onDelivered?.call();
       } else {
@@ -1425,20 +1544,38 @@ class VillagerEntity extends WorkerEntity {
         _wasSleeping = false;
         _wakeDelay = -1.0; // bir sonraki gece için sıfırla
         isInsideBuilding = false;
+        _shookDryForEntry = false;
         facingRight = rng.nextBool();
         feel(NpcEmotion.content, 1.6, moodDelta: 0.02); // gerinme/esneme
       }
     }
 
     if (state == VillagerState.walkingToSleep) {
+      // Yağmurda eve gelen köylü kapıdan anında kaybolmaz: eşikte bir kez
+      // silkelenir, sonra aynı hedefe varış dalı eve sokar.
+      if (sleepIsHome && wetShakeCue > 0) {
+        isWalking = false;
+        walkPhase = (walkPhase + dt * 0.8) % (pi * 2);
+        return;
+      }
       final (tx, ty) = sleepTarget!;
       if (moveTowards(tx, ty, dt, arriveD: 0.55)) {
         gridX = tx;
         gridY = ty;
         loco.reset();
+        if (sleepIsHome && _rainedOn && !_shookDryForEntry) {
+          wetShakeCue = 0.85;
+          _shookDryForEntry = true;
+          isWalking = false;
+          return;
+        }
         state = VillagerState.sleeping;
         isWalking = false;
-        if (sleepIsHome) isInsideBuilding = true;
+        if (sleepIsHome) {
+          isInsideBuilding = true;
+          _rainedOn = false;
+          _shookDryForEntry = false;
+        }
       } else {
         isWalking = true;
       }

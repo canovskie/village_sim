@@ -2,7 +2,7 @@ import 'dart:math';
 
 import '../characters/life_stage.dart';
 import '../characters/villager_type.dart';
-import '../systems/villager_act.dart';
+import '../systems/npc/villager_act.dart';
 import 'villager_entity.dart';
 
 /// Köyün dış dünyayla kurduğu görünür temasın türü.
@@ -59,6 +59,11 @@ class MerchantEntity extends VillagerEntity {
   double _wanderDwell = 0;
   double _socialPulse = 0;
 
+  /// Renderer'lar durakta sıfırlanan `loco.vx/vy` yerine son gerçek yol
+  /// yönünü okur. At arabası böylece park edince geliş yönünü unutmaz.
+  double travelHeadingX = 1.0;
+  double travelHeadingY = 0.0;
+
   /// true → çıkışa vardı, sahne listeden çıkarmalı.
   bool finished = false;
 
@@ -82,6 +87,12 @@ class MerchantEntity extends VillagerEntity {
     _wanderX = browseX;
     _wanderY = browseY;
     _socialPulse = 4.0 + (groupId.abs() % 5);
+    final initialDx = browseX - spawnCol;
+    final initialDy = browseY - spawnRow;
+    if (initialDx.abs() + initialDy.abs() > 0.01) {
+      travelHeadingX = initialDx;
+      travelHeadingY = initialDy;
+    }
     // Yoldan gelenin yükü uzaktan okunur. At arabası zaten kendi yükünü taşır.
     if (!hasCart) {
       prop = switch (visitorKind) {
@@ -94,6 +105,15 @@ class MerchantEntity extends VillagerEntity {
 
   bool get canTrade =>
       visitorKind == VisitorKind.caravan && isGroupLeader && !hasCart;
+
+  /// Karar/teslimat sonuçlandıktan sonra ziyaretçiyi dakikalarca meydanda
+  /// tutma. Selamını tamamlar, son toparlanma payını kullanır ve yola çıkar.
+  void wrapUpVisit({double withinSeconds = 7.0}) {
+    browseLeft = min(browseLeft, withinSeconds);
+    if (phase == MerchantPhase.greeting) {
+      greetingLeft = min(greetingLeft, 0.8);
+    }
+  }
 
   @override
   double get speed => hasCart ? 0.68 : super.speed;
@@ -150,6 +170,12 @@ class MerchantEntity extends VillagerEntity {
           isWalking = false;
           finished = true;
         }
+    }
+    // `smoothMotion` durakta hızı frenleyip sıfırlar; önce son anlamlı
+    // seyahat vektörünü sakla ki dört yönlü araba sprite'ı kararlı kalsın.
+    if (loco.speedNow > 0.05) {
+      travelHeadingX = loco.vx;
+      travelHeadingY = loco.vy;
     }
     smoothMotion(dt);
     tickInnerLife(dt, dayLight, !isWalking);

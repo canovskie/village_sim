@@ -7,8 +7,8 @@ import '../characters/villager_type.dart';
 import '../cutscene/cutscene.dart';
 import '../cutscene/cutscene_player.dart';
 import '../rendering/character_renderer.dart';
-import '../systems/imperial.dart';
-import '../ui/app_ui.dart';
+import '../systems/events/imperial.dart';
+import '../ui/core/app_ui.dart';
 
 /// ANİMASYON ODASI — animasyonları canlı görmek ve kurcalamak için dev ekranı.
 ///
@@ -584,13 +584,6 @@ class _CharPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CharPainter old) => true;
-}
-
-/// Dev konsolundan/menüden açmak için kısayol.
-void openAnimationRoom(BuildContext context) {
-  Navigator.of(context).push(
-    MaterialPageRoute<void>(builder: (_) => const AnimationRoomScreen()),
-  );
 }
 
 /// Odanın kendi başına çalışan sürümü için kök widget (bkz.

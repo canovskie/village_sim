@@ -1,5 +1,5 @@
-import '../world/hay_entity.dart';
-import '../world/resource_box.dart';
+import 'hay_entity.dart';
+import 'resource_box.dart';
 
 /// Yere düşen kaynak kutuları ve saman yığınları için tile-bazlı yerleştirme.
 ///
