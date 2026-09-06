@@ -20,7 +20,7 @@ enum BuildingRole {
   /// Kaynakları altına çevirir — pasif gelir + manuel satış (pazar).
   trade,
 
-  /// Köy stoğunun kapasitesini artırır (depo).
+  /// Kaynak teslimatı ve lojistiği için depo.
   storage,
 
   /// Köy çapında pasif etki: nüfus, moral, hız (belediye, kuyu, ahır, taverna).
@@ -58,9 +58,6 @@ class BuildingFunction {
   /// Sakin kapasitesi (yalnızca housing).
   final int housingCapacity;
 
-  /// Stok kapasitesi katkısı (yalnızca storage).
-  final int storageCapacity;
-
   /// Civic etki türü + değeri. [civicValue] SİMÜLASYONUN OKUDUĞU sayıdır —
   /// panelde gösterilen ağırlık ile buradaki değer aynı yerden gelir, ikinci
   /// bir "hangi bina moral verir" listesi yoktur.
@@ -71,22 +68,12 @@ class BuildingFunction {
     required this.role,
     required this.summary,
     this.housingCapacity = 0,
-    this.storageCapacity = 0,
     this.civicEffect = CivicEffect.none,
     this.civicValue = 0.0,
   });
 }
 
 // ─── Ekonomi sabitleri ───────────────────────────────────────────────────────
-
-/// Hiç depo yokken temel stok kapasitesi.
-const int kBaseStockCapacity = 120;
-
-/// Belediye bir köylü üretmek için harcadığı yiyecek.
-const int kPopulationGrowthFoodCost = 10;
-
-/// Nüfus büyümesinin başlaması için gereken minimum yiyecek stoğu.
-const int kPopulationGrowthFoodFloor = 14;
 
 /// Pazar tahsilat periyodu (sn). Tahsilatın MİKTARI köyün fazlasından gelir —
 /// bkz. marketBaseIncome (building_system).
@@ -122,7 +109,7 @@ const double kBellGuardResponseMultiplier = 1.60;
 const double kCaravanseraiVisitGapMultiplier = 0.65;
 
 /// Han varken gezgin tüccarın köyde kalma süresinin çarpanı.
-const double kCaravanseraiVisitDurationMultiplier = 1.55;
+const double kCaravanseraiVisitDurationMultiplier = 1.15;
 
 /// Pazarda manuel satış: kaynak türü → (satılan parti, kazanılan altın).
 const Map<ResourceKind, (int batch, int gold)> kMarketSellRates = {
@@ -240,8 +227,7 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
   BuildingType.warehouse: BuildingFunction(
     role: BuildingRole.storage,
     summary:
-        'Serin, karanlık, tıka basa. Ambar durdukça harman yerde çürümez: köyün stok tavanı yükselir.',
-    storageCapacity: 180,
+        'Serin, karanlık, tıka basa. Taşıyıcılar yüklerini burada indirir; köy stoğunun üst sınırı yoktur.',
   ),
 
   BuildingType.townhall: BuildingFunction(
@@ -333,6 +319,16 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     civicValue: 0.12,
   ),
 
+  BuildingType.chapel: BuildingFunction(
+    role: BuildingRole.civic,
+    summary:
+        'Küçük çan, sıcak bir mum, birkaç sıra. Köylüler dua etmek için uğrar; '
+        'rahip burada da onları karşılar. Büyük kiliseden daha az kaynakla '
+        'kurulur, köye daha küçük bir moral katkısı sağlar.',
+    civicEffect: CivicEffect.morale,
+    civicValue: 0.06,
+  ),
+
   // ─── Köy Meydanı & Kültür Mahallesi ────────────────────────────────────────
   BuildingType.fountain: BuildingFunction(
     role: BuildingRole.civic,
@@ -374,7 +370,7 @@ const Map<BuildingType, BuildingFunction> kBuildingFunctions = {
     role: BuildingRole.civic,
     summary:
         'Gezgin tüccar doğrudan bu avluya gelir. Han varken ziyaretler '
-        '%35 daha sık, konaklama %55 daha uzundur; dolayısıyla köy fazlasını '
+        '%35 daha sık, konaklama %15 daha uzundur; dolayısıyla köy fazlasını '
         'dışarı satmak için daha çok fırsat bulur. Taşıyıcı hızı Ahırın işidir.',
     civicEffect: CivicEffect.visitorTrade,
     civicValue: kCaravanseraiVisitDurationMultiplier - 1.0,

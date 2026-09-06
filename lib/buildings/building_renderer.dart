@@ -6,8 +6,10 @@ import 'package:flutter/services.dart';
 
 import '../rendering/asset_style.dart';
 import '../rendering/flame_renderer.dart';
+import '../rendering/household_decor_renderer.dart';
 import '../rendering/smoke_renderer.dart';
 import '../rendering/water_shimmer_renderer.dart';
+import '../rendering/wind.dart';
 import '../world/season.dart';
 import 'building_design.dart';
 import 'building_type.dart';
@@ -130,8 +132,8 @@ class BuildingRenderer {
     // beehive.png gelince procedurel skep yerine sprite çizilir; yoksa
     // _loadSprite sessizce başarısız olur, fallback devrede kalır.
     await _loadSprite(BuildingType.beehive, 'assets/buildings/beehive.png');
-    // church.png gelince procedurel şapel yerine sprite çizilir; yoksa fallback.
     await _loadSprite(BuildingType.church, 'assets/buildings/church.png');
+    await _loadSprite(BuildingType.chapel, 'assets/buildings/chapel.png');
     // tent.png gelince procedurel çadır yerine sprite çizilir; yoksa fallback.
     await _loadSprite(BuildingType.tent, 'assets/buildings/tent.png');
     // Köy Meydanı & Kültür Mahallesi — PNG'leri GELDİ (eski "placeholder
@@ -183,6 +185,10 @@ class BuildingRenderer {
     await _loadWinterSprite(
       BuildingType.church,
       'assets/buildings/church_winter.png',
+    );
+    await _loadWinterSprite(
+      BuildingType.chapel,
+      'assets/buildings/chapel_winter.png',
     );
     await _loadWinterSprite(
       BuildingType.library,
@@ -241,6 +247,7 @@ class BuildingRenderer {
       BuildingType.belltower,
       'assets/buildings/belltower_winter.png',
     );
+    await HouseholdDecorRenderer.loadAll();
   }
 
   static Future<void> _loadWinterSprite(BuildingType type, String path) async {
@@ -332,6 +339,7 @@ class BuildingRenderer {
     double dayLight = 1.0,
     double rainIntensity = 0.0,
     bool isActive = false,
+    double activityLevel = -1.0,
     bool perfMode = false,
     double fireFuel = 1.0,
     double millRotorAngle = 0.0,
@@ -339,12 +347,23 @@ class BuildingRenderer {
     int deliveryTally = 0,
     Season season = Season.spring,
     BuildingDesign design = BuildingDesign.original,
+    bool householdDecor = false,
 
     /// Pencere/fener ışığının kısılma çarpanı (bkz. [BuildingEntity.windowGlow]).
     /// Konutta sakinler uyudukça 0'a iner → evin camı söner. Konut olmayan
     /// binalar 1.0 geçer, davranışları değişmez.
     double windowGlow = 1.0,
   }) {
+    final activeLevel = activityLevel < 0
+        ? (isActive ? 1.0 : 0.0)
+        : activityLevel.clamp(0.0, 1.0);
+    // Değirmende `activityLevel` kanatların operasyonel hızıdır; un tozu ise
+    // yalnız gerçek öğütme darbesinde (`isActive`) görünür. Diğer yapılarda
+    // ikisi aynı çalışma yoğunluğudur.
+    final effectLevel = type == BuildingType.mill
+        ? (isActive ? 1.0 : 0.0)
+        : activeLevel;
+    final visiblyActive = effectLevel > 0.02;
     final normalizedDesign = normalizeBuildingDesign(type, design);
     final designSprite = normalizedDesign == BuildingDesign.original
         ? null
@@ -391,6 +410,22 @@ class BuildingRenderer {
       meta.groundXCenter,
       meta.spriteScale,
     );
+    if (householdDecor) {
+      final width = (right.dx - left.dx).abs() * meta.spriteScale;
+      final height = width * img.height / img.width;
+      HouseholdDecorRenderer.draw(
+        canvas,
+        type,
+        normalizedDesign,
+        Rect.fromLTWH(
+          (front.dx - width * meta.groundXCenter).roundToDouble(),
+          (front.dy - height * meta.groundY).roundToDouble(),
+          width.roundToDouble(),
+          height.roundToDouble(),
+        ),
+        season,
+      );
+    }
     if (type == BuildingType.mill && _millRotor != null) {
       _drawMillRotor(
         canvas,
@@ -455,13 +490,33 @@ class BuildingRenderer {
 
       // Değirmen kendi ÇOK hafif un tozunu alır (aşağıda); jenerik tepe dumanı
       // ondan çıkarılır — iki tepe efekti kalabalık olmasın (baca zaten ambient).
-      if (isActive && type != BuildingType.mill) {
-        _drawActiveSmoke(canvas, img, left, right, front, meta, time, seed);
+      if (visiblyActive && type != BuildingType.mill) {
+        _drawActiveSmoke(
+          canvas,
+          img,
+          left,
+          right,
+          front,
+          meta,
+          time,
+          seed,
+          effectLevel,
+        );
       }
-      if (isActive && type == BuildingType.mill) {
-        _drawMillFlourDust(canvas, img, left, right, front, meta, time, seed);
+      if (visiblyActive && type == BuildingType.mill) {
+        _drawMillFlourDust(
+          canvas,
+          img,
+          left,
+          right,
+          front,
+          meta,
+          time,
+          seed,
+          effectLevel,
+        );
       }
-      if (isActive || deliveryPulse > 0 || deliveryTally > 0) {
+      if (visiblyActive || deliveryPulse > 0 || deliveryTally > 0) {
         _drawWorkYard(
           canvas,
           type,
@@ -470,7 +525,7 @@ class BuildingRenderer {
           front,
           time,
           seed,
-          isActive: isActive,
+          isActive: visiblyActive,
           deliveryPulse: deliveryPulse,
           deliveryTally: deliveryTally,
         );
@@ -832,6 +887,11 @@ class BuildingRenderer {
         seed * 31 + c,
         tint: tint,
         intensity: intensity,
+        // Fırtına dumanı yukarı çıkan düz bir kolon gibi kalmasın. Yağmur
+        // 0.45'i geçince ortak rüzgâr zarfıyla aynı yöne yatmaya başlar.
+        windDrift:
+            ((wet - 0.45) / 0.55).clamp(0.0, 1.0) *
+            (0.28 + Wind.gust(time) * 0.34),
       );
     }
   }
@@ -846,6 +906,7 @@ class BuildingRenderer {
     BuildingMeta meta,
     double time,
     int seed,
+    double activityLevel,
   ) {
     final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
     final spriteH = spriteW * img.height / img.width;
@@ -862,7 +923,7 @@ class BuildingRenderer {
       time,
       seed,
       tint: const Color(0xFFB0A898),
-      intensity: 0.85,
+      intensity: 0.85 * activityLevel,
     );
   }
 
@@ -878,6 +939,7 @@ class BuildingRenderer {
     BuildingMeta meta,
     double time,
     int seed,
+    double activityLevel,
   ) {
     final spriteW = (right.dx - left.dx).abs() * meta.spriteScale;
     final spriteH = spriteW * img.height / img.width;
@@ -896,7 +958,7 @@ class BuildingRenderer {
       final px = bx + jx + sin(time * 0.7 + i * 2.1) * spriteW * 0.015;
       final py = by - phase * spriteH * 0.11;
       // Parabolik sönme (0 uçlarda, ~0.10 ortada) — pi'siz.
-      final a = 4.0 * phase * (1.0 - phase) * 0.10;
+      final a = 4.0 * phase * (1.0 - phase) * 0.10 * activityLevel;
       if (a <= 0.008) continue;
       final ai = (a * 255).round().clamp(0, 255);
       paint.color = Color((ai << 24) | 0x00F1EBDC); // soluk un beji

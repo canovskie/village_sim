@@ -96,6 +96,7 @@ const Map<BuildingType, String?> kBuildingCraft = {
   BuildingType.caravanserai: Craft.trade,
   BuildingType.stable: Craft.trade,
   BuildingType.church: Craft.faith,
+  BuildingType.chapel: Craft.faith,
   BuildingType.shrine: Craft.faith,
   BuildingType.belltower: Craft.faith,
   BuildingType.monument: Craft.faith,

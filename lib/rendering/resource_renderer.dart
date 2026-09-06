@@ -33,6 +33,7 @@ class ResourceRenderer {
     await _load('foodbasket', 'assets/tools/prop_basket.png');
     await _load('hay', 'assets/tools/hay.png');
     await _load('baleofstraw', 'assets/tools/baleofstraw.png');
+    await _load('harmanYard', 'assets/tools/harman_yard_v2.png');
     await _load('torch', 'assets/tools/torch.png');
     await _load('waterbucket', 'assets/tools/waterbucket.png');
   }
@@ -46,6 +47,38 @@ class ResourceRenderer {
     } catch (e) {
       debugPrint('ResourceRenderer: $path could not be loaded — $e');
     }
+  }
+
+  /// Yerdeki kaynakların ekran genişliği. Yemek sepeti elde aynı asset ile
+  /// yaklaşık 12 px görünür; eski ortak 32 px değer yerde onu köylünün üç katı
+  /// yapıyordu. Ağır maden/odun kasaları büyük kalabilir, sepet kalamaz.
+  static double groundSpriteWidth(ResourceBoxType type) => switch (type) {
+    ResourceBoxType.foodBasket => 16.0,
+    _ => 32.0,
+  };
+
+  /// Tarlanın yanında kendiliğinden oluşan 2×2 harman/depolama alanı.
+  ///
+  /// Asset'in ön köşesi saydam canvas'ın alt-orta noktasında; bu yüzden
+  /// [frontX]/[frontY] doğrudan 2×2 alanın izometrik ön köşesine oturur.
+  /// Dinamik saman ve balyalar daha sonra sahne pass'inde bunun üstüne çizilir.
+  static void drawHarmanYard(
+    Canvas canvas,
+    double frontX,
+    double frontY, {
+    double width = 128.0,
+  }) {
+    final img = _imgs['harmanYard'];
+    if (img == null) return;
+    _drawGroundedSprite(
+      canvas,
+      img,
+      0.5,
+      1.0,
+      width,
+      anchorX: frontX,
+      anchorY: frontY,
+    );
   }
 
   /// Drop animasyonu için parabolic offset (0 = taban, yukarıdan iner +
@@ -200,10 +233,18 @@ class ResourceRenderer {
     final phase = ((time - box.spawnTime) / kDropDuration).clamp(0.0, 1.0);
     final drop = _dropOffset(phase);
     final alpha = _dropAlpha(phase);
+    final spriteWidth = groundSpriteWidth(box.type);
     // Gölge yere oturmuş gibi — drop sırasında küçük + soluk.
-    _drawShadow(canvas, screenX, screenY, 28, drop);
+    _drawShadow(canvas, screenX, screenY, spriteWidth * 0.875, drop);
     // Sprite yukarıdan iner.
-    _drawSprite(canvas, img, screenX, screenY - drop, 32.0, alpha: alpha);
+    _drawSprite(
+      canvas,
+      img,
+      screenX,
+      screenY - drop,
+      spriteWidth,
+      alpha: alpha,
+    );
   }
 
   /// Yerde duran hay pile — pileSize 1..N için katmanlı yığın. 1 saman = tek
@@ -256,7 +297,7 @@ class ResourceRenderer {
     );
   }
 
-  /// Balya — bina gibi front-corner'a hizalanmış. Drop animation + gölge.
+  /// Balya — bina gibi front-corner'a hizalanmış, zeminde belirir.
   static void drawBale(
     Canvas canvas,
     double frontX,
@@ -272,10 +313,11 @@ class ResourceRenderer {
     const groundXCenter = 0.388;
     const groundY = 0.739;
     final phase = ((time - hay.spawnTime) / kDropDuration).clamp(0.0, 1.0);
-    final drop = _dropOffset(phase);
     final alpha = _dropAlpha(phase);
-    // Gölge: balyanın tabanında, sprite genişliğine göre büyük.
-    _drawShadow(canvas, frontX - spriteW * 0.10, frontY, spriteW * 0.7, drop);
+    // Harman zemininin kendi dokusu yeterli temas kontrastı veriyor; ayrı
+    // elips gölge balyayı yine havada okuyordu. Yerdeki balya da yarım tile'ı
+    // bütünüyle doldurmasın diye taşıma sprite'ından bağımsız küçültülür.
+    final groundSpriteW = spriteW * 0.88;
     final settle = _settleScale(phase);
     final tilt = (1 - phase) * (hay.slotIndex.isEven ? -0.055 : 0.055);
     _drawGroundedSprite(
@@ -283,9 +325,9 @@ class ResourceRenderer {
       img,
       groundXCenter,
       groundY,
-      spriteW,
+      groundSpriteW,
       anchorX: frontX,
-      anchorY: frontY - drop,
+      anchorY: frontY,
       alpha: alpha,
       scaleX: settle.$1,
       scaleY: settle.$2,

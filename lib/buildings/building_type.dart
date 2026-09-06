@@ -112,6 +112,10 @@ const Map<BuildingType, List<BuildingLight>> kBuildingLights = {
     BuildingLight(0.36, 0.79, LightKind.lantern),
     BuildingLight(0.13, 0.68, LightKind.lantern),
   ],
+  BuildingType.chapel: [
+    BuildingLight(0.60, 0.70, LightKind.window),
+    BuildingLight(0.71, 0.64, LightKind.window),
+  ],
   BuildingType.library: [
     BuildingLight(0.35, 0.43, LightKind.window),
     BuildingLight(0.70, 0.55, LightKind.window),
@@ -255,7 +259,7 @@ enum BuildingType {
   floristCottage, // 2x2 — floristcottage.png. Çiçekçi kulübesi: çevreye çiçek spawn + Florist NPC sular.
   chickenCoop, // 2x2 — chickencoop.png. Tavuk kümesi: 3-4 tavuk spawn + periyodik yumurta (food).
   beehive, // 1x1 — beehive.png. Arı kovanı: menzildeki çiçeğe göre bal üretir + ambient arılar.
-  church, // 2x2 — church.png. Kilise: civic moral + cenaze töreni mekânı + yanına mezarlık.
+  church, // 5x5 — church.png. Büyük kilise: moral + cenaze + mezarlık.
   // ─── Köy Meydanı & Kültür Mahallesi ──────────────────────────────────────────
   fountain, // 2x2 — fountain.png. Şadırvan: su kaynağı (kuyu gibi) + gündüz toplanma + dekoratif.
   library, // 2x2 — library.png. Kütüphane: kültür ameniteleri morali + kronik evi.
@@ -266,6 +270,7 @@ enum BuildingType {
   shrine, // 2x2 — shrine.png. Türbe: kültür-amenite morali + ziyaret landmark.
   belltower, // 1x1 — belltower.png. Çan Kulesi: yerel suç alarmı + muhafız menzili.
   tailor, // 2x2 — tailor.png. Terzi: köylülerin ilkel kıyafetlerini dikilmiş giysilere yükseltir.
+  chapel, // 2x2 — chapel.png. Küçük, ucuz ibadet ve dua mekânı.
 }
 
 /// İnşa paleti kategorisi — alt çubuğun kalabalık tek sırasını anlamlı gruplara
@@ -278,7 +283,7 @@ extension BuildCategoryInfo on BuildCategory {
     BuildCategory.konut => 'Konut',
     BuildCategory.uretim => 'Üretim',
     BuildCategory.ticaret => 'Ticaret',
-    BuildCategory.civic => 'Civic',
+    BuildCategory.civic => 'Kamusal',
     BuildCategory.altyapi => 'Altyapı',
     BuildCategory.araziYol => 'Arazi/Yol',
   };
@@ -314,6 +319,7 @@ const Map<BuildingType, BuildCategory> kBuildingCategory = {
   BuildingType.firepit: BuildCategory.civic,
   BuildingType.townhall: BuildCategory.civic,
   BuildingType.church: BuildCategory.civic,
+  BuildingType.chapel: BuildCategory.civic,
   BuildingType.tavern: BuildCategory.civic,
   BuildingType.fountain: BuildCategory.civic,
   BuildingType.library: BuildCategory.civic,
@@ -340,6 +346,11 @@ class BuildingMeta {
   /// false → katı bina, pathfinder + wander engel sayar.
   final bool walkable;
 
+  /// true → bina arkasında kalan aktör, bina üzerinde yarı saydam bir
+  /// siluetle okunabilir tutulur. Çadır gibi duvarsız/eğimli yapılarda bu
+  /// katman aktörü çatının üstündeymiş gibi gösterdiği için kapatılabilir.
+  final bool showOccludedActors;
+
   /// Bina merkezinden tile cinsinden etki yarıçapı (Öklid mesafesi).
   /// 0 → etkisiz. Çiçek bahçesi gibi dekoratif etki, well için su erişimi,
   /// tavern için moral menzili, firepit için ısı/ışık menzili vs.
@@ -360,6 +371,7 @@ class BuildingMeta {
     this.groundXCenter = 0.5,
     this.spriteScale = 1.0,
     this.walkable = false,
+    this.showOccludedActors = true,
     this.effectRadius = 0.0,
   });
 }
@@ -463,15 +475,28 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     effectRadius: 3.5, // bu menzildeki çiçekler bal üretimini hızlandırır
   ),
   BuildingType.church: BuildingMeta(
-    cols: 2,
-    rows: 2,
+    cols: 5,
+    rows: 5,
     label: 'Kilise',
     cost: ResourceCost(wood: 30, stone: 24, iron: 3),
-    // church.png trimlenmiş (1083×1156) → taban alt kenarda, merkez ~0.50.
-    groundY: 1.083,
-    groundXCenter: 0.5243,
-    spriteScale: 1.0397, // görkemli landmark — footprint'in biraz dışına taşar
+    // 1083×1156 sprite'ın merdiven/yan kaide/zemin süsleri, mevcut çizim
+    // ölçeğinde 4.66×4.44 tile'a yayılır. 4×3 rezervasyon bunları dışarıda
+    // bırakıyordu. 5×5 alan + kalibre edilmiş anchor tüm tabanı içine alır.
+    groundY: 1.1282,
+    groundXCenter: 0.5362,
+    // (5+5)×0.84 == (4+3)×1.20: kilisenin görsel boyutu korunur.
+    spriteScale: 0.84,
     effectRadius: 5.5, // moral menzili + cenaze töreni/mezarlık alanı
+  ),
+  BuildingType.chapel: BuildingMeta(
+    cols: 2,
+    rows: 2,
+    label: 'Şapel',
+    cost: ResourceCost(wood: 16, stone: 10),
+    groundY: 1.035,
+    groundXCenter: 0.48,
+    spriteScale: 1.05,
+    effectRadius: 3.5,
   ),
   // ─── Köy Meydanı & Kültür Mahallesi ────────────────────────────────────────
   // PNG'ler geldi; ebatlar yerleşim editörüyle oturtuldu (spriteScale/groundY
@@ -563,6 +588,9 @@ const Map<BuildingType, BuildingMeta> kBuildingMeta = {
     groundXCenter: 0.5171,
     spriteScale: 0.839, // 1×1 footprint'ten biraz taşan, evden küçük barınak
     walkable: true, // sakin içine girip uyur (ev gibi)
+    // Eğimli bez yüzeyde hayalet NPC, çatının üstüne basıyormuş gibi
+    // okunuyor. Doğal depth-sort çadırın arkasındakini zaten doğru örter.
+    showOccludedActors: false,
   ),
   BuildingType.woodenHouse: BuildingMeta(
     cols: 2,

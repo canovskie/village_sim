@@ -3,7 +3,7 @@ part of 'game_painter.dart';
 /// ─── OLAY EFEKTLERİ & HAVA ──────────────────────────────────────────────────
 ///
 /// Tam ekran (ekran-uzayı) geçişler: olayın kendi bespoke gösterisi
-/// (şenlik/mahsul lekesi/mum töreni/ayin/meteor/düğün/bereket/canavar gözü) ve
+/// olay efektlerini ve hava katmanlarını çizer.
 /// yağmur katmanları.
 ///
 /// SÖZLEŞME: bunlar sahnenin ÜSTÜNE çizilir, hiçbir varlığın konumunu ya da
@@ -30,14 +30,11 @@ extension _PainterFx on VillageGamePainter {
     if (activeFx.isEmpty) return;
     // Sahnenin yapısına bağlı partikül pass'leri.
     if (activeFx.contains(EventFx.festival)) _fxFestival(canvas, size);
-    if (activeFx.contains(EventFx.cropBlight)) _fxCropBlight(canvas, size);
     if (activeFx.contains(EventFx.vigil)) _fxVigil(canvas, size);
     if (activeFx.contains(EventFx.cultRite)) _fxCultRite(canvas, size);
-    if (activeFx.contains(EventFx.meteorShower)) _fxMeteorShower(canvas, size);
     if (activeFx.contains(EventFx.wedding)) _fxWedding(canvas, size);
-    if (activeFx.contains(EventFx.harvestBounty)) {
-      _fxHarvestBounty(canvas, size);
-    }
+    // cropBlight + harvestBounty artık overlay değildir: mevcut tarla
+    // sprite'ına _drawFarmTiles/FarmRenderer içinde uygulanır.
     // fireOutbreak artık sahne overlay'inde değil — gerçek bina drawable'da
     // sprite üstüne alev + duman çiziyor (_BuildingDrawable._drawBurningOverlay).
     if (activeFx.contains(EventFx.beastEyes)) _fxBeastEyes(canvas, size);
@@ -58,14 +55,12 @@ extension _PainterFx on VillageGamePainter {
     for (int i = 0; i < count; i++) {
       final x = ((i * 3571 + 911) % 997) / 997.0 * size.width;
       final phase = ((i * 619 + 73) % 991) / 991.0;
-      final y = ((phase + time * (0.22 + (i % 5) * 0.018)) % 1.0) *
-          (size.height + 40) - 20;
+      final y =
+          ((phase + time * (0.22 + (i % 5) * 0.018)) % 1.0) *
+              (size.height + 40) -
+          20;
       final len = 7.0 + (i % 6) * 2.2;
-      canvas.drawLine(
-        Offset(x, y),
-        Offset(x + wind * len / 18.0, y + len),
-        p,
-      );
+      canvas.drawLine(Offset(x, y), Offset(x + wind * len / 18.0, y + len), p);
     }
     final veil = ((intensity - 0.55) * 0.16).clamp(0.0, 0.08);
     _pRainMist.color = Color.fromRGBO(190, 215, 235, veil);
@@ -86,6 +81,11 @@ extension _PainterFx on VillageGamePainter {
       Color(0xFF4FA8D8), // mavi
       Color(0xFFB07BD0), // mor
     ];
+
+    final playback = fxPlayback[EventFx.festival];
+    final localTime = playback?.elapsed ?? time;
+    final envelope = playback?.envelope(enter: 1.2, exit: 1.4) ?? 1.0;
+    final reveal = _smoothUnit((playback?.elapsed ?? 2.0) / 2.0);
 
     BuildingEntity? fire;
     for (final b in buildings) {
@@ -130,7 +130,7 @@ extension _PainterFx on VillageGamePainter {
           (anchorTop.dx + end.dx) / 2,
           (anchorTop.dy + end.dy) / 2,
         );
-        final sag = (24 + sin(time * 1.3 + k) * 4) * zoom; // sallanan sarkma
+        final sag = (24 + sin(localTime * 1.3 + k) * 2.2) * zoom;
         final ctrl = Offset(mid.dx, mid.dy + sag);
         canvas.drawPath(
           Path()
@@ -147,9 +147,11 @@ extension _PainterFx on VillageGamePainter {
               omt * omt * anchorTop.dx + 2 * omt * t * ctrl.dx + t * t * end.dx;
           final py =
               omt * omt * anchorTop.dy + 2 * omt * t * ctrl.dy + t * t * end.dy;
-          final sway = sin(time * 3.0 + f * 0.7 + k) * 1.6 * zoom;
+          final sway = sin(localTime * 2.4 + f * 0.7 + k) * 1.2 * zoom;
           final w = 3.6 * zoom, h = 7.0 * zoom;
-          flagPaint.color = palette[(f + k) % palette.length];
+          flagPaint.color = palette[(f + k) % palette.length].withValues(
+            alpha: envelope * reveal,
+          );
           canvas.drawPath(
             Path()
               ..moveTo(px - w, py)
@@ -161,46 +163,65 @@ extension _PainterFx on VillageGamePainter {
         }
       }
 
-      // (3) YÜKSELEN FENERLER — ateşten 4 sıcak küre, yavaş yükselir + flicker.
+      // (3) YÜKSELEN FENERLER — soyut ışık küresi değil, gövdeli kâğıt fener.
       for (int i = 0; i < 4; i++) {
-        final phase = (time * 0.13 + i * 0.27) % 1.0;
-        final ly = fx0.dy - phase * 200 * zoom - 6 * zoom;
+        final phase = (localTime * 0.16 + i * 0.23) % 1.0;
+        final ly = fx0.dy - phase * 150 * zoom - 8 * zoom;
         final lx =
             fx0.dx +
-            sin(time * 0.6 + i * 1.7) * 16 * zoom +
+            sin(localTime * 0.6 + i * 1.7) * 13 * zoom +
             (i - 1.5) * 9 * zoom;
-        final flick = 0.8 + sin(time * 9 + i) * 0.2;
-        final a = ((1 - phase).clamp(0.0, 1.0) * flick * 220).round().clamp(
-          0,
-          220,
-        );
+        final flick = 0.88 + sin(localTime * 7 + i) * 0.12;
+        final a = ((1 - phase).clamp(0.0, 1.0) * flick * envelope * 220)
+            .round()
+            .clamp(0, 220);
         canvas.drawCircle(
           Offset(lx, ly),
-          7 * zoom,
+          6 * zoom,
           Paint()
             ..blendMode = BlendMode.plus
             ..color = Color.fromARGB((a * 0.5).round(), 0xFF, 0x9E, 0x3C),
         );
-        canvas.drawCircle(
-          Offset(lx, ly),
-          3.3 * zoom,
-          Paint()..color = Color.fromARGB(a, 0xFF, 0xE4, 0x9E),
+        final body = RRect.fromRectAndRadius(
+          Rect.fromCenter(
+            center: Offset(lx, ly),
+            width: 6.2 * zoom,
+            height: 8.5 * zoom,
+          ),
+          Radius.circular(1.6 * zoom),
+        );
+        canvas.drawRRect(
+          body,
+          Paint()..color = Color.fromARGB(a, 0xF2, 0xA9, 0x45),
+        );
+        canvas.drawLine(
+          Offset(lx, ly + 4.2 * zoom),
+          Offset(lx, ly + 6.2 * zoom),
+          Paint()
+            ..color = Color.fromARGB(a, 0x6A, 0x3A, 0x20)
+            ..strokeWidth = 0.8 * zoom,
         );
       }
     }
 
-    // (2) KONFETİ — köy üstüne süzülen renkli kağıtlar (ekran-uzayı, döner).
-    const confettiCount = 54;
+    // (2) KONFETİ — tam ekran yağmur değil, meydandaki kalabalığın üstünde
+    // yerel bir avuç kâğıt. Kamera hareketinde köyden kopmaz.
+    final center = fire == null
+        ? Offset(size.width / 2, size.height / 2)
+        : _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
+    const confettiCount = 28;
     final confPaint = Paint()..isAntiAlias = true;
     for (int i = 0; i < confettiCount; i++) {
-      final seedX = ((i * 73) % 100) / 100.0;
-      final fall = (time * (0.10 + (i % 5) * 0.015) + i * 0.13) % 1.0;
-      final x = seedX * size.width + sin(time * 1.6 + i) * 12;
-      final y = fall * (size.height + 40) - 20;
+      final seedX = ((i * 73) % 101) / 100.0 - 0.5;
+      final fall = (localTime * (0.14 + (i % 5) * 0.012) + i * 0.13) % 1.0;
+      final x = center.dx + seedX * 180 * zoom + sin(localTime * 1.6 + i) * 8;
+      final y = center.dy - 100 * zoom + fall * 125 * zoom;
       canvas.save();
       canvas.translate(x, y);
-      canvas.rotate(time * 2.2 + i);
-      confPaint.color = palette[i % palette.length].withValues(alpha: 0.85);
+      canvas.rotate(localTime * 2.2 + i);
+      confPaint.color = palette[i % palette.length].withValues(
+        alpha: 0.78 * envelope * reveal,
+      );
       canvas.drawRect(
         Rect.fromCenter(
           center: Offset.zero,
@@ -210,156 +231,6 @@ extension _PainterFx on VillageGamePainter {
         confPaint,
       );
       canvas.restore();
-    }
-  }
-
-  // ── BESPOKE Hasat Mantarı (blight) ──────────────────────────────────────────
-  // Tarlalara yayılan hastalık: sırayla enfekte olan tile'larda hastalıklı
-  // mor-gri leke + pörtleyip büyüyen mantar şapkaları + yukarı süzülen yeşil
-  // sporlar. Şenlikten tamamen farklı görünüm + farklı etki (ürün çürür).
-  void _fxCropBlight(Canvas canvas, Size size) {
-    if (farmTiles.isEmpty) return;
-    final p = Paint()..isAntiAlias = true;
-    for (int i = 0; i < farmTiles.length; i++) {
-      final t = farmTiles[i];
-      // Yayılma: tile'lar index sırasına göre kademeli enfekte olur.
-      final infect = ((time * 0.22) - i * 0.07).clamp(0.0, 1.0);
-      if (infect <= 0) continue;
-      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
-
-      // 1) Hastalıklı leke — tile üstünde mor-gri oval (büyüyerek koyulaşır).
-      final blotchA = (infect * 95).round().clamp(0, 95);
-      p.color = Color.fromARGB(blotchA, 0x5E, 0x42, 0x66);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: base,
-          width: 26 * zoom * (0.5 + infect * 0.5),
-          height: 14 * zoom * (0.5 + infect * 0.5),
-        ),
-        p,
-      );
-
-      // 2) Mantar şapkaları — büyüdükçe daha çok kapak (max 4).
-      final caps = (infect * 4).round();
-      for (int c = 0; c < caps; c++) {
-        final ang = i * 1.3 + c * 1.7;
-        final grow = (infect - c * 0.2).clamp(0.0, 1.0);
-        final mx = base.dx + cos(ang) * 8 * zoom;
-        final my = base.dy + sin(ang) * 4.5 * zoom;
-        // sap
-        p.color = const Color(0xFFCDBFA0);
-        canvas.drawRect(
-          Rect.fromCenter(
-            center: Offset(mx, my),
-            width: 1.5 * zoom,
-            height: 3.0 * zoom * grow,
-          ),
-          p,
-        );
-        // şapka
-        p.color = const Color(0xFF7E5A3C);
-        canvas.drawCircle(
-          Offset(mx, my - 2.2 * zoom * grow),
-          2.6 * zoom * grow,
-          p,
-        );
-        p.color = const Color(0xFF9A7350);
-        canvas.drawCircle(
-          Offset(mx - 0.6 * zoom, my - 2.6 * zoom * grow),
-          1.1 * zoom * grow,
-          p,
-        );
-      }
-
-      // 3) Spor — yukarı süzülen yeşilimsi nokta (hastalık havada).
-      final sp = (time * 0.65 + i * 0.33) % 1.0;
-      final spA = ((1 - sp) * infect * 130).round().clamp(0, 130);
-      p.color = Color.fromARGB(spA, 0x9C, 0xBA, 0x58);
-      canvas.drawCircle(
-        Offset(
-          base.dx + sin(time * 2 + i) * 5 * zoom,
-          base.dy - sp * 22 * zoom,
-        ),
-        1.5 * zoom,
-        p,
-      );
-    }
-  }
-
-  // ── BESPOKE Bereketli Hasat (harvestBounty) ─────────────────────────────────
-  // Mantarın pozitif karşıtı: tarlalar kademeli olarak altın bir ışıltıyla
-  // olgunlaşır — sıcak hale + dalgalanan başak demetleri + yukarı süzülen
-  // bereket zerreleri (altın toz). Cömert, ferah, hasat sevinci.
-  void _fxHarvestBounty(Canvas canvas, Size size) {
-    if (farmTiles.isEmpty) return;
-    final p = Paint()..isAntiAlias = true;
-    for (int i = 0; i < farmTiles.length; i++) {
-      final t = farmTiles[i];
-      // Olgunlaşma dalgası — tile'lar sırayla "altına döner".
-      final ripe = ((time * 0.30) - i * 0.06).clamp(0.0, 1.0);
-      if (ripe <= 0) continue;
-      final base = _worldToScreen(t.col + 0.5, t.row + 0.5, size);
-
-      // 1) Sıcak altın hale — tile üstünde yumuşak nabız atan ışıltı (additive).
-      final pulse = 0.7 + sin(time * 2.2 + i * 0.5) * 0.3;
-      final haloA = (ripe * pulse * 70).round().clamp(0, 70);
-      p
-        ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB(haloA, 0xF6, 0xC8, 0x4A);
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: base,
-          width: 30 * zoom * (0.6 + ripe * 0.4),
-          height: 16 * zoom * (0.6 + ripe * 0.4),
-        ),
-        p,
-      );
-      p.blendMode = BlendMode.srcOver;
-
-      // 2) Olgun başak demetleri — büyüdükçe daha çok sap, hafifçe rüzgârda sallanır.
-      final stalks = (ripe * 4).round();
-      for (int s = 0; s < stalks; s++) {
-        final ang = i * 1.1 + s * 1.6;
-        final grow = (ripe - s * 0.18).clamp(0.0, 1.0);
-        if (grow <= 0) continue;
-        final sway = sin(time * 1.8 + i + s) * 1.4 * zoom;
-        final sx = base.dx + cos(ang) * 8 * zoom;
-        final sy = base.dy + sin(ang) * 4.5 * zoom;
-        final topY = sy - 7.0 * zoom * grow;
-        // sap
-        p
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2 * zoom
-          ..color = const Color(0xFFB98C3A);
-        canvas.drawLine(Offset(sx, sy), Offset(sx + sway, topY), p);
-        // başak başı — altın damla
-        p
-          ..style = PaintingStyle.fill
-          ..color = const Color(0xFFF2CE5C);
-        canvas.drawCircle(Offset(sx + sway, topY), 2.0 * zoom * grow, p);
-        p.color = const Color(0xFFFCEBA0);
-        canvas.drawCircle(
-          Offset(sx + sway - 0.5 * zoom, topY - 0.5 * zoom),
-          0.9 * zoom * grow,
-          p,
-        );
-      }
-
-      // 3) Bereket zerresi — yukarı süzülen altın toz (havada ışıldayan bolluk).
-      final mt = (time * 0.5 + i * 0.4) % 1.0;
-      final mA = ((1 - mt) * ripe * 150).round().clamp(0, 150);
-      p
-        ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB(mA, 0xFF, 0xE6, 0x9C);
-      canvas.drawCircle(
-        Offset(
-          base.dx + sin(time * 1.6 + i) * 6 * zoom,
-          base.dy - mt * 24 * zoom,
-        ),
-        1.4 * zoom,
-        p,
-      );
-      p.blendMode = BlendMode.srcOver;
     }
   }
 
@@ -375,16 +246,21 @@ extension _PainterFx on VillageGamePainter {
       }
     }
     if (fire == null) return;
+    final playback = fxPlayback[EventFx.vigil];
+    final localTime = playback?.elapsed ?? time;
+    final envelope = playback?.envelope(enter: 1.6, exit: 1.6) ?? 1.0;
     final c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
     final glow = Paint()..blendMode = BlendMode.plus;
     final core = Paint()..isAntiAlias = true;
     const candles = 12;
     for (int i = 0; i < candles; i++) {
+      final placed = _smoothUnit(((playback?.elapsed ?? 4.0) - i * 0.10) / 0.8);
+      if (placed <= 0) continue;
       final ang = i * (2 * pi / candles);
       // İzometrik yassı halka (y ekseni 0.55).
       final cx = c0.dx + cos(ang) * 40 * zoom;
       final cy = c0.dy + sin(ang) * 22 * zoom;
-      final flick = 0.75 + sin(time * 7.0 + i * 1.7) * 0.25;
+      final flick = 0.78 + sin(localTime * 7.0 + i * 1.7) * 0.22;
       // Mum tabanı (küçük koyu çubuk)
       core.color = const Color(0xFF2A2018);
       canvas.drawRect(
@@ -396,18 +272,38 @@ extension _PainterFx on VillageGamePainter {
         core,
       );
       // Alev halesi + çekirdek
-      glow.color = Color.fromARGB((flick * 90).round(), 0xFF, 0x9A, 0x3A);
+      glow.color = Color.fromARGB(
+        (flick * 90 * envelope * placed).round(),
+        0xFF,
+        0x9A,
+        0x3A,
+      );
       canvas.drawCircle(Offset(cx, cy - 3 * zoom), 5.5 * zoom * flick, glow);
-      core.color = Color.fromARGB((flick * 235).round(), 0xFF, 0xE6, 0xB0);
+      core.color = Color.fromARGB(
+        (flick * 235 * envelope * placed).round(),
+        0xFF,
+        0xE6,
+        0xB0,
+      );
       canvas.drawCircle(Offset(cx, cy - 3 * zoom), 1.5 * zoom, core);
       // Yükselen soluk ruh kıvılcımı
-      final sp = (time * 0.4 + i * 0.5) % 1.0;
-      final a = ((1 - sp) * 90).round().clamp(0, 90);
-      core.color = Color.fromARGB(a, 0xCF, 0xD8, 0xE6);
-      canvas.drawCircle(
-        Offset(cx, cy - 4 * zoom - sp * 34 * zoom),
-        1.3 * zoom,
-        core,
+      final sp = (localTime * 0.32 + i * 0.37) % 1.0;
+      final a = ((1 - sp) * 65 * envelope * placed).round().clamp(0, 65);
+      final smoke = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8 * zoom
+        ..strokeCap = StrokeCap.round
+        ..color = Color.fromARGB(a, 0xCF, 0xD8, 0xE6);
+      canvas.drawPath(
+        Path()
+          ..moveTo(cx, cy - 4 * zoom - sp * 10 * zoom)
+          ..quadraticBezierTo(
+            cx + sin(localTime + i) * 2 * zoom,
+            cy - 12 * zoom - sp * 10 * zoom,
+            cx + sin(localTime * 0.7 + i) * 3 * zoom,
+            cy - 20 * zoom - sp * 13 * zoom,
+          ),
+        smoke,
       );
     }
   }
@@ -429,7 +325,11 @@ extension _PainterFx on VillageGamePainter {
         ? _worldToScreen(fire.col + 0.5, fire.row + 0.5, size)
         : _worldToScreen(kCols / 2, kRows / 2, size);
 
-    final pulse = sin(time * 1.6) * 0.5 + 0.5;
+    final playback = fxPlayback[EventFx.cultRite];
+    final localTime = playback?.elapsed ?? time;
+    final envelope = playback?.envelope(enter: 1.8, exit: 1.5) ?? 1.0;
+    final reveal = _smoothUnit((playback?.elapsed ?? 3.0) / 2.4);
+    final pulse = sin(localTime * 1.6) * 0.5 + 0.5;
     final ringR = 46 * zoom;
 
     // Yere çizilmiş izometrik çember (nabız atan teal-mor).
@@ -437,13 +337,23 @@ extension _PainterFx on VillageGamePainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = (1.4 + pulse * 1.2) * zoom
       ..blendMode = BlendMode.plus
-      ..color = Color.fromARGB((70 + pulse * 90).round(), 0x9A, 0x6C, 0xE0);
+      ..color = Color.fromARGB(
+        ((70 + pulse * 90) * envelope * reveal).round(),
+        0x9A,
+        0x6C,
+        0xE0,
+      );
     canvas.drawOval(
       Rect.fromCenter(center: c0, width: ringR * 2, height: ringR * 1.1),
       ring,
     );
     // İkinci iç çember (teal).
-    ring.color = Color.fromARGB((50 + pulse * 70).round(), 0x4C, 0xC8, 0xC0);
+    ring.color = Color.fromARGB(
+      ((50 + pulse * 70) * envelope * reveal).round(),
+      0x4C,
+      0xC8,
+      0xC0,
+    );
     canvas.drawOval(
       Rect.fromCenter(center: c0, width: ringR * 1.3, height: ringR * 0.72),
       ring,
@@ -455,7 +365,12 @@ extension _PainterFx on VillageGamePainter {
       (10 + pulse * 8) * zoom,
       Paint()
         ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB((60 + pulse * 70).round(), 0x8A, 0x60, 0xD8),
+        ..color = Color.fromARGB(
+          ((60 + pulse * 70) * envelope * reveal).round(),
+          0x8A,
+          0x60,
+          0xD8,
+        ),
     );
 
     // Dönen rünler — 6 küçük geometrik glif çember üstünde.
@@ -466,12 +381,13 @@ extension _PainterFx on VillageGamePainter {
       ..isAntiAlias = true;
     const runes = 6;
     for (int i = 0; i < runes; i++) {
-      final ang = time * 0.6 + i * (2 * pi / runes);
+      final ang = localTime * 0.22 + i * (2 * pi / runes);
       final rx = c0.dx + cos(ang) * ringR * 0.92;
       final ry = c0.dy + sin(ang) * ringR * 0.5;
-      final bob = sin(time * 3 + i) * 2 * zoom;
-      final p = Offset(rx, ry + bob);
-      final a = (150 + sin(time * 4 + i) * 60).round().clamp(0, 230);
+      final p = Offset(rx, ry);
+      final a = ((150 + sin(localTime * 4 + i) * 60) * envelope * reveal)
+          .round()
+          .clamp(0, 230);
       rune.color = Color.fromARGB(a, 0xC8, 0xB0, 0xF0);
       final s = 3.2 * zoom;
       // Glif türü i'ye göre: üçgen / artı / baklava.
@@ -502,81 +418,8 @@ extension _PainterFx on VillageGamePainter {
     }
   }
 
-  // ── BESPOKE Göktaşı yağmuru (meteorShower) ──────────────────────────────────
-  // Ekran-uzayında gökyüzünü çaprazlama geçen küçük kayan yıldızlar (parlak baş
-  // + sönen kuyruk) + periyodik olarak kratere doğru süzülen büyük bir meteor ve
-  // ardından çarpma flaşı. Additive — gece göz alıcı, gündüz daha hafif.
-  void _fxMeteorShower(Canvas canvas, Size size) {
-    final glow = Paint()
-      ..isAntiAlias = true
-      ..blendMode = BlendMode.plus;
-    final night = (1 - dayLight).clamp(0.0, 1.0);
-    final vis = 0.45 + night * 0.55; // gece daha parlak
+  // Yeni olay efektleri bağımsız renderer paketleri olarak eklenir.
 
-    const dirx = 0.82, diry = 0.57; // çapraz yön (sağ-aşağı)
-
-    // Küçük kayan yıldızlar — üst gökyüzü bandında akar.
-    const stars = 16;
-    for (int i = 0; i < stars; i++) {
-      final speed = 0.5 + (i % 5) * 0.12;
-      final ph = (time * speed + i * 0.137) % 1.0;
-      final sx = ((i * 137.0) % size.width) - size.width * 0.15;
-      final sy = (i * 53.0) % (size.height * 0.55) - size.height * 0.1;
-      final travel = size.width * 0.5;
-      final hx = sx + dirx * travel * ph;
-      final hy = sy + diry * travel * ph;
-      final fade = sin(ph * pi).clamp(0.0, 1.0); // uçlarda doğal fade
-      final a = (fade * 200 * vis).round().clamp(0, 230);
-      if (a <= 0) continue;
-      final tailLen = 26.0 * zoom;
-      final tx = hx - dirx * tailLen, ty = hy - diry * tailLen;
-      canvas.drawLine(
-        Offset(tx, ty),
-        Offset(hx, hy),
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..strokeWidth = 1.6 * zoom
-          ..strokeCap = StrokeCap.round
-          ..shader = ui.Gradient.linear(Offset(tx, ty), Offset(hx, hy), [
-            const Color(0x00FFFFFF),
-            Color.fromARGB(a, 0xCF, 0xE4, 0xFF),
-          ]),
-      );
-      glow.color = Color.fromARGB(a, 0xFF, 0xFF, 0xF2);
-      canvas.drawCircle(Offset(hx, hy), 1.8 * zoom, glow);
-    }
-
-    // Büyük bolid — ara sıra gökyüzünü baştan başa geçen parlak, yavaş meteor.
-    // Düşme/çarpma yok: sadece göz alıcı, uzun kuyruklu bir geçiş (cozy).
-    final bp = (time * 0.16) % 1.0;
-    if (bp < 0.6) {
-      final t = bp / 0.6;
-      final hx = -size.width * 0.1 + dirx * size.width * 1.2 * t;
-      final hy = size.height * 0.06 + diry * size.width * 1.2 * t;
-      final fade = sin(t * pi).clamp(0.0, 1.0);
-      final a = (fade * 235 * vis).round().clamp(0, 245);
-      const tailLen = 70.0;
-      final tx = hx - dirx * tailLen * zoom, ty = hy - diry * tailLen * zoom;
-      canvas.drawLine(
-        Offset(tx, ty),
-        Offset(hx, hy),
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..strokeWidth = 2.8 * zoom
-          ..strokeCap = StrokeCap.round
-          ..shader = ui.Gradient.linear(Offset(tx, ty), Offset(hx, hy), [
-            const Color(0x00FFD9A0),
-            Color.fromARGB(a, 0xFF, 0xE0, 0xB0),
-          ]),
-      );
-      glow.color = Color.fromARGB(a, 0xFF, 0xF4, 0xDC);
-      canvas.drawCircle(Offset(hx, hy), 3.2 * zoom, glow);
-    }
-  }
-
-  // ── BESPOKE Düğün (wedding) ─────────────────────────────────────────────────
-  // Ateş başında yükselen kalpler + tepeden süzülen renkli yaprak/konfeti + sıcak
-  // bir taban parıltısı. Şenliğin küçük, sıcak kardeşi (çift dansı NPC tarafında).
   void _fxWedding(Canvas canvas, Size size) {
     BuildingEntity? fire;
     for (final b in buildings) {
@@ -586,35 +429,33 @@ extension _PainterFx on VillageGamePainter {
       }
     }
     if (fire == null) return;
+    final playback = fxPlayback[EventFx.wedding];
+    final localTime = playback?.elapsed ?? time;
+    final envelope = playback?.envelope(enter: 1.2, exit: 1.5) ?? 1.0;
     final c0 = _worldToScreen(fire.col + 0.5, fire.row + 0.5, size);
     final fill = Paint()..isAntiAlias = true;
 
-    // 1) Sıcak taban parıltısı (nabız atan).
-    final pulse = 0.7 + sin(time * 2.2) * 0.3;
-    canvas.drawCircle(
-      Offset(c0.dx, c0.dy),
-      30 * zoom * pulse,
-      Paint()
-        ..blendMode = BlendMode.plus
-        ..color = Color.fromARGB((26 * pulse).round(), 0xFF, 0xC8, 0xD8),
-    );
-
-    // 2) Yükselen kalpler — ateş çevresinden çıkıp süzülerek yukarı kaybolur.
-    const hearts = 10;
-    for (int i = 0; i < hearts; i++) {
-      final sp = (time * 0.5 + i * 0.617) % 1.0;
-      final baseAng = i * (2 * pi / hearts);
-      final spreadX = cos(baseAng) * 30 * zoom;
-      final hx = c0.dx + spreadX + sin(time * 2 + i) * 5 * zoom;
-      final hy = c0.dy + 4 * zoom - sp * 60 * zoom;
-      final a = (sin(sp * pi) * 220).round().clamp(0, 220);
-      if (a <= 0) continue;
-      final s = (2.0 + (i % 3) * 0.7) * zoom * (0.7 + sp * 0.5);
-      fill.color = Color.fromARGB(a, 0xFF, 0x6E, 0x8C);
-      _drawHeart(canvas, Offset(hx, hy), s, fill);
+    // 1) Meydan çelengi — soyut kalp parçacığı yerine oyunun mevcut çiçek
+    // sprite'ları. Sade düğün böylece şenlik konfeti sisteminin küçüğü değildir.
+    const flowerKinds = [
+      DecorKind.daisy,
+      DecorKind.poppy,
+      DecorKind.lavender,
+      DecorKind.buttercup,
+    ];
+    for (int i = 0; i < 10; i++) {
+      final ang = i * (2 * pi / 10);
+      DecorRenderer.drawFxSprite(
+        canvas,
+        Offset(c0.dx + cos(ang) * 34 * zoom, c0.dy + sin(ang) * 18 * zoom),
+        flowerKinds[i % flowerKinds.length],
+        variant: i % 2,
+        height: 12 * zoom,
+        alpha: envelope,
+      );
     }
 
-    // 3) Süzülen yaprak/konfeti — tepeden ateş çevresine yavaşça düşer.
+    // 2) Süzülen taç yaprakları — yalnız çiftin/meydanın çevresinde.
     const petals = 16;
     const cols = [
       Color(0xFFF6C5D8),
@@ -624,17 +465,19 @@ extension _PainterFx on VillageGamePainter {
       Color(0xFFF2B6A0),
     ];
     for (int i = 0; i < petals; i++) {
-      final sp = (time * 0.35 + i * 0.41) % 1.0;
+      final sp = (localTime * 0.35 + i * 0.41) % 1.0;
       final px =
-          c0.dx + cos(i * 1.7) * 46 * zoom + sin(time * 1.6 + i) * 9 * zoom;
+          c0.dx +
+          cos(i * 1.7) * 46 * zoom +
+          sin(localTime * 1.6 + i) * 9 * zoom;
       final py = c0.dy - 46 * zoom + sp * 70 * zoom;
-      final a = (sin(sp * pi) * 200).round().clamp(0, 200);
+      final a = (sin(sp * pi) * 200 * envelope).round().clamp(0, 200);
       if (a <= 0) continue;
       fill.color = cols[i % cols.length].withValues(alpha: a / 255);
       // ince eğik oval yaprak
       canvas.save();
       canvas.translate(px, py);
-      canvas.rotate(sin(time * 2 + i) * 0.9);
+      canvas.rotate(sin(localTime * 2 + i) * 0.9);
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset.zero,
@@ -647,38 +490,36 @@ extension _PainterFx on VillageGamePainter {
     }
   }
 
-  /// Küçük dolu kalp — [c] merkez, [s] yarı-genişlik. _fxWedding için.
-  void _drawHeart(Canvas canvas, Offset c, double s, Paint p) {
-    canvas.drawCircle(Offset(c.dx - s * 0.5, c.dy - s * 0.3), s * 0.55, p);
-    canvas.drawCircle(Offset(c.dx + s * 0.5, c.dy - s * 0.3), s * 0.55, p);
-    canvas.drawPath(
-      Path()
-        ..moveTo(c.dx - s, c.dy - s * 0.1)
-        ..lineTo(c.dx, c.dy + s)
-        ..lineTo(c.dx + s, c.dy - s * 0.1)
-        ..close(),
-      p,
-    );
-  }
-
   // Hayvan baskını — gece firepit etrafında ağaç hattında kızıl göz çiftleri.
   // Gözler SÜREKLİ yavaşça gezinir (adım-atlama YOK: eski `(time/4).floor()`
   // her 4 sn ışınlıyordu) ve YUMUŞAK parıldayıp kırpışır (alpha lerp; eski ikili
   // aç-kapa pat söndürüyordu). Kavram (gövdesiz parlayan gözler) kasıtlı.
   void _fxBeastEyes(Canvas canvas, Size size) {
     if (dayLight > 0.4) return;
-    for (int i = 0; i < 4; i++) {
-      // Stabil taban (seed=i) + zamana bağlı sürekli ağır drift (kurtlar dolaşır).
-      final baseAng = i * 1.7;
-      final ang = baseAng + sin(time * 0.13 + i) * 0.35;
-      final dist = 13.0 + (i % 3) * 2.0 + sin(time * 0.09 + i * 2.1) * 1.2;
-      final gx = kCols / 2 + cos(ang) * dist;
-      final gy = kRows / 2 + sin(ang) * dist;
-      final p = _worldToScreen(gx, gy, size);
+    final playback = fxPlayback[EventFx.beastEyes];
+    final localTime = playback?.elapsed ?? time;
+    final envelope = playback?.envelope(enter: 2.0, exit: 1.0) ?? 1.0;
+    var shown = 0;
+    for (
+      int treeIndex = 0;
+      treeIndex < trees.length && shown < 4;
+      treeIndex++
+    ) {
+      final tree = trees[treeIndex];
+      final hash = tree.col * 31 + tree.row * 17;
+      if (hash % 5 != 0 || tree.isFelled) continue;
+      // Gözler artık boş harita koordinatında yüzmez; gerçek ağaç hattının
+      // karanlığında, gövdenin iki yanında belirir.
+      final p = _worldToScreen(
+        tree.col + 0.5,
+        tree.row + 0.5,
+        size,
+      ).translate(0, -8 * zoom);
+      final i = shown++;
       // Yumuşak parıltı + ara sıra kısa kırpışma (alpha, pat söner-yanar DEĞİL).
-      final glow = 0.45 + 0.30 * sin(time * 0.9 + i * 1.3);
-      final blink = (sin(time * 2.1 + i * 2.7) < -0.85) ? 0.15 : 1.0;
-      final a = (glow * blink * 255).round().clamp(0, 210);
+      final glow = 0.45 + 0.30 * sin(localTime * 0.9 + i * 1.3);
+      final blink = (sin(localTime * 2.1 + i * 2.7) < -0.85) ? 0.15 : 1.0;
+      final a = (glow * blink * 255 * envelope).round().clamp(0, 210);
       if (a <= 4) continue;
       _pFxParticle.color = Color.fromARGB(a, 0xFF, 0x30, 0x20);
       canvas.drawCircle(p + Offset(-3 * zoom, 0), 1.6 * zoom, _pFxParticle);

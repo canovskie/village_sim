@@ -1,4 +1,4 @@
-import '../systems/hearth_warmth.dart';
+import '../systems/world/hearth_warmth.dart';
 import 'building_type.dart';
 
 /// ─── Binanın Künyesi ────────────────────────────────────────────────────────
@@ -650,7 +650,7 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
       SiteTip(
         SiteTipKind.anywhere,
         'Han, gezgin tüccarın yeni durağıdır: ziyaretler %35 daha sık, '
-        'konaklama %55 daha uzun olur; daha çok fazla mal satılabilir.',
+        'konaklama %15 daha uzun olur; daha çok fazla mal satılabilir.',
         short: 'Tüccar daha sık, uzun kalır',
       ),
       SiteTip(
@@ -747,6 +747,27 @@ const Map<BuildingType, BuildingLore> kBuildingLore = {
       'Serin taş, mum kokusu, alçak sesler.',
       'Kapısı hiç kilitlenmez; kilidi olmadığı için.',
       'İçeride en çok konuşan, dışarıda en az konuşandır.',
+    ],
+  ),
+
+  BuildingType.chapel: BuildingLore(
+    tips: [
+      SiteTip(
+        SiteTipKind.homesNear,
+        'Evlere yakın kur: köylüler kısa bir dua için kolayca uğrasın.',
+        short: 'Evlere yakın olsun',
+      ),
+      SiteTip(
+        SiteTipKind.anywhere,
+        'Az kaynakla bir ibadet yeri açar. Cenaze ve mezarlık için büyük '
+        'kiliseyi kur.',
+        short: 'Küçük ibadet yeri',
+      ),
+    ],
+    notes: [
+      'Çanı küçüktür; kapısına gelenin derdi büyük olabilir.',
+      'Son çıkan mumu söndürmez, bir sonraki için bırakır.',
+      'Birkaç sıra herkese yeter; kimi duasını ayakta eder.',
     ],
   ),
 

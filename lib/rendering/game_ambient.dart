@@ -38,13 +38,21 @@ extension _PainterAmbient on VillageGamePainter {
       canvas.drawRect(rect, _pEdgeHaze);
     }
 
-    side(Rect.fromLTWH(0, 0, w, band), const Offset(0, 0), Offset(0, band)); // üst
+    side(
+      Rect.fromLTWH(0, 0, w, band),
+      const Offset(0, 0),
+      Offset(0, band),
+    ); // üst
     side(
       Rect.fromLTWH(0, h - band, w, band),
       Offset(0, h),
       Offset(0, h - band),
     ); // alt
-    side(Rect.fromLTWH(0, 0, band, h), const Offset(0, 0), Offset(band, 0)); // sol
+    side(
+      Rect.fromLTWH(0, 0, band, h),
+      const Offset(0, 0),
+      Offset(band, 0),
+    ); // sol
     side(
       Rect.fromLTWH(w - band, 0, band, h),
       Offset(w, 0),
@@ -59,6 +67,91 @@ extension _PainterAmbient on VillageGamePainter {
     final cx = size.width / 2;
     final cy = size.height / 2;
     return Offset(cx + (s.dx - cx) * zoom, cy + (s.dy - cy) * zoom);
+  }
+
+  // ── Gece lambası böcekleri ─────────────────────────────────────────────────
+  // Genel ateşböceklerinden farklı olarak gerçek lantern koordinatının etrafında
+  // dar orbit çizer. Işık pass'inden sonra çizildiği için küçük bedenleri sıcak
+  // halo içinde okunur; gündüz ve yağmurda tamamen çekilirler.
+  static final Paint _pMothWing = Paint()
+    ..isAntiAlias = true
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round;
+  static final Paint _pMothBody = Paint()..isAntiAlias = true;
+
+  void _drawLampMoths(Canvas canvas, Size size) {
+    final darkness = ((0.46 - dayLight) / 0.46).clamp(0.0, 1.0);
+    final dry = (1.0 - rainIntensity / 0.34).clamp(0.0, 1.0);
+    final visibility = darkness * dry;
+    if (visibility < 0.05) return;
+    final viewCenter = Offset(size.width * 0.5, size.height * 0.5);
+
+    for (final building in buildings) {
+      final lights = kBuildingLights[building.type];
+      if (lights == null || lights.every((l) => l.kind != LightKind.lantern)) {
+        continue;
+      }
+      if (building.windowGlow < 0.08) continue;
+      final corners = _corners(
+        building.col,
+        building.row,
+        building.cols,
+        building.rows,
+        size,
+        camera,
+      );
+      final meta = kBuildingMeta[building.type]!;
+      final sprite = BuildingRenderer.thumbnailFor(
+        building.type,
+        building.design,
+      );
+      final spriteW = (corners.$3.dx - corners.$2.dx).abs() * meta.spriteScale;
+      final spriteH = sprite == null
+          ? spriteW * 0.9
+          : spriteW * sprite.height / sprite.width;
+      final spriteLeft = corners.$4.dx - spriteW * meta.groundXCenter;
+      final spriteTop = corners.$4.dy - spriteH * meta.groundY;
+
+      for (int li = 0; li < lights.length; li++) {
+        final light = lights[li];
+        if (light.kind != LightKind.lantern) continue;
+        final worldPoint = Offset(
+          spriteLeft + light.nx * spriteW,
+          spriteTop + light.ny * spriteH,
+        );
+        final lamp = viewCenter + (worldPoint - viewCenter) * zoom;
+        if (lamp.dx < -20 ||
+            lamp.dx > size.width + 20 ||
+            lamp.dy < -20 ||
+            lamp.dy > size.height + 20) {
+          continue;
+        }
+
+        final seed =
+            building.type.index * 73 +
+            building.col * 31 +
+            building.row * 17 +
+            li * 11;
+        for (int i = 0; i < 3; i++) {
+          final phase = time * (2.2 + i * 0.34) + seed * 0.09 + i * 2.1;
+          final radius = (5.0 + i * 2.3) * zoom;
+          final p = Offset(
+            lamp.dx + cos(phase) * radius,
+            lamp.dy + sin(phase * 1.37) * radius * 0.62,
+          );
+          final flicker = 0.55 + 0.45 * sin(time * 7.0 + i).abs();
+          final alpha = (visibility * flicker * 205).round().clamp(0, 210);
+          _pMothWing
+            ..color = Color.fromARGB(alpha, 255, 232, 168)
+            ..strokeWidth = max(0.7, 0.9 * zoom);
+          final wing = (1.5 + flicker) * zoom;
+          canvas.drawLine(p.translate(-wing, -0.5), p, _pMothWing);
+          canvas.drawLine(p, p.translate(wing, 0.5), _pMothWing);
+          _pMothBody.color = Color.fromARGB(alpha, 91, 67, 38);
+          canvas.drawCircle(p, max(0.6, 0.75 * zoom), _pMothBody);
+        }
+      }
+    }
   }
 
   // ── Gece ateş böcekleri ─────────────────────────────────────────────────────
@@ -146,8 +239,7 @@ extension _PainterAmbient on VillageGamePainter {
   void _drawSeasonParticles(Canvas canvas, Size size) {
     // Yoğun olay efektleri kendi partikül dilini kullanır; üzerine kar/yaprak
     // bindirmek hem okunurluğu hem de frame maliyetini gereksiz artırır.
-    if (activeFx.contains(EventFx.festival) ||
-        activeFx.contains(EventFx.meteorShower)) {
+    if (activeFx.contains(EventFx.festival)) {
       return;
     }
     // DEV zorlaması mevsim switch'inden ÖNCE: kar yalnız kış dalında
@@ -165,7 +257,6 @@ extension _PainterAmbient on VillageGamePainter {
           season: season,
           zoom: zoom,
           festival: activeFx.contains(EventFx.festival),
-          meteorShower: activeFx.contains(EventFx.meteorShower),
           storm: activeFx.contains(EventFx.storm),
         )) {
           _drawSnow(canvas, size);

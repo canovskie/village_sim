@@ -16,16 +16,16 @@ import 'package:flutter/services.dart';
 /// görünmez. Baca için warm-gray, yangın için koyu, vb runtime'da değişir.
 class SmokeRenderer {
   static ui.Image? _sheet;
-  static const int kFrames    = 16;
+  static const int kFrames = 16;
   // PNG 4096×384 → her frame 256×384 px (16 frame yatay).
   static const double kFrameW = 256;
   static const double kFrameH = 384;
-  static const double kFps    = 8.0; // ~2 sn loop
+  static const double kFps = 8.0; // ~2 sn loop
 
   /// Asset'i yükle — initState'te bir kez.
   static Future<void> loadAll() async {
     try {
-      final data  = await rootBundle.load('assets/effects/smoke.png');
+      final data = await rootBundle.load('assets/effects/smoke.png');
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();
       _sheet = frame.image;
@@ -49,10 +49,14 @@ class SmokeRenderer {
     // Alpha hesabı: A = (255 - (R+G+B)/3) × intensity
     // Bu 5-stop matrix: [A_R, A_G, A_B, A_A, A_offset] son satır
     return ColorFilter.matrix([
-      0, 0, 0, 0, r,                     // R_out = tint.r
-      0, 0, 0, 0, g,                     // G_out = tint.g
-      0, 0, 0, 0, b,                     // B_out = tint.b
-      -iA/3, -iA/3, -iA/3, 0, 255 * iA,  // A_out = (255 - luma) × intensity
+      0, 0, 0, 0, r, // R_out = tint.r
+      0, 0, 0, 0, g, // G_out = tint.g
+      0, 0, 0, 0, b, // B_out = tint.b
+      -iA / 3,
+      -iA / 3,
+      -iA / 3,
+      0,
+      255 * iA, // A_out = (255 - luma) × intensity
     ]);
   }
 
@@ -61,10 +65,17 @@ class SmokeRenderer {
   /// yangın ~2.0.
   /// [tint] rengi ile boyanır (default warm-gray bej). [intensity] 0..1
   /// alpha çarpanı (yağmurda boost, kuraklıkta normal vb).
-  static void draw(Canvas canvas, double cx, double cy, double scale,
-      double time, int seed,
-      {Color tint = const Color(0xFFC8B8A0),
-       double intensity = 1.0}) {
+  static void draw(
+    Canvas canvas,
+    double cx,
+    double cy,
+    double scale,
+    double time,
+    int seed, {
+    Color tint = const Color(0xFFC8B8A0),
+    double intensity = 1.0,
+    double windDrift = 0.0,
+  }) {
     if (intensity <= 0.0) return;
     final img = _sheet;
     if (img == null) return;
@@ -76,10 +87,16 @@ class SmokeRenderer {
     // Display: scale 1.0 = 30 px yükseklik. Aspect oranı sheet'inkinden korunur.
     final h = 30.0 * scale;
     final w = h * kFrameW / kFrameH; // = h × 0.667
-    final dst = Rect.fromLTWH(cx - w / 2, cy - h, w, h);
+    final dst = Rect.fromLTWH(-w / 2, -h, w, h);
 
     _pSprite.colorFilter = _filterFor(tint, intensity);
+    canvas.save();
+    canvas.translate(cx, cy);
+    // Kaynak noktası (0,0) sabit kalır; yalnız dumanın üstü rüzgâr yönüne
+    // kayar. Böylece bacadan kopuk bir sprite değil, yana yatan kolon okunur.
+    if (windDrift.abs() > 0.001) canvas.skew(-windDrift, 0);
     canvas.drawImageRect(img, src, dst, _pSprite);
+    canvas.restore();
     _pSprite.colorFilter = null;
   }
 }

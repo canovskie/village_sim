@@ -7,6 +7,13 @@ import 'building_type.dart';
 const String kPublicOwner = '\u0000köy';
 
 class BuildingEntity {
+  /// İlk uyanan sakinle başlayan baca pufunun görünür kalma süresi.
+  static const double wakePuffDuration = 2.2;
+
+  /// Bir sakinin eve girişinde kapının açık okunacağı kısa süre.
+  static const double doorPulseDuration = 0.9;
+  static const double deliveryFeedbackDuration = 1.45;
+
   final BuildingType type;
   final int col;
   final int row;
@@ -16,6 +23,26 @@ class BuildingEntity {
 
   /// Maden ocağı gibi içeride çalışma olan binalar için
   bool isActive = false;
+
+  /// Görünür çalışma yoğunluğu. [isActive] anlık mantık bayrağıdır; bu değer
+  /// ona yumuşakça yaklaşır, böylece duraklatılan makine/duman tek karede
+  /// kesilmez. Geçici ve türetilmiştir, kayda girmez.
+  double activityLevel = 0.0;
+
+  /// İlk aktif karede tick henüz yoğunluğu ilerletmediyse görünürlük kaybolmasın.
+  double get visibleActivityLevel =>
+      isActive && activityLevel <= 0 ? 1.0 : activityLevel;
+
+  void updateActivityLevel(double dt, {required bool operational}) {
+    final target = operational ? 1.0 : 0.0;
+    final rate = target > activityLevel ? 4.2 : 2.3;
+    final step = rate * dt;
+    if ((target - activityLevel).abs() <= step) {
+      activityLevel = target;
+    } else {
+      activityLevel += target > activityLevel ? step : -step;
+    }
+  }
 
   /// Oyuncu binayı manuel olarak duraklattıysa true — gathering/processing
   /// rolündeki binalar tick'te bu bayrağa göre işçi/üretim çalıştırmayı atlar.
@@ -65,6 +92,40 @@ class BuildingEntity {
   /// [occupants]'ın UYANIK olanı — [windowGlow]'un hedefi buradan çıkar.
   /// Doluluk sayımıyla aynı geçişte tazelenir (bkz. _tickPopulationAndHunger).
   int awakeOccupants = 0;
+
+  /// Evin içine varıp gerçekten uykuya geçmiş sakin sayısı. Yatağa doğru
+  /// yürüyenler hâlâ uyanık sayıldığı için çatı üstü uyku işareti erkenden
+  /// belirmez. Savunmalı hesap, sayımın yenilendiği tek karelik geçişlerde
+  /// negatif değer üretmez.
+  int get sleepingOccupants =>
+      occupants > awakeOccupants ? occupants - awakeOccupants : 0;
+
+  /// Önceki doluluk sayımında hanenin tamamı uyuyor muydu? Şafakta ilk uyananı
+  /// bir kenar geçişi olarak yakalamak için tutulur; kayda girmez.
+  bool householdAsleep = false;
+
+  /// Şafakta ilk sakin uyandığında bacadan çıkan güçlü tek pufun bitiş zamanı.
+  /// Mutlak sahne zamanı kullanır; renderer yalnız bu aralıkta ek duman çizer.
+  double wakePuffUntil = 0.0;
+
+  /// Eve giren sakinin arkasından kapının kısa açılıp kapanma bitişi.
+  /// Kaydedilmez; yalnız giriş anının dünyadaki görsel yankısıdır.
+  double doorPulseUntil = 0.0;
+
+  void triggerDoorPulse(double now) {
+    doorPulseUntil = now + doorPulseDuration;
+  }
+
+  /// Güncel [occupants]/[awakeOccupants] sayımından hane uyku geçişini üretir.
+  /// İlk sayım yalnız durumu kurar; gece soğuktan uyanma gibi sabah dışı
+  /// kalkışlar baca pufunu tetiklemez.
+  void updateHouseholdSleepCue({required double now, required bool isMorning}) {
+    final asleepNow = occupants > 0 && awakeOccupants == 0;
+    if (isMorning && householdAsleep && !asleepNow && awakeOccupants > 0) {
+      wakePuffUntil = now + wakePuffDuration;
+    }
+    householdAsleep = asleepNow;
+  }
 
   /// MÜLK SAHİBİ hane (soyad). Boş = sahibi sakinlerden TÜRETİLİR (kimin evinde
   /// kim oturuyorsa onun sayılır). Bağışlanan mülkte açıkça yazılır; topyekûn
@@ -121,6 +182,18 @@ class BuildingEntity {
   /// Bu oturumda binaya inen ürün sayısı. Ekonominin kendisi değildir; yalnız
   /// avludaki 1-3 parçalık görsel yığının yoğunluğunu belirler.
   int deliveryTally = 0;
+
+  /// Son teslimin dünya üstünde yükselen kısa geri bildirimi (`+1 odun`).
+  /// HUD'a uçmaz; doğrudan teslim edilen binanın üstünde çizilir.
+  String deliveryFeedback = '';
+  double deliveryFeedbackUntil = 0.0;
+
+  void showDeliveryFeedback(double now, String label) {
+    deliveryFeedback = label;
+    deliveryFeedbackUntil = now + deliveryFeedbackDuration;
+    deliveryPulse = 1.0;
+    deliveryTally++;
+  }
 
   BuildingEntity({
     required this.type,

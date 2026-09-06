@@ -234,7 +234,7 @@ const Cutscene kOpeningCutscene = Cutscene([
 
   // 2) VARIŞ + İLK KARAR — kafilenin yükü. Maple sorar, oyuncu SEÇER.
   //    Bu kapı gerçek bir karardır: kurucu meslekler, nüfus ve başlangıç stoğu
-  //    buradan çıkar (bkz. systems/founding_choice.dart).
+  //    buradan çıkar (bkz. systems/run/founding_choice.dart).
   CutsceneShot(
     bg: CutsceneBg.valleyDawn,
     setPiece: CutsceneSetPiece.camp,

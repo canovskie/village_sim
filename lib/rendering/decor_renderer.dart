@@ -20,6 +20,7 @@ class DecorRenderer {
   static final Map<DecorKind, List<ui.Image?>> _imgs = {};
 
   static final Paint _pSprite = AssetStyle.paint();
+  static final Paint _pFxSprite = AssetStyle.paint();
 
   // Hacimli decor (log/stump/bush) için yumuşak yer gölgesi — "havada" hissini önler.
   static final Paint _pShadow = Paint()
@@ -58,6 +59,37 @@ class DecorRenderer {
       debugPrint('DecorRenderer: $path yüklenemedi — $e');
       return null;
     }
+  }
+
+  /// Geçici olay dekoru için mevcut doğa sprite'ını dünya zeminine oturtur.
+  /// Kalıcı [DecorEntity] üretmez; save'e girmeyen tarla hastalığı gibi kısa
+  /// sahneler gerçek asset dilini kullanabilir.
+  static void drawFxSprite(
+    Canvas canvas,
+    Offset ground,
+    DecorKind kind, {
+    int variant = 0,
+    double height = 16.0,
+    double alpha = 1.0,
+  }) {
+    final list = _imgs[kind];
+    if (list == null || list.isEmpty) return;
+    final img = list[variant.clamp(0, list.length - 1)];
+    if (img == null) return;
+    final width = height * img.width / img.height;
+    _pFxSprite.color = Color.fromRGBO(255, 255, 255, alpha.clamp(0.0, 1.0));
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Rect.fromLTWH(
+        ground.dx - width / 2,
+        ground.dy - height + 4,
+        width,
+        height,
+      ),
+      _pFxSprite,
+    );
+    _pFxSprite.color = const Color(0xFFFFFFFF);
   }
 
   /// Bitki türünün rüzgârda esneme genliği — düz/ağır objeler (yosun, çakıl,

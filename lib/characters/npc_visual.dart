@@ -129,6 +129,10 @@ enum BeardStyle { none, stubble, full, goatee }
 /// askeri (koyu çelik zırh + kızıl tabard + miğfer), köyde net "yabancı".
 enum NpcCostume { none, imperial }
 
+/// Köy içindeki kalıcı kişisel kıyafet tercihi. [NpcCostume] dış aktör/asker
+/// override'ıdır; bu ise bir köylünün karar sonrasında kayıtla yaşayan tarzı.
+enum NpcWardrobe { standard, flowing, traditional }
+
 // ─── Renk havuzları ──────────────────────────────────────────────────────────
 
 const List<Color> _skinTones = [

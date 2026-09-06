@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../rendering/asset_style.dart';
 import '../world/season.dart';
 
+enum FarmFxTreatment { none, bounty, blight }
+
 class FarmRenderer {
   static final List<ui.Image?> _stages = List.filled(5, null);
 
@@ -11,8 +13,8 @@ class FarmRenderer {
   // Asset paint AssetStyle'dan — yumuşatma merkezi
   static final _pImg = AssetStyle.paint();
   static final _pBorder = Paint()
-    ..color       = const Color(0xFF7A5218)
-    ..style       = PaintingStyle.stroke
+    ..color = const Color(0xFF7A5218)
+    ..style = PaintingStyle.stroke
     ..strokeWidth = 1
     ..isAntiAlias = false;
 
@@ -22,7 +24,9 @@ class FarmRenderer {
     for (int i = 0; i < 5; i++) {
       try {
         final bytes = await rootBundle.load('assets/tiles/farm_$i.png');
-        final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
+        final codec = await ui.instantiateImageCodec(
+          bytes.buffer.asUint8List(),
+        );
         final frame = await codec.getNextFrame();
         _stages[i] = await AssetStyle.softenAtLoad(frame.image);
       } catch (e) {
@@ -34,35 +38,44 @@ class FarmRenderer {
   // Mevsim tonu — tarla zeminine ince renk katmanı. Kış uykuda/karlı,
   // sonbahar altın bereket, yaz kavruk; ilkbahar tonsuz (taze).
   static final _pSeason = Paint();
+  static final _pFx = Paint();
 
   static (Color, BlendMode)? _seasonTint(Season season) => switch (season) {
-        Season.spring => null,
-        Season.summer => (const Color(0x1FE6B84A), BlendMode.overlay),
-        Season.autumn => (const Color(0x33E08A3A), BlendMode.overlay),
-        Season.winter => (const Color(0x59CFE4F2), BlendMode.srcATop),
-      };
+    Season.spring => null,
+    Season.summer => (const Color(0x1FE6B84A), BlendMode.overlay),
+    Season.autumn => (const Color(0x33E08A3A), BlendMode.overlay),
+    Season.winter => (const Color(0x59CFE4F2), BlendMode.srcATop),
+  };
 
   // Sulanmış toprak: ıslak koyu ton. Oyuncunun sulamanın çalıştığını görmesi
   // için tek sinyal — kova animasyonu bitince tarlada iz kalsın.
   static final _pWet = Paint()
-    ..color     = const Color(0x33203A4A)
+    ..color = const Color(0x33203A4A)
     ..blendMode = BlendMode.multiply;
 
-  static void drawTile(Canvas canvas,
-      double px, double py, double hw, double hh,
-      int stage, double progress, Season season,
-      {bool watered = false}) {
-
+  static void drawTile(
+    Canvas canvas,
+    double px,
+    double py,
+    double hw,
+    double hh,
+    int stage,
+    double progress,
+    Season season, {
+    bool watered = false,
+    FarmFxTreatment treatment = FarmFxTreatment.none,
+    double treatmentStrength = 0.0,
+  }) {
     _diamond
       ..reset()
-      ..moveTo(px,      py)
+      ..moveTo(px, py)
       ..lineTo(px + hw, py + hh)
-      ..lineTo(px,      py + hh * 2)
+      ..lineTo(px, py + hh * 2)
       ..lineTo(px - hw, py + hh)
       ..close();
 
     final dst = Rect.fromLTWH(px - hw, py, hw * 2, hh * 2);
-    final s   = stage.clamp(0, 4);
+    final s = stage.clamp(0, 4);
 
     canvas.save();
     canvas.clipPath(_diamond);
@@ -84,6 +97,35 @@ class FarmRenderer {
       canvas.drawRect(dst, _pSeason);
     }
 
+    final fx = treatmentStrength.clamp(0.0, 1.0);
+    if (fx > 0.001) {
+      switch (treatment) {
+        case FarmFxTreatment.none:
+          break;
+        case FarmFxTreatment.bounty:
+          // Bereket yeni sahte saplar çizmez. Mevcut ekin sprite'ı olgun evreye
+          // doğru altın bir cross-fade alır; hareket, tarlayı geçen tek hasat
+          // dalgasıdır ve komşu kareler arasında süreklidir.
+          if (s < 4) _blit(canvas, 4, dst, fx * 0.32);
+          _pFx
+            ..blendMode = BlendMode.softLight
+            ..color = Color.fromRGBO(255, 205, 82, 0.22 * fx);
+          canvas.drawRect(dst, _pFx);
+        case FarmFxTreatment.blight:
+          // Hastalık da ekinin üstüne ayrı daire/mantar karalamaz; gerçek tarla
+          // sprite'ını soldurup mora çeker. Mantar sprite'ları clip dışında,
+          // olay katmanında zemine oturtulur.
+          _pFx
+            ..blendMode = BlendMode.multiply
+            ..color = Color.fromRGBO(92, 78, 96, 0.46 * fx);
+          canvas.drawRect(dst, _pFx);
+          _pFx
+            ..blendMode = BlendMode.srcOver
+            ..color = Color.fromRGBO(174, 163, 148, 0.10 * fx);
+          canvas.drawRect(dst, _pFx);
+      }
+    }
+
     canvas.restore();
 
     canvas.drawPath(_diamond, _pBorder);
@@ -92,7 +134,12 @@ class FarmRenderer {
   static void _blit(Canvas canvas, int stage, Rect dst, double alpha) {
     final img = _stages[stage.clamp(0, 4)];
     if (img == null) return;
-    final src = Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble());
+    final src = Rect.fromLTWH(
+      0,
+      0,
+      img.width.toDouble(),
+      img.height.toDouble(),
+    );
     if (alpha < 1.0) {
       _pImg.color = Color.fromRGBO(255, 255, 255, alpha);
     } else {

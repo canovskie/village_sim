@@ -6,30 +6,41 @@ import 'package:flutter/services.dart';
 
 import 'asset_style.dart';
 
-/// Dış dünya taşıtlarının sprite çizimi. At + koşum + araba tek sprite'tır;
-/// küçük ölçekte parçaları ayrı kemiklere bölmek yerine bütün gövdeye ağırlık,
-/// tekerlere dönme izi ve yola toz verilir.
+enum CartDirection { southEast, southWest, northEast, northWest }
+
+/// Dış dünya taşıtlarının sprite çizimi. At + koşum + araba tek sprite'tır.
+/// Kaynak görsel yandan bir katalog kesiti değil, köy binalarıyla aynı 3/4
+/// izometrik açıdadır; böylece at ve arabanın zemindeki hacmi okunur.
 class VehicleRenderer {
   VehicleRenderer._();
 
-  static ui.Image? _horseCart;
+  static const int horseCartWalkFrames = 4;
+  static ui.Image? _horseCartToward;
+  static ui.Image? _horseCartAway;
   static final Paint _spritePaint = AssetStyle.paint();
   static final Paint _shadowPaint = Paint()
-    ..color = const Color(0x520E0905)
-    ..isAntiAlias = true;
-  static final Paint _dustPaint = Paint()..isAntiAlias = true;
-  static final Paint _spokePaint = Paint()
-    ..color = const Color(0x77513A22)
-    ..strokeWidth = 1.15
-    ..strokeCap = StrokeCap.round
+    ..color = const Color(0x3D0E0905)
     ..isAntiAlias = true;
 
   static Future<void> loadAll() async {
     try {
-      final bytes = await rootBundle.load('assets/vehicles/horse_cart_e.png');
-      final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
-      final frame = await codec.getNextFrame();
-      _horseCart = await AssetStyle.softenAtLoad(frame.image);
+      final towardBytes = await rootBundle.load(
+        'assets/vehicles/horse_cart_isometric.png',
+      );
+      final towardCodec = await ui.instantiateImageCodec(
+        towardBytes.buffer.asUint8List(),
+      );
+      final towardFrame = await towardCodec.getNextFrame();
+      _horseCartToward = await AssetStyle.softenAtLoad(towardFrame.image);
+
+      final awayBytes = await rootBundle.load(
+        'assets/vehicles/horse_cart_isometric_away.png',
+      );
+      final awayCodec = await ui.instantiateImageCodec(
+        awayBytes.buffer.asUint8List(),
+      );
+      final awayFrame = await awayCodec.getNextFrame();
+      _horseCartAway = await AssetStyle.softenAtLoad(awayFrame.image);
     } catch (e) {
       debugPrint('VehicleRenderer: at arabası yüklenemedi — $e');
     }
@@ -40,57 +51,56 @@ class VehicleRenderer {
   static void drawHorseCart(
     Canvas canvas,
     Offset ground, {
-    required bool facingRight,
+    required CartDirection direction,
     required double walkPhase,
     required bool isMoving,
-    required double time,
     double scale = 1.0,
   }) {
-    final image = _horseCart;
+    final pointsAway = switch (direction) {
+      CartDirection.northEast || CartDirection.northWest => true,
+      _ => false,
+    };
+    final facesRight = switch (direction) {
+      CartDirection.southEast || CartDirection.northEast => true,
+      _ => false,
+    };
+    final image = pointsAway ? _horseCartAway : _horseCartToward;
     if (image == null) return;
 
-    final stride = isMoving ? sin(walkPhase * 2.0) : sin(time * 1.35) * 0.22;
-    final bob = isMoving ? stride.abs() * 1.25 : stride;
-    final roll = isMoving ? walkPhase * 0.72 : 0.0;
-    final drawH = 74.0 * scale;
+    // Kervan NPC'den iri ama bina kadar değil. 84 px'lik eski boy sahnede
+    // pazar tezgâhını kapatıyordu; 58 px karakterlerle aynı dünyaya oturur.
+    final drawH = 58.0 * scale;
     final drawW = drawH * image.width / image.height;
-    final baseline = ground.dy + 5.0 * scale;
+    final baseline = ground.dy;
 
-    // Büyük taşıtın zemine oturduğunu NPC gölgesinden daha uzun tek parça gölge
-    // anlatır. Dururken nefesle büyüyüp küçülmez; yalnız hareket bob'u değişir.
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(ground.dx, baseline - 3.0 * scale),
-        width: drawW * 0.82,
-        height: 11.0 * scale,
-      ),
-      _shadowPaint,
+    // Tek gölge entity ankrajında kalıp arkadaki tekeri havada gösteriyordu.
+    // At ve araba temasları iki ayrı zeminsel gölgeyle bağlanır. Ofsetler
+    // kaynak sprite'ın temas noktalarına normalize edilmiştir.
+    final horseContact = pointsAway
+        ? Offset(drawW * 0.30, -drawH * 0.36)
+        : Offset(drawW * 0.27, -drawH * 0.02);
+    final wheelContact = pointsAway
+        ? Offset(-drawW * 0.20, -drawH * 0.03)
+        : Offset(-drawW * 0.36, -drawH * 0.25);
+    final flip = facesRight ? 1.0 : -1.0;
+    final hoofBeat = isMoving ? horseCartWalkFrame(walkPhase) : 0;
+    final horseShadowW = (hoofBeat.isEven ? 22.0 : 21.0) * scale;
+    _drawContactShadow(
+      canvas,
+      ground + Offset(horseContact.dx * flip, horseContact.dy),
+      horseShadowW,
+      5.0 * scale,
+    );
+    _drawContactShadow(
+      canvas,
+      ground + Offset(wheelContact.dx * flip, wheelContact.dy),
+      26.0 * scale,
+      6.0 * scale,
     );
 
-    if (isMoving) {
-      final rear = facingRight ? -1.0 : 1.0;
-      for (int i = 0; i < 3; i++) {
-        final p = (time * (0.65 + i * 0.13) + i * 0.31) % 1.0;
-        _dustPaint.color = const Color(
-          0xFFB99A68,
-        ).withValues(alpha: (1.0 - p) * 0.18);
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: Offset(
-              ground.dx + rear * (drawW * 0.27 + p * 15.0),
-              baseline - 2.0 - p * 5.0,
-            ),
-            width: 6.0 + p * 8.0,
-            height: 2.5 + p * 3.0,
-          ),
-          _dustPaint,
-        );
-      }
-    }
-
     canvas.save();
-    canvas.translate(ground.dx, baseline - bob);
-    if (!facingRight) canvas.scale(-1, 1);
+    canvas.translate(ground.dx, baseline);
+    if (!facesRight) canvas.scale(-1, 1);
     final dst = Rect.fromLTWH(-drawW / 2, -drawH, drawW, drawH);
     canvas.drawImageRect(
       image,
@@ -98,36 +108,38 @@ class VehicleRenderer {
       dst,
       _spritePaint,
     );
-
-    // Raster teker donuk görünmesin: düşük kontrastlı dört döner parmak izi
-    // mevcut boyalı tekerin üstünde neredeyse erir, ama hareketi ele verir.
-    if (isMoving) {
-      _drawWheelSpokes(
-        canvas,
-        Offset(-drawW * 0.285, -drawH * 0.245),
-        9.0,
-        roll,
-      );
-      _drawWheelSpokes(
-        canvas,
-        Offset(-drawW * 0.105, -drawH * 0.245),
-        8.0,
-        roll,
-      );
-    }
     canvas.restore();
   }
 
-  static void _drawWheelSpokes(
+  static void _drawContactShadow(
     Canvas canvas,
     Offset center,
-    double radius,
-    double angle,
+    double width,
+    double height,
   ) {
-    for (int i = 0; i < 4; i++) {
-      final a = angle + i * pi / 4;
-      final d = Offset(cos(a) * radius, sin(a) * radius);
-      canvas.drawLine(center - d, center + d, _spokePaint);
+    canvas.drawOval(
+      Rect.fromCenter(center: center, width: width, height: height),
+      _shadowPaint,
+    );
+  }
+
+  /// Grid hızını ekran uzayına projekte edip gerçek dört yönlü taşıt
+  /// sprite'ını seçer. `facingRight` tek başına kuzey/güney ayrımını
+  /// kaybettiğinden araba yolun tersine bakıyordu.
+  static CartDirection directionForGridVelocity(double vx, double vy) {
+    final screenX = vx - vy;
+    final screenY = vx + vy;
+    if (screenY >= 0) {
+      return screenX >= 0 ? CartDirection.southEast : CartDirection.southWest;
     }
+    return screenX >= 0 ? CartDirection.northEast : CartDirection.northWest;
+  }
+
+  /// Lokomosyon fazını dört vuruşlu nal ritmine çevirir. Dışarı açık
+  /// tutulması ritmin ileri/geri ve negatif fazda sarımını test ettirir.
+  static int horseCartWalkFrame(double phase) {
+    final raw = (phase / (pi / 2)).floor();
+    return ((raw % horseCartWalkFrames) + horseCartWalkFrames) %
+        horseCartWalkFrames;
   }
 }

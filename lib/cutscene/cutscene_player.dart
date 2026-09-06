@@ -7,11 +7,11 @@ import '../characters/life_stage.dart';
 import '../characters/npc_visual.dart';
 import '../characters/villager_names.dart';
 import '../rendering/character_renderer.dart';
-import '../systems/founding_choice.dart';
+import '../systems/run/founding_choice.dart';
 import '../text/village_names.dart';
 import '../text/voice.dart';
-import '../ui/app_ui.dart';
-import '../ui/mobile_ui.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/core/mobile_ui.dart';
 import 'cutscene.dart';
 
 part 'cutscene_founding.dart';

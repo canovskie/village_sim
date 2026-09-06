@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../characters/npc_visual.dart';
-import '../systems/villager_act.dart';
+import '../systems/npc/villager_act.dart';
 import 'asset_style.dart';
 
 /// ELDEKİ NESNELERİN ÇİZİMİ — kova, çuval, ekmek, maşrapa, sepet, odun.
@@ -123,6 +123,7 @@ abstract final class PropRenderer {
     double moveIntensity = 0,
     double time = 0,
     bool combat = false,
+    double? combatSwing,
   }) {
     if (prop == PropKind.none) return;
     final dir = facingRight ? 1.0 : -1.0;
@@ -132,7 +133,7 @@ abstract final class PropRenderer {
     canvas.save();
     if (combat && (prop == PropKind.scythe || prop == PropKind.axe)) {
       // El çevresinde ağır bir yay: alet elde taşınmıyor, rakibe savruluyor.
-      final swing = sin(time * 8.6) * 0.52;
+      final swing = (combatSwing ?? sin(time * 8.6)) * 0.52;
       canvas.translate(dir * 7, -48);
       canvas.rotate(dir * (0.55 + swing));
       canvas.translate(-dir * 7, 48);
