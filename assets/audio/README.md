@@ -1,6 +1,6 @@
 # assets/audio — ses kütüphanesi
 
-Motor `lib/systems/audio_manager.dart`. Üç katman: **ortam** (döngü), **müzik**
+Motor `lib/systems/platform/audio_manager.dart`. Üç katman: **ortam** (döngü), **müzik**
 (döngü), **efekt** (tek atış). Dosya adları kodda sabit; buraya doğru adla bir
 MP3 bırakmak yeterli, kod değişmez.
 
