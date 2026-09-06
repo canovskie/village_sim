@@ -2,10 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'app_ui.dart';
-import 'guide_spotlight.dart';
-import 'mobile_ui.dart';
-import 'semantic_icon.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/semantic_icon.dart';
+import '../hud/guide_spotlight.dart';
 
 /// ═══════════════════════════════════════════════════════════════════════════
 /// TAHTA — telefon yatayda YÖNETİM EKRANI yerleşimi

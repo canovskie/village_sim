@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-import '../systems/audio_manager.dart';
+import '../../systems/platform/audio_manager.dart';
 
 /// İzometrik oyun telefonda yatay çalışır. Yükseklik, telefon ile tablet
 /// ayrımında genişlikten daha güvenilir; capture harness'i de aynı mantıksal
@@ -887,7 +887,7 @@ class _AppTabsState extends State<AppTabs> {
         duration: const Duration(milliseconds: 170),
         curve: Curves.easeOut,
         // Telefonda sekme = ana gezinme; 34dp'de kalıyordu. 44 dokunma eşiği
-        // mobil temanın üç kuralından biri (bkz. ui/mobile_ui.dart).
+        // mobil temanın üç kuralından biri (bkz. ui/core/mobile_ui.dart).
         constraints: useCompactGameUi(context)
             ? const BoxConstraints(minHeight: 44)
             : const BoxConstraints(),

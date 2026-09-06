@@ -2,19 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../buildings/craft.dart';
-import '../characters/life_stage.dart';
-import '../characters/villager_type.dart';
-import '../entities/villager_entity.dart';
-import '../entities/villager_job.dart';
-import '../rendering/portrait_renderer.dart';
-import '../systems/chronicle.dart';
-import '../systems/village_custom.dart';
-import '../systems/villager_act.dart';
-import '../systems/villager_mind.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
-import 'semantic_icon.dart';
+import '../../buildings/craft.dart';
+import '../../characters/life_stage.dart';
+import '../../characters/villager_type.dart';
+import '../../entities/villager_entity.dart';
+import '../../entities/villager_job.dart';
+import '../../rendering/portrait_renderer.dart';
+import '../../systems/events/chronicle.dart';
+import '../../systems/npc/village_custom.dart';
+import '../../systems/npc/villager_act.dart';
+import '../../systems/npc/villager_mind.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/semantic_icon.dart';
 
 /// Köylü kartı — modern koyu app_ui dilinde. Üstte portre + isim + meslek
 /// rozeti + favori/kapat ikon butonları; altta durum rozetleri, animasyonlu

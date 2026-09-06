@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../systems/quest_book.dart';
-import '../systems/reckoning.dart';
-import 'app_ui.dart';
-import 'gameplay_dioramas.dart';
-import 'semantic_icon.dart';
+
+import '../../systems/run/quest_book.dart';
+import '../../systems/run/reckoning.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
+import '../events/gameplay_dioramas.dart';
 
 /// Köy Defteri — köyün kimlik kademesi (başlık) + akan görev listesi.
 /// Koyu panel: başlıkta kademe adı + ✓ tamamlanan sayısı; aktif görev
@@ -227,7 +228,7 @@ class ObjectivePanel extends StatelessWidget {
             const SizedBox(height: 3),
           ],
           Text(
-            active.quest.hint,
+            [active.quest.hint, ?active.storyNote].join('\n'),
             style: AppUi.body.copyWith(
               fontSize: 10,
               color: AppUi.textHi,
@@ -289,24 +290,18 @@ GameIconData questGlyph(String id) => switch (id) {
   'well' => GameIconData.drop,
   // ── Kuruluş mikro adımları ──────────────────────────────────────────
   'tent' => GameIconData.home,
-  'firstNight' => GameIconData.moon,
-  'tentIllness' => GameIconData.heart,
+  'mill' => GameIconData.wheat,
   'townhall' => GameIconData.bank,
   'firstPolicy' => GameIconData.scroll,
   'tavern' => GameIconData.tankard,
-  'pop10' => GameIconData.people,
   'church' => GameIconData.church,
   'market' => GameIconData.market,
   'beehive' => GameIconData.honey,
   'florist' => GameIconData.flower,
   'threePolicies' => GameIconData.scales,
-  'neighborly' => GameIconData.handshake,
-  'pop20' => GameIconData.people,
-  'bloomVillage' => GameIconData.flower,
   'fivePolicies' => GameIconData.crown,
   'hospitality' => GameIconData.door,
   'warehouse' => GameIconData.warehouse,
-  'pop30' => GameIconData.star,
   'roads' => GameIconData.map,
   'recoverPressure' => GameIconData.reed,
   'libraryLegacy' => GameIconData.scroll,
@@ -316,9 +311,7 @@ GameIconData questGlyph(String id) => switch (id) {
   'politicalIdentity' => GameIconData.scales,
   'lastingMemory' => GameIconData.star,
   'openRoutes' => GameIconData.door,
-  'charterVoice' => GameIconData.scroll,
   'trustedCouncil' => GameIconData.handshake,
   'yearFiveMatter' => GameIconData.scales,
-  'beratReady' => GameIconData.crown,
   _ => GameIconData.star,
 };

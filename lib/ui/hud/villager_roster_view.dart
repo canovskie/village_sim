@@ -3,15 +3,15 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 
-import '../characters/life_stage.dart';
-import '../characters/villager_type.dart';
-import '../entities/villager_entity.dart';
-import '../rendering/portrait_renderer.dart';
-import '../systems/estate_system.dart' show EstateMoodTier;
-import '../systems/house_system.dart';
-import 'app_ui.dart';
-import 'ledger_board.dart';
-import 'mobile_ui.dart';
+import '../../characters/life_stage.dart';
+import '../../characters/villager_type.dart';
+import '../../entities/villager_entity.dart';
+import '../../rendering/portrait_renderer.dart';
+import '../../systems/governance/estate_system.dart' show EstateMoodTier;
+import '../../systems/governance/house_system.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../ledger/ledger_board.dart';
 
 /// Bir köylünün defter satırı için önceden hesaplanmış görünüm modeli — barınma
 /// bilgisi sahnede (kBuildingMeta erişimiyle) türetilip buraya taşınır, panel
@@ -646,7 +646,7 @@ class _VillagerRosterViewState extends State<VillagerRosterView> {
       child: GestureDetector(
         onTap: () => setState(() => _sort = key),
         child: Container(
-          // Telefonda dokunma hedefi tabanı (bkz. ui/mobile_ui.dart) — chip
+          // Telefonda dokunma hedefi tabanı (bkz. ui/core/mobile_ui.dart) — chip
           // 28dp yüksekliğindeydi, parmakla ıskalanıyordu.
           alignment: Alignment.center,
           constraints: _tapFloor(context),

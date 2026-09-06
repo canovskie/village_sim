@@ -4,22 +4,22 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../dev/animation_room.dart';
-import '../main.dart' show kCaptureMode;
-import '../save/save_manager.dart';
-import '../systems/audio_manager.dart';
-import '../tools/light_editor_main.dart';
-import '../tools/placement_editor_main.dart';
+import '../../dev/animation_room.dart';
+import '../../main.dart' show kCaptureMode;
+import '../../save/save_manager.dart';
+import '../../systems/platform/audio_manager.dart';
+import '../../tools/light_editor_main.dart';
+import '../../tools/placement_editor_main.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/sky_widgets.dart';
 import 'about_screen.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
 import 'save_slots_screen.dart';
 import 'settings_screen.dart';
-import 'sky_widgets.dart';
 
+part 'menu_dawn.dart';
 part 'menu_scenery.dart';
 part 'menu_widgets.dart';
-part 'menu_dawn.dart';
 
 /// Açılış ekranı — atmosferik ŞAFAK sahnesi (yeni köy = yeni başlangıç) +
 /// zarif altın başlık + temiz koyu menü paneli. Ön planda karşılayıcı köylü

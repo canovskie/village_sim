@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../systems/chronicle.dart';
-import 'app_ui.dart';
-import 'semantic_icon.dart';
+import '../../systems/events/chronicle.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
 
 /// KRONİK SÜZGECİ — güncenin "ne arıyorum" şeridi.
 ///

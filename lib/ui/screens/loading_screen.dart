@@ -1,8 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import '../text/voice.dart';
-import 'app_ui.dart';
+import '../../text/voice.dart';
+import '../core/app_ui.dart';
 
 /// Asset cache'leri (sprite PNG'leri) hazırlanırken gösterilir.
 /// Pulse eden ateş ışıltısı + koyu oyun teması — ana menü estetiği ile uyumlu.

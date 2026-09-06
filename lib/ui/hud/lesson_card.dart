@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../systems/village_lessons.dart';
-import 'app_ui.dart';
-import 'semantic_icon.dart';
+import '../../systems/run/village_lessons.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
 
 /// ORTA OYUN DERS KARTI — kuruluştan sonra açılan bir sistemin tek açıklaması.
 ///

@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../systems/law_compass.dart';
-import '../systems/regime.dart';
-import 'app_ui.dart';
-import 'semantic_icon.dart';
+import '../../systems/governance/law_compass.dart';
+import '../../systems/governance/regime.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
 
 /// POLİTİK PUSULA'nın görünen yüzü — Kanunname'nin başına konan pirinç kadran.
 ///

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../core/resources.dart';
-import '../world/road_surface.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
-import 'semantic_icon.dart';
+import '../../core/resources.dart';
+import '../../world/road_surface.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/semantic_icon.dart';
 
 /// Yol rafı — 3 surface chip (toprak / taş / köprü) + SİLGİ. Modern koyu panel;
 /// bir chip seçilince yol modu aktif, accent (ember) vurgu çevreliyor.

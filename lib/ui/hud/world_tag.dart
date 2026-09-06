@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 
-import 'app_ui.dart';
+import '../core/app_ui.dart';
 
 /// Dünya-uzayı künye — imleci DEĞİL, hedefi takip eder.
 ///

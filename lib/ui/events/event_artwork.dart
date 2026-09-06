@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../systems/event_system.dart';
-import '../systems/petition_system.dart';
-import 'app_ui.dart';
+import '../../systems/events/event_system.dart';
+import '../../systems/governance/petition_system.dart';
+import '../core/app_ui.dart';
 
 /// Olay ve suç kararlarını bir bakışta okunur kılan sinematik resim yüzeyi.
 ///
@@ -61,23 +61,8 @@ class EventArtwork extends StatelessWidget {
   }
 }
 
-String eventArtworkAsset(EventOutcome event) => switch (event.id) {
-  EventIds.drought => 'assets/events/drought.png',
-  EventIds.plague => 'assets/events/plague.png',
-  EventIds.beastRaid => 'assets/events/beast_raid.png',
-  EventIds.storm => 'assets/events/village_disaster.png',
-  EventIds.houseFire => 'assets/events/house_fire.png',
-  EventIds.bard => 'assets/events/bard.png',
-  EventIds.caravan => 'assets/events/village_opportunity.png',
-  EventIds.bounty => 'assets/events/bounty.png',
-  EventIds.accord => 'assets/events/accord.png',
-  _ => 'assets/events/village_disaster.png',
-};
+/// Yeni içerik kendi görselini tanımlayana kadar olay kartı metinle çalışır.
+String? eventArtworkAsset(EventOutcome event) => null;
 
-/// Suç dilekçeleri özel resim kullanır; diğer dilekçelerin mevcut prosedürel
-/// sahneleri korunur.
-String? petitionArtworkAsset(Petition petition) => switch (petition.id) {
-  'crimeVerdict' => 'assets/events/crime_judgment.png',
-  'crimeWave' || 'ransom' => 'assets/events/crime_discovered.png',
-  _ => null,
-};
+/// Yeni dilekçeler kendi görsel eşlemesini ekleyebilir.
+String? petitionArtworkAsset(Petition petition) => null;

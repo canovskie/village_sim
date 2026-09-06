@@ -2,27 +2,26 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import '../buildings/building_entity.dart';
-import '../buildings/building_function.dart';
-import '../buildings/building_lore.dart';
-import '../buildings/building_renderer.dart';
-import '../buildings/building_type.dart';
-import '../characters/life_stage.dart';
-import '../characters/villager_type.dart';
-import '../core/resources.dart';
-import '../entities/villager_entity.dart';
-import '../entities/work_site.dart';
-import '../rendering/asset_style.dart';
-import '../scene/scene_data.dart';
-import '../systems/building_specialization.dart';
-import '../systems/building_system.dart';
-import '../systems/hearth_warmth.dart';
-import '../systems/winter.dart';
-import '../world/animal_entity.dart';
-import 'app_ui.dart';
-import 'gameplay_dioramas.dart';
-import 'mobile_ui.dart';
-import 'semantic_icon.dart';
+import '../../buildings/building_entity.dart';
+import '../../buildings/building_function.dart';
+import '../../buildings/building_lore.dart';
+import '../../buildings/building_renderer.dart';
+import '../../buildings/building_type.dart';
+import '../../characters/life_stage.dart';
+import '../../characters/villager_type.dart';
+import '../../core/resources.dart';
+import '../../entities/villager_entity.dart';
+import '../../entities/work_site.dart';
+import '../../rendering/asset_style.dart';
+import '../../scene/world/scene_data.dart';
+import '../../systems/labor/building_specialization.dart';
+import '../../systems/labor/building_system.dart';
+import '../../systems/world/hearth_warmth.dart';
+import '../../systems/world/winter.dart';
+import '../../world/animal_entity.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/semantic_icon.dart';
 import 'winter_section.dart';
 import 'work_crew.dart';
 
@@ -155,23 +154,151 @@ class BuildingInfoPanel extends StatelessWidget {
   BuildingFunction? get _fn => building.fn;
   Color get _accent => _accentFor(_fn, building.type);
 
-  Widget _cutaway() {
+  Widget _buildingShowcase() {
+    final thumb = BuildingRenderer.thumbnailFor(building.type, building.design);
     final hands = workSites.fold<int>(0, (sum, site) => sum + site.crew.length);
     final wanted = workSites.fold<int>(0, (sum, site) => sum + site.wanted);
-    final cap = stats.stockCapacity.clamp(1, 999999);
-    final fullness =
-        ((stockpile.wood + stockpile.stone + stockpile.food + stockpile.coal) /
-                (cap * 4))
-            .clamp(0.0, 1.0);
-    return BuildingCutawayDiorama(
-      active: building.isActive,
-      damage: building.damage,
-      hands: hands,
-      wantedHands: wanted,
-      fullness: fullness,
-      accent: _accent,
+    final (state, stateColor, stateIcon) = building.damage >= 0.62
+        ? ('Ağır hasarlı', AppUi.rust, GameIconData.hammer)
+        : building.userPaused
+        ? ('Duruşta', AppUi.accentSoft, GameIconData.pause)
+        : building.isActive
+        ? ('Çalışıyor', AppUi.sage, GameIconData.cog)
+        : ('Hazır', AppUi.textMid, GameIconData.cog);
+
+    return Semantics(
+      label:
+          '${kBuildingMeta[building.type]!.label}, $state, '
+          '${building.cols} çarpı ${building.rows}',
+      child: Container(
+        key: const ValueKey('building_showcase'),
+        height: 96,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color.alphaBlend(_accent.withValues(alpha: 0.12), AppUi.surface2),
+              AppUi.surface0,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppUi.radiusSm),
+          border: Border.all(color: _accent.withValues(alpha: 0.30)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Positioned(
+                    left: 20,
+                    right: 20,
+                    bottom: 9,
+                    child: Container(
+                      height: 8,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.transparent,
+                            _accent.withValues(alpha: 0.18),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                    child: thumb != null
+                        ? CustomPaint(
+                            painter: _ThumbPainter(thumb, building.type),
+                          )
+                        : const Center(
+                            child: GameIcon(
+                              GameIconData.home,
+                              size: 38,
+                              color: AppUi.textMid,
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            Container(width: 1, color: AppUi.line),
+            SizedBox(
+              width: 140,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(11, 10, 10, 9),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _showcaseFact(
+                      'DURUM',
+                      state,
+                      color: stateColor,
+                      icon: stateIcon,
+                    ),
+                    const SizedBox(height: 8),
+                    _showcaseFact('ALAN', '${building.cols}×${building.rows}'),
+                    if (wanted > 0) ...[
+                      const SizedBox(height: 8),
+                      _showcaseFact(
+                        'KADRO',
+                        '$hands/$wanted el',
+                        color: hands >= wanted ? AppUi.sage : AppUi.accent,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
+
+  Widget _showcaseFact(
+    String label,
+    String value, {
+    Color color = AppUi.textHi,
+    GameIconData? icon,
+  }) => Row(
+    children: [
+      Text(
+        label,
+        style: AppUi.label.copyWith(fontSize: 7.5, letterSpacing: 0.8),
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  GameIcon(icon, size: 10.5, color: color),
+                  const SizedBox(width: 4),
+                ],
+                Text(
+                  value,
+                  style: AppUi.bodyHi.copyWith(fontSize: 10.5, color: color),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -207,14 +334,14 @@ class BuildingInfoPanel extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _cutaway(),
+                        _buildingShowcase(),
                         // Oyuncunun değiştirebildiği şey ilk ekranda görünür.
                         // Eski düzende eylemler bütün istatistik ve kadronun
                         // altında kalıyor, telefonda binayı salt rapor gibi
                         // hissettiriyordu.
                         if (_managementActions().isNotEmpty) ...[
                           const SizedBox(height: 14),
-                          const AppSectionLabel('YÖNET'),
+                          const AppSectionLabel('KARAR'),
                           const SizedBox(height: 8),
                           _actionStrip(_managementActions()),
                         ],
@@ -232,7 +359,11 @@ class BuildingInfoPanel extends StatelessWidget {
                           const SizedBox(height: 8),
                           _actionStrip(_structureActions()),
                         ],
-                        if (_fn?.summary.isNotEmpty == true) ...[
+                        // Özet ile tatlı not aynı anda iki ayrı kapanış gibi
+                        // konuşmasın. Lore'u olmayan yapılarda işlev özeti
+                        // kalır; diğerlerinde tek, karakterli cümle yeter.
+                        if (_sweetNoteText == null &&
+                            _fn?.summary.isNotEmpty == true) ...[
                           const SizedBox(height: 12),
                           Text(
                             _fn!.summary,
@@ -284,7 +415,7 @@ class BuildingInfoPanel extends StatelessWidget {
   /// Binanın tatlı notu — inşa künyesindeki havuzdan (bkz. building_lore),
   /// konumdan türeyen sabit bir tohumla. Havuzu boş olan bina hiç göstermez.
   List<Widget> _sweetNote() {
-    final note = sweetNote(building.type, building.col * 31 + building.row * 7);
+    final note = _sweetNoteText;
     if (note == null) return const [];
     return [
       const SizedBox(height: 10),
@@ -311,6 +442,9 @@ class BuildingInfoPanel extends StatelessWidget {
       ),
     ];
   }
+
+  String? get _sweetNoteText =>
+      sweetNote(building.type, building.col * 31 + building.row * 7);
 
   // ─── Başlık ───────────────────────────────────────────────────────────────
 
@@ -502,14 +636,18 @@ class BuildingInfoPanel extends StatelessWidget {
   List<Widget> _housingVital(BuildingFunction fn) {
     final water = building.waterLevel.clamp(0.0, 1.0);
     final occ = residents.length / fn.housingCapacity.clamp(1, 99);
+    final overCapacity = residents.length > fn.housingCapacity;
     return [
       _ownerRow(),
       const SizedBox(height: 10),
       AppStatBar(
+        key: const ValueKey('building_occupancy_bar'),
         label: 'SAKİNLER',
         value: occ,
         trailing: '${residents.length}/${fn.housingCapacity}',
-        color: residents.length >= fn.housingCapacity
+        color: overCapacity
+            ? AppUi.rust
+            : residents.length == fn.housingCapacity
             ? AppUi.sage
             : AppUi.accent,
       ),
@@ -557,7 +695,7 @@ class BuildingInfoPanel extends StatelessWidget {
   List<Widget> _gatheringVital() {
     final isBarn = building.type == BuildingType.barn;
     final isCoop = building.type == BuildingType.chickenCoop;
-    final out = <Widget>[_statusRow(building.isActive)];
+    final out = <Widget>[];
     if (isBarn) out.addAll(_barnVital());
     if (isCoop) out.addAll(_coopVital());
     // Bal üst şeritte durmaz (lüks, omurga değil) — sayacın yeri kovandır.
@@ -639,8 +777,6 @@ class BuildingInfoPanel extends StatelessWidget {
   }
 
   List<Widget> _processingVital() => [
-    _statusRow(building.isActive),
-    const SizedBox(height: 6),
     _row(
       'Balya verimi',
       '+$kMillBaleBonus yem / balya',
@@ -682,11 +818,9 @@ class BuildingInfoPanel extends StatelessWidget {
 
   List<Widget> _storageVital(BuildingFunction fn) {
     return [
-      _row('Bu deponun katkısı', '+${fn.storageCapacity}'),
+      _row('Köy stoğu', 'Sınırsız', accent: true),
       const SizedBox(height: 6),
-      _row('Köy kapasitesi', '${stats.stockCapacity}/kaynak', accent: true),
-      const SizedBox(height: 12),
-      _CapacityBars(stockpile: stockpile, cap: stats.stockCapacity),
+      _row('Teslim noktası', '5 yük'),
     ];
   }
 
@@ -849,39 +983,52 @@ class BuildingInfoPanel extends StatelessWidget {
         'Köyünde $total kişi yaşıyor.',
         style: AppUi.bodyHi.copyWith(fontSize: 14, height: 1.25),
       ),
-      const SizedBox(height: 14),
-      _miniSection('YAŞ', [
-        _ledgerRow('Yetişkin', '${p.adults}'),
-        _ledgerRow('Çocuk', '${p.children}'),
-        _ledgerRow('Yaşlı', '${p.elders}'),
-      ]),
-      _miniSection('AİLE', [
-        _ledgerRow('Çift', '${p.couples}'),
-        if (p.pregnantSoon > 0)
-          _ledgerRow(
-            'Yakında bebek',
-            '${p.pregnantSoon}',
-            accent: AppUi.accent,
-          ),
-      ]),
-      _miniSection('KONUT', [
-        _ledgerRow(
-          'Dolu',
-          '${p.housedSlots} / ${p.totalHousing}',
-          accent: p.housedSlots < p.totalHousing ? null : AppUi.rust,
-        ),
-      ]),
-      _miniSection('YİYECEK', [
-        _ledgerRow('Günlük tüketim', p.foodPerDay.toStringAsFixed(0)),
-        _ledgerRow(
-          'Stok yeter',
-          p.daysOfFoodLeft.isFinite
-              ? '${p.daysOfFoodLeft.toStringAsFixed(1)} gün'
-              : '∞',
-          accent: foodColor,
-        ),
-      ]),
       const SizedBox(height: 10),
+      LayoutBuilder(
+        builder: (context, constraints) {
+          final cardWidth = (constraints.maxWidth - 8) / 2;
+          return Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _townhallCard(
+                width: cardWidth,
+                label: 'YAŞ',
+                value: '${p.adults} yetişkin',
+                detail: '${p.children} çocuk · ${p.elders} yaşlı',
+              ),
+              _townhallCard(
+                width: cardWidth,
+                label: 'AİLE',
+                value: '${p.couples} çift',
+                detail: p.pregnantSoon > 0
+                    ? '${p.pregnantSoon} bebek yolda'
+                    : 'Bebek beklenmiyor',
+                color: p.pregnantSoon > 0 ? AppUi.accentSoft : AppUi.textMid,
+              ),
+              _townhallCard(
+                width: cardWidth,
+                label: 'KONUT',
+                value: '${p.housedSlots} / ${p.totalHousing}',
+                detail: 'yer dolu',
+                color: p.housedSlots >= p.totalHousing
+                    ? AppUi.rust
+                    : AppUi.textHi,
+              ),
+              _townhallCard(
+                width: cardWidth,
+                label: 'YİYECEK',
+                value: p.daysOfFoodLeft.isFinite
+                    ? '${p.daysOfFoodLeft.toStringAsFixed(1)} gün'
+                    : '∞',
+                detail: '${p.foodPerDay.toStringAsFixed(0)} / gün',
+                color: foodColor,
+              ),
+            ],
+          );
+        },
+      ),
+      const SizedBox(height: 12),
       AppStatBar(
         label: 'MORAL',
         value: stats.morale,
@@ -894,6 +1041,43 @@ class BuildingInfoPanel extends StatelessWidget {
       if (onOpenDivan != null) ...[const SizedBox(height: 16), _divanLink()],
     ];
   }
+
+  Widget _townhallCard({
+    required double width,
+    required String label,
+    required String value,
+    required String detail,
+    Color color = AppUi.textHi,
+  }) => Container(
+    width: width,
+    padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
+    decoration: BoxDecoration(
+      color: AppUi.surface0.withValues(alpha: 0.62),
+      borderRadius: BorderRadius.circular(7),
+      border: Border.all(color: AppUi.line),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: AppUi.label.copyWith(fontSize: 8)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppUi.number.copyWith(fontSize: 13, color: color),
+        ),
+        const SizedBox(height: 1),
+        Text(
+          detail,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppUi.body.copyWith(fontSize: 9.5, color: AppUi.textLo),
+        ),
+      ],
+    ),
+  );
 
   /// Divan'a açılan kapı — belediye yönetişimin koltuğu; yasalar/gündem/Meclis
   /// artık Divan'da toplu duruyor (bu panel kalabalıklaşmasın).
@@ -1145,51 +1329,6 @@ class BuildingInfoPanel extends StatelessWidget {
     ),
   );
 
-  Widget _statusRow(bool active) {
-    final (label, color, icon) = active
-        ? ('Çalışıyor', AppUi.sage, GameIconData.cog)
-        : building.userPaused
-        ? ('Duruşta', AppUi.accentSoft, GameIconData.pause)
-        : ('Boşta', AppUi.textLo, GameIconData.cog);
-    return Row(
-      children: [
-        Text('DURUM', style: AppUi.label.copyWith(letterSpacing: 0.6)),
-        const Spacer(),
-        GameIcon(icon, size: 12, color: color),
-        const SizedBox(width: 5),
-        Text(label, style: AppUi.bodyHi.copyWith(color: color, fontSize: 12)),
-      ],
-    );
-  }
-
-  Widget _miniSection(String label, List<Widget> rows) {
-    if (rows.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [AppSectionLabel(label), ...rows, const SizedBox(height: 8)],
-      ),
-    );
-  }
-
-  Widget _ledgerRow(String label, String value, {Color? accent}) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2.5),
-    child: Row(
-      children: [
-        Text(label, style: AppUi.body),
-        const Spacer(),
-        Text(
-          value,
-          style: AppUi.number.copyWith(
-            fontSize: 13,
-            color: accent ?? AppUi.textHi,
-          ),
-        ),
-      ],
-    ),
-  );
-
   Widget _residentRow() => Wrap(
     spacing: 5,
     runSpacing: 5,
@@ -1298,69 +1437,6 @@ String _roleLabel(BuildingFunction? fn, [BuildingType? type]) {
       };
     case BuildingRole.none:
       return '';
-  }
-}
-
-// ─── Kapasite çubukları ──────────────────────────────────────────────────
-
-class _CapacityBars extends StatelessWidget {
-  final ResourceBundle stockpile;
-  final int cap;
-  const _CapacityBars({required this.stockpile, required this.cap});
-
-  @override
-  Widget build(BuildContext context) {
-    const kinds = [
-      (ResourceKind.wood, GameIconData.wood, Color(0xFFBB8844)),
-      (ResourceKind.stone, GameIconData.stone, Color(0xFFAAAAAA)),
-      (ResourceKind.iron, GameIconData.iron, Color(0xFFCCCCEE)),
-      (ResourceKind.coal, GameIconData.coal, Color(0xFF999999)),
-      (ResourceKind.food, GameIconData.wheat, AppUi.sage),
-    ];
-    return Column(
-      children: [
-        for (final (kind, icon, color) in kinds)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Row(
-              children: [
-                GameIcon(icon, size: 13, color: color),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: AppUi.surface0,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: AppUi.line, width: 0.8),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: (stockpile.get(kind) / cap).clamp(
-                          0.0,
-                          1.0,
-                        ),
-                        child: Container(color: color),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 30,
-                  child: Text(
-                    '${stockpile.get(kind)}',
-                    textAlign: TextAlign.right,
-                    style: AppUi.number.copyWith(fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
   }
 }
 

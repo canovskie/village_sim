@@ -1,6 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import '../systems/petition_system.dart';
+import '../../systems/governance/petition_system.dart';
 
 /// Bir KARARIN eylemini canlandıran küçük 2B sahne — dilekçe/yargı modalındaki
 /// yatay seçenek kartlarının tepesinde durur. Dilekçe hero'suyla (petition_
@@ -18,6 +18,8 @@ enum OptionScene {
   execute, // idam
   labor, // kürek cezası (NİZAM)
   penance, // tövbe meydanı (DERGÂH)
+  selfExpression, // terzi köşesi — kendi kıyafetini seç
+  traditionCouncil, // köy büyükleri masası — geleneği sürdür
   accept, // genel olumlu karar (kabul/ver/kur)
   refuse, // genel ret/geçiştir
   generic, // eşlenemeyen karar
@@ -26,6 +28,14 @@ enum OptionScene {
 /// Bir seçeneği eylemine göre bir sahneye eşler. Suç hükümleri fx'ten kesin
 /// çözülür; genel seçenekler etkinin YÖNÜNDEN (moral/kaynak/zümre) sezilir.
 OptionScene optionSceneFor(PetitionOption o) {
+  switch (o.actorEffect) {
+    case PetitionActorEffect.flowingOutfit:
+      return OptionScene.selfExpression;
+    case PetitionActorEffect.traditionalOutfit:
+      return OptionScene.traditionCouncil;
+    case PetitionActorEffect.none:
+      break;
+  }
   switch (o.fx) {
     case PetitionFx.crimePardon:
     case PetitionFx.feudPeace:
@@ -47,10 +57,8 @@ OptionScene optionSceneFor(PetitionOption o) {
   }
   // Genel seçenek: etkinin yönünden bir hava seç. Somut kaynak veren/moral
   // yükselten karar "kabul"; moral düşüren/reddeden "ret"; ikisi de yoksa nötr.
-  final givesResource = o.goldDelta < 0 ||
-      o.foodDelta < 0 ||
-      o.woodDelta < 0 ||
-      o.stoneDelta < 0;
+  final givesResource =
+      o.goldDelta < 0 || o.foodDelta < 0 || o.woodDelta < 0 || o.stoneDelta < 0;
   if (o.moraleAmount > 0 || givesResource) return OptionScene.accept;
   if (o.moraleAmount < 0) return OptionScene.refuse;
   return OptionScene.generic;
@@ -58,17 +66,19 @@ OptionScene optionSceneFor(PetitionOption o) {
 
 /// Sahnenin duygu tonu — kartın gök paletini ve parıltısını belirler.
 PetitionTone _toneOf(OptionScene s) => switch (s) {
-      OptionScene.pardon => PetitionTone.warm,
-      OptionScene.accept => PetitionTone.warm,
-      OptionScene.punish => PetitionTone.solemn,
-      OptionScene.exile => PetitionTone.solemn,
-      OptionScene.refuse => PetitionTone.solemn,
-      OptionScene.execute => PetitionTone.ominous,
-      OptionScene.labor => PetitionTone.ominous,
-      // Tövbe ne merhamet kadar ılık ne idam kadar kara: ağırbaşlı bir an.
-      OptionScene.penance => PetitionTone.solemn,
-      OptionScene.generic => PetitionTone.neutral,
-    };
+  OptionScene.pardon => PetitionTone.warm,
+  OptionScene.accept => PetitionTone.warm,
+  OptionScene.punish => PetitionTone.solemn,
+  OptionScene.exile => PetitionTone.solemn,
+  OptionScene.refuse => PetitionTone.solemn,
+  OptionScene.execute => PetitionTone.ominous,
+  OptionScene.labor => PetitionTone.ominous,
+  // Tövbe ne merhamet kadar ılık ne idam kadar kara: ağırbaşlı bir an.
+  OptionScene.penance => PetitionTone.solemn,
+  OptionScene.selfExpression => PetitionTone.warm,
+  OptionScene.traditionCouncil => PetitionTone.solemn,
+  OptionScene.generic => PetitionTone.neutral,
+};
 
 class OptionSceneCard extends StatelessWidget {
   final OptionScene scene;
@@ -94,38 +104,38 @@ class _OptionScenePainter extends CustomPainter {
   _OptionScenePainter({required this.scene, required this.tone});
 
   List<Color> get _sky => switch (tone) {
-        PetitionTone.warm => const [
-            Color(0xFF221334),
-            Color(0xFF3A2A50),
-            Color(0xFF8A5570),
-            Color(0xFFE8915A),
-          ],
-        PetitionTone.solemn => const [
-            Color(0xFF19202A),
-            Color(0xFF2A3340),
-            Color(0xFF4E5C6A),
-            Color(0xFF8B98A6),
-          ],
-        PetitionTone.ominous => const [
-            Color(0xFF140D0F),
-            Color(0xFF20161B),
-            Color(0xFF4A2A2A),
-            Color(0xFF85483A),
-          ],
-        PetitionTone.neutral => const [
-            Color(0xFF35506A),
-            Color(0xFF4E7290),
-            Color(0xFF89AEC6),
-            Color(0xFFC5DCEA),
-          ],
-      };
+    PetitionTone.warm => const [
+      Color(0xFF221334),
+      Color(0xFF3A2A50),
+      Color(0xFF8A5570),
+      Color(0xFFE8915A),
+    ],
+    PetitionTone.solemn => const [
+      Color(0xFF19202A),
+      Color(0xFF2A3340),
+      Color(0xFF4E5C6A),
+      Color(0xFF8B98A6),
+    ],
+    PetitionTone.ominous => const [
+      Color(0xFF140D0F),
+      Color(0xFF20161B),
+      Color(0xFF4A2A2A),
+      Color(0xFF85483A),
+    ],
+    PetitionTone.neutral => const [
+      Color(0xFF35506A),
+      Color(0xFF4E7290),
+      Color(0xFF89AEC6),
+      Color(0xFFC5DCEA),
+    ],
+  };
 
   Color get _glow => switch (tone) {
-        PetitionTone.warm => const Color(0xFFFFB870),
-        PetitionTone.solemn => const Color(0xFFB9C6D6),
-        PetitionTone.ominous => const Color(0xFFE0633A),
-        PetitionTone.neutral => const Color(0xFFFFF4D6),
-      };
+    PetitionTone.warm => const Color(0xFFFFB870),
+    PetitionTone.solemn => const Color(0xFFB9C6D6),
+    PetitionTone.ominous => const Color(0xFFE0633A),
+    PetitionTone.neutral => const Color(0xFFFFF4D6),
+  };
 
   Color _haze(double t) =>
       Color.lerp(const Color(0xFF0F0E14), _sky[2], t * 0.55)!;
@@ -138,40 +148,46 @@ class _OptionScenePainter extends CustomPainter {
 
     // Gökyüzü.
     canvas.drawRect(
-        Offset.zero & size,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: _sky,
-            stops: const [0.0, 0.34, 0.74, 1.0],
-          ).createShader(Offset.zero & size));
+      Offset.zero & size,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: _sky,
+          stops: const [0.0, 0.34, 0.74, 1.0],
+        ).createShader(Offset.zero & size),
+    );
 
     // Gök cismi + ufuk parıltısı.
     final celestial = Offset(w * 0.72, horizon - h * 0.10);
     canvas.drawCircle(
-        celestial,
-        h * 0.44,
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..shader = RadialGradient(colors: [
-            _glow.withValues(alpha: 0.38),
-            _glow.withValues(alpha: 0.0),
-          ]).createShader(Rect.fromCircle(center: celestial, radius: h * 0.44)));
+      celestial,
+      h * 0.44,
+      Paint()
+        ..blendMode = BlendMode.plus
+        ..shader = RadialGradient(
+          colors: [_glow.withValues(alpha: 0.38), _glow.withValues(alpha: 0.0)],
+        ).createShader(Rect.fromCircle(center: celestial, radius: h * 0.44)),
+    );
     canvas.drawCircle(
-        celestial,
-        h * 0.13,
-        Paint()
-          ..shader = RadialGradient(colors: [
+      celestial,
+      h * 0.13,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
             Color.lerp(_glow, Colors.white, 0.45)!,
             _glow.withValues(alpha: 0.85),
-          ]).createShader(Rect.fromCircle(center: celestial, radius: h * 0.13)));
+          ],
+        ).createShader(Rect.fromCircle(center: celestial, radius: h * 0.13)),
+    );
 
     // Tepe katmanları (hava perspektifi).
     _hills(canvas, size, horizon + h * 0.02, _haze(0.5), 4, h * 0.10);
     _hills(canvas, size, horizon + h * 0.12, _haze(0.26), 6, h * 0.09);
-    canvas.drawRect(Rect.fromLTWH(0, h * 0.84, w, h * 0.16),
-        Paint()..color = _haze(0.14));
+    canvas.drawRect(
+      Rect.fromLTWH(0, h * 0.84, w, h * 0.16),
+      Paint()..color = _haze(0.14),
+    );
 
     // ── Eylem motifi ─────────────────────────────────────────────────────────
     final gy = h * 0.88;
@@ -211,6 +227,14 @@ class _OptionScenePainter extends CustomPainter {
         _figure(canvas, Offset(w * 0.22, gy), h * 0.30);
         _figure(canvas, Offset(w * 0.70, gy), h * 0.30);
         _figure(canvas, Offset(w * 0.84, gy + h * 0.01), h * 0.26);
+      case OptionScene.selfExpression:
+        // Taslaktaki terzi köşesi: kumaş askısı, tezgâh ve seçimini elinde
+        // tutan tek kişi. Kıyafet kararı, soyut bir "kabul" ateşine düşmesin.
+        _tailorCorner(canvas, size, gy);
+      case OptionScene.traditionCouncil:
+        // Taslaktaki köy büyükleri: uzun masa, arkasında sancak ve çevresinde
+        // oturan figürler. Geleneğin baskısı tek bir yalnız silüet değil.
+        _traditionCouncil(canvas, size, gy);
       case OptionScene.accept:
         // Kabul: ateş etrafında iki figür (sıcak, bereketli karar).
         _fire(canvas, Offset(w * 0.5, gy), h * 0.30);
@@ -228,20 +252,27 @@ class _OptionScenePainter extends CustomPainter {
     // Ön-plan silüet çerçevesi (derinlik) + vinyet.
     _foreground(canvas, size);
     canvas.drawRect(
-        Offset.zero & size,
-        Paint()
-          ..shader = const RadialGradient(
-            center: Alignment(0.0, -0.1),
-            radius: 1.25,
-            colors: [Color(0x00000000), Color(0x73000000)],
-            stops: [0.55, 1.0],
-          ).createShader(Offset.zero & size));
+      Offset.zero & size,
+      Paint()
+        ..shader = const RadialGradient(
+          center: Alignment(0.0, -0.1),
+          radius: 1.25,
+          colors: [Color(0x00000000), Color(0x73000000)],
+          stops: [0.55, 1.0],
+        ).createShader(Offset.zero & size),
+    );
   }
 
   // ── Atmosfer primitifleri ──────────────────────────────────────────────────
 
   void _hills(
-      Canvas c, Size size, double baseY, Color col, int bumps, double amp) {
+    Canvas c,
+    Size size,
+    double baseY,
+    Color col,
+    int bumps,
+    double amp,
+  ) {
     final path = Path()
       ..moveTo(0, size.height)
       ..lineTo(0, baseY);
@@ -249,7 +280,8 @@ class _OptionScenePainter extends CustomPainter {
     for (int i = 0; i <= steps; i++) {
       final x = size.width * i / steps;
       final t = i / steps;
-      final y = baseY -
+      final y =
+          baseY -
           amp * (0.5 + 0.5 * sin(t * pi * bumps + baseY)) -
           amp * 0.3 * sin(t * pi * (bumps * 2.2) + baseY * 0.7);
       path.lineTo(x, y);
@@ -271,14 +303,19 @@ class _OptionScenePainter extends CustomPainter {
         final p = Path()
           ..moveTo(x, h + 2)
           ..quadraticBezierTo(
-              x + dir * sc * 5, h - tall * 0.5, x + dir * sc * 12, h - tall);
+            x + dir * sc * 5,
+            h - tall * 0.5,
+            x + dir * sc * 12,
+            h - tall,
+          );
         c.drawPath(
-            p,
-            Paint()
-              ..color = dark.withValues(alpha: 0.92)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = sc * 2.0
-              ..strokeCap = StrokeCap.round);
+          p,
+          Paint()
+            ..color = dark.withValues(alpha: 0.92)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = sc * 2.0
+            ..strokeCap = StrokeCap.round,
+        );
       }
     }
 
@@ -290,11 +327,73 @@ class _OptionScenePainter extends CustomPainter {
 
   static const _silhouette = Color(0xFF0D0B12);
 
-  void _figure(Canvas c, Offset base, double s,
-      {_Arms arms = _Arms.none,
-      bool kneel = false,
-      bool walkAway = false,
-      bool bent = false}) {
+  void _tailorCorner(Canvas c, Size size, double gy) {
+    final w = size.width, h = size.height;
+    final wood = Paint()..color = const Color(0xFF291B11);
+    final cloth = Paint()..color = const Color(0xFF315B67);
+    // Askılık + iki asılı kumaş.
+    c.drawRect(Rect.fromLTWH(w * .16, gy - h * .56, w * .025, h * .56), wood);
+    c.drawRect(Rect.fromLTWH(w * .14, gy - h * .56, w * .28, h * .025), wood);
+    c.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * .20, gy - h * .50, w * .09, h * .28),
+        const Radius.circular(3),
+      ),
+      cloth,
+    );
+    c.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(w * .31, gy - h * .48, w * .08, h * .26),
+        const Radius.circular(3),
+      ),
+      Paint()..color = const Color(0xFF9A6548),
+    );
+    // Kumaş serili çalışma tezgâhı.
+    c.drawRect(Rect.fromLTWH(w * .12, gy - h * .14, w * .46, h * .12), wood);
+    c.drawRect(
+      Rect.fromLTWH(w * .18, gy - h * .18, w * .30, h * .07),
+      Paint()..color = const Color(0xFF4A8190),
+    );
+    _figure(c, Offset(w * .73, gy), h * .31, arms: _Arms.open);
+  }
+
+  void _traditionCouncil(Canvas c, Size size, double gy) {
+    final w = size.width, h = size.height;
+    // Arkadaki koyu sancak ve küçük altın işaret.
+    c.drawRect(
+      Rect.fromLTWH(w * .37, gy - h * .70, w * .26, h * .42),
+      Paint()..color = const Color(0xFF17263A),
+    );
+    c.drawCircle(
+      Offset(w * .50, gy - h * .51),
+      h * .055,
+      Paint()..color = const Color(0xFFC38A3C),
+    );
+    // Masa ve çevresindeki köy büyükleri.
+    c.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * .50, gy - h * .10),
+        width: w * .56,
+        height: h * .17,
+      ),
+      Paint()..color = const Color(0xFF352217),
+    );
+    _figure(c, Offset(w * .50, gy - h * .10), h * .24);
+    _figure(c, Offset(w * .25, gy), h * .22);
+    _figure(c, Offset(w * .37, gy + h * .02), h * .20);
+    _figure(c, Offset(w * .63, gy + h * .02), h * .20);
+    _figure(c, Offset(w * .76, gy), h * .22);
+  }
+
+  void _figure(
+    Canvas c,
+    Offset base,
+    double s, {
+    _Arms arms = _Arms.none,
+    bool kneel = false,
+    bool walkAway = false,
+    bool bent = false,
+  }) {
     final col = Paint()..color = _silhouette;
     if (kneel) {
       // Diz çökmüş: alçak gövde + öne eğik baş.
@@ -335,20 +434,27 @@ class _OptionScenePainter extends CustomPainter {
         ..color = _silhouette
         ..strokeWidth = s * 0.14
         ..strokeCap = StrokeCap.round;
-      c.drawLine(base.translate(-s * 0.12, -s * 0.72),
-          base.translate(-s * 0.5, -s * 0.95), arm);
-      c.drawLine(base.translate(s * 0.12, -s * 0.72),
-          base.translate(s * 0.5, -s * 0.95), arm);
+      c.drawLine(
+        base.translate(-s * 0.12, -s * 0.72),
+        base.translate(-s * 0.5, -s * 0.95),
+        arm,
+      );
+      c.drawLine(
+        base.translate(s * 0.12, -s * 0.72),
+        base.translate(s * 0.5, -s * 0.95),
+        arm,
+      );
     }
     if (walkAway) {
       // Uzayan gölge — gidişin ağırlığı.
       c.drawPath(
-          Path()
-            ..moveTo(base.dx - s * 0.2, base.dy)
-            ..lineTo(base.dx + s * 1.4, base.dy + s * 0.06)
-            ..lineTo(base.dx - s * 0.2, base.dy + s * 0.12)
-            ..close(),
-          Paint()..color = Colors.black.withValues(alpha: 0.28));
+        Path()
+          ..moveTo(base.dx - s * 0.2, base.dy)
+          ..lineTo(base.dx + s * 1.4, base.dy + s * 0.06)
+          ..lineTo(base.dx - s * 0.2, base.dy + s * 0.12)
+          ..close(),
+        Paint()..color = Colors.black.withValues(alpha: 0.28),
+      );
     }
   }
 
@@ -367,46 +473,64 @@ class _OptionScenePainter extends CustomPainter {
     // Teşhir direği: tek dikey kazık + tepesinde kısa bir askı çıkıntısı
     // (haç DEĞİL — çapraz kol tepede ve tek yöne, boyunduruk hissi).
     c.drawRect(
-        Rect.fromLTWH(base.dx - hh * 0.03, base.dy - hh, hh * 0.06, hh), wood);
+      Rect.fromLTWH(base.dx - hh * 0.03, base.dy - hh, hh * 0.06, hh),
+      wood,
+    );
     c.drawRect(
-        Rect.fromLTWH(base.dx - hh * 0.02, base.dy - hh, hh * 0.20, hh * 0.05),
-        wood);
+      Rect.fromLTWH(base.dx - hh * 0.02, base.dy - hh, hh * 0.20, hh * 0.05),
+      wood,
+    );
     // Boyunduruk halkası (mahkûmun başı hizasında).
     c.drawCircle(
-        base.translate(0, -hh * 0.5),
-        hh * 0.07,
-        Paint()
-          ..color = const Color(0xFF241608)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = hh * 0.03);
+      base.translate(0, -hh * 0.5),
+      hh * 0.07,
+      Paint()
+        ..color = const Color(0xFF241608)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = hh * 0.03,
+    );
   }
 
   void _gate(Canvas c, Offset base, double hh) {
     final wood = Paint()..color = const Color(0xFF1C1408);
     c.drawRect(
-        Rect.fromLTWH(base.dx - hh * 0.22, base.dy - hh, hh * 0.06, hh), wood);
+      Rect.fromLTWH(base.dx - hh * 0.22, base.dy - hh, hh * 0.06, hh),
+      wood,
+    );
     c.drawRect(
-        Rect.fromLTWH(base.dx + hh * 0.16, base.dy - hh, hh * 0.06, hh), wood);
+      Rect.fromLTWH(base.dx + hh * 0.16, base.dy - hh, hh * 0.06, hh),
+      wood,
+    );
     c.drawRect(
-        Rect.fromLTWH(base.dx - hh * 0.22, base.dy - hh, hh * 0.44, hh * 0.08),
-        wood);
+      Rect.fromLTWH(base.dx - hh * 0.22, base.dy - hh, hh * 0.44, hh * 0.08),
+      wood,
+    );
   }
 
   void _gallows(Canvas c, Offset base, double hh) {
     final wood = Paint()..color = const Color(0xFF160F06);
     // Dikey direk + üst kiriş + ilmek ipi.
     c.drawRect(
-        Rect.fromLTWH(base.dx - hh * 0.03, base.dy - hh, hh * 0.06, hh), wood);
+      Rect.fromLTWH(base.dx - hh * 0.03, base.dy - hh, hh * 0.06, hh),
+      wood,
+    );
     c.drawRect(
-        Rect.fromLTWH(base.dx - hh * 0.03, base.dy - hh, hh * 0.42, hh * 0.06),
-        wood);
+      Rect.fromLTWH(base.dx - hh * 0.03, base.dy - hh, hh * 0.42, hh * 0.06),
+      wood,
+    );
     final rope = Paint()
       ..color = const Color(0xFF3A2A16)
       ..strokeWidth = hh * 0.03;
-    c.drawLine(base.translate(hh * 0.34, -hh + hh * 0.06),
-        base.translate(hh * 0.34, -hh * 0.62), rope);
-    c.drawCircle(base.translate(hh * 0.34, -hh * 0.58), hh * 0.05,
-        Paint()..color = const Color(0xFF3A2A16));
+    c.drawLine(
+      base.translate(hh * 0.34, -hh + hh * 0.06),
+      base.translate(hh * 0.34, -hh * 0.62),
+      rope,
+    );
+    c.drawCircle(
+      base.translate(hh * 0.34, -hh * 0.58),
+      hh * 0.05,
+      Paint()..color = const Color(0xFF3A2A16),
+    );
   }
 
   void _chain(Canvas c, Offset a, Offset b) {
@@ -433,19 +557,22 @@ class _OptionScenePainter extends CustomPainter {
     c.drawPath(p, rock);
     // Üst yüz vurgusu.
     c.drawPath(
-        Path()
-          ..moveTo(base.dx - s * 0.4, base.dy - s * 0.7)
-          ..lineTo(base.dx + s * 0.15, base.dy - s * 0.9)
-          ..lineTo(base.dx + s * 0.05, base.dy - s * 0.6)
-          ..lineTo(base.dx - s * 0.28, base.dy - s * 0.52)
-          ..close(),
-        Paint()..color = const Color(0xFF4E4753));
+      Path()
+        ..moveTo(base.dx - s * 0.4, base.dy - s * 0.7)
+        ..lineTo(base.dx + s * 0.15, base.dy - s * 0.9)
+        ..lineTo(base.dx + s * 0.05, base.dy - s * 0.6)
+        ..lineTo(base.dx - s * 0.28, base.dy - s * 0.52)
+        ..close(),
+      Paint()..color = const Color(0xFF4E4753),
+    );
   }
 
   void _house(Canvas c, Offset base, double w, double hh) {
     final wall = Paint()..color = const Color(0xFF1C150E);
     c.drawRect(
-        Rect.fromLTWH(base.dx - w / 2, base.dy - hh * 0.66, w, hh * 0.66), wall);
+      Rect.fromLTWH(base.dx - w / 2, base.dy - hh * 0.66, w, hh * 0.66),
+      wall,
+    );
     final roof = Path()
       ..moveTo(base.dx - w * 0.64, base.dy - hh * 0.66)
       ..lineTo(base.dx + w * 0.64, base.dy - hh * 0.66)
@@ -453,36 +580,50 @@ class _OptionScenePainter extends CustomPainter {
       ..close();
     c.drawPath(roof, Paint()..color = const Color(0xFF3E2716));
     c.drawRect(
-        Rect.fromCenter(
-            center: base.translate(0, -hh * 0.28),
-            width: w * 0.22,
-            height: w * 0.22),
-        Paint()..color = const Color(0xFFE0A354).withValues(alpha: 0.7));
+      Rect.fromCenter(
+        center: base.translate(0, -hh * 0.28),
+        width: w * 0.22,
+        height: w * 0.22,
+      ),
+      Paint()..color = const Color(0xFFE0A354).withValues(alpha: 0.7),
+    );
   }
 
   void _fire(Canvas c, Offset base, double s) {
     c.drawRRect(
-        RRect.fromRectAndRadius(
-            Rect.fromCenter(
-                center: base, width: s * 0.9, height: s * 0.16),
-            const Radius.circular(2)),
-        Paint()..color = const Color(0xFF3A240F));
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: base, width: s * 0.9, height: s * 0.16),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFF3A240F),
+    );
     final glowC = base.translate(0, -s * 0.3);
     c.drawCircle(
-        glowC,
-        s * 1.5,
-        Paint()
-          ..blendMode = BlendMode.plus
-          ..shader = RadialGradient(colors: [
+      glowC,
+      s * 1.5,
+      Paint()
+        ..blendMode = BlendMode.plus
+        ..shader = RadialGradient(
+          colors: [
             const Color(0xFFFFB24D).withValues(alpha: 0.5),
             const Color(0x00000000),
-          ]).createShader(Rect.fromCircle(center: glowC, radius: s * 1.5)));
+          ],
+        ).createShader(Rect.fromCircle(center: glowC, radius: s * 1.5)),
+    );
     Path flame(double k) => Path()
       ..moveTo(base.dx, base.dy - s * 1.1 * k)
-      ..quadraticBezierTo(base.dx + s * 0.4 * k, base.dy - s * 0.38 * k,
-          base.dx, base.dy - s * 0.1)
-      ..quadraticBezierTo(base.dx - s * 0.4 * k, base.dy - s * 0.38 * k,
-          base.dx, base.dy - s * 1.1 * k)
+      ..quadraticBezierTo(
+        base.dx + s * 0.4 * k,
+        base.dy - s * 0.38 * k,
+        base.dx,
+        base.dy - s * 0.1,
+      )
+      ..quadraticBezierTo(
+        base.dx - s * 0.4 * k,
+        base.dy - s * 0.38 * k,
+        base.dx,
+        base.dy - s * 1.1 * k,
+      )
       ..close();
     c.drawPath(flame(1.0), Paint()..color = const Color(0xFFFF8A2E));
     c.drawPath(flame(0.6), Paint()..color = const Color(0xFFFFD66A));
@@ -490,15 +631,19 @@ class _OptionScenePainter extends CustomPainter {
 
   void _emberPile(Canvas c, Offset base, double s) {
     c.drawRRect(
-        RRect.fromRectAndRadius(
-            Rect.fromCenter(
-                center: base, width: s * 1.0, height: s * 0.2),
-            const Radius.circular(2)),
-        Paint()..color = const Color(0xFF2A1A0C));
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: base, width: s * 1.0, height: s * 0.2),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFF2A1A0C),
+    );
     // Sönmekte olan birkaç kor.
     for (final dx in const [-0.2, 0.05, 0.25]) {
-      c.drawCircle(base.translate(s * dx, -s * 0.06), s * 0.06,
-          Paint()..color = const Color(0xFFB4501E).withValues(alpha: 0.8));
+      c.drawCircle(
+        base.translate(s * dx, -s * 0.06),
+        s * 0.06,
+        Paint()..color = const Color(0xFFB4501E).withValues(alpha: 0.8),
+      );
     }
   }
 

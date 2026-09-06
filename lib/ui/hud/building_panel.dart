@@ -2,15 +2,15 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import '../buildings/building_renderer.dart';
-import '../buildings/building_type.dart';
-import '../buildings/craft.dart';
-import '../core/resources.dart';
-import '../rendering/asset_style.dart';
-import '../text/voice.dart';
-import 'app_ui.dart';
+import '../../buildings/building_renderer.dart';
+import '../../buildings/building_type.dart';
+import '../../buildings/craft.dart';
+import '../../core/resources.dart';
+import '../../rendering/asset_style.dart';
+import '../../text/voice.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
 import 'guide_spotlight.dart';
-import 'mobile_ui.dart';
 
 const _desktopRailHeight = 164.0;
 const _desktopTileWidth = 164.0;
@@ -71,6 +71,14 @@ class BuildingPanel extends StatelessWidget {
     this.hintType,
     this.embedded = false,
   });
+
+  /// Masaüstü kataloğunun kart sayısına göre doğal genişliği. Komuta kabuğu
+  /// bunu okuyup iki kartlık kategoriyi 860 px'lik boş bir raya çevirmeden
+  /// yüzeyi içeriğe yaklaştırır; kalabalık kategori yine viewport'ta kayar.
+  static double preferredDesktopWidth(int itemCount) =>
+      20.0 +
+      itemCount * _desktopTileWidth +
+      (itemCount > 0 ? itemCount - 1 : 0) * 8.0;
 
   @override
   Widget build(BuildContext context) {
@@ -190,8 +198,7 @@ class BuildingPanel extends StatelessWidget {
     // Standalone katalog kuruluşta tek kart taşıyabilir. Komuta çubuğunun
     // kullanılabilir bütün genişliğini koyu boş yüzeyle doldurmak yerine içerik
     // kadar büyür; kart sayısı arttığında ise mevcut viewport'ta kayar.
-    final preferredWidth =
-        20.0 + types.length * _desktopTileWidth + (types.length - 1) * 8.0;
+    final preferredWidth = preferredDesktopWidth(types.length);
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.hasBoundedWidth

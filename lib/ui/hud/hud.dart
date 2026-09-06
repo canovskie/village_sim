@@ -1,12 +1,12 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import '../core/resources.dart';
-import '../systems/village_year.dart';
-import '../world/season.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
-import 'ui_icon.dart';
+import '../../core/resources.dart';
+import '../../systems/run/village_year.dart';
+import '../../world/season.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/ui_icon.dart';
 
 /// Oyun HUD'u — Manor Lords çıtası: çerçevesiz, ferah ince üst şerit.
 /// Kutu YOK; üstte aşağı solan okunabilirlik scrim'i, tek satır kaynak/nüfus/
@@ -39,16 +39,12 @@ class GameHUD extends StatelessWidget {
   final bool lowWater, starving;
   final String? eventLabel;
 
-  /// Stok kapasitesi (wood/stone/iron/coal/food tavanı). Hücre tavana
-  /// ulaşınca "dolu" uyarısı gösterilir.
-  final int stockCapacity;
-
   /// Cevher hücreleri (demir + kömür) gösterilsin mi. Maden kurulmadan ikisi de
   /// hep 0'dır; boş sayaç üst şeridi kalabalıklaştırmaktan başka iş görmez.
   /// Maden dikilince (ya da elde cevher varsa) kalıcı olarak açılır.
   final bool showOre;
 
-  /// 0..1 nabız (sahneden _time türevi) — dolu kaynak hücresi bununla yanar.
+  /// 0..1 nabız (sahneden _time türevi) — gök çemberinin animasyonu.
   final double fullPulse;
 
   /// Öğreticinin ilk dakikaları: oyuncuya yalnız hemen işine yarayan omurga
@@ -134,7 +130,6 @@ class GameHUD extends StatelessWidget {
     required this.lowWater,
     required this.starving,
     this.eventLabel,
-    this.stockCapacity = 1 << 30,
     this.showOre = true,
     this.fullPulse = 0,
     this.onboarding = false,
@@ -389,7 +384,7 @@ class GameHUD extends StatelessWidget {
     required double right,
     required double top,
   }) {
-    // "KENAR RAYI" (bkz. ui/mobile_ui.dart) — telefonda kroma yalnız kenara
+    // "KENAR RAYI" (bkz. ui/core/mobile_ui.dart) — telefonda kroma yalnız kenara
     // yapışır, ortası daima köydür.
     //
     // Üstte TEK ince şerit var: kaynaklar · saat · kontroller aynı satırda,
@@ -575,21 +570,19 @@ class GameHUD extends StatelessWidget {
     int transit, {
     bool last = false,
   }) {
-    final full = stored >= stockCapacity;
     final empty = stored == 0 && transit == 0;
-    final tint = full ? _amber : color;
     return Padding(
       padding: EdgeInsets.only(right: last ? 0 : 13),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _hudIcon(icon, size: 14, opacity: empty ? 0.5 : 1.0, color: tint),
+          _hudIcon(icon, size: 14, opacity: empty ? 0.5 : 1.0, color: color),
           const SizedBox(width: 4),
           Text(
             '$stored',
             style: AppUi.number.copyWith(
               fontSize: 13.5,
-              color: full ? _amber : (empty ? AppUi.textLo : AppUi.textHi),
+              color: empty ? AppUi.textLo : AppUi.textHi,
             ),
           ),
           if (transit > 0)
@@ -744,7 +737,6 @@ class GameHUD extends StatelessWidget {
         const Color(0xFFD79A5B),
         stockpile.wood,
         woodInTransit,
-        capped: true,
       ),
       if (!onboarding)
         _res(
@@ -752,7 +744,6 @@ class GameHUD extends StatelessWidget {
           const Color(0xFFC0C0C0),
           stockpile.stone,
           stoneInTransit,
-          capped: true,
         ),
       if (!onboarding && showOre) ...[
         _res(
@@ -760,56 +751,31 @@ class GameHUD extends StatelessWidget {
           const Color(0xFFCED2EC),
           stockpile.iron,
           ironInTransit,
-          capped: true,
         ),
         _res(
           GameIconData.coal,
           const Color(0xFFA6A6A6),
           stockpile.coal,
           coalInTransit,
-          capped: true,
         ),
       ],
       if (!onboarding)
         _res(GameIconData.hammer, AppUi.accent, stockpile.weapons, 0),
-      _res(
-        GameIconData.wheat,
-        AppUi.sage,
-        stockpile.food,
-        foodInTransit,
-        capped: true,
-      ),
+      _res(GameIconData.wheat, AppUi.sage, stockpile.food, foodInTransit),
       if (!onboarding) _res(GameIconData.coin, AppUi.gold, stockpile.gold, 0),
     ],
   );
 
-  static const _amber = Color(0xFFE8A23A);
-
-  // Tek kaynak: ikon + sayı (+taşımadaki). Tavan dolunca kehribar + nabız.
-  Widget _res(
-    GameIconData icon,
-    Color color,
-    int stored,
-    int transit, {
-    bool capped = false,
-  }) {
+  // Tek kaynak: ikon + sayı (+taşımadaki).
+  Widget _res(GameIconData icon, Color color, int stored, int transit) {
     final empty = stored == 0 && transit == 0;
-    final full = capped && stored >= stockCapacity;
-    final iconColor = full ? _amber : color;
-    final numColor = full
-        ? Color.lerp(_amber, const Color(0xFFFFE0A0), fullPulse)!
-        : (empty ? AppUi.textLo : AppUi.textHi);
+    final numColor = empty ? AppUi.textLo : AppUi.textHi;
     return Padding(
       padding: const EdgeInsets.only(right: 15),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _hudIcon(
-            icon,
-            size: 16,
-            opacity: empty ? 0.45 : 1.0,
-            color: iconColor,
-          ),
+          _hudIcon(icon, size: 16, opacity: empty ? 0.45 : 1.0, color: color),
           const SizedBox(width: 5),
           Text(
             '$stored',
@@ -1173,7 +1139,7 @@ class GameHUD extends StatelessWidget {
           children: [
             Text(
               // YIL ÖNDE: köyün ömrü artık yıllarla sayılıyor (bkz.
-              // systems/village_year.dart) ve hesaplaşma bir YIL'a bağlı.
+              // systems/run/village_year.dart) ve hesaplaşma bir YIL'a bağlı.
               // "Gün 37" oyuncuya nerede olduğunu söylemiyordu; "3. yıl"
               // söylüyor. Gün sayacı yanında kalır, kronikle eşleşsin.
               '${yearOf(dayCount)}. YIL · GÜN $dayCount',

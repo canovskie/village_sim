@@ -1,7 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import '../systems/petition_system.dart';
-import 'app_ui.dart';
+import '../../systems/governance/petition_system.dart';
+import '../core/app_ui.dart';
 
 /// Dilekçe konusunu anlatan 2B illüstrasyon panosu — modalın tepesinde
 /// sinematik bir "boyalı olay karesi" gibi durur (Total War ikilem panosu

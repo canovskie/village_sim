@@ -1,10 +1,14 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
-import '../core/resources.dart';
-import '../systems/event_system.dart';
-import 'app_ui.dart';
+
+import '../../core/resources.dart';
+import '../../systems/events/event_system.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/semantic_icon.dart';
 import 'event_artwork.dart';
-import 'mobile_ui.dart';
-import 'semantic_icon.dart';
+import 'event_scene_card.dart';
 
 /// Karar gerektiren olaylar için tam-ekran modal. Arka planı karartır,
 /// ortada koyu rafine kart: ikon + başlık + olay mesajı + seçenek kartları.
@@ -58,41 +62,6 @@ class EventChoiceModal extends StatelessWidget {
   /// dokunmak modalı KAPATMAZ (yanlışlıkla kapama en çok telefonda can yakar).
   Widget _swallow(Widget child) => GestureDetector(onTap: () {}, child: child);
 
-  List<Widget> _choiceCards({bool compact = false}) => [
-    for (final c in event.choices!) ...[
-      _ChoiceCard(
-        choice: c,
-        accent: _accent,
-        compact: compact,
-        onTap: stockpile == null || c.canAfford(stockpile!)
-            ? () => onChoose(c)
-            : null,
-      ),
-      if (c != event.choices!.last) const SizedBox(height: 9),
-    ],
-  ];
-
-  /// Mobil kararlar kaymaz: mevcut yüksekliği seçenekler eşit paylaşır.
-  /// Olay kataloğunda 2 seçenek var; üçe çıksa da aynı ekrana bölünür.
-  Widget _compactChoices() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      for (int i = 0; i < event.choices!.length; i++) ...[
-        Expanded(
-          child: _ChoiceCard(
-            choice: event.choices![i],
-            accent: _accent,
-            compact: true,
-            onTap: stockpile == null || event.choices![i].canAfford(stockpile!)
-                ? () => onChoose(event.choices![i])
-                : null,
-          ),
-        ),
-        if (i != event.choices!.length - 1) const SizedBox(height: 7),
-      ],
-    ],
-  );
-
   /// TELEFON YATAY — solda olay, sağda seçenekler. Tek sütunda üç seçenekli
   /// bir olay 414dp'lik ekranın altından taşıyordu; iki sütun hem taşmayı hem
   /// de iki yandaki ~340dp'lik ölü alanı bitirir.
@@ -104,42 +73,20 @@ class EventChoiceModal extends StatelessWidget {
         height: window.height,
         child: _swallow(
           AppReveal(
-            child: AppPanel(
+            child: AppGildedFrame(
               accent: _accent,
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  Expanded(flex: 5, child: _eventStory(compact: true)),
+                  Container(width: 1, color: AppUi.line),
                   Expanded(
-                    flex: 5,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _header(compact: true),
-                        const SizedBox(height: 7),
-                        EventArtwork(
-                          asset: eventArtworkAsset(event),
-                          height: 100,
-                          accent: _accent,
-                        ),
-                        const SizedBox(height: 7),
-                        Text(
-                          event.message,
-                          maxLines: 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppUi.body.copyWith(
-                            fontSize: 12,
-                            height: 1.45,
-                          ),
-                        ),
-                      ],
+                    flex: 4,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(9, 9, 9, 9),
+                      child: _choiceDeck(compact: true, dense: true),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Container(width: 1, color: AppUi.line),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 4, child: _compactChoices()),
                 ],
               ),
             ),
@@ -149,96 +96,216 @@ class EventChoiceModal extends StatelessWidget {
     );
   }
 
-  Widget _wideBody() {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: _swallow(
-            AppReveal(
-              child: AppPanel(
-                accent: _accent,
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _header(),
-                    const SizedBox(height: 12),
-                    EventArtwork(
-                      asset: eventArtworkAsset(event),
-                      height: 164,
-                      accent: _accent,
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      event.message,
-                      textAlign: TextAlign.center,
-                      style: AppUi.body.copyWith(fontSize: 12.5, height: 1.5),
-                    ),
-                    const AppDivider(),
-                    ..._choiceCards(),
-                  ],
+  Widget _wideBody() => SafeArea(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final panelWidth = min(1180.0, constraints.maxWidth - 40);
+        final panelHeight = min(680.0, constraints.maxHeight - 40);
+        final dense = panelHeight < 610;
+        return Center(
+          child: SizedBox(
+            width: panelWidth,
+            height: panelHeight,
+            child: _swallow(
+              AppReveal(
+                child: AppGildedFrame(
+                  accent: _accent,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SizedBox(
+                        width: panelWidth * .43,
+                        child: _eventStory(compact: dense),
+                      ),
+                      Container(width: 1, color: AppUi.line),
+                      Expanded(
+                        child: Container(
+                          padding: EdgeInsets.all(dense ? 12 : 18),
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF1B1E23), Color(0xFF111318)],
+                            ),
+                          ),
+                          child: _choiceDeck(compact: false, dense: dense),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+        );
+      },
+    ),
+  );
+
+  Widget _eventStory({required bool compact}) {
+    final artwork = eventArtworkAsset(event);
+    return ClipRect(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (artwork != null)
+            EventArtwork(
+              asset: artwork,
+              height: double.infinity,
+              accent: _accent,
+            )
+          else
+            EventSceneCard(
+              event: event,
+              height: double.infinity,
+              drawBorder: false,
+            ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0x3D050607),
+                  Color(0x00050607),
+                  Color(0xE8111215),
+                ],
+                stops: [0, .42, 1],
+              ),
+            ),
+          ),
+          Positioned(
+            left: compact ? 13 : 24,
+            top: compact ? 12 : 22,
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 9 : 13,
+                vertical: compact ? 4 : 6,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xD6171010),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: _accent.withValues(alpha: .72)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SemanticIcon(
+                    event.icon,
+                    size: compact ? 11 : 14,
+                    color: _accent,
+                    fallback: GameIconData.dice,
+                    label: event.title,
+                  ),
+                  SizedBox(width: compact ? 6 : 8),
+                  Text(
+                    'KÖY OLAYI · $_categoryLabel',
+                    style: AppUi.label.copyWith(
+                      color: _accent,
+                      fontSize: compact ? 8 : 10,
+                      letterSpacing: compact ? .8 : 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
+            left: compact ? 14 : 28,
+            right: compact ? 14 : 28,
+            bottom: compact ? 14 : 28,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _upper(event.title),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.title.copyWith(
+                    fontSize: compact ? 21 : 36,
+                    height: 1.06,
+                    letterSpacing: compact ? 1.4 : 2.2,
+                    shadows: const [
+                      Shadow(color: Color(0xF0000000), blurRadius: 10),
+                    ],
+                  ),
+                ),
+                SizedBox(height: compact ? 6 : 10),
+                Container(width: compact ? 44 : 68, height: 2, color: _accent),
+                SizedBox(height: compact ? 6 : 10),
+                Text(
+                  event.message,
+                  maxLines: compact ? 3 : 5,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppUi.body.copyWith(
+                    color: AppUi.textHi,
+                    fontSize: compact ? 11 : 15,
+                    height: compact ? 1.3 : 1.48,
+                    shadows: const [
+                      Shadow(color: Color(0xF0000000), blurRadius: 8),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _header({bool compact = false}) {
-    return Row(
+  Widget _choiceDeck({required bool compact, required bool dense}) {
+    final choices = event.choices!;
+    final columns = choices.length <= 3 ? 1 : 2;
+    final rows = (choices.length / columns).ceil();
+    return Column(
       children: [
-        // Olay ikonu — koyu kare, aksan kenar + soft glow.
-        Container(
-          width: compact ? 50 : 60,
-          height: compact ? 50 : 60,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppUi.surface0,
-            borderRadius: BorderRadius.circular(AppUi.radiusSm),
-            border: Border.all(
-              color: _accent.withValues(alpha: 0.7),
-              width: 1.5,
+        for (var row = 0; row < rows; row++) ...[
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var column = 0; column < columns; column++) ...[
+                  if (row * columns + column < choices.length)
+                    Expanded(
+                      child: _choiceCard(
+                        choices[row * columns + column],
+                        compact: compact || columns > 1,
+                        dense: dense,
+                      ),
+                    )
+                  else
+                    const Expanded(child: SizedBox.shrink()),
+                  if (column != columns - 1) SizedBox(width: compact ? 6 : 10),
+                ],
+              ],
             ),
-            boxShadow: [
-              BoxShadow(color: _accent.withValues(alpha: 0.28), blurRadius: 14),
-            ],
           ),
-          child: SemanticIcon(
-            event.icon,
-            size: compact ? 27 : 32,
-            color: _accent,
-            fallback: GameIconData.dice,
-            label: event.title,
-          ),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(_categoryLabel, style: AppUi.label.copyWith(color: _accent)),
-              const SizedBox(height: 4),
-              Text(
-                event.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: AppUi.title.copyWith(
-                  fontSize: compact ? 16 : 18,
-                  color: _accent,
-                ),
-              ),
-            ],
-          ),
-        ),
+          if (row != rows - 1) SizedBox(height: compact ? 7 : 10),
+        ],
       ],
     );
   }
+
+  Widget _choiceCard(
+    EventChoice choice, {
+    required bool compact,
+    required bool dense,
+  }) {
+    final enabled = stockpile == null || choice.canAfford(stockpile!);
+    return _ChoiceCard(
+      choice: choice,
+      accent: _accent,
+      compact: compact,
+      dense: dense,
+      onTap: enabled ? () => onChoose(choice) : null,
+    );
+  }
 }
+
+String _upper(String text) =>
+    text.replaceAll('i', 'İ').replaceAll('ı', 'I').toUpperCase();
 
 /// Hover/press feedback'li olay seçim kartı.
 class _ChoiceCard extends StatefulWidget {
@@ -246,11 +313,13 @@ class _ChoiceCard extends StatefulWidget {
   final Color accent;
   final VoidCallback? onTap;
   final bool compact;
+  final bool dense;
   const _ChoiceCard({
     required this.choice,
     required this.accent,
     required this.onTap,
     this.compact = false,
+    this.dense = false,
   });
   @override
   State<_ChoiceCard> createState() => _ChoiceCardState();
@@ -279,17 +348,15 @@ class _ChoiceCardState extends State<_ChoiceCard> {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOut,
-            padding: widget.compact
-                ? const EdgeInsets.fromLTRB(10, 8, 10, 8)
-                : const EdgeInsets.fromLTRB(12, 10, 12, 11),
             decoration: BoxDecoration(
-              color: _hover
-                  ? Color.alphaBlend(
-                      accent.withValues(alpha: 0.14),
-                      AppUi.surface2,
-                    )
-                  : AppUi.surface1,
-              borderRadius: BorderRadius.circular(AppUi.radiusSm),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: _hover
+                    ? [const Color(0xFF252930), const Color(0xFF171A1F)]
+                    : [const Color(0xFF1A1D22), const Color(0xFF101216)],
+              ),
+              borderRadius: BorderRadius.circular(11),
               border: Border.all(
                 color: _hover ? accent : AppUi.line,
                 width: _hover ? 1.5 : 1,
@@ -303,66 +370,117 @@ class _ChoiceCardState extends State<_ChoiceCard> {
                     ]
                   : null,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: accent,
-                        borderRadius: BorderRadius.circular(2),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: widget.compact ? 3 : 4,
+                        child: EventChoiceSceneCard(
+                          choice: c,
+                          height: double.infinity,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        c.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppUi.bodyHi.copyWith(
-                          fontSize: widget.compact ? 12.5 : 13,
+                      Expanded(
+                        flex: widget.compact ? 6 : 7,
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            widget.compact ? 9 : 18,
+                            widget.compact ? 8 : 14,
+                            widget.compact ? 8 : 13,
+                            widget.compact ? 7 : 12,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 3,
+                                    height: widget.compact ? 13 : 18,
+                                    color: accent,
+                                  ),
+                                  SizedBox(width: widget.compact ? 7 : 10),
+                                  Expanded(
+                                    child: Text(
+                                      _upper(c.label),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppUi.title.copyWith(
+                                        fontSize: widget.compact ? 10.5 : 16,
+                                        height: 1.12,
+                                        letterSpacing: widget.compact ? .5 : 1,
+                                      ),
+                                    ),
+                                  ),
+                                  GameIcon(
+                                    GameIconData.chevron,
+                                    size: widget.compact ? 11 : 14,
+                                    color: _hover ? accent : AppUi.textLo,
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: widget.compact ? 4 : 8),
+                              Text(
+                                c.detail,
+                                maxLines: widget.compact || widget.dense
+                                    ? 2
+                                    : 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppUi.body.copyWith(
+                                  color: AppUi.textLo,
+                                  fontSize: widget.compact ? 9 : 11.5,
+                                  height: 1.32,
+                                ),
+                              ),
+                              if (deltas.isNotEmpty) ...[
+                                SizedBox(height: widget.compact ? 5 : 10),
+                                Wrap(
+                                  spacing: widget.compact ? 4 : 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    for (final delta in deltas.take(3))
+                                      _deltaChip(delta.$1, delta.$2),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (!enabled)
+                    Positioned(
+                      left: 7,
+                      right: 7,
+                      bottom: 7,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppUi.surface0.withValues(alpha: .94),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: AppUi.rust),
+                        ),
+                        child: Text(
+                          'YETERSİZ KAYNAK',
+                          textAlign: TextAlign.center,
+                          style: AppUi.label.copyWith(
+                            color: AppUi.rust,
+                            fontSize: 7.5,
+                          ),
                         ),
                       ),
                     ),
-                    GameIcon(
-                      GameIconData.chevron,
-                      size: 14,
-                      color: _hover ? accent : AppUi.textLo,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                Padding(
-                  padding: const EdgeInsets.only(left: 13),
-                  child: Text(
-                    c.detail,
-                    maxLines: widget.compact ? 2 : null,
-                    overflow: widget.compact ? TextOverflow.ellipsis : null,
-                    style: AppUi.body.copyWith(
-                      fontSize: widget.compact ? 10.5 : 11,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-                if (deltas.isNotEmpty &&
-                    (!widget.compact || deltas.length <= 3)) ...[
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 13),
-                    child: Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: deltas
-                          .map((d) => _deltaChip(d.$1, d.$2))
-                          .toList(),
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -376,7 +494,10 @@ class _ChoiceCardState extends State<_ChoiceCard> {
     // Fayda sage ↑ / bedel rust ↓ — sonuçları tipografi+renkle koru.
     final color = isMoral ? AppUi.accent : (isNeg ? AppUi.rust : AppUi.sage);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.compact ? 5 : 7,
+        vertical: widget.compact ? 2 : 3,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(20),
@@ -385,11 +506,14 @@ class _ChoiceCardState extends State<_ChoiceCard> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(icon, style: const TextStyle(fontSize: 11)),
+          Text(icon, style: TextStyle(fontSize: widget.compact ? 9 : 11)),
           const SizedBox(width: 4),
           Text(
             label,
-            style: AppUi.number.copyWith(fontSize: 10.5, color: color),
+            style: AppUi.number.copyWith(
+              fontSize: widget.compact ? 8.5 : 10.5,
+              color: color,
+            ),
           ),
         ],
       ),

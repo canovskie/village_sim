@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
 
 /// Oyunun kısa kimlik ve yapım bilgisi.
 class AboutScreen extends StatelessWidget {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'app_ui.dart';
+import '../core/app_ui.dart';
 
 /// Dünyada doğan küçük, oyuncuyu zorla durdurmayan hikâyenin işareti.
 ///

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../systems/event_system.dart';
-import 'app_ui.dart';
+
+import '../../systems/events/event_system.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
 import 'event_artwork.dart';
-import 'semantic_icon.dart';
 
 /// Bir rastgele olay tetiklendiğinde ekranın üst-ortasında çıkan zengin
 /// banner kartı. Kategoriye göre renklenir (pozitif sage, negatif rust,
@@ -79,16 +80,17 @@ class EventBanner extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  // Bildirim büyümeden olayı gösteren sinematik küçük kare.
-                  SizedBox(
-                    width: 104,
-                    child: EventArtwork(
-                      asset: eventArtworkAsset(event),
-                      height: 54,
-                      accent: _accent,
+                  if (eventArtworkAsset(event) case final artwork?) ...[
+                    SizedBox(
+                      width: 104,
+                      child: EventArtwork(
+                        asset: artwork,
+                        height: 54,
+                        accent: _accent,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 11),
+                    const SizedBox(width: 11),
+                  ],
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

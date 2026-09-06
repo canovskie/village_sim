@@ -30,6 +30,7 @@ class _ModeButtonState extends State<ModeButton> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = useCompactGameUi(context);
     final tint = widget.accentColor;
     final active = widget.active;
     final hot = _hover || active;
@@ -50,7 +51,13 @@ class _ModeButtonState extends State<ModeButton> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 130),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          constraints: compact
+              ? const BoxConstraints(minWidth: 38, minHeight: 44)
+              : null,
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 5 : 12,
+            vertical: compact ? 3 : 6,
+          ),
           decoration: BoxDecoration(
             color: active
                 ? Color.alphaBlend(tint.withValues(alpha: 0.24), AppUi.surface2)
@@ -74,7 +81,7 @@ class _ModeButtonState extends State<ModeButton> {
             children: [
               SemanticIcon(
                 widget.icon,
-                size: 18,
+                size: compact ? 16 : 18,
                 color: fg,
                 fallback: GameIconData.hammer,
               ),
@@ -82,8 +89,8 @@ class _ModeButtonState extends State<ModeButton> {
               Text(
                 widget.label.toUpperCase(),
                 style: AppUi.label.copyWith(
-                  fontSize: 9,
-                  letterSpacing: 1.0,
+                  fontSize: compact ? 8 : 9,
+                  letterSpacing: compact ? 0.45 : 1.0,
                   color: fg,
                 ),
               ),

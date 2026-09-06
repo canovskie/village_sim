@@ -1,14 +1,14 @@
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
-import '../buildings/building_design.dart';
-import '../buildings/building_lore.dart';
-import '../buildings/building_renderer.dart';
-import '../buildings/building_type.dart';
-import '../core/resources.dart';
-import '../rendering/asset_style.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
+import '../../buildings/building_design.dart';
+import '../../buildings/building_lore.dart';
+import '../../buildings/building_renderer.dart';
+import '../../buildings/building_type.dart';
+import '../../core/resources.dart';
+import '../../rendering/asset_style.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
 
 /// İNŞA KÜNYESİ — palette'ten bir bina seçildiği an açılan bilgi kartı.
 ///

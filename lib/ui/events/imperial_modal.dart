@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import '../systems/imperial.dart';
-import '../systems/imperial_raid.dart';
-import '../systems/regime.dart';
-import 'app_ui.dart';
+
+import '../../systems/events/imperial.dart';
+import '../../systems/events/imperial_raid.dart';
+import '../../systems/governance/regime.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
 import 'gameplay_dioramas.dart';
-import 'mobile_ui.dart';
 
 /// İmparatorluk vergi heyetiyle pazarlık modalı. Karar ZORUNLU (boşluğa
 /// dokunup kaçılamaz — sim duraklı). Kaynak talebinde basit pazarlık mini-oyunu
@@ -22,7 +23,7 @@ class ImperialModal extends StatefulWidget {
   final String raidIntel;
   final ImperialRaidScenario? raidScenario;
 
-  // ── REJİM (bkz. systems/regime.dart) ────────────────────────────────────────
+  // ── REJİM (bkz. systems/governance/regime.dart) ────────────────────────────────────────
   /// Pazarlık eşiğinden düşülen — tüccar köy daha ucuza anlaşır (görüntü sahne
   /// hesabıyla birebir tutsun diye).
   final double haggleEase;
@@ -422,12 +423,11 @@ class _ImperialModalState extends State<ImperialModal> {
         ),
       ],
       const SizedBox(height: 8),
-      // Direniş — yalnız köy yeterince güçlüyse (muhafız/kalabalık). Başarı
-      // şansı AÇIKÇA gösterilir (#7 saydamlık): körlemesine kumar değil.
+      // Hazırlık değerlendirmesi savunma düzenlerini açar; sonucu canlı savaş belirler.
       if (widget.resistChance > 0) ...[
         if (!useCompactGameUi(context)) _defensePanel(),
         _opt(
-          'Savunmayı seç  ·  %${(widget.resistChance * 100).round()} başarı',
+          'Savunmayı seç',
           'Köyün eşikte nasıl dövüşeceğini belirle.',
           AppUi.accent,
           widget.onDefensePlan == null
@@ -459,12 +459,12 @@ class _ImperialModalState extends State<ImperialModal> {
       Text('SAVUNMA DÜZENİ', style: AppUi.label.copyWith(color: AppUi.accent)),
       const SizedBox(height: 3),
       Text(
-        'Seçtiğin düzen yalnız oranı değil, yenilginin can bedelini de değiştirir.',
+        'Köylüler bulundukları yerden savaşa katılır. Silah, sağlık ve konum sonucu belirler; çatışma sırasında emir verebilirsin.',
         style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
       ),
       for (final p in plans)
         _opt(
-          '${p.plan.title}  ·  %${(_scenarioChance(p) * 100).round()}',
+          p.plan.title,
           '${p.plan.detail}${p.woodCost > 0 ? '  Bedel: ${p.woodCost}🪵.' : ''}',
           p.available ? AppUi.accent : AppUi.textLo,
           p.available ? () => widget.onDefensePlan!(p.plan) : null,
@@ -478,17 +478,6 @@ class _ImperialModalState extends State<ImperialModal> {
         () => setState(() => _planningDefense = false),
       ),
     ];
-  }
-
-  double _scenarioChance(ImperialPlanPreview preview) {
-    final raid = widget.raidScenario;
-    if (raid == null) return preview.chance;
-    final planBonus = switch (preview.plan) {
-      ImperialDefensePlan.holdLine => raid.holdBonus,
-      ImperialDefensePlan.barricade => raid.barricadeBonus,
-      ImperialDefensePlan.counterCharge => raid.chargeBonus,
-    };
-    return (preview.chance + planBonus - raid.attackDelta).clamp(.02, .95);
   }
 
   Widget _defensePanel() {

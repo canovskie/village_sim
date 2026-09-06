@@ -5,7 +5,7 @@ part of 'village_ledger.dart';
 /// ═══════════════════════════════════════════════════════════════════════════
 ///
 /// Defterin telefon yatay yerleşimi. Gerekçe ve ızgara kuralları
-/// `ui/ledger_board.dart` başında; burası o kuralların Köy Defteri'ne
+/// `ui/ledger/ledger_board.dart` başında; burası o kuralların Köy Defteri'ne
 /// uygulanışıdır. Masaüstü gövdeleri ([VillageLedger._meclisTab] vb.) HİÇ
 /// değişmez — telefon ayrı gövdeler kullanır çünkü sorun boyut değil DİZİLİM:
 /// aynı içeriği küçültmek 760×360'ta işe yaramıyor, yeniden dizmek gerekiyor.

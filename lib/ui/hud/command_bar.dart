@@ -2,10 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../text/voice.dart';
-import 'app_ui.dart';
+import '../../text/voice.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
 import 'guide_spotlight.dart';
-import 'mobile_ui.dart';
 
 /// KOMUTA ÇUBUĞU — oyunun tek alt komuta hattı (konsept 04).
 ///
@@ -20,6 +20,9 @@ import 'mobile_ui.dart';
 class CommandBar extends StatefulWidget {
   /// Sol segment — inşa paleti içeriği (kategori sekmeleri + kartlar).
   final Widget buildSegment;
+
+  /// İnşa kapısının yanında, kataloğu açmadan erişilen dünya araçları.
+  final Widget? toolSegment;
 
   /// Orta segment — seçili öğe bağlamı. null ise sakin bir ipucu gösterilir.
   final CommandContext? context;
@@ -52,6 +55,7 @@ class CommandBar extends StatefulWidget {
   const CommandBar({
     super.key,
     required this.buildSegment,
+    this.toolSegment,
     required this.onDefter,
     required this.onDivan,
     required this.onRoster,
@@ -152,6 +156,13 @@ class _CommandBarState extends State<CommandBar> {
                     onTap: () => _setCatalogOpen(!_isCatalogOpen),
                   ),
                 ),
+                if (widget.toolSegment != null) ...[
+                  const SizedBox(width: 6),
+                  AppPanel(
+                    padding: const EdgeInsets.all(4),
+                    child: widget.toolSegment!,
+                  ),
+                ],
                 const SizedBox(width: 14),
                 Expanded(
                   child: widget.context == null
@@ -219,12 +230,24 @@ class _CommandBarState extends State<CommandBar> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                MobileSurface(
-                  child: _MobileBuildButton(
-                    open: false,
-                    active: widget.buildModeActive,
-                    onTap: () => _setCatalogOpen(true),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    MobileSurface(
+                      child: _MobileBuildButton(
+                        open: false,
+                        active: widget.buildModeActive,
+                        onTap: () => _setCatalogOpen(true),
+                      ),
+                    ),
+                    if (widget.toolSegment != null) ...[
+                      const SizedBox(width: MobileUi.gap),
+                      MobileSurface(
+                        padding: const EdgeInsets.all(2),
+                        child: widget.toolSegment!,
+                      ),
+                    ],
+                  ],
                 ),
                 // Bağlam yuvası yalnız seçim VARSA yer kaplar — boşken kapsül
                 // açılmaz, orası harita kalır.

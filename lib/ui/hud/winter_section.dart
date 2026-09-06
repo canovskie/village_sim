@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../systems/winter.dart';
-import 'app_ui.dart';
+import '../../systems/world/winter.dart';
+import '../core/app_ui.dart';
 
 /// KIŞ BÖLÜMÜ — tezgâhın durduğu binanın (ambar; ambar yoksa ocak başı)
 /// panelinde açılan kış sayfası.

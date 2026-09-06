@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../save/save_manager.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
+import '../../save/save_manager.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
 
 /// KAYITLI KÖYLER — ana menünün şafak sahnesinin ÜSTÜNDE açılan overlay pano
 /// (eskiden ayrı bir Material sayfaya atlıyordu: AppBar + AlertDialog + Material

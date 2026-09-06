@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../entities/villager_entity.dart';
-import '../entities/villager_job.dart';
-import '../entities/work_site.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
-import 'semantic_icon.dart';
+import '../../entities/villager_entity.dart';
+import '../../entities/villager_job.dart';
+import '../../entities/work_site.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/semantic_icon.dart';
 import 'work_crew.dart';
 
 /// BİNASIZ İŞ YERİ KARTI — tarla, böğürtlenlik, şantiye, yol işi.

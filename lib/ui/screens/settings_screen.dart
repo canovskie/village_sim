@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'app_ui.dart';
-import 'mobile_ui.dart';
-import 'settings_model.dart';
+import '../core/app_ui.dart';
+import '../core/mobile_ui.dart';
+import '../core/settings_model.dart';
 
 /// Ses, görüntü ve dil seçeneklerini sunan modern koyu ayar ekranı.
 class SettingsScreen extends StatefulWidget {

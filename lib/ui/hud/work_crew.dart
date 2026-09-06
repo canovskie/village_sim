@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../entities/villager_entity.dart';
-import '../entities/villager_job.dart';
-import '../entities/work_site.dart';
-import '../rendering/portrait_renderer.dart';
-import '../systems/job_feedback.dart';
-import 'app_ui.dart';
-import 'semantic_icon.dart';
+import '../../entities/villager_entity.dart';
+import '../../entities/villager_job.dart';
+import '../../entities/work_site.dart';
+import '../../rendering/portrait_renderer.dart';
+import '../../systems/labor/job_feedback.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
 
 /// KADRO — bir iş yerinin oyuncuya bakan yüzü.
 ///

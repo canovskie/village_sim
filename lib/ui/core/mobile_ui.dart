@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../systems/platform_adapt.dart';
+import '../../systems/platform/platform_adapt.dart';
 import 'app_ui.dart';
 
 /// Harness/test override — macOS'ta tablet TAKLİT edilirken dokunma
@@ -33,7 +33,7 @@ class BuildCatalogCloseNotification extends Notification {
 /// MOBİL TEMA — "KENAR RAYI"
 /// ═══════════════════════════════════════════════════════════════════════════
 ///
-/// Telefonda oyun YATAY çalışır (bkz. systems/platform_adapt.dart): geniş ama
+/// Telefonda oyun YATAY çalışır (bkz. systems/platform/platform_adapt.dart): geniş ama
 /// ALÇAK bir ekran. Orada kıt olan kaynak yükseklik, bol olan genişliktir.
 /// Masaüstü yerleşimini küçültmek bu yüzden işe yaramadı — üst üste binen
 /// levhalar ekranın yarısını yiyor, kalan her şey "ortada yüzen kutu" oluyordu.

@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import 'app_ui.dart';
+import '../core/app_ui.dart';
 
 /// ÖĞRETİCİ İŞARETİ — "şuna tıkla"yı ekranda GÖSTEREN katman.
 ///

@@ -22,7 +22,7 @@ class CouncilTable extends StatefulWidget {
   /// TAHTA KİPİ (telefon) — masa sabit boy yerine VERİLEN alanı doldurur ve
   /// reise dokununca açılan eylem kartı masanın ALTINA eklenmez, ÜSTÜNE biner.
   ///
-  /// Neden: tahtada sütunun boyu sabittir (bkz. ui/ledger_board.dart). Kart
+  /// Neden: tahtada sütunun boyu sabittir (bkz. ui/ledger/ledger_board.dart). Kart
   /// alta eklenince sütun uzamak ister, uzayamaz, taşar. Kartı masanın üstüne
   /// bindirmek yerleşimi hiç kıpırdatmaz — ve telefonda zaten doğru olan
   /// davranış budur: seçtiğin reisin kartı, masanın önüne çıkar.

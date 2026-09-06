@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../systems/reckoning.dart';
-import 'app_ui.dart';
-import 'gameplay_dioramas.dart';
-import 'semantic_icon.dart';
+import '../../systems/run/reckoning.dart';
+import '../core/app_ui.dart';
+import '../core/semantic_icon.dart';
+import '../events/gameplay_dioramas.dart';
 
 /// HESAPLAŞMA EKRANI — koşunun kapanışı.
 ///

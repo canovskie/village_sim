@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../systems/village_collapse.dart';
-import 'app_ui.dart';
-import 'gameplay_dioramas.dart';
+import '../../systems/run/village_collapse.dart';
+import '../core/app_ui.dart';
+import '../events/gameplay_dioramas.dart';
 
 /// KÖY DAĞILDI — koşunun kapanış ekranı.
 ///
