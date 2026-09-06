@@ -1,10 +1,13 @@
+@Tags(['probe'])
+library;
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/main.dart';
-import 'package:village_sim/systems/gameplay_pacing.dart';
+import 'package:village_sim/systems/run/gameplay_pacing.dart';
 
 /// İlk geceyi saf sabitlerle değil gerçek VillageScene tick zinciriyle ölçer.
 /// Dünya referans köyden alınır, yalnız kuruluş anına geri sarılır; yatak serimi,

@@ -13,9 +13,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../systems/law_book.dart';
-import '../ui/app_ui.dart';
-import '../ui/law_book_panel.dart';
+import '../systems/governance/law_book.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/ledger/law_book_panel.dart';
 import 'capture_support.dart';
 import 'law_demo_ctx.dart';
 

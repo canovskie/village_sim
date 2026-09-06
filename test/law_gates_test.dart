@@ -10,7 +10,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/buildings/craft.dart';
-import 'package:village_sim/systems/law_book.dart';
+import 'package:village_sim/systems/governance/law_book.dart';
 
 /// Yeni kurulmuş köy: beş kurucu, tek hane, hiçbir şey yok.
 const fresh = LawContext(population: 5, dayCount: 1, households: 1);

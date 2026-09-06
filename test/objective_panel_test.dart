@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/quest_book.dart';
-import 'package:village_sim/ui/objective_panel.dart';
+import 'package:village_sim/systems/run/quest_book.dart';
+import 'package:village_sim/ui/hud/objective_panel.dart';
 
 void main() {
   testWidgets('aktif ana mesele hesaplaşma kefesini doğal biçimde gösterir', (

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/entities/villager_job.dart';
-import 'package:village_sim/systems/village_custom.dart';
+import 'package:village_sim/systems/npc/village_custom.dart';
 
 /// KÖYÜN ÂDETİ — kural değil huy.
 ///

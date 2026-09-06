@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/entities/villager_entity.dart';
-import 'package:village_sim/systems/locomotion.dart';
+import 'package:village_sim/systems/npc/locomotion.dart';
 
 /// NPC hareketinin "akıcılık" sözleşmesi.
 ///

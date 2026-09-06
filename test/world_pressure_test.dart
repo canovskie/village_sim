@@ -11,8 +11,8 @@
 //     şeyler oluyor" gürültüsü üretmez.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/law_compass.dart';
-import 'package:village_sim/systems/world_pressure.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
+import 'package:village_sim/systems/governance/world_pressure.dart';
 import 'package:village_sim/world/season.dart';
 
 /// Test kısayolu — yalnız ilgilenilen ekseni verip kalanı sabit tutar.

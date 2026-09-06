@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/constants.dart';
 import 'package:village_sim/entities/villager_entity.dart';
-import 'package:village_sim/systems/separation_system.dart';
+import 'package:village_sim/systems/npc/separation_system.dart';
 import 'package:village_sim/world/animal_entity.dart';
 
 double _dist(double x1, double y1, double x2, double y2) {
@@ -13,6 +13,18 @@ double _dist(double x1, double y1, double x2, double y2) {
 
 void main() {
   group('applySeparation', () {
+    test('coincident villagers separate without a large position jump', () {
+      final villagers = [
+        for (var i = 0; i < 8; i++)
+          VillagerEntity(type: VillagerType.farmer, name: 'V$i', male: true,
+                         startCol: 5, startRow: 5),
+      ];
+      applySeparation(dt: 1 / 60, villagers: villagers, waterTiles: const {});
+      expect(villagers.any((v) => v.gridX != 5 || v.gridY != 5), isTrue);
+      for (final v in villagers) {
+        expect(_dist(v.gridX, v.gridY, 5, 5), lessThanOrEqualTo(1 / 900 + .000001));
+      }
+    });
     test('two close villagers get pushed apart', () {
       final a = VillagerEntity(type: VillagerType.farmer, name: 'A', male: true, startCol: 5, startRow: 5);
       final b = VillagerEntity(type: VillagerType.guard, name: 'B', male: false, startCol: 5.3, startRow: 5);

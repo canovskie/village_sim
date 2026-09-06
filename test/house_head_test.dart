@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/life_stage.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/entities/villager_entity.dart';
-import 'package:village_sim/systems/house_head.dart';
+import 'package:village_sim/systems/governance/house_head.dart';
 
 /// Divan masasında oturan yüzler GERÇEK hane reisleri olmalı — rastgele değil.
 /// Bu testler seçim kuralını ve determinizmini kilitler.

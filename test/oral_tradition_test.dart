@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/law_book.dart';
-import 'package:village_sim/systems/oral_tradition.dart';
+import 'package:village_sim/systems/governance/law_book.dart';
+import 'package:village_sim/systems/governance/oral_tradition.dart';
 
 void main() {
   LawDef law(String id) => LawBook.byId(id)!;

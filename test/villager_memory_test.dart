@@ -11,7 +11,7 @@
 //     dün görülen cinayet, bugünkü atışmadan kalıcıdır.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/villager_memory.dart';
+import 'package:village_sim/systems/npc/villager_memory.dart';
 
 /// Özne yerine geçen sahte kimlik (gerçek köylüye bağımlı olmadan test).
 class _Who {

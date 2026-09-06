@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/rendering/game_painter.dart';
-import 'package:village_sim/systems/lighting_system.dart';
-import 'package:village_sim/systems/road_system.dart';
+import 'package:village_sim/systems/world/lighting_system.dart';
+import 'package:village_sim/systems/world/road_system.dart';
 
 void main() {
   test('büyük fiziksel viewport efekt bütçesini otomatik düşürüyor', () {

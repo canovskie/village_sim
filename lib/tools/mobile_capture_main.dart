@@ -13,7 +13,7 @@
 //   • TAP<44     — 44dp altında kalan dokunma hedefleri (Apple HIG eşiği)
 //   • FONT<11    — 11px altında kalan yazılar, boyuta göre gruplu
 //
-// NOT: mobil YATAY kilitli (bkz. systems/platform_adapt.dart) — profiller de
+// NOT: mobil YATAY kilitli (bkz. systems/platform/platform_adapt.dart) — profiller de
 // yatay ölçüdedir. Köy = REFERANS KÖY (sabit tohum) → koşular kıyaslanabilir.
 //
 // Çalıştır:  flutter run -d macos -t lib/tools/mobile_capture_main.dart
@@ -30,8 +30,8 @@ import 'package:flutter/scheduler.dart';
 
 import '../buildings/building_type.dart';
 import '../main.dart';
-import '../ui/app_ui.dart';
-import '../ui/village_ledger.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/ledger/village_ledger.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cihaz profilleri — hepsi YATAY (oyun yatay kilitli)
@@ -979,7 +979,7 @@ Audit _audit(Phone d) {
     // ── Yazı boyu ─────────────────────────────────────────────────────────
     if (ro is RenderParagraph) {
       // ETKİN boy — bildirilen boy DEĞİL. Mobil tema 11px'lik tabanı ağacın
-      // kökünde bir TextScaler ile uyguluyor (bkz. ui/mobile_ui.dart), yani
+      // kökünde bir TextScaler ile uyguluyor (bkz. ui/core/mobile_ui.dart), yani
       // `style.fontSize` hâlâ 7.5 derken ekrana 11 çiziliyor. Bildirilen boya
       // bakan eski ölçüm bu yüzden hiç değişmiyordu ve düzelmiş bir şeyi
       // "hâlâ bozuk" diye raporluyordu.

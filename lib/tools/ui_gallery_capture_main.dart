@@ -35,59 +35,54 @@ import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../cutscene/cutscene.dart';
 import '../cutscene/cutscene_player.dart';
-import '../dev/dev_command.dart';
-import '../dev/dev_console.dart';
 import '../entities/villager_entity.dart';
 import '../entities/villager_job.dart';
 import '../entities/work_site.dart';
 import '../rendering/character_renderer.dart';
 import '../save/save_manager.dart';
-import '../scene/scene_data.dart';
-import '../systems/building_system.dart';
-import '../systems/chronicle.dart';
-import '../systems/contextual_guides.dart';
-import '../systems/estate_system.dart';
-import '../systems/event_system.dart';
-import '../systems/house_system.dart';
-import '../systems/imperial.dart';
-import '../systems/law_book.dart';
-import '../systems/petition_system.dart';
-import '../systems/quest_book.dart';
-import '../systems/reckoning.dart';
-import '../systems/regime.dart';
-import '../systems/village_collapse.dart';
-import '../text/voice.dart';
-import '../ui/about_screen.dart';
-import '../ui/app_ui.dart';
-import '../ui/building_brief.dart';
-import '../ui/building_info_panel.dart';
-import '../ui/building_panel.dart';
-import '../ui/collapse_screen.dart';
-import '../ui/command_bar.dart';
-import '../ui/dev_panel.dart';
-import '../ui/event_banner.dart';
-import '../ui/event_choice_modal.dart';
-import '../ui/hud.dart';
-import '../ui/imperial_modal.dart';
-import '../ui/law_book_panel.dart';
-import '../ui/law_compass_view.dart';
-import '../ui/loading_screen.dart';
-import '../ui/main_menu_screen.dart';
-import '../ui/mobile_ui.dart';
-import '../ui/mode_button.dart';
-import '../ui/objective_panel.dart';
-import '../ui/option_scene_card.dart';
-import '../ui/petition_modal.dart';
-import '../ui/petition_scene_card.dart';
-import '../ui/reckoning_screen.dart';
-import '../ui/road_panel.dart';
-import '../ui/save_slots_screen.dart';
-import '../ui/settings_screen.dart';
-import '../ui/village_ledger.dart';
-import '../ui/village_pulse_card.dart';
-import '../ui/villager_info_panel.dart';
-import '../ui/villager_roster_view.dart';
-import '../ui/world_tag.dart';
+import '../scene/world/scene_data.dart';
+import '../systems/events/chronicle.dart';
+import '../systems/events/event_system.dart';
+import '../systems/events/imperial.dart';
+import '../systems/governance/estate_system.dart';
+import '../systems/governance/house_system.dart';
+import '../systems/governance/law_book.dart';
+import '../systems/governance/petition_system.dart';
+import '../systems/governance/regime.dart';
+import '../systems/labor/building_system.dart';
+import '../systems/run/contextual_guides.dart';
+import '../systems/run/quest_book.dart';
+import '../systems/run/reckoning.dart';
+import '../systems/run/village_collapse.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/core/mobile_ui.dart';
+import '../ui/core/mode_button.dart';
+import '../ui/dev/dev_panel.dart';
+import '../ui/events/event_choice_modal.dart';
+import '../ui/events/imperial_modal.dart';
+import '../ui/events/petition_modal.dart';
+import '../ui/hud/building_brief.dart';
+import '../ui/hud/building_info_panel.dart';
+import '../ui/hud/building_panel.dart';
+import '../ui/hud/command_bar.dart';
+import '../ui/hud/hud.dart';
+import '../ui/hud/notification_plaque.dart';
+import '../ui/hud/objective_panel.dart';
+import '../ui/hud/road_panel.dart';
+import '../ui/hud/village_pulse_card.dart';
+import '../ui/hud/villager_info_panel.dart';
+import '../ui/hud/villager_roster_view.dart';
+import '../ui/hud/world_tag.dart';
+import '../ui/ledger/law_book_panel.dart';
+import '../ui/ledger/law_compass_view.dart';
+import '../ui/ledger/village_ledger.dart';
+import '../ui/screens/about_screen.dart';
+import '../ui/screens/collapse_screen.dart';
+import '../ui/screens/loading_screen.dart';
+import '../ui/screens/main_menu_screen.dart';
+import '../ui/screens/reckoning_screen.dart';
+import '../ui/screens/save_slots_screen.dart';
+import '../ui/screens/settings_screen.dart';
 import '../world/road_surface.dart';
 import '../world/season.dart';
 import 'law_demo_ctx.dart';
@@ -181,7 +176,6 @@ final _demoQuests = QuestBook.activeQuests(
     population: 24,
     stock: ResourceBundle(wood: 60, stone: 30, food: 41, gold: 18),
     policies: VillagePolicies(),
-    decorCount: 12,
     charterTier: 1,
   ),
   _demoCompletedQuests,
@@ -417,29 +411,6 @@ List<SaveSlotMeta> _slots() {
     ),
   ];
 }
-
-const _voiceCtx = VoiceCtx(
-  seed: 5,
-  name: 'İlyas',
-  other: 'Ayşe',
-  profession: 'Demirci',
-  house: 'Karaoğlan',
-  estate: 'Emekçiler',
-  village: 'Bahçeköy',
-  season: Season.winter,
-  day: 41,
-);
-
-List<Petition> _petitions() {
-  final all = PetitionSystem.allForTest.map((p) => p.spoken(_voiceCtx)).toList()
-    ..sort((a, b) => b.options.length.compareTo(a.options.length));
-  return all;
-}
-
-EventOutcome _eventPlain() =>
-    EventSystem.events.firstWhere((e) => e.choices == null);
-EventOutcome _eventChoice() =>
-    EventSystem.events.firstWhere((e) => e.choices != null);
 
 /// Oyun dünyasının yerine geçen sıcak zemin — HUD/banner gibi dünya üstü
 /// katmanlar boşlukta yüzmesin.
@@ -903,7 +874,6 @@ List<Shot> buildShots() => <Shot>[
         lowWater: false,
         starving: false,
         eventLabel: 'Kervan ozanı köye uğradı',
-        stockCapacity: 200,
         fullPulse: 0,
         moraleBreakdown: const [
           ('Ocak başı', 0.08),
@@ -1343,7 +1313,6 @@ List<Shot> buildShots() => <Shot>[
               : const [],
           stockpile: _stock(),
           stats: const VillageStats(
-            stockCapacity: 200,
             morale: 0.63,
             carrierSpeedMultiplier: 1.1,
             wellCount: 2,
@@ -1556,115 +1525,6 @@ List<Shot> buildShots() => <Shot>[
   ),
 
   // ── Modallar ────────────────────────────────────────────────────────────
-  for (final i in const [0, 1])
-    Shot(
-      id: 'petition_$i',
-      title: 'Dilekçe Modalı ${i + 1}',
-      group: 'Modallar',
-      note: 'Birinci ağızdan metin + sahne kartı + karar seçenekleri.',
-      w: 640,
-      h: 940,
-      settleMs: 2000,
-      build: () {
-        final list = _petitions();
-        final p = list[i % list.length];
-        return Scaffold(
-          backgroundColor: const Color(0xFF14171C),
-          body: PetitionModal(
-            petition: p,
-            state: (morale: 0.41, population: 24, food: 41, gold: 18),
-            onChoose: (_) {},
-            onDismiss: _noop,
-          ),
-        );
-      },
-    ),
-  Shot(
-    id: 'petition_scenes',
-    title: 'Dilekçe Sahne Kartları',
-    group: 'Modallar',
-    note: 'Dilekçenin geçtiği yeri çizen prosedürel kart seti.',
-    w: 1200,
-    h: 700,
-    build: () => Scaffold(
-      backgroundColor: const Color(0xFF14171C),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: GridView.count(
-          crossAxisCount: 4,
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: 1.6,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            for (final s in PetitionScene.values)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(9),
-                      child: PetitionSceneCard.custom(
-                        scene: s,
-                        tone: PetitionTone.solemn,
-                        height: 200,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    s.name,
-                    textAlign: TextAlign.center,
-                    style: AppUi.label.copyWith(fontSize: 9),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    ),
-  ),
-  Shot(
-    id: 'option_scenes',
-    title: 'Karar-Eylem Sahneleri',
-    group: 'Modallar',
-    note: 'Her karar seçeneğinin altındaki motif kartı (bağışla/sür/idam…).',
-    w: 1300,
-    h: 700,
-    build: () => Scaffold(
-      backgroundColor: const Color(0xFF14171C),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: GridView.count(
-          crossAxisCount: 4,
-          mainAxisSpacing: 14,
-          crossAxisSpacing: 14,
-          childAspectRatio: 1.35,
-          physics: const NeverScrollableScrollPhysics(),
-          children: [
-            for (final s in OptionScene.values)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(9),
-                      child: OptionSceneCard(scene: s, height: 200),
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    s.name,
-                    textAlign: TextAlign.center,
-                    style: AppUi.label.copyWith(fontSize: 9),
-                  ),
-                ],
-              ),
-          ],
-        ),
-      ),
-    ),
-  ),
   Shot(
     id: 'imperial_modal',
     title: 'İmparatorluk Talebi',
@@ -1698,29 +1558,88 @@ List<Shot> buildShots() => <Shot>[
     ),
   ),
   Shot(
-    id: 'event_banner',
-    title: 'Olay Bandı',
-    group: 'Modallar',
-    w: 1000,
-    h: 240,
-    build: () => _worldBackdrop(
-      child: EventBanner(
-        event: _eventPlain(),
-        timeLeft: 8,
-        duration: 12,
-        onClose: _noop,
-      ),
-    ),
+    id: 'divan_dilemma',
+    title: 'Divan İkilemi',
+    group: 'Kararlar',
+    note: 'Geniş iki sütunlu Divan panosu: köylü solda, hükümler sağda.',
+    w: 1440,
+    h: 900,
+    settleMs: 1100,
+    build: () {
+      final author = VillagerEntity(
+        type: VillagerType.merchant,
+        name: 'Yusuf',
+        surname: 'Karaca',
+        male: true,
+        startCol: 0,
+        startRow: 0,
+        ageDays: 300,
+      );
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          _worldBackdrop(),
+          PetitionModal(
+            petition: PetitionSystem.requireById(PetitionIds.personalStyle),
+            author: author,
+            state: const (morale: .60, population: 24, food: 72, gold: 10),
+            onChoose: (_) {},
+            onDismiss: _noop,
+          ),
+        ],
+      );
+    },
   ),
   Shot(
-    id: 'event_choice',
-    title: 'Olay Kararı Modalı',
-    group: 'Modallar',
-    w: 760,
-    h: 640,
-    build: () => Scaffold(
-      backgroundColor: const Color(0xFF14171C),
-      body: EventChoiceModal(event: _eventChoice(), onChoose: (_) {}),
+    id: 'village_event_dilemma',
+    title: 'Köy Olayı İkilemi',
+    group: 'Kararlar',
+    note: 'Mekân odaklı olay sahnesi ve resimli karar kartları.',
+    w: 1440,
+    h: 900,
+    settleMs: 1100,
+    build: () => Stack(
+      fit: StackFit.expand,
+      children: [
+        _worldBackdrop(),
+        EventChoiceModal(
+          event: const EventOutcome(
+            id: 'first_frost',
+            title: 'Kış Kapıda',
+            icon: '❄️',
+            message: 'İlk don düştü. Haneler odun bekliyor.',
+            category: EventCategory.negative,
+            severity: EventSeverity.major,
+            choices: [
+              EventChoice(
+                id: 'share_wood',
+                label: 'Odunu paylaştır',
+                detail: 'Hanelerin ocakları bu gece yanar.',
+                resolutionMessage: 'Odun hanelere pay edildi.',
+                woodDelta: -10,
+                moraleModifier: .05,
+                duration: 20,
+              ),
+              EventChoice(
+                id: 'store_wood',
+                label: 'Ambarda tut',
+                detail: 'Stok korunur, haneler soğuğa dayanır.',
+                resolutionMessage: 'Odun ambarda tutuldu.',
+                moraleModifier: -.03,
+                duration: 20,
+              ),
+            ],
+          ),
+          onChoose: (_) {},
+        ),
+        const Positioned(
+          top: 72,
+          right: 26,
+          child: NotificationPlaque(
+            message: '❄️ İlk don — Çatılar kırağı tuttu.',
+          ),
+        ),
+      ],
     ),
   ),
 
@@ -1748,11 +1667,42 @@ List<Shot> buildShots() => <Shot>[
         onJumpSeason: (_) {},
         onSeedReference: (_) {},
         onClose: _noop,
-        onOpenConsole: _noop,
+        petitionPreviews: const [
+          (
+            id: 'personalStyle',
+            label: '🧵 Kendi Yolum',
+            condition: 'Normal: 1+ evlenmemiş yetişkin erkek',
+          ),
+          (
+            id: 'ovenTurn',
+            label: '🥖 Fırın Sırası',
+            condition: 'Normal: nüfus 4+',
+          ),
+          (
+            id: 'hearthSeat',
+            label: '🔥 Ateşin Yanındaki Yer',
+            condition: 'Normal: nüfus 3+',
+          ),
+          (
+            id: 'wellBucket',
+            label: '🪣 Ortak Kova',
+            condition: 'Normal: nüfus 4+',
+          ),
+          (
+            id: 'animalBell',
+            label: '🔔 Çanın Sesi',
+            condition: 'Normal: hayvan 1+',
+          ),
+          (
+            id: 'quietEvening',
+            label: '🎶 Akşam Türküsü',
+            condition: 'Normal: nüfus 5+',
+          ),
+        ],
+        onPreviewPetition: (_) {},
         onToggleGod: _noop,
         onSetRain: (_) {},
         onSetTimeOfDay: (_) {},
-        onTriggerEvent: (_) {},
         onAddResource: (_, _) {},
         onSpawnVillager: _noop,
         onKillRandomVillager: _noop,
@@ -1805,9 +1755,6 @@ List<Shot> buildShots() => <Shot>[
         scenarioProgress: 0,
         lastReport: null,
         onScenarioBaseline: _noop,
-        onScenarioPlague: _noop,
-        onScenarioDrought: _noop,
-        onScenarioFire: _noop,
         onPlayMusic: _noop,
         onStartDance: _noop,
         onStartChat: _noop,
@@ -1815,7 +1762,6 @@ List<Shot> buildShots() => <Shot>[
         onIgniteFeud: _noop,
         onStartCrime: _noop,
         onClearActivities: _noop,
-        onMeteorShower: _noop,
         onSeedShowcase: _noop,
         onSetDawn: _noop,
         onSetNoon: _noop,
@@ -1828,100 +1774,12 @@ List<Shot> buildShots() => <Shot>[
         onMakeSage: _noop,
         onSpawnMigrant: _noop,
         onSummonImperial: _noop,
-        onForcePetition: _noop,
-        onForcePetitionShortFuse: _noop,
-        onForcePetitionAudience: _noop,
-        petitions: const [
-          ('fireDied', 'Ateş söndü'),
-          ('crimeVerdict', 'Yargı'),
-          ('switchProfession', 'Meslek değişimi'),
-        ],
-        onForcePetitionId: (_) {},
         perfMode: false,
         onTogglePerf: _noop,
         devLogOn: true,
         onToggleDevLog: _noop,
       ),
     ),
-  ),
-
-  Shot(
-    id: 'dev_console',
-    title: 'Dev Konsolu (`)',
-    group: 'Geliştirici',
-    note: 'Quake-style komut arama + parametre formu + senaryo kayıt/oynat.',
-    w: 900,
-    h: 760,
-    settleMs: 1600,
-    build: () {
-      final rec = DevRecorder();
-      final cmds = <DevCommand>[
-        DevCommand(
-          id: 'spawnVillager',
-          label: 'Köylü doğur',
-          hint: 'Belirtilen sayıda yetişkin köye katılır',
-          category: DevCat.nufus,
-          params: const [DevParam.integer('n', 'Adet', intDefault: 3)],
-          run: (_) {},
-        ),
-        DevCommand(
-          id: 'summonImperial',
-          label: 'İmparatorluğu çağır',
-          hint: 'Vergici heyet harita kenarından yürüyerek gelir',
-          category: DevCat.olay,
-          run: (_) {},
-        ),
-        DevCommand(
-          id: 'forcePetition',
-          label: 'Dilekçe zorla',
-          hint: 'Sıradaki dilekçeyi hemen sun',
-          category: DevCat.yonetisim,
-          run: (_) {},
-        ),
-        DevCommand(
-          id: 'setSeason',
-          label: 'Mevsimi ayarla',
-          category: DevCat.zaman,
-          run: (_) {},
-        ),
-        DevCommand(
-          id: 'addResource',
-          label: 'Kaynak ekle',
-          hint: 'Ambara istediğin kadar mal yaz',
-          category: DevCat.ekonomi,
-          run: (_) {},
-        ),
-        DevCommand(
-          id: 'seedShowcase',
-          label: 'Showcase köyü kur',
-          hint: 'Depo + ağıl + sürü + muhafızla dolu köy',
-          category: DevCat.koy,
-          run: (_) {},
-        ),
-      ];
-      return Scaffold(
-        backgroundColor: AppUi.surface0,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            _worldBackdrop(),
-            DevConsole(
-              commands: cmds,
-              recorder: rec,
-              scripts: const [
-                DevScript('Kış + kıtlık', [], builtin: true),
-                DevScript('İmparatorluk baskını', []),
-              ],
-              onRun: (_, _) {},
-              onRunScript: (_) {},
-              onSaveScript: (_) {},
-              onDeleteScript: (_) {},
-              onClose: _noop,
-            ),
-          ],
-        ),
-      );
-    },
   ),
 
   // ── Tasarım sistemi ─────────────────────────────────────────────────────

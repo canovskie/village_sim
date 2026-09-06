@@ -11,7 +11,7 @@ import 'package:flutter/material.dart';
 import '../buildings/building_design.dart';
 import '../buildings/building_renderer.dart';
 import '../buildings/building_type.dart';
-import '../ui/app_ui.dart';
+import '../ui/core/app_ui.dart';
 import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();

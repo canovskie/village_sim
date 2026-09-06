@@ -5,10 +5,10 @@ import 'package:village_sim/buildings/building_renderer.dart';
 import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/buildings/craft.dart';
 import 'package:village_sim/core/resources.dart';
-import 'package:village_sim/systems/founding_choice.dart';
-import 'package:village_sim/ui/app_ui.dart';
-import 'package:village_sim/ui/building_panel.dart';
-import 'package:village_sim/ui/command_bar.dart';
+import 'package:village_sim/systems/run/founding_choice.dart';
+import 'package:village_sim/ui/core/app_ui.dart';
+import 'package:village_sim/ui/hud/building_panel.dart';
+import 'package:village_sim/ui/hud/command_bar.dart';
 
 void main() {
   test('her kafile zorunlu kuruluş zincirini kaynak beklemeden kurar', () {
@@ -46,6 +46,12 @@ void main() {
 
   test('çadır iki kişi barındırır', () {
     expect(kBuildingFunctions[BuildingType.tent]!.housingCapacity, 2);
+  });
+
+  test('katalog kamusal kategoriyi Türkçe ve içeriğe yakın ölçer', () {
+    expect(BuildCategory.civic.label, 'Kamusal');
+    expect(BuildingPanel.preferredDesktopWidth(1), 184);
+    expect(BuildingPanel.preferredDesktopWidth(2), 356);
   });
 
   test('kurucu meslek bilgileri ve üç uzman hakkı tüm iş kollarını açar', () {

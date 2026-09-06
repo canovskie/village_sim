@@ -12,7 +12,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/buildings/building_entity.dart';
 import 'package:village_sim/buildings/building_type.dart';
-import 'package:village_sim/systems/lighting_system.dart';
+import 'package:village_sim/systems/world/lighting_system.dart';
 
 /// Konut ışığının sıcak rengi — toplayıcı ateş/fener/işyeri ışıklarını da
 /// döndürüyor, ev ışığını renginden ayırıyoruz.

@@ -4,11 +4,14 @@
 // dağılıyor mu, ayrılık GERÇEKTEN oluyor mu, ve en önemlisi — kayıp haber
 // verilerek mi geliyor? Bir game-over'ın en pahalı hatası sessiz gelmesidir.
 
+@Tags(['probe'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/main.dart';
-import 'package:village_sim/systems/village_collapse.dart';
+import 'package:village_sim/systems/run/village_collapse.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -27,7 +30,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
 
     kProbeCollapseArmed = false;
     kProbeNoEvents = false;
@@ -54,18 +59,24 @@ void main() {
 
     var waitedMs = 0;
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'collapse'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'collapse'),
+        ),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         waitedMs += 50;
       }
     });
     await tester.pump();
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
-            'bu testin kaybetme eşiğiyle ilgisi YOK.');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason:
+          'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
+          'bu testin kaybetme eşiğiyle ilgisi YOK.',
+    );
   }
 
   Future<void> shutdown(WidgetTester tester) async {
@@ -92,9 +103,13 @@ void main() {
     kDevSpeedBoostOverride = 24.0;
     await run(tester, 30);
 
-    expect(kProbeCollapsed, isFalse,
-        reason: 'oturmuş köy kendiliğinden dağılıyorsa eşikler yanlış — '
-            'kayıp bir kaza değil, bir sonuç olmalı');
+    expect(
+      kProbeCollapsed,
+      isFalse,
+      reason:
+          'oturmuş köy kendiliğinden dağılıyorsa eşikler yanlış — '
+          'kayıp bir kaza değil, bir sonuç olmalı',
+    );
     expect(kProbeVitality, VillageVitality.healthy.name);
     await shutdown(tester);
   });
@@ -113,14 +128,19 @@ void main() {
       await run(tester, 15);
       left = kProbeHousesLeft > 0;
     }
-    expect(left, isTrue,
-        reason: 'kopuşta kalan hane köyü terk etmedi — ayrılık kolu ölü '
-            '(sim donduysa: "$kProbePause")');
+    expect(
+      left,
+      isTrue,
+      reason:
+          'kopuşta kalan hane köyü terk etmedi — ayrılık kolu ölü '
+          '(sim donduysa: "$kProbePause")',
+    );
     await shutdown(tester);
   });
 
-  testWidgets('köy dağılır: geri sayım GÖRÜNÜR, sonra defter kapanır',
-      (tester) async {
+  testWidgets('köy dağılır: geri sayım GÖRÜNÜR, sonra defter kapanır', (
+    tester,
+  ) async {
     await boot(tester);
     kProbeCollapseArmed = true;
     kProbeNoEvents = true;
@@ -132,13 +152,19 @@ void main() {
     await run(tester, 8);
 
     // ÖNCE UYARI: geri sayım görünür olmalı — sessiz ölüm yok.
-    expect(kProbeVitality, VillageVitality.failing.name,
-        reason: 'köy kritik banda indi ama evre değişmedi '
-            '(yetişkin: $kProbeAdults, eşik: $kFailingAdults)');
-    expect(kProbeCollapseDaysLeft, greaterThan(0),
-        reason: 'geri sayım görünmüyor — oyuncu uyarılmadan kaybediyor');
-    expect(kProbeCollapsed, isFalse,
-        reason: 'köy uyarı vermeden dağılmamalı');
+    expect(
+      kProbeVitality,
+      VillageVitality.failing.name,
+      reason:
+          'köy kritik banda indi ama evre değişmedi '
+          '(yetişkin: $kProbeAdults, eşik: $kFailingAdults)',
+    );
+    expect(
+      kProbeCollapseDaysLeft,
+      greaterThan(0),
+      reason: 'geri sayım görünmüyor — oyuncu uyarılmadan kaybediyor',
+    );
+    expect(kProbeCollapsed, isFalse, reason: 'köy uyarı vermeden dağılmamalı');
 
     // SONRA DAĞILMA: süre dolunca defter kapanır.
     var dead = false;
@@ -146,14 +172,21 @@ void main() {
       await run(tester, 15);
       dead = kProbeCollapsed;
     }
-    expect(dead, isTrue,
-        reason: 'geri sayım doldu ama köy dağılmadı '
-            '(sim donduysa: "$kProbePause")');
+    expect(
+      dead,
+      isTrue,
+      reason:
+          'geri sayım doldu ama köy dağılmadı '
+          '(sim donduysa: "$kProbePause")',
+    );
 
     // Mezar taşı ekranı gerçekten çizilmeli.
     await tester.pump();
-    expect(find.text('KÖY DAĞILDI'), findsOneWidget,
-        reason: 'köy dağıldı ama kapanış ekranı çizilmedi');
+    expect(
+      find.text('KÖY DAĞILDI'),
+      findsOneWidget,
+      reason: 'köy dağıldı ama kapanış ekranı çizilmedi',
+    );
     await shutdown(tester);
   });
 }

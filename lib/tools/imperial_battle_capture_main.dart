@@ -8,7 +8,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../main.dart';
-import '../systems/imperial.dart';
 import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();
@@ -22,7 +21,6 @@ Future<void> main() async {
   kCaptureImperialBattle = true;
   kProbeOn = true;
   kProbeImperialArmed = true;
-  kProbeForceResistWin = true;
 
   runApp(
     MaterialApp(
@@ -36,14 +34,17 @@ Future<void> main() async {
   }
   kDevSpeedBoostOverride = 8;
   kProbeSummonImperial = true;
-  while (kProbeVignetteId != kThresholdVignetteId) {
+  while (!kProbeImperialBattleActive) {
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
   kDevSpeedBoostOverride = 0;
 
   // Pencere öndeyken motorun doğal saatini kullan. Elle kare pompalamak burada
   // AnimationController saatleriyle yarışır ve muharebeyi ileri sarar.
-  await Future<void>.delayed(const Duration(milliseconds: 15500));
+  while (!kProbeImperialCombatContactSeen && kProbeImperialBattleActive) {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+  await Future<void>.delayed(const Duration(milliseconds: 150));
   await captureBoundary(
     _boundaryKey,
     '/tmp/imperial_battle.png',

@@ -17,7 +17,22 @@ dosyaların varlık sebebi budur.
 | `crime_capture_main.dart` | Suçun evreleri + muhafız tepkisi + hüküm zinciri. |
 | `anim_room_probe_main.dart` | Animasyon odasının kendi kendini kontrolü. |
 
-## Canlı doğal kuruluş tester'ı
+## Canlı köy tester'ı
+
+Günlük köy testi için `village_tester_main.dart` kullanılır. Rastgele, normal
+bir kuruluş açar; **hazır bina/NPC yerleştirmez ve god mode'u kendiliğinden
+açmaz**. Sağ üstteki üç sekmeli panelden canlı teşhis, sim hızı, saat, hava,
+kaynak enjeksiyonu ve sohbet/dans/kavga/suç gibi dünya tepkileri aynı koşu
+üzerinde denenir. `Eylem → Dış Dünya` bölümünden kervan, yolcu veya yabancı
+ziyareti de doğrudan sahneye çağrılabilir. Panel gizlenebilir; normal dev panelindeki uzun içerik
+kataloglarına ihtiyaç duymaz.
+
+```
+flutter run -d macos -t lib/tools/village_tester_main.dart
+flutter run --release -d <iphone-id> -t lib/tools/village_tester_main.dart
+```
+
+## Doğal kuruluş gözlemcisi
 
 `founding_tester_main.dart`, capture aracı değildir. Ana menü ve normal kayıt
 listesi yerine doğrudan rastgele taze köy açar; kuruluş halkası, intro seçimi,
@@ -42,7 +57,6 @@ flutter run --release -d <iphone-id> -t lib/tools/founding_tester_main.dart
 | `ledger_capture_main.dart` | Köy Defteri'nin beş bölümü. |
 | `law_capture_main.dart` | Kanunname + mühür ritüeli. |
 | `compass_capture_main.dart` | Politik pusula, dört farklı köy hâlinde. |
-| `petition_capture_main.dart` | Dilekçe modalı, gerçek metinlerle. |
 | `option_scene_capture_main.dart` | Karar-eylem sahnelerinin grid önizlemesi. |
 | `villager_capture_main.dart` | Köylü paneli (GENEL/KİŞİLİK/ÖYKÜ). |
 | `char_capture_main.dart` | NPC render'ı iki ölçekte yan yana. |
@@ -65,7 +79,7 @@ flutter run --release -d <iphone-id> -t lib/tools/founding_tester_main.dart
 
 `mobile_capture_main.dart` diğerlerinden farklı: tek kare çekmez, **oyun
 ekranını sürer**. Altı yatay telefon/tablet profilinde (mobil yatay kilitli,
-bkz. `systems/platform_adapt.dart`) 19 adım koşar — pan, pinch-zoom, inşa
+bkz. `systems/platform/platform_adapt.dart`) 19 adım koşar — pan, pinch-zoom, inşa
 paleti, köylü seçimi, Köy Defteri'nin beş bölümü + Haneler sekmesi — her adımda
 kare çeker ve dört şeyi SAYAR: taşma, ekran dışına düşen yazı/hedef, 44dp altı
 dokunma hedefi, 11px altı yazı.
@@ -75,7 +89,7 @@ dokunma hedefi, 11px altı yazı.
 kaydırma alanının içinde fold altında kalıyordu. NÜFUS bölümünde 18 kişilik
 köyden ekranda BİR BUÇUK köylü vardı ve sayaçlar bunu göremedi: "taşma yok"
 ile "işe yarıyor" aynı şey değil. Telefon yerleşiminin bugünkü hâli ve
-gerekçesi `ui/ledger_board.dart` başında; sözleşmesi de
+gerekçesi `ui/ledger/ledger_board.dart` başında; sözleşmesi de
 `test/ledger_board_layout_test.dart`'ta kilitli (bölüm gövdesi dikey kaydırma
 AÇMAZ — sayfalar).
 

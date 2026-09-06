@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/road_route.dart';
+import 'package:village_sim/systems/world/road_route.dart';
 
 /// Yol güzergâhının sözleşmesi.
 ///

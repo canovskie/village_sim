@@ -13,6 +13,9 @@
 //
 // TUZAK (bkz. living_probe_test): asset yüklemesi gerçek async, ticker fake
 // clock ister. Önce runAsync ile kur, sonra pump ile sür.
+@Tags(['probe'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -35,7 +38,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
     kProbeOn = false;
     kCaptureMode = false;
     kDevSpeedBoostOverride = 0;
@@ -43,7 +48,9 @@ void main() {
     kProbeColdRouses = 0;
   });
 
-  testWidgets('kış gelince ocaktan uzak çadır köylüsünü üşütür', (tester) async {
+  testWidgets('kış gelince ocaktan uzak çadır köylüsünü üşütür', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -54,18 +61,24 @@ void main() {
 
     var waitedMs = 0;
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'coldtent'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'coldtent'),
+        ),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         waitedMs += 50;
       }
     });
     await tester.pump();
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
-            'bu testin çadır mekaniğiyle ilgisi YOK: sahne ayağa kalkmadı.');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason:
+          'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
+          'bu testin çadır mekaniğiyle ilgisi YOK: sahne ayağa kalkmadı.',
+    );
 
     // Referans köy yazda başlar (gün 24); kış birkaç gün ötede. Bulunca çık.
     kDevSpeedBoostOverride = 40.0;
@@ -73,10 +86,14 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(kProbeColdTents, greaterThan(0),
-        reason: 'kış geldi ama hiçbir köylü üşümedi — çadır↔ocak mesafesi '
-            'sahneye bağlanmamış olabilir (mevsim / _tickShelter / ocak '
-            'referansı).');
+    expect(
+      kProbeColdTents,
+      greaterThan(0),
+      reason:
+          'kış geldi ama hiçbir köylü üşümedi — çadır↔ocak mesafesi '
+          'sahneye bağlanmamış olabilir (mevsim / _tickShelter / ocak '
+          'referansı).',
+    );
 
     kDevSpeedBoostOverride = 0;
     await tester.pumpWidget(const SizedBox());

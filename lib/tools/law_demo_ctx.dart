@@ -7,7 +7,7 @@
 // OYUN KODU DEĞİL, yalnız capture/preview içindir.
 import '../buildings/building_type.dart';
 import '../buildings/craft.dart';
-import '../systems/law_book.dart';
+import '../systems/governance/law_book.dart';
 
 const LawContext kDemoLawContext = LawContext(
   population: 18,

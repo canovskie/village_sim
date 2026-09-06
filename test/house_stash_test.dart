@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/house_stance.dart';
-import 'package:village_sim/systems/house_system.dart';
+import 'package:village_sim/systems/governance/house_stance.dart';
+import 'package:village_sim/systems/governance/house_system.dart';
 
 /// Hane motorunun karşılık tarafı: saklanan yiyecek yok olmaz, geri döner,
 /// kayıttan sağ çıkar; esirgeyen hane panelde başa gelir.

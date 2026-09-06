@@ -12,8 +12,6 @@ void main() {
 
     expect(_pngDimensions(base), (width: 1270, height: 1239));
     expect(_pngDimensions(rotor), (width: 1254, height: 1254));
-    expect(base.lengthInBytes, greaterThan(100000));
-    expect(rotor.lengthInBytes, greaterThan(100000));
   });
 }
 

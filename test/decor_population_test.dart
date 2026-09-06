@@ -6,8 +6,8 @@ import 'package:village_sim/core/constants.dart';
 import 'package:village_sim/main.dart' as game;
 import 'package:village_sim/rendering/game_painter.dart';
 import 'package:village_sim/rendering/tile_renderer.dart';
-import 'package:village_sim/systems/decor_population.dart';
-import 'package:village_sim/systems/founding_site.dart';
+import 'package:village_sim/systems/world/decor_population.dart';
+import 'package:village_sim/systems/world/founding_site.dart';
 import 'package:village_sim/world/decor_entity.dart';
 import 'package:village_sim/world/world_generator.dart';
 

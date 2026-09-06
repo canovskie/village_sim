@@ -11,8 +11,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-import '../ui/app_ui.dart';
-import '../ui/main_menu_screen.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/screens/main_menu_screen.dart';
 import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();

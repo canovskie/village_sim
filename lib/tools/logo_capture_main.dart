@@ -9,7 +9,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../ui/app_ui.dart';
+import '../ui/core/app_ui.dart';
 import 'capture_support.dart';
 
 final GlobalKey _boundaryKey = GlobalKey();

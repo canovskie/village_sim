@@ -8,6 +8,9 @@
 // Kurulum deseni living_probe_test ile birebir aynı (asset yüklemesi runAsync,
 // ticker fake-clock; ikisi aynı anda olmaz).
 
+@Tags(['probe'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';

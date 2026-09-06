@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/buildings/building_lore.dart';
 import 'package:village_sim/buildings/building_type.dart';
-import 'package:village_sim/systems/hearth_warmth.dart';
+import 'package:village_sim/systems/world/hearth_warmth.dart';
 
 /// İNŞA KÜNYESİ bekçisi.
 ///

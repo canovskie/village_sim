@@ -18,6 +18,9 @@
 // Test ikisini de arar. Telemetri YAPIŞKAN: jest 1,6 saniye sürüyor, sabit
 // aralıklı bir örnekleme onu ıskalayabilirdi.
 
+@Tags(['probe'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,7 +43,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
     kProbeOn = false;
     kProbeWaveSeen = false;
     kProbeBannedBubble = '';
@@ -48,8 +53,9 @@ void main() {
     kCaptureMode = false;
   });
 
-  testWidgets('komşuluk selamı gövdede oynar — baş üstünde ikon kalmadı',
-      (tester) async {
+  testWidgets('komşuluk selamı gövdede oynar — baş üstünde ikon kalmadı', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(1600, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -60,9 +66,11 @@ void main() {
     kCaptureSceneReady = false;
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'gesture'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'gesture'),
+        ),
+      );
       for (var i = 0; i < 160 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
@@ -81,12 +89,20 @@ void main() {
       await tester.pump(const Duration(milliseconds: 16));
     }
 
-    expect(kProbeWaveSeen, isTrue,
-        reason: 'hiçbir köylü el sallamadı — selam jesti hiç tetiklenmiyor '
-            '(waveTime yazılıyor ama okunmuyor olabilir)');
-    expect(kProbeBannedBubble, '',
-        reason: 'baş üstünde yasaklı ikon göründü: $kProbeBannedBubble — '
-            'gövde diline taşınan bir anlatım baloncuğa geri döndü');
+    expect(
+      kProbeWaveSeen,
+      isTrue,
+      reason:
+          'hiçbir köylü el sallamadı — selam jesti hiç tetiklenmiyor '
+          '(waveTime yazılıyor ama okunmuyor olabilir)',
+    );
+    expect(
+      kProbeBannedBubble,
+      '',
+      reason:
+          'baş üstünde yasaklı ikon göründü: $kProbeBannedBubble — '
+          'gövde diline taşınan bir anlatım baloncuğa geri döndü',
+    );
 
     kDevSpeedBoostOverride = 0;
     kProbeOn = false;

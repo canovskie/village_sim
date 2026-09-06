@@ -10,11 +10,11 @@
 //   • Kapı/meclis kararları YASAYA değil dünyaya bakar.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/estate_system.dart';
-import 'package:village_sim/systems/law_book.dart';
-import 'package:village_sim/systems/law_compass.dart';
-import 'package:village_sim/systems/petition_system.dart';
-import 'package:village_sim/systems/regime.dart';
+import 'package:village_sim/systems/governance/estate_system.dart';
+import 'package:village_sim/systems/governance/law_book.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
+import 'package:village_sim/systems/governance/petition_system.dart';
+import 'package:village_sim/systems/governance/regime.dart';
 
 const happy = {
   Estate.laborers: 0.75,

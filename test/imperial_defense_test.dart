@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/imperial.dart';
+import 'package:village_sim/systems/events/imperial.dart';
 
 void main() {
   test('silah savunmayı araç gereçten daha fazla güçlendirir', () {
@@ -88,63 +88,5 @@ void main() {
     );
     expect(plan.available, isFalse);
     expect(plan.woodCost, 8);
-  });
-
-  test('muharebe ritmi hazırlıktan sonuca ilerler', () {
-    expect(imperialBattleBeat(9.2), ImperialBattleBeat.mustering);
-    expect(imperialBattleBeat(6.0), ImperialBattleBeat.firstImpact);
-    expect(imperialBattleBeat(4.5), ImperialBattleBeat.counterstrike);
-    expect(imperialBattleBeat(2.5), ImperialBattleBeat.finalPush);
-    expect(imperialBattleBeat(1.0), ImperialBattleBeat.result);
-  });
-
-  test('ilk darbede asker vurur, köylü temas tepkisi verir', () {
-    final approach = imperialCombatMotion(
-      remaining: 6.8,
-      lane: 0,
-      villageWon: true,
-    );
-    final contact = imperialCombatMotion(
-      remaining: 6.15,
-      lane: 0,
-      villageWon: true,
-    );
-
-    expect(contact.attackerAdvance, greaterThan(approach.attackerAdvance));
-    expect(contact.attackerStriking, isTrue);
-    expect(contact.defenderHit, isTrue);
-  });
-
-  test('hatlar aynı karede değil şerit gecikmesiyle çarpışır', () {
-    final front = imperialCombatMotion(
-      remaining: 6.5,
-      lane: 0,
-      villageWon: false,
-    );
-    final wing = imperialCombatMotion(
-      remaining: 6.5,
-      lane: 3,
-      villageWon: false,
-    );
-
-    expect(front.attackerAdvance, greaterThan(wing.attackerAdvance));
-  });
-
-  test('son itiş kazanan tarafı mekanda ilerletir', () {
-    final victory = imperialCombatMotion(
-      remaining: 2.2,
-      lane: 0,
-      villageWon: true,
-    );
-    final defeat = imperialCombatMotion(
-      remaining: 2.2,
-      lane: 0,
-      villageWon: false,
-    );
-
-    expect(victory.attackerHit, isTrue);
-    expect(victory.attackerAdvance, isNegative);
-    expect(defeat.defenderHit, isTrue);
-    expect(defeat.defenderAdvance, isPositive);
   });
 }

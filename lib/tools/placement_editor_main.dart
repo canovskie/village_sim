@@ -82,6 +82,7 @@ const Map<BuildingType, String> _kAssets = {
   BuildingType.lamppost:       'assets/buildings/lamppost.png',
   BuildingType.barn:           'assets/buildings/barn.png',
   BuildingType.church:         'assets/buildings/church.png',
+  BuildingType.chapel:         'assets/buildings/chapel.png',
   BuildingType.tent:           'assets/buildings/tent.png',
   BuildingType.fountain:       'assets/buildings/fountain.png',
   BuildingType.library:        'assets/buildings/library.png',

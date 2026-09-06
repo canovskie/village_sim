@@ -11,7 +11,7 @@
 //   • Her davranışın oyuncuya gösterilebilir bir SEBEBİ vardır.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/villager_mind.dart';
+import 'package:village_sim/systems/npc/villager_mind.dart';
 
 Bid _bid(
   IntentKind kind, {

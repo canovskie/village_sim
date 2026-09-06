@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/house_stance.dart';
+import 'package:village_sim/systems/governance/house_stance.dart';
 
 /// Hane karşılığı: merdivenin İKİ omurgası kilitlenir —
 ///  (1) kızgınlık tek başına yetmez, hanenin KOZU da olmalı,

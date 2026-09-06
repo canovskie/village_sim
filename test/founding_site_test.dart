@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/core/constants.dart';
-import 'package:village_sim/systems/founding_site.dart';
+import 'package:village_sim/systems/world/founding_site.dart';
 
 void main() {
   test('first hearth accepts the dry central founding area', () {

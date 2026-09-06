@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/hearth_warmth.dart';
-import 'package:village_sim/systems/villager_morale.dart';
+import 'package:village_sim/systems/npc/villager_morale.dart';
+import 'package:village_sim/systems/world/hearth_warmth.dart';
 
 /// ÇADIR ↔ OCAK — kışın ateşten uzak çadırın bedeli.
 ///

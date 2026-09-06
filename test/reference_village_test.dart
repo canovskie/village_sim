@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/buildings/building_function.dart';
 import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/core/constants.dart';
-import 'package:village_sim/systems/law_compass.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
 import 'package:village_sim/world/reference_village_plan.dart';
 import 'package:village_sim/world/season.dart';
 import 'package:village_sim/world/world_generator.dart';

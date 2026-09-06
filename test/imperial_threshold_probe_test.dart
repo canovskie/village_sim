@@ -1,27 +1,14 @@
-// EŞİK PROVASI — kazanılan direniş GERÇEKTEN sahneleniyor mu?
-//
-// Bu testin varlık sebebi bir yalandı: kronik yıllardır "köy tırpanla, baltayla
-// eşiğe dizildi" yazıyordu ama dizilen kimse yoktu. Direnişin KAYBI sahnede
-// oynuyordu (askerler merkeze dalar, kurbanlar düşer), KAZANCI ise bildirim
-// satırıydı. Birim testi bunu göremez: `imperialDefensePreview` doğru sayıyı
-// üretiyordu, eksik olan sayı değil GÖVDEYDİ.
-//
-// Üç şeyi arıyoruz ve üçü de ancak gerçek sahnede görülür:
-//   1. Direniş modal'ındaki savunma düğmesi EKRANDA VE BASILABİLİR mi.
-//   2. Basınca eşik vinyeti kuruluyor ve kadro buluyor mu ("sessiz susma").
-//   3. Sahne kapanınca kadro salıveriliyor mu — vinyet rolleri
-//      `IntentPriority.ceremony` ile dayatılır ve salıverilmezse köylü ÖMÜR BOYU
-//      donar (bkz. scene_vignette sınıf başlığındaki tuzak).
-//
-// Harness deseni event_vignette_test ile aynı: runAsync ile köyü kur, sonra
-// koşula bakan pump'lar. Sabit sayıda pump güvenilmez — heyet yürürken sim
-// akar, modal açıkken DURUR.
+// Integration: a real decision starts unscripted map combat and releases every actor.
+
+@Tags(['probe'])
+library;
+
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/main.dart';
-import 'package:village_sim/systems/imperial.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +33,6 @@ void main() {
     kProbeOn = false;
     kProbeImperialArmed = false;
     kProbeSummonImperial = false;
-    kProbeForceResistWin = false;
     kProbeNoImperial = false;
     kProbeVignetteId = '';
     kProbeVignetteCast = 0;
@@ -96,13 +82,12 @@ void main() {
 
   Future<void> shutdown(WidgetTester tester) async {
     kDevSpeedBoostOverride = 0;
-    kProbeForceResistWin = false;
     kProbeImperialArmed = false;
     kProbeOn = false;
     await tester.pumpWidget(const SizedBox());
   }
 
-  testWidgets('kazanılan direniş eşikte bir hat kurar ve hattı salıverir', (
+  testWidgets('direniş gerçek temas üretir ve savaş sonunda kadroyu bırakır', (
     tester,
   ) async {
     await boot(tester);
@@ -115,7 +100,6 @@ void main() {
     // Muafiyet kalksın: prova köyünde pazarlık modalı normalde her tick
     // siliniyor (bkz. kProbeImperialArmed) — düğmeye basacak olan BU test.
     kProbeImperialArmed = true;
-    kProbeForceResistWin = true;
     kProbeSummonImperial = true;
 
     // Pazarlık açılınca sim durur — telemetri bunu 'imparatorluk' diye yazar.
@@ -149,23 +133,19 @@ void main() {
     await tester.tap(planBtn);
     await tester.pump();
 
-    // 2. Sahne kuruldu mu? Telemetri `_imperialResist` içinde SENKRON yazılır,
-    // yani tıklamadan hemen sonra okunur.
+    expect(kProbeImperialBattleActive, isTrue);
     expect(
       kProbeVignetteId,
-      kThresholdVignetteId,
-      reason: 'direniş kazanıldı ama eşik sahnesi hiç kurulmadı',
+      isEmpty,
+      reason: 'combat must not start a scripted vignette',
     );
     expect(
-      kProbeVignetteCast,
-      greaterThan(1),
-      reason: 'hat tek kişilik — kadro bulunamıyor (bkz. _castNear yarıçapı)',
+      kProbeImperialBattleHits,
+      0,
+      reason: 'decision must not pre-apply damage',
     );
-    expect(
-      kProbeImperialCombatPairs,
-      greaterThan(1),
-      reason: 'hat kuruldu ama askerler savunmacılarla bire bir eşleşmedi',
-    );
+    expect(kProbeImperialBattleResult, isEmpty);
+    expect(kProbeImperialCombatPairs, greaterThan(1));
 
     final madeContact = await waitUntil(
       tester,
@@ -177,19 +157,38 @@ void main() {
       reason: 'eşleşmeler kuruldu ama hiçbir bireysel darbe/tepki oynanmadı',
     );
 
+    await tester.tap(find.text('İlerle'));
+    tester.view.physicalSize = const Size(844, 390);
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'combat HUD overflowed on phone',
+    );
+    final hitsBeforeSave = kProbeImperialBattleHits;
+    kProbeSaveRoundtrip = true;
+    await tester.pump(const Duration(milliseconds: 16));
+    expect(kProbeSaveRoundtrip, isFalse);
+    expect(kProbeSaveError, isEmpty);
+    final snapshot = jsonDecode(kProbeWorldJson) as Map<String, dynamic>;
+    expect(snapshot['imperialBattle']['simulation']['plan'], 'counterCharge');
+    expect(kProbeImperialBattleActive, isTrue);
+    expect(kProbeImperialBattleHits, greaterThanOrEqualTo(hitsBeforeSave));
+    expect(tester.takeException(), isNull);
+
     // 3. Kapanış: ömür dolunca ya da kadro işini bitirince salıverilmeli.
-    final closed = await waitUntil(tester, () => kProbeVignetteId.isEmpty);
-    expect(closed, isTrue, reason: 'eşik sahnesi hiç kapanmadı');
+    final closed = await waitUntil(tester, () => !kProbeImperialBattleActive);
+    expect(closed, isTrue, reason: 'combat did not terminate');
+    expect(kProbeImperialBattleHits, greaterThan(0));
+    expect(kProbeImperialBattleResult, isNotEmpty);
     // Salıverme telemetri turunda okunur — birkaç kare pay bırak.
     for (var i = 0; i < 60; i++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
     expect(
-      kProbeCeremonyLocked,
-      0,
-      reason:
-          '$kProbeCeremonyLocked köylü ceremony niyetinde DONDU — '
-          'eşik kadrosu salıverilmiyor',
+      kProbeImperialBattleActorsReleased,
+      isTrue,
+      reason: 'battle left a combat pose or gauge on a released actor',
     );
 
     await shutdown(tester);

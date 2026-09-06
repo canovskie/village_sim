@@ -19,8 +19,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/ui/app_ui.dart';
-import 'package:village_sim/ui/main_menu_screen.dart';
+import 'package:village_sim/ui/core/app_ui.dart';
+import 'package:village_sim/ui/screens/main_menu_screen.dart';
 
 /// Masaüstü kadraj + telefon (yatay) kadraj.
 const _shots = <String, Size>{

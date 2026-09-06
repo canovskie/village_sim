@@ -11,7 +11,7 @@ import 'package:village_sim/entities/villager_entity.dart';
 import 'package:village_sim/rendering/character_renderer.dart';
 import 'package:village_sim/rendering/game_painter.dart';
 import 'package:village_sim/rendering/resource_renderer.dart';
-import 'package:village_sim/systems/road_system.dart';
+import 'package:village_sim/systems/world/road_system.dart';
 import 'package:village_sim/world/resource_box.dart';
 
 void main() {

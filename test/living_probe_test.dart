@@ -10,11 +10,14 @@
 // pump(dt) ile ticker'ı sür. Ses eklentisi (audioplayers) testte yok →
 // kanalları mock'la, yoksa MissingPluginException gürültü yapar.
 
+@Tags(['probe'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/main.dart';
-import 'package:village_sim/systems/crime_system.dart';
+import 'package:village_sim/systems/events/crime_system.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +36,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
 
     // Prova global'lerini sıfırla — testler arası sızıntı olmasın.
     kProbeOn = false;
@@ -87,9 +92,11 @@ void main() {
     // Kurulum gerçekten kilitlenirse test yine düşer, ama doğru cümleyle.
     var waitedMs = 0;
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'probe'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'probe'),
+        ),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
         waitedMs += 50;
@@ -97,10 +104,14 @@ void main() {
     });
     await tester.pump();
 
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
-            'asset yükleme ya da kurulum takıldı. Bu testin sim davranışıyla '
-            'ilgisi YOK: sahne hiç ayağa kalkmadı.');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason:
+          'referans köy ${waitedMs ~/ 1000} sn içinde kurulamadı — '
+          'asset yükleme ya da kurulum takıldı. Bu testin sim davranışıyla '
+          'ilgisi YOK: sahne hiç ayağa kalkmadı.',
+    );
   }
 
   /// Sahneyi kapat — State.dispose (ticker + timer iptali). HER testin sonunda
@@ -124,8 +135,11 @@ void main() {
 
   testWidgets('köy kurulur ve sim döner (temel canlılık)', (tester) async {
     await boot(tester);
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy kurulamadı — asset/kurulum takıldı');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason: 'referans köy kurulamadı — asset/kurulum takıldı',
+    );
 
     kDevSpeedBoostOverride = 12.0; // hızlandır
     await run(tester, 12);
@@ -135,73 +149,35 @@ void main() {
     // etkilemez, yalnız çizimi. Test davranışı doğrular, çizimi değil.
     //
     // Donmuş köy de pırıl pırıl çizilir; tek dürüst kanıt kat edilen yol.
-    expect(kMindDistance, greaterThan(3.0),
-        reason: 'köy yol kat etmedi — hakem kilitlenmiş olabilir');
-    expect(kMindDistinctIntents, greaterThan(1),
-        reason: 'herkes tek niyette toplandı');
+    expect(
+      kMindDistance,
+      greaterThan(3.0),
+      reason: 'köy yol kat etmedi — hakem kilitlenmiş olabilir',
+    );
+    expect(
+      kMindDistinctIntents,
+      greaterThan(1),
+      reason: 'herkes tek niyette toplandı',
+    );
     await shutdown(tester);
   });
 
-  testWidgets('niyet kilitlenmez — uzun koşuda en eski niyet makul kalır',
-      (tester) async {
+  testWidgets('niyet kilitlenmez — uzun koşuda en eski niyet makul kalır', (
+    tester,
+  ) async {
     await boot(tester);
     kDevSpeedBoostOverride = 16.0;
     await run(tester, 20);
     // Güvenlik ağı niyetleri günün çeyreğinde düşürür; "ölümsüz" bir niyet
     // olmamalı — bolca pay bırakıyoruz.
-    expect(kMindOldestIntent, lessThan(400.0),
-        reason: 'bir niyet ${kMindOldestIntent.toStringAsFixed(0)} sn '
-            'değişmedi — kilitlenme');
+    expect(
+      kMindOldestIntent,
+      lessThan(400.0),
+      reason:
+          'bir niyet ${kMindOldestIntent.toStringAsFixed(0)} sn '
+          'değişmedi — kilitlenme',
+    );
     await shutdown(tester);
-  });
-
-  // İZLEME TESTİ — bu test bir şeyi "geçmez/kalmaz" için değil, köyün
-  // DAVRANIŞINI GÖZLEMEK için. Çalıştır:
-  //   flutter test test/living_probe_test.dart --name izle
-  // Köyün birkaç günlük davranış raporunu + tetiklenmiş bir suçun tanık
-  // zincirini stdout'a basar. Sayıların oturup oturmadığını buradan okursun.
-  testWidgets('izle: köyün davranış raporu', (tester) async {
-    await boot(tester);
-    kProbeOn = true;
-    kDevSpeedBoostOverride = 28.0; // yoğun rapor için hızlı
-
-    var lastSeq = -1;
-    var reports = 0;
-    // 50ms adım × 28× → pump başına ~1.4 sim-sn; ~1800 pump ≈ 2500 sim-sn ≈
-    // 10 oyun günü. Rapor aralığı 0.43 gün → ~23 rapor ve örnek noktası her
-    // turda kayar, yani döküm günün TÜM saatlerini tarar (bkz. scene_probe
-    // `_kProbeInterval` — yarım günlük eski aralık hep aynı iki saate düşüyordu).
-    for (var i = 0; i < 1800; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-      if (kProbeReportSeq != lastSeq && kProbeReport.isNotEmpty) {
-        lastSeq = kProbeReportSeq;
-        reports++;
-        // ignore: avoid_print
-        print(kProbeReport);
-        // Köy oturduktan sonra her rapor bir suç dener → tanık/dedikodu/ihbar
-        // zincirinin biriktiğini SAYAÇ satırında izle.
-        if (reports >= 2) {
-          kProbeTriggerCrime = true;
-          // Suçların YARISINI hırsızlığa zorla. Rastgele seçimde 10 tür
-          // içinden nadiren çıkıyor ve Faz 4'ün sahnesi (gir → çuval → göm)
-          // dökümde hiç görünmüyordu — "yazıldı ama kimse görmedi" hâli.
-          // Diğer yarısı rastgele kalsın ki döküm tek suça daralmasın.
-          kCaptureCrimeKind = reports.isEven ? CrimeKind.theft : null;
-          // ignore: avoid_print
-          print('  ↪ [suç denendi — SAYAÇ satırında tanıklık/ihbar birikmeli]');
-        }
-      }
-    }
-
-    // ignore: avoid_print
-    print('\n═══ ÖZET ═══ kat edilen yol '
-        '${kMindDistance.toStringAsFixed(0)} tile · '
-        '$reports rapor · farklı niyet(son) $kMindDistinctIntents');
-
-    await shutdown(tester);
-
-    expect(reports, greaterThan(6),
-        reason: 'köy yeterince rapor üretmedi — sim çok yavaş ya da donuk');
   });
 
   // DOĞUM YOLU — bu testin var olma sebebi bir kör nokta.
@@ -227,18 +203,29 @@ void main() {
     kProbeForceBirth = true;
     await run(tester, 6);
 
-    expect(kProbeBirths, greaterThan(0),
-        reason: 'doğum hiç olmadı — test kendi iddiasını sınamıyor, '
-            'kProbeForceBirth kapısı kopmuş olabilir');
-    expect(tester.takeException(), isNull,
-        reason: 'doğum sırasında exception — ConcurrentModificationError geri geldi');
+    expect(
+      kProbeBirths,
+      greaterThan(0),
+      reason:
+          'doğum hiç olmadı — test kendi iddiasını sınamıyor, '
+          'kProbeForceBirth kapısı kopmuş olabilir',
+    );
+    expect(
+      tester.takeException(),
+      isNull,
+      reason:
+          'doğum sırasında exception — ConcurrentModificationError geri geldi',
+    );
 
     // Exception yutulmuş olabilir; asıl kanıt köyün doğumdan SONRA hâlâ
     // yürüyor olması (CME tick'in kalanını düşürürdü).
     final distAfterBirth = kMindDistance;
     await run(tester, 6);
-    expect(kMindDistance, greaterThan(distAfterBirth),
-        reason: 'doğumdan sonra köy yol kat etmedi — tick zinciri kopmuş');
+    expect(
+      kMindDistance,
+      greaterThan(distAfterBirth),
+      reason: 'doğumdan sonra köy yol kat etmedi — tick zinciri kopmuş',
+    );
 
     await shutdown(tester);
   });
@@ -280,17 +267,26 @@ void main() {
       if (kProbeTheftSack) sawSack = true;
     }
 
-    expect(sawInside, isTrue,
-        reason: 'fail binaya hiç girmedi — sahne eski "kapıda dikilme" hâlinde');
-    expect(sawSack, isTrue,
-        reason: 'fail çuvalla çıkmadı — çalınan mal görünür yük olmadı');
+    expect(
+      sawInside,
+      isTrue,
+      reason: 'fail binaya hiç girmedi — sahne eski "kapıda dikilme" hâlinde',
+    );
+    expect(
+      sawSack,
+      isTrue,
+      reason: 'fail çuvalla çıkmadı — çalınan mal görünür yük olmadı',
+    );
 
     // Gömmeye kadar sür.
     for (var i = 0; i < 1800 && kProbeLootCount == 0; i++) {
       await tester.pump(const Duration(milliseconds: 50));
     }
-    expect(kProbeLootCount, greaterThan(0),
-        reason: 'zula gömülmedi — çalınan mal dünyada bir yere geçmedi');
+    expect(
+      kProbeLootCount,
+      greaterThan(0),
+      reason: 'zula gömülmedi — çalınan mal dünyada bir yere geçmedi',
+    );
 
     // MALIN KORUNUMU — Faz 4'ün asıl sözleşmesi: hırsızlık bir sayı düşüşü
     // değil, malın YER DEĞİŞTİRMESİ. Çalınan her birim ya toprakta durur ya da
@@ -299,10 +295,16 @@ void main() {
     // Ham stok toplamıyla ölçülemez: köyün ekonomisi paralel dönüyor (köylü
     // yiyor, işçi üretiyor) → o sayı hırsızlıktan bağımsız oynar. Bu yüzden
     // korunum hırsızlık alt-sistemine özel sayaçlarla sınanır.
-    expect(kProbeTheftTaken, greaterThan(0),
-        reason: 'hiç mal çalınmadı — test kendi iddiasını sınamıyor');
-    expect(kProbeLootTotal + kProbeLootRecovered, kProbeTheftTaken,
-        reason: 'mal buharlaştı — çalınan miktar ne toprakta ne ambarda');
+    expect(
+      kProbeTheftTaken,
+      greaterThan(0),
+      reason: 'hiç mal çalınmadı — test kendi iddiasını sınamıyor',
+    );
+    expect(
+      kProbeLootTotal + kProbeLootRecovered,
+      kProbeTheftTaken,
+      reason: 'mal buharlaştı — çalınan miktar ne toprakta ne ambarda',
+    );
 
     await shutdown(tester);
   });
@@ -329,11 +331,18 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    expect(kProbeLootRecovered, 10,
-        reason: 'meydana gömülü GÖRÜLMÜŞ zula bulunup ambara dönmedi — '
-            'bulma/iade yolu (_tickLoot → _uncoverLoot) fiilen ölü');
-    expect(kProbeLootCount, 0,
-        reason: 'zula geri alındı ama toprakta duruyor görünüyor');
+    expect(
+      kProbeLootRecovered,
+      10,
+      reason:
+          'meydana gömülü GÖRÜLMÜŞ zula bulunup ambara dönmedi — '
+          'bulma/iade yolu (_tickLoot → _uncoverLoot) fiilen ölü',
+    );
+    expect(
+      kProbeLootCount,
+      0,
+      reason: 'zula geri alındı ama toprakta duruyor görünüyor',
+    );
 
     await shutdown(tester);
   });

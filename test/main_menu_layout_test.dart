@@ -9,9 +9,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:village_sim/ui/main_menu_screen.dart';
-import 'package:village_sim/ui/mobile_ui.dart';
+import 'package:village_sim/ui/core/mobile_ui.dart';
+import 'package:village_sim/ui/screens/main_menu_screen.dart';
 
 /// Dokunma yerleşiminde ekranda olması gereken her şey.
 const _touchLabels = [

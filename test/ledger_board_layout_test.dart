@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/entities/villager_entity.dart';
-import 'package:village_sim/systems/estate_system.dart' show EstateMoodTier;
-import 'package:village_sim/systems/house_system.dart';
-import 'package:village_sim/systems/petition_system.dart';
-import 'package:village_sim/ui/app_ui.dart';
-import 'package:village_sim/ui/ledger_board.dart';
-import 'package:village_sim/ui/mobile_ui.dart';
-import 'package:village_sim/ui/village_ledger.dart';
-import 'package:village_sim/ui/villager_roster_view.dart';
+import 'package:village_sim/systems/governance/estate_system.dart' show EstateMoodTier;
+import 'package:village_sim/systems/governance/house_system.dart';
+import 'package:village_sim/systems/governance/petition_system.dart';
+import 'package:village_sim/ui/core/app_ui.dart';
+import 'package:village_sim/ui/core/mobile_ui.dart';
+import 'package:village_sim/ui/hud/villager_roster_view.dart';
+import 'package:village_sim/ui/ledger/ledger_board.dart';
+import 'package:village_sim/ui/ledger/village_ledger.dart';
 
 /// KÖY DEFTERİ — TELEFON TAHTASI.
 ///
@@ -19,7 +18,7 @@ import 'package:village_sim/ui/villager_roster_view.dart';
 /// Defter masaüstünde doğdu ve oradaki dizilimi (üst üste yatay bantlar + tek
 /// sütunluk liste) telefona taşımıştı. Ölçülen sonuç: iPhone 11'de NÜFUS
 /// bölümünde bantlar 270dp yiyor, 18 kişilik köyün listesine 90dp kalıyor,
-/// oyuncu bir buçuk köylü görüyordu. Tahta dizilimi (bkz. ui/ledger_board.dart)
+/// oyuncu bir buçuk köylü görüyordu. Tahta dizilimi (bkz. ui/ledger/ledger_board.dart)
 /// gezinmeyi dikeye, içeriği sütunlara, taşan içeriği de kaydırma yerine
 /// SAYFAYA aldı.
 ///

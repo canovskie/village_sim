@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../save/save_manager.dart';
-import '../ui/save_slots_screen.dart';
+import '../ui/screens/save_slots_screen.dart';
 import 'capture_support.dart';
 
 final GlobalKey _key = GlobalKey();

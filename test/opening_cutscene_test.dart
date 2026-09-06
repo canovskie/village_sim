@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/cutscene/cutscene.dart';
 import 'package:village_sim/cutscene/cutscene_player.dart';
-import 'package:village_sim/systems/founding_choice.dart';
+import 'package:village_sim/systems/run/founding_choice.dart';
 
 /// AÇILIŞIN KAPI ZİNCİRİ — sinematik artık izlenen bir film değil, iki karar.
 ///

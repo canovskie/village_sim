@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/ui/village_pulse_card.dart';
+import 'package:village_sim/ui/hud/village_pulse_card.dart';
 
 void main() {
   testWidgets(

@@ -1,22 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:village_sim/systems/event_system.dart';
-import 'package:village_sim/systems/imperial.dart';
-import 'package:village_sim/systems/law_compass.dart';
-import 'package:village_sim/systems/petition_system.dart';
-import 'package:village_sim/systems/reckoning.dart';
-import 'package:village_sim/systems/village_lessons.dart';
-import 'package:village_sim/ui/about_screen.dart';
-import 'package:village_sim/ui/app_ui.dart';
-import 'package:village_sim/ui/event_choice_modal.dart';
-import 'package:village_sim/ui/imperial_modal.dart';
-import 'package:village_sim/ui/lesson_card.dart';
-import 'package:village_sim/ui/mobile_ui.dart';
-import 'package:village_sim/ui/petition_modal.dart';
-import 'package:village_sim/ui/reckoning_screen.dart';
-import 'package:village_sim/ui/save_slots_screen.dart';
-import 'package:village_sim/ui/settings_screen.dart';
+import 'package:village_sim/characters/villager_type.dart';
+import 'package:village_sim/entities/villager_entity.dart';
+import 'package:village_sim/rendering/portrait_renderer.dart';
+import 'package:village_sim/systems/events/event_system.dart';
+import 'package:village_sim/systems/events/imperial.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
+import 'package:village_sim/systems/governance/petition_system.dart';
+import 'package:village_sim/systems/run/reckoning.dart';
+import 'package:village_sim/systems/run/village_lessons.dart';
+import 'package:village_sim/ui/core/app_ui.dart';
+import 'package:village_sim/ui/core/mobile_ui.dart';
+import 'package:village_sim/ui/events/event_choice_modal.dart';
+import 'package:village_sim/ui/events/imperial_modal.dart';
+import 'package:village_sim/ui/events/petition_modal.dart';
+import 'package:village_sim/ui/hud/lesson_card.dart';
+import 'package:village_sim/ui/screens/about_screen.dart';
+import 'package:village_sim/ui/screens/reckoning_screen.dart';
+import 'package:village_sim/ui/screens/save_slots_screen.dart';
+import 'package:village_sim/ui/screens/settings_screen.dart';
 
 const _iphone11 = Size(896, 414);
 const _iphone11Safe = EdgeInsets.only(left: 44, right: 44, bottom: 21);
@@ -112,6 +114,23 @@ const _judgmentPetition = Petition(
   ],
 );
 
+VillagerEntity _petitionAuthor() => VillagerEntity(
+  type: VillagerType.merchant,
+  name: 'Yusuf',
+  surname: 'Karaca',
+  male: true,
+  startCol: 0,
+  startRow: 0,
+  ageDays: 300,
+);
+
+PortraitPainter _compactPortrait(WidgetTester tester) {
+  final paint = tester.widget<CustomPaint>(
+    find.byKey(const ValueKey('compact-divan-portrait-paint')),
+  );
+  return paint.painter! as PortraitPainter;
+}
+
 Future<void> _pumpPhone(WidgetTester tester, Widget child) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = _iphone11;
@@ -154,7 +173,10 @@ void main() {
   testWidgets('olay penceresi kompakt bütçeyi aşmıyor', (tester) async {
     await _pumpPhone(tester, EventChoiceModal(event: _event, onChoose: (_) {}));
     expect(tester.takeException(), isNull);
-    expect(tester.getSize(find.byType(AppPanel).first), const Size(760, 360));
+    expect(
+      tester.getSize(find.byType(AppGildedFrame).first),
+      const Size(760, 360),
+    );
     expect(find.byType(Scrollable), findsNothing);
   });
 
@@ -204,6 +226,57 @@ void main() {
     expect(find.text('Paylaştır'), findsOneWidget);
     expect(find.text('Ambarda tut'), findsOneWidget);
     expect(find.byType(Scrollable), findsNothing);
+  });
+
+  testWidgets('mobil Divan portresi parmağı izler ve seçim tepkisi verir', (
+    tester,
+  ) async {
+    PetitionOption? chosen;
+    await _pumpPhone(
+      tester,
+      PetitionModal(
+        petition: _petition,
+        author: _petitionAuthor(),
+        onChoose: (option) => chosen = option,
+        onDismiss: () {},
+      ),
+    );
+
+    final finger = await tester.startGesture(
+      tester.getCenter(find.text('Paylaştır')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(_compactPortrait(tester).lookOffset.dx, greaterThan(0));
+    expect(_compactPortrait(tester).expression, PortraitExpression.curious);
+
+    await finger.up();
+    await tester.pump();
+    expect(_compactPortrait(tester).expression, PortraitExpression.happy);
+    expect(chosen, isNull);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(chosen, _petition.options.first);
+  });
+
+  testWidgets('mobil Divan portresi uzun kararsızlıkta esner', (tester) async {
+    final author = _petitionAuthor();
+    await _pumpPhone(
+      tester,
+      PetitionModal(
+        petition: _petition,
+        author: author,
+        onChoose: (_) {},
+        onDismiss: () {},
+      ),
+    );
+
+    final seed = _petition.id.codeUnits.fold<int>(
+      author.name.codeUnits.fold<int>(0, (a, b) => a + b),
+      (a, b) => a + b,
+    );
+    await tester.pump(Duration(milliseconds: 12000 + (seed % 6001)));
+    await tester.pump();
+    expect(_compactPortrait(tester).expression, PortraitExpression.yawn);
   });
 
   testWidgets('dünyada karşılığı olmayan dilekçe seçeneği nedenini gösterir', (

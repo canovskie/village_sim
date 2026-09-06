@@ -6,8 +6,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 
-import '../ui/app_ui.dart';
-import '../ui/law_compass_view.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/ledger/law_compass_view.dart';
 import 'capture_support.dart';
 
 final GlobalKey _key = GlobalKey();

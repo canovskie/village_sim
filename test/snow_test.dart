@@ -20,7 +20,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/main.dart';
 import 'package:village_sim/rendering/snow_field.dart';
-import 'package:village_sim/systems/winter.dart';
+import 'package:village_sim/systems/world/winter.dart';
 import 'package:village_sim/world/reference_village_plan.dart';
 import 'package:village_sim/world/season.dart';
 
@@ -88,13 +88,11 @@ void main() {
       Season season = Season.winter,
       double zoom = 1.0,
       bool festival = false,
-      bool meteorShower = false,
       bool storm = false,
     }) => snowfallVisible(
       season: season,
       zoom: zoom,
       festival: festival,
-      meteorShower: meteorShower,
       storm: storm,
     );
 
@@ -113,7 +111,6 @@ void main() {
 
     test('şenlik ve göktaşı kendi partikül dilini kullanır', () {
       expect(vis(festival: true), isFalse);
-      expect(vis(meteorShower: true), isFalse);
     });
 
     test('çok uzak zoom\'da tane gürültüye döner — çizilmez', () {

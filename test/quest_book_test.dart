@@ -17,20 +17,21 @@ import 'package:village_sim/buildings/building_entity.dart';
 import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/resources.dart';
-import 'package:village_sim/scene/scene_data.dart';
-import 'package:village_sim/systems/quest_book.dart';
-import 'package:village_sim/systems/reckoning.dart';
-import 'package:village_sim/systems/village_year.dart';
+import 'package:village_sim/farm/farm_tile.dart';
+import 'package:village_sim/scene/world/scene_data.dart';
+import 'package:village_sim/systems/run/quest_book.dart';
+import 'package:village_sim/systems/run/reckoning.dart';
+import 'package:village_sim/systems/run/village_year.dart';
 
 QuestContext _ctx({
   int charterTier = 0,
   int dayCount = 1,
-  int woodHarvested = 0,
   int roadCount = 0,
   int connectedProductionSites = 0,
+  int productiveBeehiveCount = 0,
   int population = 0,
-  int reedBedCount = 0,
-  bool foundingTentIllnessTriggered = false,
+  int craftCount = 0,
+  int loyalHouses = 0,
   int houseCount = 0,
   int withheldHouses = 0,
   int pressuresWeathered = 0,
@@ -38,24 +39,24 @@ QuestContext _ctx({
   double charter = 0,
   double grit = 0,
   double legacy = 0,
-  double standing = 0,
   bool regimeNamed = false,
   List<BuildingEntity> buildings = const [],
+  List<FarmTile> farmTiles = const [],
+  ResourceBundle? stock,
   Map<VillagerType, String> names = const {},
 }) => QuestContext(
   buildings: buildings,
-  farmTiles: const [],
+  farmTiles: farmTiles,
   population: population,
-  stock: ResourceBundle(),
+  stock: stock ?? ResourceBundle(),
   policies: VillagePolicies(),
-  decorCount: 0,
   charterTier: charterTier,
   dayCount: dayCount,
-  reedBedCount: reedBedCount,
-  foundingTentIllnessTriggered: foundingTentIllnessTriggered,
-  woodHarvested: woodHarvested,
+  productiveBeehiveCount: productiveBeehiveCount,
+  craftCount: craftCount,
   roadCount: roadCount,
   connectedProductionSites: connectedProductionSites,
+  loyalHouses: loyalHouses,
   houseCount: houseCount,
   withheldHouses: withheldHouses,
   pressuresWeathered: pressuresWeathered,
@@ -63,7 +64,6 @@ QuestContext _ctx({
   charter: charter,
   grit: grit,
   legacy: legacy,
-  standing: standing,
   regimeNamed: regimeNamed,
   speakerNames: names,
 );
@@ -168,6 +168,18 @@ void main() {
       reason:
           'tekrar eden id: tamamlanma seti tek girdi tutar, '
           'ikinci görev sessizce ölü kalır',
+    );
+  });
+
+  test('eski pasif görev işaretleri kademe sayacını şişirmez', () {
+    expect(
+      QuestBook.completedCount(const {
+        'firepit',
+        'firstNight',
+        'tentIllness',
+        'bloomVillage',
+      }),
+      1,
     );
   });
 
@@ -349,12 +361,11 @@ void main() {
   group('kuruluş kademesi boş bırakmaz', () {
     List<Quest> tier0() => QuestBook.all.where((q) => q.tier == 0).toList();
 
-    test('kuruluş 7-10 mikro adım bandında kalır', () {
-      // ALT sınır: beş "bina dik" görevine geri dönülürse oyuncu ilk on
-      // dakikayı yine bekleyerek geçirir — boşluğun kaynağı buydu.
-      // ÜST sınır: on ikiye çıktığında liste bir iş listesi gibi okundu.
-      expect(tier0().length, greaterThanOrEqualTo(7));
-      expect(tier0().length, lessThanOrEqualTo(10));
+    test('kuruluş 6-8 gerçek oyuncu hamlesinde kalır', () {
+      // Gece/hastalık gibi izleme sahneleri görev sayılmaz; altı temel karar da
+      // beş binalık eski boş kontrol listesinden daha çeşitli kalır.
+      expect(tier0().length, greaterThanOrEqualTo(6));
+      expect(tier0().length, lessThanOrEqualTo(8));
     });
 
     test('hiçbir adım tek tek köylü atamasına dayanmaz', () {
@@ -379,29 +390,30 @@ void main() {
         isFalse,
         reason: 'Belediye yokken kuruluş öğreticisi Kanunname gösteriyor',
       );
-      expect(firstPolicy.tier, 1);
+      expect(firstPolicy.tier, 2);
       expect(firstPolicy.guided, isTrue);
       expect(policyIndex, townhallIndex + 1);
     });
 
     test('yazılı hüküm rehberi Belediye görevi bitmeden sıra almaz', () {
-      final foundingDone = {
-        for (final q in QuestBook.all.where((q) => q.tier == 0)) q.id,
+      final beforeTownHallDone = {
+        for (final q in QuestBook.all.where((q) => q.tier < 2)) q.id,
+        'market',
       };
       final beforeHall = QuestBook.activeQuests(
-        _ctx(charterTier: 1),
-        foundingDone,
+        _ctx(charterTier: 2),
+        beforeTownHallDone,
       );
       expect(beforeHall.first.quest.id, 'townhall');
 
       final afterHall = QuestBook.activeQuests(
         _ctx(
-          charterTier: 1,
+          charterTier: 2,
           buildings: [
             BuildingEntity(type: BuildingType.townhall, col: 4, row: 4),
           ],
         ),
-        {...foundingDone, 'townhall'},
+        {...beforeTownHallDone, 'townhall'},
       );
       expect(afterHall.first.quest.id, 'firstPolicy');
       expect(afterHall.first.quest.uiTarget, QuestUi.lawBook);
@@ -414,7 +426,7 @@ void main() {
       final guided = QuestBook.all.where((q) => q.guided).toList();
       expect(guided.length, greaterThanOrEqualTo(3));
       expect(guided.length, lessThanOrEqualTo(5));
-      expect(guided.where((q) => q.tier == 0).length, 4);
+      expect(guided.where((q) => q.tier == 0).length, 3);
       expect(
         guided.where((q) => q.tier > 0).map((q) => q.id),
         orderedEquals(const ['firstPolicy']),
@@ -457,19 +469,6 @@ void main() {
       );
     });
 
-    test('ilk gece ancak herkesin saz yatağı varsa ikinci gün tamamlanır', () {
-      final q = QuestBook.all.firstWhere((q) => q.id == 'firstNight');
-      expect(
-        q.check(_ctx(dayCount: 1, population: 5, reedBedCount: 5)),
-        isFalse,
-      );
-      expect(q.check(_ctx(dayCount: 2, population: 5)), isFalse);
-      expect(
-        q.check(_ctx(dayCount: 2, population: 5, reedBedCount: 5)),
-        isTrue,
-      );
-    });
-
     test('çadır görevi tek çadırla değil bütün nüfus barınınca biter', () {
       final q = QuestBook.all.firstWhere((q) => q.id == 'tent');
       final one = BuildingEntity(type: BuildingType.tent, col: 1, row: 1);
@@ -478,10 +477,14 @@ void main() {
       expect(q.check(_ctx(population: 4, buildings: [one, two])), isTrue);
     });
 
-    test('öğretici çadır hastalığı ayrı bir kuruluş adımıdır', () {
-      final q = QuestBook.all.firstWhere((q) => q.id == 'tentIllness');
-      expect(q.check(_ctx()), isFalse);
-      expect(q.check(_ctx(foundingTentIllnessTriggered: true)), isTrue);
+    test('izleme ve bekleme sahneleri görev diye listelenmez', () {
+      final ids = QuestBook.all.map((q) => q.id).toSet();
+      expect(ids, isNot(contains('firstNight')));
+      expect(ids, isNot(contains('tentIllness')));
+      expect(ids, isNot(contains('pop10')));
+      expect(ids, isNot(contains('pop20')));
+      expect(ids, isNot(contains('pop30')));
+      expect(ids, isNot(contains('bloomVillage')));
     });
 
     test('çadır ile ev AYNI görevi doldurmaz', () {
@@ -492,24 +495,22 @@ void main() {
       expect(tent.check, isNot(same(house.check)));
     });
 
-    test('kuruluş sırası sazdan çadıra, temellerden hastalık ve eve gider', () {
+    test('kuruluş sırası altı doğrudan oyuncu hamlesinden oluşur', () {
       final ids = tier0().map((q) => q.id).toList();
       expect(
         ids,
         orderedEquals(const [
           'firepit',
-          'firstNight',
           'tent',
           'lumber',
           'well',
           'farm',
-          'tentIllness',
           'house',
         ]),
       );
     });
 
-    test('oduncu görevi kulübe dikilince değil ilk kütük inince biter', () {
+    test('oduncu görevi NPC darbesini bekletmeden kulübeyle biter', () {
       final q = QuestBook.all.firstWhere((q) => q.id == 'lumber');
       final camp = BuildingEntity(
         type: BuildingType.lumberCamp,
@@ -517,8 +518,35 @@ void main() {
         row: 1,
       );
       expect(q.check(_ctx()), isFalse);
-      expect(q.check(_ctx(buildings: [camp])), isFalse);
-      expect(q.check(_ctx(buildings: [camp], woodHarvested: 1)), isTrue);
+      expect(q.check(_ctx(buildings: [camp])), isTrue);
+    });
+
+    test('tarla görevi tek kare karalamayı değil küçük bir bostanı ister', () {
+      final q = QuestBook.all.firstWhere((q) => q.id == 'farm');
+      expect(q.check(_ctx(farmTiles: [FarmTile(1, 1)])), isFalse);
+      expect(
+        q.check(
+          _ctx(
+            farmTiles: [
+              FarmTile(1, 1),
+              FarmTile(1, 2),
+              FarmTile(2, 1),
+              FarmTile(2, 2),
+            ],
+          ),
+        ),
+        isTrue,
+      );
+    });
+
+    test('kovan görevi boş kutuyu değil çiçekli yerleşimi sayar', () {
+      final q = QuestBook.all.firstWhere((q) => q.id == 'beehive');
+      final hive = BuildingEntity(type: BuildingType.beehive, col: 1, row: 1);
+      expect(q.check(_ctx(buildings: [hive])), isFalse);
+      expect(
+        q.check(_ctx(buildings: [hive], productiveBeehiveCount: 1)),
+        isTrue,
+      );
     });
 
     test('isteyen köylü yaşıyorsa adı panele düşer, yoksa düşmez', () {

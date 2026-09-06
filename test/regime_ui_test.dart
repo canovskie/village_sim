@@ -9,11 +9,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/imperial.dart';
-import 'package:village_sim/systems/law_compass.dart';
-import 'package:village_sim/systems/regime.dart';
-import 'package:village_sim/ui/imperial_modal.dart';
-import 'package:village_sim/ui/law_compass_view.dart';
+import 'package:village_sim/systems/events/imperial.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
+import 'package:village_sim/systems/governance/regime.dart';
+import 'package:village_sim/ui/events/imperial_modal.dart';
+import 'package:village_sim/ui/ledger/law_compass_view.dart';
 
 /// Widget'ı gerçek bir ekranda pompalar; layout/paint hatası varsa fırlatır.
 Future<void> _pump(WidgetTester tester, Widget child) async {

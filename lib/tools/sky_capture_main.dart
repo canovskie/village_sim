@@ -8,7 +8,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/resources.dart';
-import '../ui/hud.dart';
+import '../ui/hud/hud.dart';
 import '../world/season.dart';
 import 'capture_support.dart';
 

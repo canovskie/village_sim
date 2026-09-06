@@ -18,15 +18,15 @@ import '../characters/npc_visual.dart';
 import '../characters/villager_type.dart';
 import '../core/resources.dart';
 import '../entities/villager_entity.dart';
-import '../scene/scene_data.dart';
-import '../systems/chronicle.dart';
-import '../systems/estate_system.dart';
-import '../systems/house_system.dart';
-import '../systems/petition_system.dart';
-import '../systems/quest_book.dart';
-import '../ui/app_ui.dart';
-import '../ui/village_ledger.dart';
-import '../ui/villager_roster_view.dart';
+import '../scene/world/scene_data.dart';
+import '../systems/events/chronicle.dart';
+import '../systems/governance/estate_system.dart';
+import '../systems/governance/house_system.dart';
+import '../systems/governance/petition_system.dart';
+import '../systems/run/quest_book.dart';
+import '../ui/core/app_ui.dart';
+import '../ui/hud/villager_roster_view.dart';
+import '../ui/ledger/village_ledger.dart';
 import 'capture_support.dart';
 import 'law_demo_ctx.dart';
 
@@ -262,7 +262,6 @@ Future<void> main() async {
       population: 26,
       stock: ResourceBundle(wood: 60, stone: 30, food: 41, gold: 18),
       policies: VillagePolicies(),
-      decorCount: 12,
       charterTier: 1,
     ),
     completed,

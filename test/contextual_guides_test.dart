@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/entities/work_site.dart';
-import 'package:village_sim/systems/contextual_guides.dart';
+import 'package:village_sim/systems/run/contextual_guides.dart';
 
 void main() {
   test('acil NPC bağlamı genel tıklama kılavuzunun önüne geçer', () {

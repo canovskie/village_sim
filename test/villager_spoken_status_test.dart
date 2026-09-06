@@ -3,9 +3,9 @@ import 'package:village_sim/characters/life_stage.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/entities/villager_entity.dart';
 import 'package:village_sim/entities/villager_job.dart';
-import 'package:village_sim/systems/villager_act.dart';
-import 'package:village_sim/systems/villager_mind.dart';
-import 'package:village_sim/systems/villager_spoken_status.dart';
+import 'package:village_sim/systems/npc/villager_act.dart';
+import 'package:village_sim/systems/npc/villager_mind.dart';
+import 'package:village_sim/systems/npc/villager_spoken_status.dart';
 
 void main() {
   VillagerEntity villager({JobRole role = JobRole.none}) {

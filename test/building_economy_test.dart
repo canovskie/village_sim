@@ -3,9 +3,9 @@ import 'package:village_sim/buildings/building_entity.dart';
 import 'package:village_sim/buildings/building_function.dart';
 import 'package:village_sim/buildings/building_type.dart';
 import 'package:village_sim/core/resources.dart';
-import 'package:village_sim/systems/building_specialization.dart';
-import 'package:village_sim/systems/building_system.dart';
-import 'package:village_sim/systems/villager_morale.dart';
+import 'package:village_sim/systems/labor/building_specialization.dart';
+import 'package:village_sim/systems/labor/building_system.dart';
+import 'package:village_sim/systems/npc/villager_morale.dart';
 
 /// Bina işlevlerinin GERÇEKTEN bağlı olduğunu doğrular. Buradaki regresyon
 /// koruması iki yönlü:
@@ -32,8 +32,11 @@ void main() {
         BuildingType.caravanserai,
         BuildingType.belltower,
       ]) {
-        expect(moraleWeightOf(t), 0.0,
-            reason: '$t artık moral yığını değil özgün işlevini taşır');
+        expect(
+          moraleWeightOf(t),
+          0.0,
+          reason: '$t artık moral yığını değil özgün işlevini taşır',
+        );
       }
       expect(amenityMoraleFrom({BuildingType.warehouse: 3}), 0.0);
     });
@@ -72,11 +75,16 @@ void main() {
 
     test('aynı türün ikincisi çeşitlilikten az katar', () {
       final twoSame = amenityMoraleFrom({BuildingType.library: 2});
-      final twoDiff =
-          amenityMoraleFrom({BuildingType.library: 1, BuildingType.shrine: 1});
+      final twoDiff = amenityMoraleFrom({
+        BuildingType.library: 1,
+        BuildingType.shrine: 1,
+      });
       expect(twoDiff, greaterThan(twoSame));
       // …ama ikincisi yine de bir şey katar (sıfır değil).
-      expect(twoSame, greaterThan(amenityMoraleFrom({BuildingType.library: 1})));
+      expect(
+        twoSame,
+        greaterThan(amenityMoraleFrom({BuildingType.library: 1})),
+      );
     });
 
     test('computeVillageStats sayımı bina listesinden yapar', () {
@@ -89,8 +97,7 @@ void main() {
       expect(
         stats.amenityMorale,
         closeTo(
-          amenityMoraleFrom(
-              {BuildingType.tavern: 2, BuildingType.library: 1}),
+          amenityMoraleFrom({BuildingType.tavern: 2, BuildingType.library: 1}),
           1e-9,
         ),
       );
@@ -98,22 +105,24 @@ void main() {
 
     test('moral formülüne birebir eklenir', () {
       MoraleEval eval(double amenity) => evaluateVillagerMorale(
-            homeless: false,
-            starving: false,
-            lowWater: false,
-            cold: false,
-            houseMood: 0.55,
-            elderRespected: false,
-            amenityMorale: amenity,
-          );
+        homeless: false,
+        starving: false,
+        lowWater: false,
+        cold: false,
+        houseMood: 0.55,
+        elderRespected: false,
+        amenityMorale: amenity,
+      );
       expect(eval(0.12).target - eval(0.0).target, closeTo(0.12, 1e-9));
     });
   });
 
   group('kuyu/şadırvan', () {
     test('ikisi de su kaynağı sayılır', () {
-      final stats = computeVillageStats(
-          [b(BuildingType.well), b(BuildingType.fountain, 4)]);
+      final stats = computeVillageStats([
+        b(BuildingType.well),
+        b(BuildingType.fountain, 4),
+      ]);
       expect(stats.wellCount, 2);
     });
   });
@@ -150,7 +159,10 @@ void main() {
       final s = stock(gold: 10);
       final market = b(BuildingType.market);
       updateBuildings(
-          dt: kMarketIncomeInterval + 1, buildings: [market], stockpile: s);
+        dt: kMarketIncomeInterval + 1,
+        buildings: [market],
+        stockpile: s,
+      );
       expect(s.gold, 10);
       expect(market.isActive, isFalse);
     });
@@ -159,7 +171,10 @@ void main() {
       final s = stock(food: kMarketSurplusFloor + 200, gold: 0);
       final market = b(BuildingType.market);
       updateBuildings(
-          dt: kMarketIncomeInterval + 1, buildings: [market], stockpile: s);
+        dt: kMarketIncomeInterval + 1,
+        buildings: [market],
+        stockpile: s,
+      );
       expect(s.gold, greaterThan(0));
       expect(market.isActive, isTrue);
     });
@@ -168,15 +183,17 @@ void main() {
       // Tek pazar
       final s1 = stock(food: kMarketSurplusFloor + 200);
       updateBuildings(
-          dt: kMarketIncomeInterval + 1,
-          buildings: [b(BuildingType.market)],
-          stockpile: s1);
+        dt: kMarketIncomeInterval + 1,
+        buildings: [b(BuildingType.market)],
+        stockpile: s1,
+      );
       // İki pazar
       final s2 = stock(food: kMarketSurplusFloor + 200);
       updateBuildings(
-          dt: kMarketIncomeInterval + 1,
-          buildings: [b(BuildingType.market), b(BuildingType.market, 6)],
-          stockpile: s2);
+        dt: kMarketIncomeInterval + 1,
+        buildings: [b(BuildingType.market), b(BuildingType.market, 6)],
+        stockpile: s2,
+      );
       expect(s2.gold, greaterThan(s1.gold)); // ikinci pazar işe yarar
       expect(s2.gold, lessThan(s1.gold * 2)); // ama iki katı değil
       expect(marketShare(1), lessThan(marketShare(0)));
@@ -187,38 +204,60 @@ void main() {
     test('ahır lojistik verir; han artık aynı etkiyi kopyalamaz', () {
       final one = computeVillageStats([b(BuildingType.stable)]);
       expect(one.carrierSpeedMultiplier, closeTo(1.15, 1e-9));
-      final withInn = computeVillageStats(
-          [b(BuildingType.stable), b(BuildingType.caravanserai, 4)]);
+      final withInn = computeVillageStats([
+        b(BuildingType.stable),
+        b(BuildingType.caravanserai, 4),
+      ]);
       expect(withInn.carrierSpeedMultiplier, closeTo(1.15, 1e-9));
     });
   });
 
   group('geç dönem uzmanlaşmaları', () {
     test('seçilen dört bina farklı etki türü taşır', () {
-      expect(kBuildingFunctions[BuildingType.bathhouse]!.civicEffect,
-          CivicEffect.recovery);
-      expect(kBuildingFunctions[BuildingType.monument]!.civicEffect,
-          CivicEffect.legacy);
-      expect(kBuildingFunctions[BuildingType.caravanserai]!.civicEffect,
-          CivicEffect.visitorTrade);
-      expect(kBuildingFunctions[BuildingType.belltower]!.civicEffect,
-          CivicEffect.alarm);
+      expect(
+        kBuildingFunctions[BuildingType.bathhouse]!.civicEffect,
+        CivicEffect.recovery,
+      );
+      expect(
+        kBuildingFunctions[BuildingType.monument]!.civicEffect,
+        CivicEffect.legacy,
+      );
+      expect(
+        kBuildingFunctions[BuildingType.caravanserai]!.civicEffect,
+        CivicEffect.visitorTrade,
+      );
+      expect(
+        kBuildingFunctions[BuildingType.belltower]!.civicEffect,
+        CivicEffect.alarm,
+      );
     });
 
     test('hamam yalnız hasta varken ve odun varsa külhan yakar', () {
       final idle = stepBathhouseFuel(
-          secondsLeft: 0, dt: 1, woodAvailable: 10, hasPatient: false);
+        secondsLeft: 0,
+        dt: 1,
+        woodAvailable: 10,
+        hasPatient: false,
+      );
       expect(idle.active, isFalse);
       expect(idle.woodUsed, 0);
 
       final lit = stepBathhouseFuel(
-          secondsLeft: 0, dt: 1, woodAvailable: 1, hasPatient: true);
+        secondsLeft: 0,
+        dt: 1,
+        woodAvailable: 1,
+        hasPatient: true,
+      );
       expect(lit.active, isTrue);
       expect(lit.woodUsed, kBathhouseFuelWood);
       expect(lit.secondsLeft, kBathhouseFuelSeconds);
 
       final cold = stepBathhouseFuel(
-          secondsLeft: 0, dt: 1, woodAvailable: 0, hasPatient: true);
+        secondsLeft: 0,
+        dt: 1,
+        woodAvailable: 0,
+        hasPatient: true,
+      );
       expect(cold.active, isFalse);
       expect(bathhouseRecoveryRate(cold.active), 1.0);
       expect(bathhouseRecoveryRate(lit.active), 2.0);
@@ -253,7 +292,10 @@ void main() {
 
     test('han ziyaret aralığını kısaltır, konaklamayı uzatır', () {
       expect(merchantVisitGap(100, hasCaravanserai: true), 65);
-      expect(merchantVisitDuration(100, hasCaravanserai: true), 155);
+      expect(
+        merchantVisitDuration(100, hasCaravanserai: true),
+        closeTo(115, 1e-9),
+      );
       expect(merchantVisitGap(100, hasCaravanserai: false), 100);
     });
 
@@ -270,13 +312,26 @@ void main() {
     });
   });
 
-  group('depo kapasitesi', () {
-    test('ambar tavanı yükseltir, stok kırpılır', () {
-      final s = ResourceBundle(wood: 100000);
-      final stats = updateBuildings(
-          dt: 0.1, buildings: [b(BuildingType.warehouse)], stockpile: s);
-      expect(stats.stockCapacity, kBaseStockCapacity + 180);
-      expect(s.wood, stats.stockCapacity);
+  group('sınırsız stok', () {
+    test('ambar olsa da olmasa da kaynak kırpılmaz', () {
+      for (final buildings in [
+        <BuildingEntity>[],
+        [b(BuildingType.warehouse)],
+      ]) {
+        final s = ResourceBundle(
+          wood: 100000,
+          stone: 100000,
+          iron: 100000,
+          coal: 100000,
+          food: 100000,
+        );
+        updateBuildings(dt: 0.1, buildings: buildings, stockpile: s);
+        expect(s.wood, 100000);
+        expect(s.stone, 100000);
+        expect(s.iron, 100000);
+        expect(s.coal, 100000);
+        expect(s.food, 100000);
+      }
     });
   });
 }

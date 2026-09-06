@@ -13,9 +13,9 @@
 // (3) köyün hâlini gerçekten değiştirir, (4) kapılıysa gerekçesi vardır.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/law_book.dart';
-import 'package:village_sim/systems/law_compass.dart';
-import 'package:village_sim/systems/world_pressure.dart';
+import 'package:village_sim/systems/governance/law_book.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
+import 'package:village_sim/systems/governance/world_pressure.dart';
 import 'package:village_sim/world/season.dart';
 
 /// Bir basınç tablosunun bütün sayısal alanları — karşılaştırma için.

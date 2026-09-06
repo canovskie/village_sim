@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/winter.dart';
+import 'package:village_sim/systems/world/winter.dart';
 import 'package:village_sim/world/season.dart';
 
 /// KIŞ ÇEKİRDEĞİ — saf matematiğin regresyonu.
@@ -97,7 +97,7 @@ void main() {
   });
 
   // Kış göstergesi HUD'dan kalkıp köyün ağzına taşındığında (bkz.
-  // ui/winter_section.dart) uyarının BİRİMİ de değişti: yüzde değil GÜN.
+  // ui/hud/winter_section.dart) uyarının BİRİMİ de değişti: yüzde değil GÜN.
   // "Odun iki güne biter" bir cümledir; "%40" bir puandır.
   group('kaç gün yeter', () {
     test('gün sayısı stok ÷ günlük ihtiyaç', () {

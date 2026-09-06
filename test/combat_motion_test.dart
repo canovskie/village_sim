@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/combat_motion.dart';
+import 'package:village_sim/systems/npc/combat_motion.dart';
 
 void main() {
   test('NPC düellosu yaklaşır, temas eder ve ayrılır', () {

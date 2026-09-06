@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/village_lessons.dart';
+import 'package:village_sim/systems/run/village_lessons.dart';
 import 'package:village_sim/world/season.dart';
 
 /// ORTA OYUN DERSLERİ — katalog sözleşmesi.

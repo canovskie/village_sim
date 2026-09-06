@@ -12,8 +12,8 @@
 import 'package:flutter/material.dart';
 
 import '../main.dart' as game;
-import '../systems/platform_adapt.dart';
-import '../ui/settings_model.dart';
+import '../systems/platform/platform_adapt.dart';
+import '../ui/core/settings_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

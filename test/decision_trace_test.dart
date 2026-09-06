@@ -1,24 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/scene/scene_data.dart';
-import 'package:village_sim/systems/chronicle.dart';
-import 'package:village_sim/systems/law_book.dart';
-import 'package:village_sim/systems/petition_system.dart';
+import 'package:village_sim/scene/world/scene_data.dart';
+import 'package:village_sim/systems/events/chronicle.dart';
+import 'package:village_sim/systems/governance/law_book.dart';
+import 'package:village_sim/systems/governance/petition_system.dart';
 import 'package:village_sim/text/voice.dart';
 
 /// KARARIN İZİ — saf taraf.
 ///
 /// Sorulan şey tek cümle: **oyuncunun verdiği her karar geriye bir kayıt
 /// bırakabiliyor mu, ve o kayıt kaybolmadan (kayıt/yükleme, fesih) yaşıyor mu?**
-/// Sahnede gerçekten YAZILDIĞINI prova testi kanıtlar
-/// (test/decision_trace_probe_test.dart) — burası sözleşmenin kendisi.
+/// Buradaki testler kaydın saf sözleşmesini korur; dilekçe kataloğunun metin
+/// bütünlüğü `petition_catalog_test.dart` içinde tek yerden doğrulanır.
 void main() {
   group('kronik türü', () {
     test('tür kayda yazılır ve kayıttan aynen döner', () {
       const e = ChronicleEntry(
-          day: 12,
-          icon: '⚖',
-          text: 'Nöbet başladı.',
-          kind: ChronicleKind.decision);
+        day: 12,
+        icon: '⚖',
+        text: 'Nöbet başladı.',
+        kind: ChronicleKind.decision,
+      );
       final back = ChronicleEntry.fromJson(e.toJson());
       expect(back.kind, ChronicleKind.decision);
       expect(back.day, 12);
@@ -41,25 +42,6 @@ void main() {
   });
 
   group('dilekçe şıkkının annali', () {
-    test('her şık ya annal ya da çözüm cümlesi taşır — kararsız kayıt olmaz',
-        () {
-      // Bu iddia "her şıkka metin yazıldı" demek DEĞİL: sahne çözüm cümlesini
-      // günceye çevirebiliyor (bkz. _chronicleDecision). Boş kalan bir şık
-      // günceye "Başlık: Şık" diye kuru bir satır düşürür — testin engellediği
-      // şey ikisinin de olmaması değil, ikisinin de BOŞ kalıp fark edilmemesi.
-      final mute = <String>[];
-      for (final p in PetitionSystem.all) {
-        for (final o in p.options) {
-          if (o.annal.trim().isEmpty && o.resolution.trim().isEmpty) {
-            mute.add('${p.id} → ${o.label}');
-          }
-        }
-      }
-      expect(mute, isEmpty,
-          reason: 'bu şıklar günceye ancak kuru bir başlık düşürür; '
-              'annalPool yaz: ${mute.join(', ')}');
-    });
-
     test('annal havuzu bağlamla dokunur (spoken)', () {
       const raw = PetitionOption(
         label: 'Kabul et',
@@ -74,7 +56,10 @@ void main() {
 
     test('annal yazılmamışsa boş kalır — uydurma cümle üretilmez', () {
       const raw = PetitionOption(
-          label: 'Kabul et', detail: '...', resolutionPool: ['oldu']);
+        label: 'Kabul et',
+        detail: '...',
+        resolutionPool: ['oldu'],
+      );
       expect(raw.annal, isEmpty);
       expect(raw.spoken(const VoiceCtx(seed: 1)).annal, isEmpty);
     });
@@ -109,10 +94,16 @@ void main() {
       p.seal(otherLaw(), day: 9);
       // Fesih yolu: gün haritası GEÇİLMEDEN sealed yeniden kurulur.
       p.restoreSealed([otherLaw().id]);
-      expect(p.sealedOn.containsKey(anyLaw().id), isFalse,
-          reason: 'feshedilen fermanın gün damgası defterde kalmamalı');
-      expect(p.sealedOn[otherLaw().id], 9,
-          reason: 'başka fermanın damgası fesihten etkilenmemeli');
+      expect(
+        p.sealedOn.containsKey(anyLaw().id),
+        isFalse,
+        reason: 'feshedilen fermanın gün damgası defterde kalmamalı',
+      );
+      expect(
+        p.sealedOn[otherLaw().id],
+        9,
+        reason: 'başka fermanın damgası fesihten etkilenmemeli',
+      );
     });
   });
 }

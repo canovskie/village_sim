@@ -13,7 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/life_stage.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/entities/villager_entity.dart';
-import 'package:village_sim/systems/villager_act.dart';
+import 'package:village_sim/systems/npc/villager_act.dart';
 
 void main() {
   group('adım dizisi', () {
@@ -71,8 +71,10 @@ void main() {
 
     test('boş kova ağır değildir, dolu kova ağırdır', () {
       expect(propSpeedFactor(PropKind.bucketEmpty), 1.0);
-      expect(propSpeedFactor(PropKind.bucketFull),
-          lessThan(propSpeedFactor(PropKind.bucketEmpty)));
+      expect(
+        propSpeedFactor(PropKind.bucketFull),
+        lessThan(propSpeedFactor(PropKind.bucketEmpty)),
+      );
     });
 
     test('hafif nesneler tek elle, yük iki elle taşınır', () {
@@ -106,15 +108,15 @@ void main() {
 
   group('yük gerçekten yavaşlatır (köylü üstünde)', () {
     VillagerEntity mk() => VillagerEntity(
-          type: VillagerType.farmer,
-          name: 'Deneme',
-          male: true,
-          startCol: 10,
-          startRow: 10,
-          ageDays: kAdultStartDay + 5,
-          visualSeed: 3,
-          personalitySeed: 3,
-        );
+      type: VillagerType.farmer,
+      name: 'Deneme',
+      male: true,
+      startCol: 10,
+      startRow: 10,
+      ageDays: kAdultStartDay + 5,
+      visualSeed: 3,
+      personalitySeed: 3,
+    );
 
     test('çuval taşıyan köylü boş elliden YAVAŞ yürür', () {
       final empty = mk();

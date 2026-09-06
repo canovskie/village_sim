@@ -8,8 +8,7 @@ import '../dev/animation_room.dart';
 ///   flutter run -d macos -t lib/tools/animation_room_main.dart
 ///
 /// Hot reload çalışır → sinematik/karakter kodunda yaptığın değişiklik saniyeler
-/// içinde ekranda. (Oyun içinden açmak için: backtick konsolu → `anim.room`,
-/// ya da ana menüdeki ANİMASYONLAR satırı.)
+/// içinde ekranda. Oyun içinden ana menüdeki ANİMASYONLAR satırıyla da açılır.
 void main() {
   runApp(const AnimationRoomApp());
 }

@@ -78,4 +78,22 @@ void main() {
 
     expect(cart.speed, lessThan(walker.speed));
   });
+
+  test('sonuçlanan kervan selamı kesip kısa sürede çıkışa hazırlanır', () {
+    final visitor = MerchantEntity(
+      startCol: 2,
+      startRow: 2,
+      browseX: 2,
+      browseY: 2,
+      exitX: 4,
+      exitY: 4,
+      greetingLeft: 3,
+      browseLeft: 120,
+    )..phase = MerchantPhase.greeting;
+
+    visitor.wrapUpVisit();
+
+    expect(visitor.greetingLeft, 0.8);
+    expect(visitor.browseLeft, 7);
+  });
 }

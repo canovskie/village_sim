@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/imperial.dart';
-import 'package:village_sim/systems/village_year.dart';
+import 'package:village_sim/systems/events/imperial.dart';
+import 'package:village_sim/systems/run/village_year.dart';
 
 /// ÖŞÜR RAKAMI — verginin gerçekten bir baskı olup olmadığı.
 ///

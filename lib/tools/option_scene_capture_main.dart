@@ -8,7 +8,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../ui/option_scene_card.dart';
+import '../ui/events/option_scene_card.dart';
 
 final GlobalKey _key = GlobalKey();
 

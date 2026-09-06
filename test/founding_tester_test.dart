@@ -69,7 +69,6 @@ void main() {
         '○ Odun',
         '○ Kuyu',
         '○ Tarla',
-        '○ Hastalık',
         '○ Ev',
       ]) {
         expect(

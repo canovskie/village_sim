@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/house_action.dart';
+import 'package:village_sim/systems/governance/house_action.dart';
 
 /// Hane eylemleri: yetki kapısı + bedel dengesi. Bu testler tasarımın iki
 /// omurgasını kilitler — (1) sert eylem yetkisiz/yasasız yapılamaz,

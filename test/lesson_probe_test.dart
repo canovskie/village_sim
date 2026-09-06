@@ -7,6 +7,9 @@
 // öğretici, olmayan bir öğreticiden daha kötüdür: yazılmıştır, bakımı yapılır,
 // kimse okumaz.
 
+@Tags(['probe'])
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -29,7 +32,9 @@ void main() {
       });
     }
     m.setMockStreamHandler(
-        const EventChannel('xyz.luan/audioplayers.global/events'), null);
+      const EventChannel('xyz.luan/audioplayers.global/events'),
+      null,
+    );
 
     kProbeLessonsArmed = false;
     kProbeLessonsShown = 0;
@@ -49,16 +54,21 @@ void main() {
     kCaptureSceneReady = false;
 
     await tester.runAsync(() async {
-      await tester.pumpWidget(const MaterialApp(
-        home: VillageScene(referenceVillage: true, slotId: 'lessons'),
-      ));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: VillageScene(referenceVillage: true, slotId: 'lessons'),
+        ),
+      );
       for (var i = 0; i < 1200 && !kCaptureSceneReady; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 50));
       }
     });
     await tester.pump();
-    expect(kCaptureSceneReady, isTrue,
-        reason: 'referans köy kurulamadı — bu testin derslerle ilgisi YOK.');
+    expect(
+      kCaptureSceneReady,
+      isTrue,
+      reason: 'referans köy kurulamadı — bu testin derslerle ilgisi YOK.',
+    );
   }
 
   Future<void> shutdown(WidgetTester tester) async {
@@ -75,8 +85,9 @@ void main() {
     }
   }
 
-  testWidgets('ders GERÇEKTEN açılıyor ve kart ekrana çiziliyor',
-      (tester) async {
+  testWidgets('ders GERÇEKTEN açılıyor ve kart ekrana çiziliyor', (
+    tester,
+  ) async {
     await boot(tester);
     kProbeLessonsArmed = true;
     kProbeNoEvents = true; // olay banner'ı aynı yeri kullanıyor
@@ -88,18 +99,29 @@ void main() {
       shown = kProbeLessonsShown > 0;
     }
 
-    expect(shown, isTrue,
-        reason: 'oturmuş bir köyde tek bir ders bile açılmadı — ders '
-            'penceresi hiçbir zaman açılmıyor demektir '
-            '(sim donduysa: "$kProbePause")');
+    expect(
+      shown,
+      isTrue,
+      reason:
+          'oturmuş bir köyde tek bir ders bile açılmadı — ders '
+          'penceresi hiçbir zaman açılmıyor demektir '
+          '(sim donduysa: "$kProbePause")',
+    );
 
     await tester.pump();
-    expect(find.text('KÖYÜN ÂDETİ'), findsOneWidget,
-        reason: 'ders "$kProbeLastLesson" tetiklendi ama kart çizilmedi');
+    expect(
+      find.text('KÖYÜN ÂDETİ'),
+      findsOneWidget,
+      reason: 'ders "$kProbeLastLesson" tetiklendi ama kart çizilmedi',
+    );
     // Kartın asıl işi: ne yapılacağını söylemek.
-    expect(find.text('NE YAPABİLİRSİN'), findsOneWidget,
-        reason: 'ders kartında eylem bölümü çizilmedi — kart bir tabelaya '
-            'dönmüş');
+    expect(
+      find.text('NE YAPABİLİRSİN'),
+      findsOneWidget,
+      reason:
+          'ders kartında eylem bölümü çizilmedi — kart bir tabelaya '
+          'dönmüş',
+    );
     await shutdown(tester);
   });
 
@@ -119,8 +141,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('Anladım'));
     await tester.pump();
-    expect(find.text('KÖYÜN ÂDETİ'), findsNothing,
-        reason: 'kart kapanmadı');
+    expect(find.text('KÖYÜN ÂDETİ'), findsNothing, reason: 'kart kapanmadı');
 
     // Koşuya devam. Aynı ders bir daha AÇILMAMALI — ama koşulları hâlâ
     // sağlanıyor, yani tekrar açılmaması gerçek bir iddia.
@@ -132,19 +153,28 @@ void main() {
     await run(tester, 20);
     final cardUp = find.text('KÖYÜN ÂDETİ').evaluate().isNotEmpty;
     if (cardUp) {
-      expect(kProbeLastLesson, isNot(first),
-          reason: 'kapatılan ders "$first" yeniden açıldı — "bir kez" kuralı '
-              'çalışmıyor, öğretici dırdıra döner');
+      expect(
+        kProbeLastLesson,
+        isNot(first),
+        reason:
+            'kapatılan ders "$first" yeniden açıldı — "bir kez" kuralı '
+            'çalışmıyor, öğretici dırdıra döner',
+      );
     } else {
-      expect(kProbeLastLesson, first,
-          reason: 'ekranda kart yok ama son ders değişmiş: bir ders açılıp '
-              'kendiliğinden kaybolmuş (ders okunmadan kaybolmamalı)');
+      expect(
+        kProbeLastLesson,
+        first,
+        reason:
+            'ekranda kart yok ama son ders değişmiş: bir ders açılıp '
+            'kendiliğinden kaybolmuş (ders okunmadan kaybolmamalı)',
+      );
     }
     await shutdown(tester);
   });
 
-  testWidgets('dersler ÜST ÜSTE yığılmaz — aralarında nefes payı var',
-      (tester) async {
+  testWidgets('dersler ÜST ÜSTE yığılmaz — aralarında nefes payı var', (
+    tester,
+  ) async {
     await boot(tester);
     kProbeLessonsArmed = true;
     kProbeNoEvents = true;
@@ -153,8 +183,11 @@ void main() {
     // Oturmuş köyde birden çok ders koşulu aynı anda sağlanır. Hepsi arka
     // arkaya patlarsa oyuncu hiçbirini okumaz.
     await run(tester, 25);
-    expect(find.text('KÖYÜN ÂDETİ').evaluate().length, lessThanOrEqualTo(1),
-        reason: 'aynı anda birden çok ders kartı çizildi');
+    expect(
+      find.text('KÖYÜN ÂDETİ').evaluate().length,
+      lessThanOrEqualTo(1),
+      reason: 'aynı anda birden çok ders kartı çizildi',
+    );
     await shutdown(tester);
   });
 }

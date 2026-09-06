@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/decision_pacing.dart';
+import 'package:village_sim/systems/governance/decision_pacing.dart';
 
 void main() {
   group('DecisionPacing sessizlik sözleşmesi', () {
@@ -128,5 +128,18 @@ void main() {
     expect(restored.queued.first.kind, HeavyDecisionKind.majorEvent);
     expect(restored.queued.last.kind, HeavyDecisionKind.imperial);
     expect(restored.metrics.deferredDecisions, 2);
+  });
+
+  test('payloadu kalkmış istek aktiften veya kuyruktan cezasız atılabilir', () {
+    final pacing = DecisionPacing();
+    final active = pacing.request(HeavyDecisionKind.petition, atDay: 1);
+    final queued = pacing.request(HeavyDecisionKind.majorEvent, atDay: 1.1);
+
+    expect(pacing.cancel(queued.request.id), isTrue);
+    expect(pacing.queueLength, 0);
+    expect(pacing.cancel(active.request.id), isTrue);
+    expect(pacing.active, isNull);
+    expect(pacing.metrics.resolvedDecisions, 0);
+    expect(pacing.cancel('missing'), isFalse);
   });
 }

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/constants.dart';
-import 'package:village_sim/systems/founding_choice.dart';
+import 'package:village_sim/systems/run/founding_choice.dart';
 
 /// KURULUŞ KARARI — açılış sinematiğine gömülü ilk seçim.
 ///

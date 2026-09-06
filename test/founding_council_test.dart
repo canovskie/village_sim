@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/cutscene/cutscene_player.dart';
 import 'package:village_sim/main.dart';
-import 'package:village_sim/ui/command_bar.dart';
+import 'package:village_sim/ui/hud/command_bar.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/ui/world_tag.dart';
+import 'package:village_sim/ui/hud/world_tag.dart';
 
 void main() {
   testWidgets('NPC hover künyesi tek ve çift tık ipucunu gösterir', (

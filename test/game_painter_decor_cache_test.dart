@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/rendering/decor_renderer.dart';
 import 'package:village_sim/rendering/game_painter.dart';
-import 'package:village_sim/systems/road_system.dart';
+import 'package:village_sim/systems/world/road_system.dart';
 import 'package:village_sim/world/decor_entity.dart';
 
 void main() {

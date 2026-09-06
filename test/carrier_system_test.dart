@@ -8,10 +8,10 @@ import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/core/resources.dart';
 import 'package:village_sim/entities/villager_entity.dart';
 import 'package:village_sim/entities/villager_job.dart';
-import 'package:village_sim/systems/anchor_system.dart';
-import 'package:village_sim/systems/carrier_system.dart';
-import 'package:village_sim/systems/villager_act.dart';
-import 'package:village_sim/systems/villager_mind.dart';
+import 'package:village_sim/systems/labor/carrier_system.dart';
+import 'package:village_sim/systems/npc/anchor_system.dart';
+import 'package:village_sim/systems/npc/villager_act.dart';
+import 'package:village_sim/systems/npc/villager_mind.dart';
 import 'package:village_sim/world/hay_entity.dart';
 import 'package:village_sim/world/resource_box.dart';
 

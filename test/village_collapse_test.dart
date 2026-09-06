@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/village_collapse.dart';
+import 'package:village_sim/systems/run/village_collapse.dart';
 
 /// Kaybetme eşiğinin üç sözü kilitlenir:
 ///  (1) kayıp HABER VERİLMİŞ olur — dağılma ani değil, evreli ve geri sayımlı,

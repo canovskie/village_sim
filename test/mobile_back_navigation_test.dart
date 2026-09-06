@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/main.dart';
-import 'package:village_sim/ui/mobile_ui.dart';
+import 'package:village_sim/ui/core/mobile_ui.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

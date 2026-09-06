@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/systems/law_compass.dart';
-import 'package:village_sim/systems/reckoning.dart';
+import 'package:village_sim/systems/governance/law_compass.dart';
+import 'package:village_sim/systems/run/reckoning.dart';
 
 /// HESAPLAŞMA — kapanış kararının sözleşmesi.
 ///

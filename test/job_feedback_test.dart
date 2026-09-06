@@ -3,7 +3,7 @@ import 'package:village_sim/characters/life_stage.dart';
 import 'package:village_sim/characters/villager_type.dart';
 import 'package:village_sim/entities/villager_entity.dart';
 import 'package:village_sim/entities/villager_job.dart';
-import 'package:village_sim/systems/job_feedback.dart';
+import 'package:village_sim/systems/labor/job_feedback.dart';
 
 void main() {
   VillagerEntity villager(JobRole role) {

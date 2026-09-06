@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/farm/farm_tile.dart';
-import 'package:village_sim/systems/hay_processor.dart';
+import 'package:village_sim/systems/labor/hay_processor.dart';
 import 'package:village_sim/world/harman_site.dart';
 import 'package:village_sim/world/hay_entity.dart';
 

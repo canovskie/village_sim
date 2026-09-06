@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 
 import '../characters/villager_type.dart';
 import '../entities/villager_entity.dart';
-import '../systems/chronicle.dart';
-import '../ui/villager_info_panel.dart';
+import '../systems/events/chronicle.dart';
+import '../ui/hud/villager_info_panel.dart';
 import 'capture_support.dart';
 
 final GlobalKey _key = GlobalKey();

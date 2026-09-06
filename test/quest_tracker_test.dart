@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:village_sim/ui/app_ui.dart';
-import 'package:village_sim/ui/command_bar.dart';
+import 'package:village_sim/ui/core/app_ui.dart';
+import 'package:village_sim/ui/hud/command_bar.dart';
 
 void main() {
   testWidgets('kuruluş şantiyesi beklerken beklemeyi geç eylemi görünür', (
