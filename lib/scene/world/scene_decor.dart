@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// DÜNYA DEKORU — tek yerleşim, nüfus ve topoloji kapısı.
 ///

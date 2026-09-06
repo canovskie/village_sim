@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// HASTALIK & KIRILGANLIK — köyün "hayat kırılgan" katmanı (kullanıcı kararı:
 /// hastalık + sert kış; politika toggle'ı YOK, hep açık).
@@ -76,7 +76,6 @@ extension _SceneIllness on _VillageSceneState {
 
   void _tickIllness(double dt) {
     if (_villagers.isEmpty) return;
-    _maybeTriggerFoundingTentIllness();
     final step = dt / kGameDaySeconds;
     final winter = _season.isFrozen;
     final foodShort = _wasStarving;
@@ -158,78 +157,6 @@ extension _SceneIllness on _VillageSceneState {
     }
   }
 
-  /// Kuruluş dersinin kontrollü hastalığı.
-  ///
-  /// Bütün kurucular çadıra girdikten, odun, su ve tarla temeli hazır olduktan
-  /// sonra sağlıklı bir çadır sakini ateşlenir. Oyuncu bütün kararları verdikten
-  /// sonra sırf gün sayacı dönsün diye bekletilmez.
-  /// Bu hastalık normal iyileşme döngüsünü kullanır fakat ölüm zarı atmaz.
-  /// Aynı anda marangozluk açılır: oyuncuya "ev gerek" deyip kilitli bir ev
-  /// kartı göstermek öğretmek değil, yolu kapatmak olurdu.
-  void _maybeTriggerFoundingTentIllness() {
-    if (_foundingTentIllnessTriggered || _completedQuests.contains('house')) {
-      return;
-    }
-    const foundations = {'firstNight', 'tent', 'lumber', 'well', 'farm'};
-    if (!foundations.every(_completedQuests.contains)) return;
-    final candidates = _villagers.where((v) {
-      final home = v.homeBuilding;
-      return !v.isDying &&
-          v.lifeStage != LifeStage.child &&
-          v.lifeStage != LifeStage.elder &&
-          v.sickDays <= 0 &&
-          v.injuryDays <= 0 &&
-          home is BuildingEntity &&
-          home.type == BuildingType.tent;
-    }).toList();
-    final chosen = candidates.firstOrNull;
-
-    // Marangozluğu önce aç: bütün uygun kurucular zaten hastaysa kontrollü
-    // hastalığı üstlerine ikinci kez bindirmeden görev yine ilerleyebilsin.
-    final builder =
-        _villagers
-            .where((v) => !identical(v, chosen) && !v.isDying)
-            .firstOrNull ??
-        chosen;
-    if (builder != null) {
-      final currentMastery = builder.mastery[Craft.carpentry] ?? 0.0;
-      if (currentMastery < 22.0) builder.mastery[Craft.carpentry] = 22.0;
-    }
-    _knownCrafts.add(Craft.carpentry);
-    _foundingTentIllnessTriggered = true;
-
-    if (chosen == null) {
-      _showNotification(
-        '🤒 Çadırdaki hastalık kalıcı dam ihtiyacını gösterdi. Köy Evi artık kurulabilir.',
-      );
-      _chronicle(
-        'Çadırdaki hastalık köyü kalıcı dam için marangozluğa yöneltti.',
-        icon: '🤒',
-        kind: ChronicleKind.crisis,
-        milestone: true,
-      );
-      return;
-    }
-
-    chosen.sickDays = 2.0;
-    chosen.tutorialIllness = true;
-    chosen.feel(NpcEmotion.fear, 3.5, moodDelta: -0.04);
-    _sendHome(chosen);
-    chosen.chatBubbleIcon = '🤒';
-    chosen.chatBubbleTime = 5.0;
-    _illnessSeen++;
-    AudioManager.instance.playSfx(Sfx.cough);
-    _showNotification(
-      '🤒 ${chosen.name} çadırda ateşlendi — bez duvar yetmedi. Köy Evi artık kurulabilir.',
-    );
-    _chronicle(
-      '${chosen.name} çadırın neminde hastalandı. Köy, kalıcı dam için marangozluğa başladı.',
-      icon: '🤒',
-      kind: ChronicleKind.crisis,
-      milestone: true,
-    );
-  }
-
   /// TECRİT — hastayı kendi damına yollar. Evi yoksa (evsiz/sazlıkta yatan)
   /// hiçbir şey yapmaz: kapısı olmayanı kapıya kapatamazsın.
   ///
@@ -276,7 +203,7 @@ extension _SceneIllness on _VillageSceneState {
       };
       cands.add(v);
       // İHMALİN AĞIRLIĞI — kış tek başına öldürmez, ihmal öldürür
-      // (bkz. systems/winter.dart coldNeglect). Sönmüş ocak + soğuk barınak +
+      // (bkz. systems/world/winter.dart coldNeglect). Sönmüş ocak + soğuk barınak +
       // giysisizlik + boş ambar ÜST ÜSTE binerse o köylü hastalanma
       // kurasında öne çıkar. İki ihmale kadar çarpan 1.0'dır: kışın bir gece
       // ocağın sönmesi kimseyi hasta etmez.
@@ -353,64 +280,6 @@ extension _SceneIllness on _VillageSceneState {
       icon: '🤒',
       kind: ChronicleKind.crisis,
     );
-  }
-
-  /// VEBA TOLÜ — toplu salgının bedeli (scene_events plague kararı çağırır).
-  /// [healer] true ise (şifacı çağrıldı) salgın erken kırılır: ÖLÜM YOK, yalnız
-  /// birkaç kişi hafif hasta olur. false ise (kendi başına atlat) salgın köyün
-  /// EN KIRILGANLARINI (yaşlı + düşük moralli) alır + birkaçını ağır hasta eder
-  /// (bazıları atlatır, bazıları atlatamaz — hastalık döngüsü karar verir).
-  void _plagueToll({required bool healer}) {
-    final pool =
-        _villagers
-            .where(
-              (v) =>
-                  !v.isDying &&
-                  !v.tutorialIllness &&
-                  v.lifeStage != LifeStage.child,
-            )
-            .toList()
-          ..sort((a, b) => _plagueFrailty(b).compareTo(_plagueFrailty(a)));
-    if (pool.isEmpty) return;
-
-    if (healer) {
-      // Erken kırıldı — en kırılgan 1 kişi kısa süre hasta düşer, ölüm yok.
-      if (pool.first.sickDays <= 0) {
-        pool.first.sickDays = _kSickDaysMin;
-        pool.first.feel(NpcEmotion.fear, 2.5, moodDelta: -0.03);
-      }
-      return;
-    }
-
-    // Şifacı yok — salgın en zayıfları doğrudan alır (nüfusa göre 1-2), sonra
-    // birkaçını ağır hasta bırakır (belirsizlik: iyileşme/ölüm hastalık tickinde).
-    //
-    // TECRİT FERMANI — salgın bir can az alır. Hükmün en pahalı anda ödediği
-    // karşılık budur: tecrit gündelik hayatı kısan bir yüktür ama vebada
-    // gerçekten bir mezar eksiltir.
-    var claim = pool.length >= 6 ? 2 : (pool.length >= 3 ? 1 : 0);
-    if (_policies.quarantine && claim > 0) claim--;
-    for (var i = 0; i < claim; i++) {
-      _illnessDeath(pool[i], winter: _season.isFrozen);
-    }
-    for (var i = claim; i < pool.length && i < claim + 3; i++) {
-      if (pool[i].sickDays <= 0) {
-        pool[i].sickDays = _kSickDaysMax; // ağır
-        pool[i].feel(NpcEmotion.fear, 3.0, moodDelta: -0.06);
-      }
-    }
-    _feelVillage(NpcEmotion.grief, 12, -0.05); // köy yasa büründü
-  }
-
-  /// Veba hedef sıralaması için kırılganlık — yaşlı + düşük moral öne.
-  double _plagueFrailty(VillagerEntity v) {
-    final ageW = switch (v.lifeStage) {
-      LifeStage.elder => 3.0,
-      LifeStage.adult => 1.0,
-      LifeStage.youth => 0.5,
-      LifeStage.child => 0.0,
-    };
-    return ageW * (1.3 - v.morale.clamp(0.0, 1.0));
   }
 
   /// Hastalıktan/kıştan ölüm — doğal ölümle aynı temiz çıkış (aile bağı kopar,

@@ -1,8 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// ─── KIŞ: HAZIRLIK, YÜN ZİNCİRİ, İHMAL ───────────────────────────────────────
 ///
-/// Kışın matematiği [systems/winter.dart]'ta (saf); burası onu köye bağlar:
+/// Kışın matematiği [systems/world/winter.dart]'ta (saf); burası onu köye bağlar:
 ///
 ///   • **Kırkım** — sonbaharda çoban koyunu kırkar → yün. Yılda bir kez.
 ///   • **Dokuma** — [JobRole.weaver] yünü kışlık giysiye çevirir. Kışın
@@ -331,7 +331,7 @@ extension _SceneWinter on _VillageSceneState {
       fodder: _stockpile.reed.toDouble() + _hayEntities.length.toDouble(),
       coats: coats,
       days: days,
-      // Yıl geçtikçe kış sertleşir (bkz. systems/village_year.dart). Gösterge
+      // Yıl geçtikçe kış sertleşir (bkz. systems/run/village_year.dart). Gösterge
       // de aynı sayıyı okur: panelde yazan hazırlık oranı, simin kullandığı
       // oranın ta kendisi olmalı — iki ayrı hesap iki ayrı kış demektir.
       bite: pressureForDay(_dayCount).winterBite,
@@ -340,7 +340,7 @@ extension _SceneWinter on _VillageSceneState {
 
   /// KIŞIN SESİ — hazırlık ekranda değil, köyün ağzında durur.
   ///
-  /// Sürekli açık kış kartı kaldırıldığında (bkz. ui/winter_section.dart) bu
+  /// Sürekli açık kış kartı kaldırıldığında (bkz. ui/hud/winter_section.dart) bu
   /// üç an, oyuncunun kışı öğrendiği tek yer oldu; bu yüzden ZAMANLAMASI
   /// önemli. Kural: uyarı, hakkında bir şey YAPILABİLECEK zaman gelir.
   ///

@@ -1,8 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// HESAPLAŞMA — koşunun kapanışı, dağılmanın simetriği.
 ///
-/// Saf kurallar `systems/reckoning.dart` ve `systems/village_year.dart`'ta;
+/// Saf kurallar `systems/run/reckoning.dart` ve `systems/run/village_year.dart`'ta;
 /// burası onları köye bağlar. Üç an vardır ve üçü de HABER VERİLMİŞTİR:
 ///
 ///   1. **İLAN** ([kReckoningHeraldYear] yılına girince, bir kez) — komutan

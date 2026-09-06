@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// İmparatorluk (dış tehdit) — vergici askerî heyet KOŞULLU olarak gelir
 /// (köy zenginleştikçe/büyüdükçe dikkat çeker; fakir köy genelde es geçilir).
@@ -17,27 +17,6 @@ extension _SceneImperial on _VillageSceneState {
   static const int _kMinPop = 8; // bu nüfusun altında ilgilenmez
   static const double _kProsperityGate =
       55.0; // bunun altı "fakir köy" → es geç
-
-  /// DEV TEST — gerçek imparatorluk darbesindeki ölüm bildirimi yolunu
-  /// askerleri beklemeden sahneler. İki isim seçilir, çöküş animasyonu,
-  /// toast ve kronik aynı anda doğrulanabilir.
-  void _devStageImperialDeathNotice() {
-    if (_imperialPhase != ImperialVisitPhase.idle || _imperialDemand != null) {
-      _showNotification('Önce aktif imparatorluk sahnesini bitir.');
-      return;
-    }
-    final candidates = _villagers
-        .where((v) => !v.isDying && !v.isFavorite)
-        .toList();
-    if (candidates.length < 2) {
-      _showNotification('Test için en az iki uygun köylü gerekiyor.');
-      return;
-    }
-    _imperialRaidVictims
-      ..clear()
-      ..addAll(candidates.take(2));
-    _strikeRaidVictims();
-  }
 
   /// Köyün refah skoru — İmparatorluğun iştahını belirler.
   double _prosperity() =>
@@ -178,7 +157,7 @@ extension _SceneImperial on _VillageSceneState {
       tMax = 22.0; // görünüm henüz hazır değil — makul sabit
     }
     tMax = tMax.clamp(10.0, 34.0);
-    final (px, py) = _nearestLand(
+    final (px, py) = _battleGround(
       cxd + dc * tMax * 0.45,
       cyd + dr * tMax * 0.45,
     );
@@ -285,17 +264,27 @@ extension _SceneImperial on _VillageSceneState {
     }
   }
 
-  /// Yağma dalışı — askerler köy merkezine koşar; varışta (veya sayaç dolunca)
-  /// DARBE: kurbanlar çöker + sarsıntı + kızıl tint. Kısa bekleyişten sonra
-  /// ayrılışa geçer. [dt] sim-sn (sayaç), [npcDt] fx-ölçekli (hareket).
+  /// The routed front opens a path to the actual raid target. No contact, no building damage.
   void _tickImperialRaid(double dt, double npcDt) {
-    final reached =
-        _stepAnchor(npcDt, _impRaidCol, _impRaidRow, _kRaidSpeed) < 0.6;
+    _stepAnchor(npcDt, _impRaidCol, _impRaidRow, _kRaidSpeed);
     _chargeSoldiers(npcDt, _impRaidCol, _impRaidRow);
+    final reached = _soldiers.any(
+      (s) =>
+          _wdist(s.gridX, s.gridY, _impRaidCol, _impRaidRow) < 1.4 &&
+          _battleClearLine(s.gridX, s.gridY, _impRaidCol, _impRaidRow),
+    );
     if (!_impStruck) {
       _impRaidTimer -= dt;
-      if (reached || _impRaidTimer <= 0) {
-        _strikeRaidVictims();
+      if (_impRaidTimer <= 0 && !reached) {
+        for (final s in _soldiers) {
+          s.imperialAttacking = false;
+        }
+        _imperialPhase = ImperialVisitPhase.leaving;
+        _setMarchDir(_impExitCol - _impAnchorCol, _impExitRow - _impAnchorRow);
+        return;
+      }
+      if (reached) {
+        _strikeRaidTarget();
         _impStruck = true;
         _impRaidTimer = 0.9; // darbe sonrası kısa bekleyiş
       }
@@ -312,223 +301,451 @@ extension _SceneImperial on _VillageSceneState {
     }
   }
 
-  /// Eşik muharebesi — sonuçtan bağımsız oynar. Saflar kurulur, ilk imparatorluk
-  /// darbesi gelir, köy karşılık verir, son itiş sonucu dünyada görünür kılar.
-  /// Kaybedildiyse bu evre meydan yağmasına KESİNTİSİZ akar.
-  static const double _kClashTotal = 12.0;
-
-  double get _imperialBattleProgress =>
-      (1.0 - _imperialClashTimer / _kClashTotal).clamp(0.0, 1.0);
-
   void _tickImperialClash(double dt) {
-    final previousBeat = imperialBattleBeat(_imperialClashTimer);
-    _imperialClashTimer -= dt;
-    final beat = imperialBattleBeat(_imperialClashTimer);
-    final defenders = _imperialDefenderPosts.keys.toList(growable: false);
-
-    // Safları temas mesafesine getir. Eski sahnede iki taraf üç karo arayla
-    // yerinde mızrak sallıyordu; ilk darbede kolon ilerler, köy karşılığında
-    // söktürür, son itiş de sonucu mekânda gösterir.
-    final (cx, cy) = _villageCenter();
-    final dx = cx - _impParleyCol, dy = cy - _impParleyRow;
-    final len = sqrt(dx * dx + dy * dy);
-    final ux = len < 0.001 ? 0.0 : dx / len;
-    final uy = len < 0.001 ? 1.0 : dy / len;
-    _impDirX = ux;
-    _impDirY = uy;
-    _tickImperialEngagements(dt * _fxNpcSpeedMul);
-    if (beat != previousBeat && beat != ImperialBattleBeat.mustering) {
-      final hard = beat == ImperialBattleBeat.finalPush;
-      addCameraShake(hard ? 12.0 : 8.0, dur: hard ? 0.85 : 0.55);
-      _activeFx.add(
-        ActiveFx(
-          EventEffect(
-            screenTint: hard && !_imperialBattleWon
-                ? const Color(0x44A81818)
-                : const Color(0x2D71849B),
-            duration: hard ? 1.1 : 0.65,
-          ),
-          hard ? 1.1 : 0.65,
-        ),
-      );
-      if (beat == ImperialBattleBeat.result && _imperialBattleWon) {
-        // Zaferi karar anında değil, dünyadaki son itişten sonra kutla.
-        _activeFx.add(
-          ActiveFx(const EventEffect(fx: EventFx.festival, duration: 8), 8),
+    final battle = _imperialBattle;
+    if (battle == null) return;
+    final previous = {for (final f in battle.fighters) f.id: (f.x, f.y)};
+    if (battle.result != null) {
+      _battleAftermath -= dt;
+      for (final f in battle.fighters) {
+        if (f.health <= 0) f.downTime += dt;
+        final retreating =
+            f.action == BattleAction.fleeing ||
+            (f.side == BattleSide.empire && _imperialBattleWon);
+        if (retreating && f.health > 0) f.action = BattleAction.fleeing;
+        f.body.planted = !retreating || f.health <= 0;
+        final target = retreating
+            ? (
+                f.side == BattleSide.empire ? _impExitCol : battle.objectiveX,
+                f.side == BattleSide.empire ? _impExitRow : battle.objectiveY,
+              )
+            : (f.x, f.y);
+        final goal = _battleWaypoint(f, target.$1, target.$2);
+        f.body.advance(
+          dt,
+          goal.$1,
+          goal.$2,
+          retreating && f.health > 0 ? f.speed : 0,
+          clearPath: _battleClearLine,
         );
       }
-      if (beat == ImperialBattleBeat.result &&
-          !_imperialBattleOutcomeAnnounced) {
-        _imperialBattleOutcomeAnnounced = true;
-        if (_imperialBattleChronicle.isNotEmpty) {
-          _chronicle(
-            _imperialBattleChronicle,
-            icon: _imperialBattleWon ? '🛡️' : '⚔️',
-            milestone: true,
-            kind: _imperialBattleWon
-                ? ChronicleKind.decision
-                : ChronicleKind.crisis,
-          );
-        }
-        if (_imperialBattleNotice.isNotEmpty) {
-          _showNotification(_imperialBattleNotice);
-        }
+      NpcBody.solveContacts(
+        battle.fighters.map((f) => f.body).toList(),
+        dt,
+        clearPath: _battleClearLine,
+      );
+      _syncBattleActors(dt, previous);
+      if (_battleAftermath > 0) return;
+      _clearImperialEngagements();
+      if (!_imperialBattleWon) {
+        _beginImperialRaid();
+      } else {
+        _imperialPhase = ImperialVisitPhase.leaving;
+        _setMarchDir(_impExitCol - _impAnchorCol, _impExitRow - _impAnchorRow);
       }
-    }
-    if (_imperialClashTimer > 0) return;
-    for (final s in _soldiers) {
-      s.imperialAttacking = false;
-      s.imperialHit = false;
-    }
-    for (final v in defenders) {
-      v.imperialAttacking = false;
-      v.imperialHit = false;
-    }
-    if (_imperialRaid) {
-      _imperialRaid = false;
-      _beginImperialRaid();
+      setStateHere(() {});
       return;
     }
-    _imperialPhase = ImperialVisitPhase.leaving;
-    _clearImperialEngagements();
-    _setMarchDir(_impExitCol - _impAnchorCol, _impExitRow - _impAnchorRow);
-  }
-
-  /// Ön saftaki askerleri eşikteki yetişkin savunucularla şerit sırasına göre
-  /// bire bir eşler. Arka saflar yedek kalır; aynı savunucunun üstüne üç asker
-  /// yığılmaz. Mevziler bir kez kaydedilir ki her hamle bir önceki karenin
-  /// kaymış konumundan değil, gerçek çatışma hattından hesaplansın.
-  void _prepareImperialEngagements() {
-    _clearImperialEngagements();
-    kProbeImperialCombatPairs = 0;
-    kProbeImperialCombatContactSeen = false;
-    final vg = _vignette;
-    if (vg == null || vg.eventId != kThresholdVignetteId) return;
-    final defenders = vg.cast
-        .where((v) => !v.isDying && v.lifeStage != LifeStage.child)
-        .toList();
-    if (defenders.isEmpty || _soldiers.isEmpty) return;
-
-    final perpX = -_impDirY, perpY = _impDirX;
-    double lateral(VillagerEntity v) =>
-        (v.gridX - _impAnchorCol) * perpX + (v.gridY - _impAnchorRow) * perpY;
-    defenders.sort((a, b) => lateral(a).compareTo(lateral(b)));
-    final attackers = [..._soldiers]
-      ..sort((a, b) {
-        final row = a.backOffset.compareTo(b.backOffset);
-        return row != 0 ? row : a.sideOffset.compareTo(b.sideOffset);
-      });
-    final count = min(defenders.length, attackers.length);
-    for (var i = 0; i < count; i++) {
-      final s = attackers[i];
-      final v = defenders[i];
-      _imperialCombatPairs[s] = v;
-      _imperialSoldierPosts[s] = (s.gridX, s.gridY);
-      _imperialDefenderPosts[v] = (v.gridX, v.gridY);
-      s.lookToward(v.gridX, v.gridY);
-      v.lookToward(s.gridX, s.gridY);
+    _battleSoundLeft = max(0, _battleSoundLeft - dt);
+    battle.tick(dt, waypoint: _battleWaypoint, clearLine: _battleClearLine);
+    kProbeImperialBattleHits = battle.hits;
+    _syncBattleActors(dt, previous);
+    for (final hit in battle.impacts) {
+      kProbeImperialCombatContactSeen = true;
+      if (!hit.blocked) {
+        final v = _battleActors[hit.defender.id]!;
+        v.injuryDays = max(
+          v.injuryDays,
+          (1 - hit.defender.health / hit.defender.maxHealth) * 4,
+        );
+      }
     }
-    kProbeImperialCombatPairs = _imperialCombatPairs.length;
-  }
-
-  /// Her eşleşmeyi kendi gecikmeli hamlesiyle yürütür. Bu, global bir saldırı
-  /// bayrağı değildir: temas eden kişi vurur, karşısındaki kişi o anda tepki
-  /// verir ve son itişte yalnız kaybeden taraf geri sürülür.
-  void _tickImperialEngagements(double dt) {
-    var lane = 0;
-    for (final entry in _imperialCombatPairs.entries) {
-      final s = entry.key;
-      final v = entry.value;
-      final soldierPost = _imperialSoldierPosts[s];
-      final defenderPost = _imperialDefenderPosts[v];
-      if (soldierPost == null ||
-          defenderPost == null ||
-          !_soldiers.contains(s) ||
-          !_villagers.contains(v) ||
-          v.isDying) {
-        lane++;
+    if (battle.impacts.isNotEmpty) {
+      addCameraShake(2.2, dur: .12);
+      if (_battleSoundLeft <= 0) {
+        AudioManager.instance.playSfx(Sfx.fightScuffle);
+        _battleSoundLeft = .4;
+      }
+    }
+    // Civilians flee from nearby soldiers using the same world pathfinding.
+    final (cx, cy) = _villageCenterD();
+    for (final v in _battleCivilians) {
+      final threatened = battle.fighters.any(
+        (f) =>
+            f.side == BattleSide.empire &&
+            f.active &&
+            f.distance(v.gridX, v.gridY) < 6,
+      );
+      if (!threatened) {
+        v.animateExternalMotion(dt, v.gridX, v.gridY);
         continue;
       }
-      final motion = imperialCombatMotion(
-        remaining: _imperialClashTimer,
-        lane: lane,
-        villageWon: _imperialBattleWon,
-      );
-      final stx = soldierPost.$1 + _impDirX * motion.attackerAdvance;
-      final sty = soldierPost.$2 + _impDirY * motion.attackerAdvance;
-      s.stepTo(
-        dt,
-        stx,
-        sty,
-        dayLight: _cycle.dayLight,
-        rainIntensity: _cycle.rainIntensity,
-        speedMul: 3.4,
-        arriveD: 0.025,
-      );
-      final vtx = defenderPost.$1 + _impDirX * motion.defenderAdvance;
-      final vty = defenderPost.$2 + _impDirY * motion.defenderAdvance;
-      v.isWalking = true;
-      final arrived = v.moveTowards(
-        vtx,
-        vty,
-        dt,
-        arriveD: 0.025,
-        speedScale: 3.0,
-      );
-      if (arrived) v.isWalking = false;
-      v.smoothMotion(dt);
-      s.lookToward(v.gridX, v.gridY);
-      v.lookToward(s.gridX, s.gridY);
-      s.imperialAttacking = motion.attackerStriking;
-      v.imperialAttacking = motion.defenderStriking;
-      s.imperialHit = motion.attackerHit;
-      v.imperialHit = motion.defenderHit;
-      if (motion.attackerStriking ||
-          motion.defenderStriking ||
-          motion.attackerHit ||
-          motion.defenderHit) {
-        kProbeImperialCombatContactSeen = true;
-      }
-      lane++;
+      final (tx, ty) = _nearestLand(cx - _impDirX * 4, cy - _impDirY * 4);
+      final fromX = v.gridX, fromY = v.gridY;
+      v.moveTowards(tx, ty, dt, speedScale: 1.4);
+      v.animateExternalMotion(dt, fromX, fromY);
     }
+    final engaged = battle.fighters
+        .where(
+          (f) =>
+              f.active &&
+              f.target != null &&
+              f.distanceTo(
+                    battle.fighters.firstWhere((b) => b.id == f.target),
+                  ) <
+                  2.5,
+        )
+        .toList();
+    if (engaged.isNotEmpty) {
+      _watchX = engaged.fold(0.0, (n, f) => n + f.x) / engaged.length;
+      _watchY = engaged.fold(0.0, (n, f) => n + f.y) / engaged.length;
+    }
+    _watchLeft = 2;
+    if (battle.result != null) _settleImperialBattle();
+  }
 
-    // Eşleşmeyen arka saf yerini korur; boşluğa mızrak sallamaz.
-    final perpX = -_impDirY, perpY = _impDirX;
-    for (final s in _soldiers) {
-      if (_imperialCombatPairs.containsKey(s)) continue;
-      final tx = _impAnchorCol - _impDirX * s.backOffset + perpX * s.sideOffset;
-      final ty = _impAnchorRow - _impDirY * s.backOffset + perpY * s.sideOffset;
-      s.stepTo(
+  bool _battleClearLine(double ax, double ay, double bx, double by) {
+    final steps = max(1, (sqrt(pow(bx - ax, 2) + pow(by - ay, 2)) * 5).ceil());
+    for (var i = 1; i <= steps; i++) {
+      final x = ax + (bx - ax) * i / steps;
+      final y = ay + (by - ay) * i / steps;
+      if (x < 0 || y < 0 || x >= kCols || y >= kRows) return false;
+      if (_pathContext.blocked(x.floor(), y.floor())) return false;
+    }
+    return true;
+  }
+
+  (double, double) _battleWaypoint(BattleFighter f, double x, double y) {
+    final v = _battleActors[f.id]!;
+    v.gridX = f.x;
+    v.gridY = f.y;
+    return v.navigationWaypoint(
+      x,
+      y,
+      forcePath: !_battleClearLine(f.x, f.y, x, y),
+    );
+  }
+
+  void _syncBattleActors(double dt, Map<int, (double, double)> previous) {
+    final battle = _imperialBattle!;
+    for (final f in battle.fighters) {
+      final v = _battleActors[f.id]!;
+      v.gridX = f.x;
+      v.gridY = f.y;
+      v.imperialAttacking =
+          f.action == BattleAction.windingUp ||
+          f.action == BattleAction.striking;
+      v.imperialHit = f.action == BattleAction.recoiling;
+      v.battleSwing = f.swing;
+      v.battleFall = (f.downTime / .65).clamp(0, 1);
+      v.battleHealth = (f.health / f.maxHealth).clamp(0, 1);
+      v.battleResolve = f.resolve;
+      v.actPose = null;
+      final target = _battleActors[f.target];
+      final stepping =
+          f.action == BattleAction.advancing ||
+          f.action == BattleAction.fleeing;
+      if (!stepping && target != null) {
+        v.lookToward(target.gridX, target.gridY);
+      } else if (f.body.speed > .02) {
+        v.lookToward(f.x + f.body.vx, f.y + f.body.vy);
+      }
+      final from = previous[f.id]!;
+      v.animateExternalMotion(
         dt,
-        tx,
-        ty,
-        dayLight: _cycle.dayLight,
-        rainIntensity: _cycle.rainIntensity,
-        speedMul: 1.25,
-        arriveD: 0.12,
+        from.$1,
+        from.$2,
+        stepping: stepping,
+        watchTarget: true,
+        actualSpeed: f.body.speed,
       );
-      s.imperialAttacking = false;
-      s.imperialHit = false;
+      v.tickTorch(dt, _cycle.dayLight, _cycle.rainIntensity);
     }
   }
 
-  void _clearImperialEngagements() {
-    for (final s in _imperialCombatPairs.keys) {
-      s.imperialAttacking = false;
-      s.imperialHit = false;
+  (double, double) _battleGround(double x, double y) {
+    final c = x.floor(), r = y.floor();
+    for (var radius = 0; radius < 16; radius++) {
+      (double, double)? best;
+      var distance = double.infinity;
+      for (var dx = -radius; dx <= radius; dx++) {
+        for (var dy = -radius; dy <= radius; dy++) {
+          final col = c + dx, row = r + dy;
+          if (col < 0 ||
+              row < 0 ||
+              col >= kCols ||
+              row >= kRows ||
+              _pathContext.blocked(col, row) ||
+              _wilderness.contains((col, row))) {
+            continue;
+          }
+          final d = pow(col + .5 - x, 2) + pow(row + .5 - y, 2);
+          if (d < distance) {
+            distance = d.toDouble();
+            best = (col + .5, row + .5);
+          }
+        }
+      }
+      if (best != null) return best;
     }
-    for (final v in _imperialDefenderPosts.keys) {
+    return _nearestLand(x, y);
+  }
+
+  void _prepareImperialEngagements() {
+    _releaseVignette();
+    _clearImperialEngagements();
+    final raid = _imperialRaidScenario;
+    _imperialRaidTargetBuilding = _raidTargetBuilding(raid?.target);
+    final (ox, oy) = _raidTargetPoint(raid?.target);
+    final (tx, ty) = _battleGround(ox, oy);
+    final (cx, cy) = _villageCenterD();
+    _setMarchDir(cx - _impAnchorCol, cy - _impAnchorRow);
+    final available =
+        _villagers
+            .where(
+              (v) =>
+                  !v.isDying &&
+                  !v.isLeaving &&
+                  v.lifeStage != LifeStage.child &&
+                  !v.isInsideBuilding &&
+                  !v.isSleeping &&
+                  v.sickDays <= 0 &&
+                  v.injuryDays < 3,
+            )
+            .toList()
+          ..sort((a, b) {
+            final guard = (a.type == VillagerType.guard ? 0 : 1).compareTo(
+              b.type == VillagerType.guard ? 0 : 1,
+            );
+            return guard != 0
+                ? guard
+                : _wdist(
+                    a.gridX,
+                    a.gridY,
+                    tx,
+                    ty,
+                  ).compareTo(_wdist(b.gridX, b.gridY, tx, ty));
+          });
+    final defenders = available
+        .take(min(18, max(3, _soldiers.length + _guardCount())))
+        .toList();
+    final fighters = <BattleFighter>[];
+    var weapons = _stockpile.weapons;
+    for (final v in defenders) {
+      final i = fighters.length;
+      final guard = v.type == VillagerType.guard;
+      final armed = guard || weapons > 0;
+      if (!guard && armed) weapons--;
+      _prepForScene(v);
+      v.state = VillagerState.idle;
+      v.prop = guard
+          ? PropKind.none
+          : (v.type == VillagerType.farmer ? PropKind.scythe : PropKind.axe);
+      v.feel(NpcEmotion.anger, 8);
+      // Positions are destinations, never teleports. Late defenders must run
+      // from their actual workplace before they can contribute a strike.
+      final lateral = ((i % 5) - 2) * 1.1;
+      final (px, py) = _battleGround(
+        _impAnchorCol + _impDirX * (3.5 + i ~/ 5) - _impDirY * lateral,
+        _impAnchorRow + _impDirY * (3.5 + i ~/ 5) + _impDirX * lateral,
+      );
+      if (_imperialDefensePlan == ImperialDefensePlan.barricade && i < 5) {
+        v.battlePost = (px - _impDirX * .6, py - _impDirY * .6);
+      }
+      _battleActors[i] = v;
+      fighters.add(
+        BattleFighter(
+          id: i,
+          side: BattleSide.village,
+          name: v.name,
+          x: v.gridX,
+          y: v.gridY,
+          postX: px,
+          postY: py,
+          maxHealth: (guard ? 115 : 85) * (1 - v.injuryDays * .15).clamp(.4, 1),
+          power:
+              (armed ? 23 : 14) *
+              (1 + _imperialPosture.resistBonus + _faithEffect.resistBonus),
+          armor: guard ? .24 : (armed ? .12 : .04),
+          reach: armed ? 1.15 : .95,
+          resolve: (.4 + v.morale * .5).clamp(.2, .95),
+          speed: v.disabled ? 1.0 : 1.5,
+        ),
+      );
+    }
+    for (final s in _soldiers) {
+      final i = fighters.length;
+      _battleActors[i] = s;
+      fighters.add(
+        BattleFighter(
+          id: i,
+          side: BattleSide.empire,
+          name: s.name,
+          x: s.gridX,
+          y: s.gridY,
+          postX: s.gridX,
+          postY: s.gridY,
+          maxHealth: s.commander ? 125 : 100,
+          power: (s.commander ? 24 : 19) * (1 + (raid?.attackDelta ?? 0)),
+          armor: .22,
+          reach: 1.2,
+          resolve: s.commander ? .95 : .8,
+          commander: s.commander,
+        ),
+      );
+    }
+    _battleCivilians.addAll(
+      _villagers.where(
+        (v) =>
+            !defenders.contains(v) &&
+            !v.isDying &&
+            !v.isInsideBuilding &&
+            !v.isSleeping,
+      ),
+    );
+    for (final v in _battleCivilians) {
+      _prepForScene(v);
+    }
+    _imperialBattle = ImperialBattle(
+      fighters: fighters,
+      plan: _imperialDefensePlan,
+      objectiveX: tx,
+      objectiveY: ty,
+      exitX: _impExitCol,
+      exitY: _impExitRow,
+      rain: _cycle.rainIntensity,
+      darkness: 1 - _cycle.dayLight,
+      seed: _impSeed(91),
+    );
+    _followedVillager = null;
+    _watchX = _impAnchorCol + _impDirX * 2;
+    _watchY = _impAnchorRow + _impDirY * 2;
+    _watchLeft = 90;
+    _battlePreviousZoom = _zoom;
+    _zoom = max(_zoom, _viewSize.shortestSide < 500 ? 2.0 : 2.35);
+    kProbeImperialBattleActive = true;
+    kProbeImperialBattleActorsReleased = false;
+    kProbeImperialBattleHits = 0;
+    kProbeImperialBattleResult = '';
+    kProbeImperialCombatPairs = defenders.length;
+    kProbeImperialCombatContactSeen = false;
+  }
+
+  void _settleImperialBattle() {
+    final battle = _imperialBattle!;
+    final d = _battleDemand!;
+    _imperialBattleWon = battle.result == BattleResult.held;
+    _battleAftermath = 2.5;
+    kProbeImperialBattleResult = battle.result!.name;
+    var wounded = 0;
+    var fallen = 0;
+    for (final f in battle.fighters) {
+      final v = _battleActors[f.id]!;
+      if (f.side == BattleSide.village && f.health < f.maxHealth) {
+        if (f.health <= 0 && !v.isFavorite) {
+          fallen++;
+        } else {
+          wounded++;
+        }
+      }
       v.imperialAttacking = false;
       v.imperialHit = false;
     }
-    _imperialCombatPairs.clear();
-    _imperialSoldierPosts.clear();
-    _imperialDefenderPosts.clear();
+    // Losses belong to the people who actually took blows. No off-screen
+    // victim lottery; surviving civilians are never killed by this result.
+    _imperialFavor = (_imperialFavor - (_imperialBattleWon ? .15 : .25)).clamp(
+      0,
+      1,
+    );
+    if (_imperialBattleWon) {
+      _feelVillage(NpcEmotion.joy, 12, .14);
+      pushPolicyMorale(.08, 4);
+      _unrest = (_unrest - .14).clamp(0, 1);
+      _stockpile.weapons += battle.fighters
+          .where((f) => f.side == BattleSide.empire && f.health <= 0)
+          .length;
+    } else {
+      if (!d.isConscript) {
+        _spendResource(
+          d.kind,
+          (d.amount * .6 * (_imperialRaidScenario?.lootMultiplier ?? 1))
+              .round(),
+        );
+      }
+      _feelVillage(NpcEmotion.fear, 16, -.22);
+      pushPolicyMorale(-.15, 6);
+      _imperialInternalToll(d, 1, raid: true);
+    }
+    final message =
+        '${battle.report} $wounded savunucu yaralandı.${fallen > 0 ? ' $fallen savunucu hayatını kaybetti.' : ''}';
+    _chronicle(
+      message,
+      icon: _imperialBattleWon ? '🛡️' : '⚔️',
+      milestone: true,
+      kind: _imperialBattleWon ? ChronicleKind.decision : ChronicleKind.crisis,
+    );
+    _showNotification(message);
   }
 
-  /// Darbe anı — seçili kurbanları çökertir (aile bağını kopararak), görünür
-  /// şiddet FX'i basar. `_imperialRaidVictims` karar anında seçilmiştir.
-  void _strikeRaidVictims() {
+  void _clearImperialEngagements({bool applyLosses = true}) {
+    for (final v in [..._battleActors.values, ..._battleCivilians]) {
+      v.imperialAttacking = false;
+      v.imperialHit = false;
+      v.battleHealth = null;
+      v.battleSwing = null;
+      v.battleFall = 0;
+      v.battleResolve = null;
+      v.battlePost = null;
+      v.actPose = null;
+      v.prop = PropKind.none;
+      v.isWalking = false;
+      v.state = VillagerState.idle;
+      v.targetCol = v.gridX;
+      v.targetRow = v.gridY;
+    }
+    // Incapacitated soldiers do not stand up and rejoin the marching column.
+    final battle = _imperialBattle;
+    if (battle != null) {
+      for (final f in battle.fighters.where(
+        (f) => f.side == BattleSide.empire && f.health <= 0,
+      )) {
+        _soldiers.remove(_battleActors[f.id]);
+      }
+    }
+    if (battle != null && applyLosses) {
+      for (final f in battle.fighters.where(
+        (f) => f.side == BattleSide.village && f.health <= 0,
+      )) {
+        final v = _battleActors[f.id]!;
+        if (v.isFavorite || v.isDying) continue;
+        for (final p in v.parents) {
+          p.children.remove(v);
+        }
+        for (final c in v.children) {
+          c.parents.remove(v);
+        }
+        _markDeathHouse(v);
+        v.startDying(funeral: true);
+      }
+    }
+    kProbeImperialBattleActorsReleased = _battleActors.values.every(
+      (v) =>
+          v.battleHealth == null &&
+          v.battleResolve == null &&
+          !v.imperialAttacking &&
+          !v.imperialHit,
+    );
+    _battleActors.clear();
+    _battleCivilians.clear();
+    _imperialBattle = null;
+    if (_battlePreviousZoom != null) _zoom = _battlePreviousZoom!;
+    _battlePreviousZoom = null;
+    kProbeImperialBattleActive = false;
+    _watchLeft = 0;
+  }
+
+  /// Surviving raiders damage the objective only after reaching it.
+  void _strikeRaidTarget() {
     addCameraShake(13.0, dur: 1.0);
     AudioManager.instance.playSfx(Sfx.thunderClap);
     _activeFx.add(
@@ -544,34 +761,6 @@ extension _SceneImperial on _VillageSceneState {
       damaged.damage = (damaged.damage + blow).clamp(0.0, 1.0);
       damaged.deathMarkerUntil = max(damaged.deathMarkerUntil, _time + 18.0);
     }
-    final fallen = <String>[];
-    for (final v in _imperialRaidVictims) {
-      if (v.isDying || !_villagers.contains(v)) continue;
-      final house = v.surname.trim().isEmpty ? '' : ' (${v.surname} Hanesi)';
-      fallen.add('${v.name}$house');
-      for (final p in v.parents) {
-        p.children.remove(v);
-      }
-      for (final c in v.children) {
-        c.parents.remove(v);
-      }
-      _markDeathHouse(v);
-      v.startDying(funeral: true);
-    }
-    if (fallen.isNotEmpty) {
-      final names = fallen.join(', ');
-      _showNotification(
-        '⚔️ İmparatorluk baskınında hayatını kaybedenler: $names.',
-      );
-      _chronicle(
-        '${_imperialRaidScenario?.title ?? 'İmparatorluk baskını'} sırasında '
-        '${fallen.join(', ')} hayatını kaybetti.',
-        icon: '⚔️',
-        milestone: true,
-        kind: ChronicleKind.crisis,
-      );
-    }
-    _imperialRaidVictims.clear();
   }
 
   /// Çapayı [tx],[ty]'ye [speed] (tile/sim-sn) ile yürütür; başlangıç mesafesini
@@ -730,7 +919,7 @@ extension _SceneImperial on _VillageSceneState {
   }
 
   /// İmparatorluk geliş sinematiği — TALEBE + İTİBARA göre dinamik kurulur.
-  /// Gövde saf fonksiyona taşındı (systems/imperial.dart) ki animasyon odası da
+  /// Gövde saf fonksiyona taşındı (systems/events/imperial.dart) ki animasyon odası da
   /// birebir AYNI sahneyi oynatabilsin; odanın kendi kopyasını tutması sahne
   /// düzeltmelerinin oraya yansımamasına yol açıyordu.
   Cutscene _buildImperialCutscene(ImperialDemand d) => imperialArrivalCutscene(
@@ -745,7 +934,7 @@ extension _SceneImperial on _VillageSceneState {
     // İki katman çarpılır ve ikisi ayrı şeyi ölçer: İTİBAR "seninle nasıl
     // geçiniyoruz", YIL "imparatorluğun bu yılki iştahı". Eskiden yalnız
     // birincisi vardı, dolayısıyla iyi geçinen bir köy altıncı yılda birinci
-    // yıldaki rakamı ödüyordu (bkz. systems/village_year.dart).
+    // yıldaki rakamı ödüyordu (bkz. systems/run/village_year.dart).
     final severity = 1.0 + (1.0 - _imperialFavor) * 0.8; // 1.0–1.8
     final era = pressureForDay(_dayCount);
     final appetite = era.imperialAppetite; // 1.0–2.0
@@ -769,7 +958,7 @@ extension _SceneImperial on _VillageSceneState {
     int amount;
     switch (kind) {
       case ImperialDemandKind.goldTax:
-        // Rakam saf fonksiyonda (bkz. systems/imperial.dart) — bir denge
+        // Rakam saf fonksiyonda (bkz. systems/events/imperial.dart) — bir denge
         // kararı sahnede gömülü kalmasın, ölçülebilir bir yerde dursun.
         amount = imperialGoldDemand(
           population: pop,
@@ -972,162 +1161,21 @@ extension _SceneImperial on _VillageSceneState {
     );
     if (!planPreview.available) return;
     _imperialDefensePlan = plan;
-    _imperialBattleOutcomeAnnounced = false;
-    _imperialBattleChronicle = '';
-    _imperialBattleNotice = '';
-    _stockpile.wood = (_stockpile.wood - planPreview.woodCost).clamp(
-      0,
-      1 << 30,
-    );
-    _stockpile.weapons = (_stockpile.weapons - planPreview.weaponCost).clamp(
-      0,
-      1 << 30,
-    );
-    final raid = _imperialRaidScenario;
-    final planBonus = raid == null
-        ? 0.0
-        : switch (plan) {
-            ImperialDefensePlan.holdLine => raid.holdBonus,
-            ImperialDefensePlan.barricade => raid.barricadeBonus,
-            ImperialDefensePlan.counterCharge => raid.chargeBonus,
-          };
-    final chance = (planPreview.chance + planBonus - (raid?.attackDelta ?? 0))
-        .clamp(0.02, 0.95);
-    AudioManager.instance.playSfx(Sfx.thunderClap);
-    addCameraShake(9.0, dur: 0.8);
-    // Sonuç ne olursa olsun eşikte kan/gurur kaldı — bir daha geldiklerinde
-    // usul bozulmuş olur, o dönüş sahnelenir (bkz. _startImperialParley).
+    _imperialAlertLeft = 0;
+    _stockpile.wood = max(0, _stockpile.wood - planPreview.woodCost);
+    _battleDemand = d;
     _impGrudge = true;
-    // Hür rejim: meclis ödeme/pazarlık isterken sen köyü kumara sürdüysen
-    // (meclis direnmek istemiyordu) meşruiyet bedeli — sonuç ne olursa olsun.
     if (_defiesCouncil(ImperialVerdict.resist)) {
       _payCouncilOverride(violent: false);
     }
-    var defenseWon = false;
-    if (kProbeForceResistWin || _rng.nextDouble() < chance) {
-      defenseWon = true;
-      // BAŞARI — heyet kovuldu. Ölüm yok; köy gururla doğrulur. İtibar düşer
-      // (imparatorluk aşağılandı) ama bir muhafız yara alabilir (bedelsiz değil).
-      _imperialFavor = (_imperialFavor - 0.15).clamp(0.0, 1.0);
-      _feelVillage(NpcEmotion.joy, 12, 0.14); // zafer gururu
-      pushPolicyMorale(0.08, 4.0);
-      _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.06, swayGain: 0.05);
-      _nudgeHousesByEstate(Estate.laborers, moodDelta: 0.04, swayGain: 0.03);
-      // Başarılı direniş huzursuzluğu YATIŞTIRIR: köy dışa karşı kenetlendi,
-      // içerideki homurtu bir süre unutuldu (gurur = meşruiyet).
-      _unrest = (_unrest - 0.14).clamp(0.0, 1.0);
-      _unrestStirShown = false;
-      final capturedWeapon = _rng.nextDouble() < 0.45 ? 1 : 0;
-      if (capturedWeapon > 0) _stockpile.weapons += capturedWeapon;
-      // Bir muhafız yaralanabilir — direniş bedavaya gelmez.
-      final guards = _villagers
-          .where((v) => !v.isDying && v.type == VillagerType.guard)
-          .toList();
-      if (guards.isNotEmpty && _rng.nextDouble() < 0.5) {
-        final g = guards[_rng.nextInt(guards.length)];
-        g.injuryDays = 2.0 + _rng.nextDouble() * 2.0;
-        g.feel(NpcEmotion.grief, 4.0, moodDelta: -0.08);
-      }
-      // SAHNE — bilançodan SONRA kurulur ve sıra önemlidir: `_feelVillage(joy)`
-      // köyün tamamına sevinç yazar, eşik kadrosunun duygusu ise rolle birlikte
-      // gelir (öfke/korku). Sahne önce kurulsaydı sevinç onu ezerdi ve hat,
-      // mızrakların önünde dururken gülümserdi. Zafer ancak heyet dönünce
-      // sevinç olur; hat kurulurken değil.
-      _imperialBattleChronicle =
-          '$_villageName ${plan.title.toLowerCase()} kurdu; tırpanla, baltayla '
-          'eşiği tuttu. Heyet geri döndü.';
-      _imperialBattleNotice =
-          '🛡️ ${Voice.say(const ['Heyet geri çekildi. {köy} bu akşam kimseyi gömmüyor.', 'Mızraklar geri döndü. Kimse bağırmadı; herkes yerinde durdu, yetti.'], _impVoice(24))}${capturedWeapon > 0 ? ' Bir silah ele geçirildi.' : ''}';
-    } else {
-      // BAŞARISIZ — direniş ezildi. Reddetmekten beter: savunucular (muhafızlar)
-      // ön safta düşer. Kurbanlar SEÇİLİR ama ölüm, askerlerin merkeze dalışıyla
-      // (raiding) senkron gerçekleşir (bkz. _strikeRaidVictims). Favoriler korunur.
-      final victimCount =
-          (2 +
-                  (1.0 - _imperialFavor).floor() +
-                  planPreview.casualtyDelta +
-                  (raid?.casualtyDelta ?? 0))
-              .clamp(1, 6);
-      final pool = _villagers
-          .where((v) => !v.isDying && !v.isFavorite)
-          .toList();
-      pool.sort((a, b) {
-        final ga = a.type == VillagerType.guard ? 0 : 1;
-        final gb = b.type == VillagerType.guard ? 0 : 1;
-        return ga.compareTo(gb);
-      });
-      _imperialRaidVictims
-        ..clear()
-        ..addAll(pool.take(victimCount));
-      _imperialRaid = true;
-      final killed = _imperialRaidVictims.length;
-      if (!d.isConscript) {
-        _spendResource(
-          d.kind,
-          (d.amount * 0.6 * (raid?.lootMultiplier ?? 1)).round(),
-        );
-      }
-      _imperialFavor = (_imperialFavor - 0.25).clamp(0.0, 1.0);
-      _feelVillage(NpcEmotion.fear, 16, -0.22);
-      pushPolicyMorale(-0.15, 6.0);
-      _imperialInternalToll(
-        d,
-        1.0,
-        raid: true,
-      ); // ezilen direniş: huzursuzluk sıçrar
-      _imperialBattleChronicle =
-          '${raid?.title ?? 'İmparatorluk baskını'} sırasında direniş kırıldı. '
-          '$killed köylü yerde kaldı; hedef ${raid?.target.label ?? 'meydan'} oldu.';
-      _imperialBattleNotice =
-          '⚔️ ${Voice.say(const ['Sıra bozuldu. Askerler meydana giriyor.', 'Baltalar yetmedi. Atlılar {köy-in} içinde.'], _impVoice(25))}';
-    }
-    _imperialBattleWon = defenseWon;
-    _stageThresholdStand(won: defenseWon, plan: plan);
     _endImperialVisit(_prosperity(), clash: true);
+    _stockpile.weapons = max(0, _stockpile.weapons - planPreview.weaponCost);
   }
 
   void _imperialRefuse() {
-    final d = _imperialDemand;
-    if (d == null) return;
-    // Şiddet — talebin sertliğine göre 1–3 kurban (favoriler DAHİL). Kurbanlar
-    // SEÇİLİR ama ölüm askerlerin merkeze dalışıyla (raiding) senkron gerçekleşir
-    // (bkz. _strikeRaidVictims). Üstüne yağma (kaynağın bir kısmı zorla alınır).
-    final severity = 1.0 + (1.0 - _imperialFavor);
-    final raid = _imperialRaidScenario;
-    final victimCount = (1 + severity.floor() + (raid?.casualtyDelta ?? 0))
-        .clamp(1, 6);
-    final pool = _villagers.where((v) => !v.isDying).toList()..shuffle(_rng);
-    _imperialRaidVictims
-      ..clear()
-      ..addAll(pool.take(victimCount));
-    _imperialRaid = true;
-    _impGrudge = true; // kinli dönüş sahnelenir
-    final killed = _imperialRaidVictims.length;
-    if (!d.isConscript) {
-      _spendResource(
-        d.kind,
-        (d.amount * 0.5 * (raid?.lootMultiplier ?? 1)).round(),
-      );
-    }
-    _imperialFavor = (_imperialFavor - 0.25).clamp(0.0, 1.0);
-    _feelVillage(NpcEmotion.fear, 16, -0.22);
-    pushPolicyMorale(-0.15, 6.0);
-    _imperialInternalToll(d, 1.0, raid: true); // yağma: huzursuzluk sıçrar
-    // Hür rejim: meclis hangi duruşu önermiş olursa olsun, "reddet" (bilinçli
-    // kıyım) meclisin önerisi değildir → her zaman en ağır meşruiyet çelişkisi.
-    if (_imperialCouncilVerdict != null) _payCouncilOverride(violent: true);
-    AudioManager.instance.playSfx(Sfx.thunderClap); // reddetme gümbürtüsü
-    _chronicle(
-      '$_villageName ödemedi. ${raid?.title ?? 'Baskın'} başladı; komutan '
-      '$killed kişiyi bedel olarak aldı.',
-      icon: '⚔️',
-      milestone: true,
-      kind: ChronicleKind.crisis,
-    );
-    _showNotification(
-      '⚔️ ${Voice.say(const ['Komutan sessizce başını salladı. Mızraklar indi, atlar {köy-e} sürüldü.', 'Cevabı aldı. Şimdi bedelini kendi eliyle topluyor.'], _impVoice(26))}',
-    );
-    _endImperialVisit(_prosperity());
+    // Refusal starts the same physical confrontation. Even an unprepared
+    // village gets to fight or withdraw; no civilians die by a remote roll.
+    _imperialResist(ImperialDefensePlan.holdLine);
   }
 
   /// Bir genci askere ver — köyden ayrılır (ölüm değil; yas + moral).
@@ -1159,28 +1207,16 @@ extension _SceneImperial on _VillageSceneState {
     setStateHere(() => _imperialDemand = null);
     _impProsperity = prosp;
     if (_soldiers.isEmpty) {
-      // Fiziksel heyet yok (yüklemeden/eski yol) — dalış oynayamaz: bekleyen
-      // kurban varsa hemen uygula, doğrudan sayaca dön.
-      if (_imperialRaid) {
-        _strikeRaidVictims();
-        _imperialRaid = false;
-      }
       _imperialPhase = ImperialVisitPhase.idle;
       _imperialTimer = _rollImperialInterval(prosp);
       return;
     }
     if (clash) {
-      _imperialClashTimer = _kClashTotal;
       _imperialPhase = ImperialVisitPhase.clashing;
       for (final s in _soldiers) {
         s.imperialAttacking = false;
       }
       _prepareImperialEngagements();
-      return;
-    }
-    if (_imperialRaid) {
-      _imperialRaid = false;
-      _beginImperialRaid();
       return;
     }
     _imperialPhase = ImperialVisitPhase.leaving;
@@ -1190,11 +1226,11 @@ extension _SceneImperial on _VillageSceneState {
   void _beginImperialRaid() {
     _clearImperialEngagements();
     _impStruck = false;
-    _impRaidTimer = 3.2;
+    _impRaidTimer = 15;
     final raid = _imperialRaidScenario;
     _imperialRaidTargetBuilding = _raidTargetBuilding(raid?.target);
     final (cx, cy) = _raidTargetPoint(raid?.target);
-    final (rx, ry) = _nearestLand(cx, cy);
+    final (rx, ry) = _battleGround(cx, cy);
     _impRaidCol = rx;
     _impRaidRow = ry;
     _followedVillager = null;
@@ -1239,7 +1275,12 @@ extension _SceneImperial on _VillageSceneState {
       );
     }
     if (target == ImperialRaidTarget.threshold) {
-      return (_impParleyCol, _impParleyRow);
+      final (cx, cy) = _villageCenterD();
+      final dx = cx - _impParleyCol, dy = cy - _impParleyRow;
+      final length = max(.01, sqrt(dx * dx + dy * dy));
+      // The objective is behind the defenders, never the ground on which
+      // the arriving expedition already stands.
+      return (_impParleyCol + dx / length * 5, _impParleyRow + dy / length * 5);
     }
     final (cx, cy) = _villageCenter();
     if (target == ImperialRaidTarget.fields) {

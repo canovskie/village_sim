@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Cenaze sistemi — bir köylü ömrünü tamamlayıp hayata veda ettiğinde
 /// (scene_tick doğal ölüm) köy onu uğurlar. Kilise varsa: köy ateş başında

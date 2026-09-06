@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// ─── REFERANS KÖY ────────────────────────────────────────────────────────────
 ///
@@ -176,7 +176,7 @@ extension _SceneReferenceVillage on _VillageSceneState {
         if (q.tier == 0 || q.check(refCtx)) _completedQuests.add(q.id);
       }
       _charterTier = QuestBook.charterTier(
-        _completedQuests.length,
+        QuestBook.completedCount(_completedQuests),
         _policies.enactedCount,
       );
 

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Kişilik katmanı — köylülerin kişisel anları: yıldönümü (yaş kilometre taşı),
 /// çağrısını buldu (genç→yetişkin meslek keşfi, [_tickCallingMoments]), BÜYÜDÜ

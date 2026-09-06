@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Bina yerleştirme + alan-seçim (maden/oduncu/tarla) commit + yol tile paint.
 /// part of main.dart — State'in tüm private alanlarına erişim.

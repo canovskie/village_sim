@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Dilekçe / Meclis sistemi — köy periyodik olarak senden bir şey ister,
 /// sen karar verirsin. Yönetişimin omurgası: pasif toggle yerine akan karar.
@@ -87,6 +87,9 @@ extension _ScenePetitions on _VillageSceneState {
     for (int i = 0; i < _petitionFollowUps.length; i++) {
       if (_petitionFollowUps[i].fireAtSim <= _time) {
         final link = _petitionFollowUps[i];
+        final thread = StoryThreads.threadOf(link.id);
+        final intact = thread == null || _storyCastIntact(_storyCasts[thread]);
+        if (intact && !StoryThreads.ready(link.id, _dayCount)) continue;
         _petitionFollowUps.removeAt(i);
         final p = PetitionSystem.byId(link.id);
         if (p != null) {
@@ -116,6 +119,12 @@ extension _ScenePetitions on _VillageSceneState {
       if (_queuedPresentDelay > 0) return;
       final q = _queuedPetition!;
       _queuedPetition = null;
+      final thread = StoryThreads.threadOf(q.id);
+      if (thread != null &&
+          StoryThreads.isOpening(q.id) &&
+          _villageMemory.contains(StoryThreads.id(thread, 'started'))) {
+        return;
+      }
       _presentPetition(q);
       return;
     }
@@ -166,6 +175,9 @@ extension _ScenePetitions on _VillageSceneState {
               '📜 Bir başkası da derdini yazdırmış; kapıda sırada.',
               '📜 Kapıdaki kuyruk uzadı: ikinci bir dilekçe var.',
             ], _voice(null, seed: _stableSeed('petitionQueue', _dayCount))),
+      headline: 'Kapıda Bir Söz Daha',
+      topic: VillageNewsTopic.council,
+      priority: VillageNewsPriority.important,
     );
   }
 
@@ -191,6 +203,13 @@ extension _ScenePetitions on _VillageSceneState {
     VillagerEntity? author,
     Map<String, String> extra = const {},
   }) {
+    final story = _prepareStoryPetition(rawPetition);
+    if (StoryThreads.threadOf(rawPetition.id) != null) {
+      if (story == null) return;
+      rawPetition = story.petition;
+      author = story.author;
+      extra = {...extra, ...story.extra};
+    }
     // Kervan hakkında konuşan zincir, metni açılmadan önce dünyadaki kervanı
     // doğurur. Başka bir yolcu köydeyse de ayrı grup olarak gelebilir.
     if (rawPetition.id == 'roadCaravan') {
@@ -234,6 +253,9 @@ extension _ScenePetitions on _VillageSceneState {
       _lawmakingUnlocked
           ? '📜 ${p.petitioner} bir dilekçe sundu'
           : '🔥 ${p.petitioner} ateş başında söz istedi',
+      headline: p.title,
+      topic: VillageNewsTopic.council,
+      priority: VillageNewsPriority.important,
     );
   }
 
@@ -285,11 +307,15 @@ extension _ScenePetitions on _VillageSceneState {
   /// Köyün anlık durumunu dilekçe koşulları için derler.
   PetitionContext _buildPetitionContext() {
     int adults = 0;
+    int unwedAdultMen = 0;
     for (final v in _villagers) {
       if (v.lifeStage != LifeStage.elder &&
           v.lifeStage != LifeStage.child &&
           v.hasProfession) {
         adults++;
+      }
+      if (!v.isDying && v.isMale && !v.wed && v.lifeStage == LifeStage.adult) {
+        unwedAdultMen++;
       }
     }
     // Sürü durumu — yem sıkıntısı / hayvan dilekçelerinin kapısı.
@@ -309,6 +335,10 @@ extension _ScenePetitions on _VillageSceneState {
       morale: _stats.morale,
       hasChurch: _churchBuilding != null,
       memory: _villageMemory,
+      storyCasts: {
+        for (final thread in StoryThread.values)
+          if (_chooseStoryCast(thread) != null) thread,
+      },
       aggrievedEstate: _sullenEstate(),
       ascendant: _houses.ascendant == null
           ? null
@@ -345,6 +375,7 @@ extension _ScenePetitions on _VillageSceneState {
       craftLost: _villageMemory.contains('craft.lost'),
       imperialVisits: _imperialVisits,
       governanceLegacy: _governanceLegacy,
+      unwedAdultMen: unwedAdultMen,
     );
   }
 
@@ -467,75 +498,7 @@ extension _ScenePetitions on _VillageSceneState {
     );
   }
 
-  /// DEBUG (DevPanel): anında bir dilekçe getir + modal'ı aç. Koşullar uygunsa
-  /// gerçek roll, değilse rastgele bir dilekçe — test için her zaman görünür.
-  void _forcePetition() {
-    setStateHere(() {
-      final ctx = _buildPetitionContext();
-      _pendingPetition =
-          PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
-      _petitionAuthor = _pickPetitionAuthor(_pendingPetition!);
-      _petitionOverdue = false;
-      _petitionOverdueTimer = 0;
-      _petitionDeadline = _kPetitionGrace;
-      _petitionModalOpen = true; // dev kısayolu: hemen göster
-    });
-  }
-
-  /// DEBUG (DevPanel): id ile BELİRLİ bir dilekçeyi anında getir + modal'ı aç.
-  void _forcePetitionById(String id) {
-    final p = PetitionSystem.byId(id);
-    if (p == null) return;
-    setStateHere(() {
-      // Düğün gerçek bir çifte bağlıdır — dev zorlamada da bir çift bağla ki
-      // tam deneyim (isimli çift + sinematik + sahne) görünsün.
-      if (id == 'villageWedding') {
-        _weddingCouple = _findCourtship();
-        _petitionAuthor = _weddingCouple?.$1 ?? _pickPetitionAuthor(p);
-      } else {
-        _petitionAuthor = _pickPetitionAuthor(p);
-      }
-      _pendingPetition = p;
-      _petitionOverdue = false;
-      _petitionOverdueTimer = 0;
-      _petitionDeadline = _kPetitionGrace;
-      _petitionModalOpen = true;
-    });
-  }
-
-  /// DEBUG (DevPanel): bir dilekçeyi AMBIENT getir (modal AÇMA) + mühleti ~12s'e
-  /// kıs — mühür geri sayımını, sıkışmayı (kızarma/AZ KALDI) ve mühlet dolunca
-  /// kapıda beklemeye geçişi tek tıkla, beklemeden izle.
-  void _forcePetitionShortFuse() {
-    setStateHere(() {
-      final ctx = _buildPetitionContext();
-      _pendingPetition =
-          PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
-      _summonSpokesperson(_pendingPetition!); // _petitionAuthor atar
-      _petitionOverdue = false;
-      _petitionOverdueTimer = 0;
-      _petitionModalOpen = false; // mühür HUD'da — geri sayımı izle
-      _petitionDeadline = 12.0; // kısa fitil: ~12 sn sonra kapıda beklemeye
-    });
-  }
-
-  /// DEBUG (DevPanel): kapıda bekleyen huzuru ANINDA tetikle. Bekleyen dilekçe
-  /// varsa onu geçir; yoksa önce bir dilekçe getirip hemen geçir.
-  void _forcePetitionAudienceNow() {
-    if (_pendingPetition == null) {
-      setStateHere(() {
-        final ctx = _buildPetitionContext();
-        _pendingPetition =
-            PetitionSystem.roll(ctx, _rng) ?? PetitionSystem.debugRandom(_rng);
-        _summonSpokesperson(_pendingPetition!);
-        _petitionOverdue = false;
-        _petitionOverdueTimer = 0;
-        _petitionModalOpen = false;
-        _petitionDeadline = _kPetitionGrace;
-      });
-    }
-    _escalateOverduePetition();
-  }
+  /// Yeni içerik eklendiğinde geliştirici tetikleyicileri burada bağlanır.
 
   /// HUD mührüne tıklayınca — modal aç.
   void _openPetition() => setStateHere(() => _petitionModalOpen = true);
@@ -550,9 +513,16 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// Oyuncu bir seçeneği seçti: deltaları + morali + yasayı + fx'i uygula.
   void _resolvePetition(Petition p, PetitionOption o) {
+    if (_refreshLostStory(p)) return;
     final blocked = _petitionOptionBlockReason(o);
     if (blocked != null) {
-      _showNotification(blocked);
+      _showNotification(
+        blocked,
+        headline: 'Karar Uygulanamadı',
+        topic: VillageNewsTopic.system,
+        tone: VillageNewsTone.caution,
+        priority: VillageNewsPriority.urgent,
+      );
       return;
     }
     setStateHere(() {
@@ -589,7 +559,14 @@ extension _ScenePetitions on _VillageSceneState {
       _petitionTimer = _petitionInterval();
     });
     // Boş resolution → mesaj reaksiyonun kendisinden gelir (ör. kayıp ismi).
-    if (o.resolution.isNotEmpty) _showNotification(o.resolution);
+    if (o.resolution.isNotEmpty) {
+      _showNotification(
+        o.resolution,
+        headline: p.title,
+        topic: VillageNewsTopic.council,
+        priority: VillageNewsPriority.noteworthy,
+      );
+    }
   }
 
   /// KARARIN İZİ — verdiğin her dilekçe kararı günceye düşer.
@@ -686,11 +663,14 @@ extension _ScenePetitions on _VillageSceneState {
     if (o.moraleAmount != 0 && o.moraleDays > 0) {
       pushPolicyMorale(o.moraleAmount, o.moraleDays);
     }
-    _applyPetitionFx(o.fx, author);
+    _applyPetitionFx(o.fx, author, source: p.id);
+    _applyPetitionActorEffect(o.actorEffect, author);
     // Bespoke sahnesi olmayan seçenek de GÖRÜLSÜN: karar sahibi ve çevresi
     // gövdeyle karşılık verir (bkz. scene_reactions._reactPlainDecision).
     // Eskiden bu seçenekler yalnız bildirim + sayı değişimiydi.
-    if (o.fx == PetitionFx.none) _reactPlainDecision(o, author);
+    if (o.fx == PetitionFx.none && o.actorEffect == PetitionActorEffect.none) {
+      _reactPlainDecision(o, author);
+    }
     // Zümre dengesi: kararın morali oynatması + nüfuz kayması (köy kimliği).
     _applyEstatePetition(p, o);
     // Yazarın hanesi, talebine ilgi gösterilmesinden ("dinlendik") ufak bir
@@ -711,6 +691,7 @@ extension _ScenePetitions on _VillageSceneState {
     // Köy hafızası: kararın bıraktığı kalıcı bayraklar (zincir/dallanma okur).
     _villageMemory.addAll(o.setsFlags);
     _villageMemory.removeAll(o.clearsFlags);
+    _applyStoryDecision(p, o);
 
     // Zincir: seçenek bir takip dilekçesi tetikliyorsa kuyruğa al.
     if (o.followUpId != null) {
@@ -952,12 +933,16 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// Dilekçe/meclis efektini sahneye uygular — somut animasyon (sadece
   /// istatistik değil). [author] sahibe bağlı fx'ler (çağrı/sulh) için gerekir.
-  void _applyPetitionFx(PetitionFx fx, VillagerEntity? author) {
+  void _applyPetitionFx(
+    PetitionFx fx,
+    VillagerEntity? author, {
+    String source = 'petition',
+  }) {
     switch (fx) {
       case PetitionFx.none:
         break;
       case PetitionFx.festival:
-        _reactFestival();
+        break;
       case PetitionFx.cropBlight:
         _reactBlight();
       case PetitionFx.vigil:
@@ -1203,25 +1188,6 @@ extension _ScenePetitions on _VillageSceneState {
     _activeFx.add(ActiveFx(e, dur));
     _feelVillage(NpcEmotion.joy, 12, 0.12); // köy şükran içinde
     _gatherAtFire(dur, max: 5); // birkaçı kutlamak için ateşe toplanır
-  }
-
-  /// BESPOKE şenlik tepkisi: köy çapında flama/konfeti/fener fx'i + köylüleri
-  /// ateş başına topla, birkaç çift dans ettir. Gerçek, görünür bir bayram.
-  void _reactFestival() {
-    AudioManager.instance.playSfx(Sfx.crowdFair);
-    // Görsel şenlik ile NPC şenliği aynı sahne saatini paylaşır. Eskiden
-    // flamalar bir güne yakın kalırken dans 7-11 sn'de bitiyor, meydan yeniden
-    // gündelik rutine dönüyordu.
-    const dur = 24.0;
-    const e = EventEffect(fx: EventFx.festival, duration: dur);
-    _activeFx.add(ActiveFx(e, dur));
-    final fire = _firepitBuilding;
-    final (fx, fy) = fire != null ? _centerOf(fire) : _villageCenterD();
-    _releaseVignette();
-    _openVignette('festival', 'Köy şenlikte', fx, fy);
-    _stageCelebration(music: true, dance: true, gather: 9);
-    _feelVillage(NpcEmotion.joy, dur, 0.20);
-    _announceVignette();
   }
 
   // Düğün tepkisi (`_reactWedding`) + tüm kur/sahneleme yaşam döngüsü

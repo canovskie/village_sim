@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Tarladan ayrı harmanın dünya bağlantısı ve çiftçinin demet teslim zinciri.
 extension _SceneHarman on _VillageSceneState {

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Otomatik denge testleri — DevPanel'den çalıştırılır. Köyü preset'e
 /// kurar, 30× hızda sim'i `durationSec` kadar koşturur, başlangıç + bitiş
@@ -126,51 +126,4 @@ extension _SceneScenarios on _VillageSceneState {
   // ── Hazır senaryolar ────────────────────────────────────────────────────
   void _scenarioBaseline() =>
       _runScenario('Baz Köy (10 dk)', 600, _buildLivingVillage);
-
-  void _scenarioPlague() => _runScenario('Salgın Stresi (8 dk)', 480, () {
-    _buildLivingVillage();
-    final e = EventSystem.events.firstWhere((e) => e.id == EventIds.plague);
-    _applyEventAutomatic(
-      EventOutcome(
-        id: e.id,
-        title: e.title,
-        icon: e.icon,
-        message: e.message,
-        category: e.category,
-        severity: e.severity,
-        moraleModifier: -0.25,
-        duration: 60,
-        effect: const EventEffect(
-          fx: EventFx.plagueAura,
-          npcSpeedMul: 0.7,
-          duration: 60,
-        ),
-      ),
-    );
-  });
-
-  void _scenarioDrought() => _runScenario('Kuraklık (8 dk)', 480, () {
-    _buildLivingVillage();
-    final e = EventSystem.events.firstWhere((e) => e.id == EventIds.drought);
-    _applyEventAutomatic(e);
-  });
-
-  void _scenarioFire() => _runScenario('Yangın (5 dk)', 300, () {
-    _buildLivingVillage();
-    final e = EventSystem.events.firstWhere((e) => e.id == EventIds.houseFire);
-    _applyEventAutomatic(
-      EventOutcome(
-        id: e.id,
-        title: e.title,
-        icon: e.icon,
-        message: e.message,
-        category: e.category,
-        severity: e.severity,
-        woodDelta: -28,
-        moraleModifier: -0.15,
-        duration: 30,
-        effect: const EventEffect(fx: EventFx.fireOutbreak, duration: 60),
-      ),
-    );
-  });
 }

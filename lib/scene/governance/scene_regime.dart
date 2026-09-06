@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// REJİM — pusulanın oyuncuya dokunan yarısının SAHNE tarafı.
 ///

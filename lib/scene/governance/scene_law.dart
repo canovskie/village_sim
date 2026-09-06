@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// ─── KANUNNAME: MÜHÜR VE İDAME ──────────────────────────────────────────────
 ///

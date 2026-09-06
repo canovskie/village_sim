@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// SAHNE ARAYÜZÜ — yargı onayı, olay modali, dev paneli, olay bandı, künye.
 ///
@@ -115,6 +115,117 @@ extension _SceneUiPanels on _VillageSceneState {
 
   // ── Dev panel — sağdan slide-in ────────────────────────────────────────────
 
+  /// MEVSİME ATLA — test panelindeki mevsim düğmelerinin ortak gövdesi.
+  /// Takvim hep ileri sarılır; geri almak gün-tabanlı sayaçları bozardı.
+  void jumpToSeason(Season target) {
+    var d = _dayCount;
+    for (var i = 1; i <= 4 * kDaysPerSeason; i++) {
+      if (seasonForDay(_dayCount + i) == target) {
+        d = _dayCount + i;
+        break;
+      }
+    }
+    final jumped = d - _dayCount;
+    _dayCount = d;
+    logDev(
+      '${target.icon} ${target.label} — takvim $jumped gün ileri',
+      tag: '🗓️',
+    );
+  }
+
+  List<DevPetitionPreview> get _devPetitionPreviews {
+    final context = _buildPetitionContext();
+    return [
+      for (final gate in PetitionSystem.gatesForTest)
+        (
+          id: gate.petition.id,
+          label: '${gate.petition.icon} ${gate.petition.title}',
+          condition:
+              '${gate.canFire(context) && petitionGravityWeight(gate.gravity, context.agendaGravity) > 0 ? 'Şu an uygun' : 'Şu an koşul dışı'} · '
+              '${_petitionGravityLabel(gate.gravity)} · '
+              '${gate.petition.options.length} seçenek',
+        ),
+    ];
+  }
+
+  List<DevEventPreview> get _devEventPreviews {
+    final context = EventContext(
+      population: _villagers.length,
+      stockpile: _stockpile,
+      buildings: _buildings,
+    );
+    return [
+      for (final event in EventSystem.events)
+        (
+          id: event.id,
+          label: '${event.icon} ${event.title}',
+          condition:
+              '${event.canFire?.call(context) ?? true ? 'Şu an uygun' : 'Şu an koşul dışı'} · '
+              '${_eventCategoryLabel(event.category)} · '
+              '${event.needsChoice ? '${event.choices!.length} seçenek' : 'otomatik sonuç'}',
+        ),
+    ];
+  }
+
+  String _petitionGravityLabel(PetitionGravity gravity) => switch (gravity) {
+    PetitionGravity.personal => 'kişisel',
+    PetitionGravity.communal => 'topluluk',
+    PetitionGravity.civic => 'kamusal',
+    PetitionGravity.critical => 'kritik',
+  };
+
+  String _eventCategoryLabel(EventCategory category) => switch (category) {
+    EventCategory.positive => 'olumlu',
+    EventCategory.negative => 'olumsuz',
+    EventCategory.neutral => 'nötr',
+  };
+
+  /// Katalog önizlemesi normal canFire/çekiliş/ritim kapılarını atlar;
+  /// seçenek bedelleri ve sonuçları gerçek oynanıştaki gibi işler.
+  void _devPreviewPersonalPetition(String id) {
+    final petition = PetitionSystem.byId(id);
+    if (petition == null) {
+      _showNotification('Divan testi bulunamadı: $id');
+      return;
+    }
+    if (_pendingPetition != null ||
+        _pendingChoice != null ||
+        _imperialDemand != null) {
+      _showNotification('Önce açık kararı tamamla, sonra Divan testini aç');
+      return;
+    }
+
+    setStateHere(() => _devPanelOpen = false);
+    _activatePetition(petition);
+    setStateHere(() => _petitionModalOpen = true);
+  }
+
+  void _devPreviewEvent(String id) {
+    EventOutcome? event;
+    for (final candidate in EventSystem.events) {
+      if (candidate.id == id) {
+        event = candidate;
+        break;
+      }
+    }
+    if (event == null) {
+      _showNotification('Köy olayı testi bulunamadı: $id');
+      return;
+    }
+    if (_omenEvent != null ||
+        _pendingPetition != null ||
+        _pendingChoice != null ||
+        _pacedChoices.isNotEmpty ||
+        _imperialDemand != null) {
+      _showNotification('Önce açık kararı veya olayı tamamla');
+      return;
+    }
+
+    setStateHere(() => _devPanelOpen = false);
+    kForcedEventId = id;
+    _beginOmen();
+  }
+
   Widget buildDevPanel() {
     return Positioned.fill(
       child: ListenableBuilder(
@@ -126,10 +237,10 @@ extension _SceneUiPanels on _VillageSceneState {
           villagerCount: _villagers.length,
           buildingCount: _buildings.length,
           onClose: () => setStateHere(() => _devPanelOpen = false),
-          onOpenConsole: () => setStateHere(() {
-            _devPanelOpen = false;
-            _devConsoleOpen = true;
-          }),
+          petitionPreviews: _devPetitionPreviews,
+          onPreviewPetition: _devPreviewPersonalPetition,
+          eventPreviews: _devEventPreviews,
+          onPreviewEvent: _devPreviewEvent,
           onToggleGod: () => setStateHere(() => _godMode = !_godMode),
           onSetRain: (v) => setStateHere(() => _cycle.rainIntensity = v),
           season: _season,
@@ -153,18 +264,6 @@ extension _SceneUiPanels on _VillageSceneState {
             );
           },
           onSetTimeOfDay: (v) => setStateHere(() => _cycle.timeOfDay = v),
-          onTriggerEvent: (e) {
-            setStateHere(() {
-              if (e.needsChoice) {
-                // Gerçek yol neyse dev de onu tetikler: kuyruk + mühür +
-                // mühlet (modalı elle açıp bakmak için mühre tıkla).
-                _queueChoiceEvent(e);
-              } else {
-                _applyEventAutomatic(e);
-              }
-              _devPanelOpen = false;
-            });
-          },
           onAddResource: (k, n) => setStateHere(() {
             _stockpile.add(k, n);
             final cur = _stockpile.get(k);
@@ -267,19 +366,6 @@ extension _SceneUiPanels on _VillageSceneState {
             ); // yaklaşan kolon görünsün
             _devSummonImperial();
           },
-          onForcePetition: _forcePetition,
-          onForcePetitionShortFuse: () {
-            setStateHere(() => _devPanelOpen = false); // mühür/modal görünsün
-            _forcePetitionShortFuse();
-          },
-          onForcePetitionAudience: () {
-            setStateHere(() => _devPanelOpen = false); // zorla modal görünsün
-            _forcePetitionAudienceNow();
-          },
-          petitions: [
-            for (final p in PetitionSystem.all) (p.id, '${p.icon} ${p.title}'),
-          ],
-          onForcePetitionId: _forcePetitionById,
           perfMode: _perfMode,
           onTogglePerf: () => setStateHere(() => _perfMode = !_perfMode),
           devLogOn: _devLogOn,
@@ -319,9 +405,6 @@ extension _SceneUiPanels on _VillageSceneState {
                   warnings: _lastReport!.warnings,
                 ),
           onScenarioBaseline: _scenarioBaseline,
-          onScenarioPlague: _scenarioPlague,
-          onScenarioDrought: _scenarioDrought,
-          onScenarioFire: _scenarioFire,
           onPlayMusic: () {
             if (!_devStartMusic()) {
               _showNotification('Uygun NPC yok');
@@ -356,8 +439,10 @@ extension _SceneUiPanels on _VillageSceneState {
               );
             }
           }),
+          onSpawnCaravan: () => _spawnTesterVisitor(VisitorKind.caravan),
+          onSpawnTraveler: () => _spawnTesterVisitor(VisitorKind.traveler),
+          onSpawnStranger: () => _spawnTesterVisitor(VisitorKind.stranger),
           onClearActivities: () => setStateHere(_devClearActivities),
-          onMeteorShower: () => setStateHere(_startMeteorShower),
         ),
       ),
     );

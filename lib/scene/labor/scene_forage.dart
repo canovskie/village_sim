@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// TOPLAYICI + AŞÇI — köyün BİNASIZ ilk üretim zinciri.
 ///

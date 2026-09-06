@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Oyun canvas'ı pointer/gesture input işleyicileri.
 /// part of main.dart — State'in tüm private alanlarına erişim.
@@ -519,7 +519,7 @@ extension _SceneInput on _VillageSceneState {
             _selectedSiteId = null;
             // Bina dekor değil, dünya üstündeki yönetim kapısıdır. Özellikle
             // telefonda ikinci bir "Detay" dokunuşu etkileşimi saklıyordu;
-            // binaya dokunmak artık doğrudan kendi masasını açar.
+            // binaya dokunmak doğrudan kendi masasını açar.
             _detailExpanded = true;
           });
         } else if (siteId != null) {

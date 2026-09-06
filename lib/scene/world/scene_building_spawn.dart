@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Bina tamamlandığında ne olur + NPC spawn (başlangıç + yetişkin doğum) +
 /// uyku hedefi atama + spawn pozisyon temizleme + tek-tıkla canlı köy.
@@ -1353,7 +1353,7 @@ extension _SceneBuildingSpawn on _VillageSceneState {
           c >= showOx - 2 &&
           c <= showOx + 22 &&
           r >= showOy - 2 &&
-          r <= showOy + 17;
+          r <= showOy + 19; // 5×5 kilisenin son sırası ve çevresi
       _trees.removeWhere((t) => inShowcaseClear(t.col, t.row));
       _reeds.removeWhere(
         (r) => inShowcaseClear(r.col, r.row) || inShowcaseClear(r.col2, r.row2),

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// KÖY NABZI — bekleme anlarını isimli insanların küçük gündemleriyle doldurur.
 ///

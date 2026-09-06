@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// İŞ YERLERİ — iş vermenin KİŞİDEN YERE taşındığı katman.
 ///
@@ -339,8 +339,11 @@ extension _SceneWorkSites on _VillageSceneState {
 
   /// Belirli bir köylüyü bu yuvaya koy (panelden isim seçildiğinde).
   void _pinToSite(VillagerEntity v, WorkSite site) {
-    v.assignedSiteId = site.id;
     _assignVillagerJob(v, site.role);
+    if (v.assignedRole == site.role) {
+      v.assignedSiteId = site.id;
+      v.acknowledgeAssignment(site.cx, site.cy);
+    }
   }
 
   /// Yuvayı boşalt — köylü otomatik iş gücü havuzuna geri döner.

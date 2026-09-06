@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 // ── Âdet dersi — rol başına BİR kez, öğretici ton ────────────────────────────
 // Oyuncu ilk kez âdete aykırı bir atama yaptığında köy ne dediğini AÇIK AÇIK

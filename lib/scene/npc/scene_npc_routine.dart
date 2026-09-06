@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// NPC günlük rutini — köylülerin amaçsız volta atması yerine **amaçlı hedef
 /// akışı**. Bir köylü boşalıp [VillagerEntity.needsErrand] verince bu sistem
@@ -133,6 +133,7 @@ extension _SceneNpcRoutine on _VillageSceneState {
     );
     // Kilise — ara sıra; inanç hükümleri burayı köyün merkezi yapabilir.
     addBuilding(BuildingType.church, 0.7 * p.churchPull, 6, 10);
+    addBuilding(BuildingType.chapel, 0.45 * p.churchPull, 4, 7);
     // Meclis/meydan — gündüz. Rejimin en okunur silueti bu ağırlıkta.
     addBuilding(
       BuildingType.townhall,
@@ -286,7 +287,7 @@ extension _SceneNpcRoutine on _VillageSceneState {
       // Gezinti/sohbet hedefi ekinin, harmanın ya da birinin yatağının üstü
       // olmasın. İş sistemleri bu yüzeylere kendi hedefleriyle hâlâ ulaşır.
       if (_softObs.contains((c, r))) continue;
-      if (_roadSystem.has(c, r)) return (tx, ty);
+      if (_pathContext.isPreferredTransit(c, r)) return (tx, ty);
       fallback ??= (tx, ty);
     }
     return fallback;

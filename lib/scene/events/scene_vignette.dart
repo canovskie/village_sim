@@ -1,20 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
-/// OLAY VİNYETİ — rastgele olayın DÜNYADA izlenebilir hâli.
-///
-/// Derdi tek cümleyle: olay bir banner'dı. `_stageEventResponse` köyün gövde
-/// dilini kımıldatıyordu ama sahnede olan şey her olayda aynıydı — *birkaç kişi
-/// bir noktaya yürüyor*. Kuraklıkla fırtınayı, vebayla bereketi birbirinden
-/// ayıran hiçbir okunur eylem yoktu.
-///
-/// Vinyet bunun karşıtı: her olayın ROLLERİ ve ADIMLARI olur. Kuraklıkta biri
-/// kovayı indirir ve **boş** çeker; vebada biri sokakta çöker, komşusu yanına
-/// diz çöker; yangında kuyuyla ev arasında dolu kovalar taşınır. Oyuncu bakınca
-/// ne olduğunu METİN OKUMADAN anlar.
-///
-/// Mimari: yeni bir hareket sistemi DEĞİL. Faz 3'ün [Act]/[PropKind]
-/// dağarcığını (bkz. [_SceneAct]) olay diline koşar — bu yüzden vinyet
-/// oyuncuların zaten tanıdığı gövdeyi konuşur.
+/// Olayları dünya içinde oynatan genel vinyet çalışma zamanı.
+/// Yeni içerik kendi rol ve adımlarını bağlar; motor kadro salıverme, kamera ve
+/// yönetmen yaşam döngüsünü ortak yürütür.
 ///
 /// ⚠ TEK BÜYÜK TUZAK — SALIVERME. Roller [IntentPriority.ceremony] ile
 /// dayatılır; hakem ([_SceneMind]) o önceliği **hiçbir koşulda** düşürmez
@@ -34,54 +22,15 @@ extension _SceneVignette on _VillageSceneState {
   // YÖNETMEN
   // ══════════════════════════════════════════════════════════════════════════
 
-  /// Olayı (ve varsa oyuncunun kararını) bir vinyete çevirir.
-  ///
-  /// [_stageEventResponse]'tan çağrılır: koro (kalabalığın koşuşması) orada
-  /// kalır, BAŞ ROLLER burada oynar. İkisi birlikte sahneyi kurar.
+  /// Katalog olayları için boş bağlantı noktası. Yeni olay paketi kendi
+  /// koreografisini buradan kaydeder.
   void _stageVignette(EventOutcome e, {String? choiceId}) {
-    // Süren bir vinyet varsa önce onu kapat — iki sahne aynı kadroyu paylaşamaz.
     _releaseVignette();
-    switch (e.id) {
-      case EventIds.drought:
-        _vgDrought();
-      case EventIds.plague:
-        _vgPlague(choiceId);
-      case EventIds.beastRaid:
-        _vgBeastRaid(choiceId);
-      case EventIds.storm:
-        _vgStorm();
-      case EventIds.houseFire:
-        _vgHouseFire(choiceId);
-      case EventIds.bard:
-        _vgBard();
-      case EventIds.caravan:
-        _vgCaravan();
-      case EventIds.bounty:
-        _vgBounty();
-      case EventIds.accord:
-        _vgAccord();
-    }
-    _announceVignette();
-  }
-
-  /// EŞİK — heyet püskürtüldüğünde köyün dizildiği an ([_imperialResist]).
-  ///
-  /// Olay dağarcığından değil imparatorluk kolundan gelir, o yüzden
-  /// [_stageVignette]'in switch'ine girmez; ama kadro/salıverme/telemetri aynı
-  /// makineden geçer — vinyetin tek çıkış kapısı [_releaseVignette]'tir.
-  void _stageThresholdStand({
-    bool won = true,
-    ImperialDefensePlan plan = ImperialDefensePlan.holdLine,
-  }) {
-    _releaseVignette();
-    _vgThreshold(won: won, plan: plan);
-    _announceVignette();
-    // Nadir fiziksel tehdit oyuncu haritanın öbür ucundayken toast'a dönüşmesin.
-    _watchVignette();
   }
 
   /// Sahne kurulduktan sonraki ortak kuyruk: günlük satırı, prova telemetrisi,
   /// capture harness'ının otomatik kamerası.
+  // ignore: unused_element — retained event-package staging hook.
   void _announceVignette() {
     final vg = _vignette;
     if (vg != null) {
@@ -108,21 +57,51 @@ extension _SceneVignette on _VillageSceneState {
       _releaseVignette();
       return;
     }
-    // Kadronun tamamı eylemini bitirdiyse sahne de bitmiştir — ömrün dolmasını
-    // beklemek, rolünü oynamış köylüyü boşuna kilitli tutardı.
-    for (final v in vg.cast) {
-      if (v.act != null && _villagers.contains(v)) return;
+    final castIdle = vg.cast.every(
+      (v) => !_villagers.contains(v) || v.act == null,
+    );
+    _handleEventSceneSignals(_eventSceneDirector.tick(dt, castIdle: castIdle));
+    if (_vignette != null && !_eventSceneDirector.isBusy) {
+      _releaseVignette(resetDirector: false);
     }
-    _releaseVignette();
+  }
+
+  /// Saf yönetmenin sinyallerini dünya tarafındaki beat kancalarına çevirir.
+  /// Olay paketleri yalnız kendi beat id'lerini dinler; sıra ve timeout kararı
+  /// burada değil [EventSceneDirector]'dadır.
+  void _handleEventSceneSignals(List<EventSceneSignal> signals) {
+    var completed = false;
+    for (final signal in signals) {
+      final vg = _vignette;
+      if (vg == null || signal.plan.key != vg.sceneKey) continue;
+      switch (signal.kind) {
+        case EventSceneSignalKind.beatEntered:
+          final id = signal.beat!.id;
+          vg.beatId = id;
+          vg.onBeatEnter[id]?.call();
+        case EventSceneSignalKind.completed:
+        case EventSceneSignalKind.cancelled:
+          completed = true;
+        case EventSceneSignalKind.started:
+        case EventSceneSignalKind.beatExited:
+          break;
+      }
+    }
+    if (completed && _vignette != null) {
+      _releaseVignette(resetDirector: false);
+    }
   }
 
   /// SAHNEYİ KAPAT — kadroyu dayatılmış niyetten kurtarır.
   ///
   /// Ceremony önceliğini yalnız burası geri alabilir. `mind.clear()` çağrılmazsa
   /// köylü sonsuza dek "sahnede" sayılır ve hiçbir teklif onu kurtaramaz.
-  void _releaseVignette() {
+  void _releaseVignette({bool resetDirector = true}) {
     final vg = _vignette;
-    if (vg == null) return;
+    if (vg == null) {
+      if (resetDirector) _eventSceneDirector.reset();
+      return;
+    }
     for (final v in vg.cast) {
       v.act = null;
       v.actPose = null;
@@ -156,6 +135,7 @@ extension _SceneVignette on _VillageSceneState {
     kProbeVignetteCast = 0;
     // Kamera sahneye kilitliyse bırak — izlenecek bir şey kalmadı.
     if (_watchLeft > 0) _watchLeft = 0;
+    if (resetDirector) _eventSceneDirector.reset();
   }
 
   /// "İZLE" — kamerayı sahnenin odağına götürür (banner düğmesi).
@@ -184,13 +164,33 @@ extension _SceneVignette on _VillageSceneState {
 
   /// Sahneyi açar — sonraki [_role] çağrıları bu sahneye yazılır.
   /// [gx],[gy] kamera odağı: "İzle"ye basınca kadraja gelecek nokta.
-  void _openVignette(String eventId, String title, double gx, double gy) {
+  // ignore: unused_element — retained event-package staging hook.
+  void _openVignette(
+    String eventId,
+    String title,
+    double gx,
+    double gy, {
+    EventScenePlan? plan,
+    Map<String, VoidCallback> onBeatEnter = const {},
+    bool ownsChorus = false,
+  }) {
+    final resolved =
+        plan ?? EventScenePlan.standard(eventId: eventId, title: title);
     _vignette = Vignette(
       eventId: eventId,
       title: title,
       gx: gx,
       gy: gy,
       life: _kVignetteLife,
+      sceneKey: resolved.key,
+      onBeatEnter: onBeatEnter,
+      ownsChorus: ownsChorus,
+    );
+    _handleEventSceneSignals(
+      _eventSceneDirector.start(
+        resolved,
+        policy: EventSceneStartPolicy.replace,
+      ),
     );
   }
 
@@ -200,6 +200,7 @@ extension _SceneVignette on _VillageSceneState {
   /// [reason] köylü panelinde görünecek birinci ağız sebep — boş bırakılamaz.
   /// Uygun kimse yoksa `null` döner ve koreografi o rolsüz devam eder: sahne
   /// eksik oynanır ama ASLA yarım kilitlenmez.
+  // ignore: unused_element — retained event-package staging hook.
   VillagerEntity? _role(
     String label,
     String reason,
@@ -245,24 +246,6 @@ extension _SceneVignette on _VillageSceneState {
     v.chatBubbleIcon = '';
     v.waveTime = 0; // yarım kalan selam sahnenin ortasında sallanmasın
     v.clearConvo();
-  }
-
-  /// İmparatorluk karar modalından dünya sahnesine dönülen kesitte savunucuyu
-  /// eşik slotuna kur. Normal vinyetler yürüyerek kadro toplar; muharebede ise
-  /// ilk darbe başladığında köyün yarısının hâlâ merkezden koşması sahneyi
-  /// görünmez kılıyordu. Kamera o sırada eşiğe kaydığı için bu bir sahne kesiti,
-  /// oyuncunun gözü önünde ışınlanma değil.
-  void _deployThreshold(VillagerEntity? v, double x, double y, double faceX) {
-    if (v == null) return;
-    v.gridX = x;
-    v.gridY = y;
-    v.renderX = x;
-    v.renderY = y;
-    v.targetCol = x;
-    v.targetRow = y;
-    v.isWalking = false;
-    v.loco.reset();
-    v.loco.snapFacing(faceX > x);
   }
 
   /// [nearX],[nearY] noktasına en yakın uygun köylü. Sahnede zaten rolü olan
@@ -353,6 +336,7 @@ extension _SceneVignette on _VillageSceneState {
 
   /// Çocuk rolü — yola koşan, merakla bakan gövde. Yetişkin filtresinin
   /// tersine çevrilmiş hâli; bulunamazsa rol düşer.
+  // ignore: unused_element — retained event-package staging hook.
   VillagerEntity? _kidRole(
     String label,
     String reason,
@@ -398,643 +382,7 @@ extension _SceneVignette on _VillageSceneState {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // KOREOGRAFİLER — her olayın kendi iskeleti
-  // ══════════════════════════════════════════════════════════════════════════
-  //
-  // Yazım kuralı: sahne bir CÜMLE anlatmalı ve o cümle metinsiz okunmalı.
-  // "Kova indi, boş çıktı" (kuraklık) ile "kova doldu, ateşe koştu" (yangın)
-  // aynı nesneyi kullanır ama zıt şey anlatır — fark ADIM DİZİSİNDEDİR.
-
-  /// KURAKLIK — kuyu boş çıkar. Köyün en okunur mikro-sahnesinin (kuyudan su
-  /// taşıma) TERSİ: aynı hazırlık, gelmeyen sonuç.
-  void _vgDrought() {
-    final well =
-        _firstBuildingOf(BuildingType.well) ??
-        _firstBuildingOf(BuildingType.fountain);
-    final (wx, wy) = well != null ? _centerOf(well) : _villageCenterD();
-    _openVignette(EventIds.drought, 'Kuyu boş çıktı', wx, wy);
-
-    // A — kovayı indirir, çeker, BOŞ kalır, bir daha dener, kovayı bırakır.
-    _role(
-      'kuyudan su çekmeye çalışıyor',
-      'kuyuda su kalmış mı, bakıyorum',
-      wx,
-      wy,
-      [
-        ActStep.goTo(wx, wy),
-        const ActStep.take(PropKind.bucketEmpty),
-        ActStep.face(wx, wy),
-        const ActStep.work(2.4, pose: ActPose.stoop), // indiriyor
-        const ActStep.work(1.8, pose: ActPose.labor), // ipi çekiyor
-        // Kova hâlâ bucketEmpty — sahnenin bütün anlamı bu tek satırda: dolu
-        // kovaya GEÇMEZ. Oyuncu elde boş kovayı görür.
-        const ActStep.work(1.6, pose: ActPose.stand), // duruyor, bakıyor
-        const ActStep.work(2.2, pose: ActPose.labor), // bir daha çekiyor
-        const ActStep.put(), // kovayı yere bırakır
-        const ActStep.work(3.0, pose: ActPose.kneel), // kuyu başına çöker
-      ],
-      emotion: NpcEmotion.wonder,
-    );
-
-    // B — komşu birkaç adım ötede durur, ona bakar.
-    _role(
-      'kuyu başındakine bakıyor',
-      'kuyudan ses gelmedi',
-      wx + 2,
-      wy + 1,
-      [
-        ActStep.goTo(wx + 1.6, wy + 1.2),
-        ActStep.face(wx, wy),
-        const ActStep.work(9.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.fear,
-    );
-
-    // C — boş testiyle gelir, sıraya durur, eli boş döner.
-    _role(
-      'kuyu sırasında bekliyor',
-      'su almaya geldim',
-      wx - 2,
-      wy + 2,
-      [
-        ActStep.goTo(wx - 1.5, wy + 1.5),
-        const ActStep.take(PropKind.bucketEmpty),
-        ActStep.face(wx, wy),
-        const ActStep.work(7.0, pose: ActPose.stand),
-        const ActStep.put(),
-      ],
-      emotion: NpcEmotion.fear,
-    );
-  }
-
-  /// VEBA — biri sokakta çöker, yakını yanına diz çöker, şifacı bohçayla koşar.
-  /// Ölüm bilançosu [_plagueToll]'un işi; bu sahne onun İNSAN yüzü.
-  void _vgPlague(String? choiceId) {
-    // Hasta düşecek yer: köyün göbeği değil, birinin yürüdüğü sokak — sahneyi
-    // meydana taşımak "tören" gibi durur, oysa bu ani bir çöküş.
-    final fallen = _castNear(_villageCenterD().$1, _villageCenterD().$2);
-    final (fx, fy) = fallen != null
-        ? (fallen.gridX, fallen.gridY)
-        : _villageCenterD();
-    _openVignette(EventIds.plague, 'Biri sokakta düştü', fx, fy);
-
-    // A — yürürken durur, sendeler, çöker ve kalkmaz.
-    _role(
-      'ayakta duramıyor',
-      'başım dönüyor',
-      fx,
-      fy,
-      [
-        const ActStep.work(1.0, pose: ActPose.stand), // durur
-        const ActStep.work(1.4, pose: ActPose.stoop), // öne katlanır
-        const ActStep.work(12.0, pose: ActPose.slump), // yere çöker, kalmaz
-      ],
-      emotion: NpcEmotion.grief,
-      emotionDur: 12,
-    );
-
-    // B — yakını koşar, yanına diz çöker.
-    _role(
-      'düşenin başında',
-      'onu yalnız bırakamam',
-      fx + 3,
-      fy + 2,
-      [
-        ActStep.goTo(fx + 0.9, fy + 0.6),
-        ActStep.face(fx, fy),
-        const ActStep.work(11.0, pose: ActPose.kneel),
-      ],
-      emotion: NpcEmotion.grief,
-      emotionDur: 11,
-    );
-
-    // C — şifacı bohçayla gelir. Karar 'healer' ise erken yetişir (kısa yol),
-    // değilse geç kalır: aynı roller, geciken zamanlama.
-    final church = _firstBuildingOf(BuildingType.church);
-    final (hx, hy) = church != null ? _centerOf(church) : (fx - 4, fy - 3);
-    final late = choiceId != 'healer';
-    _role(
-      'şifa taşıyor',
-      late ? 'geç kaldım galiba' : 'ilacı yetiştiriyorum',
-      hx,
-      hy,
-      [
-        const ActStep.take(PropKind.basket),
-        if (late) const ActStep.work(3.5, pose: ActPose.stand), // duraksama
-        ActStep.goTo(fx - 0.9, fy + 0.7),
-        ActStep.face(fx, fy),
-        const ActStep.work(2.0, pose: ActPose.stoop),
-        const ActStep.put(),
-        ActStep.work(late ? 3.0 : 5.0, pose: ActPose.kneel),
-      ],
-      emotion: NpcEmotion.fear,
-    );
-  }
-
-  /// CANAVAR — kenara iki gövde çakılır, üçüncüsü köye haber taşır.
-  /// Muhafız kararında duruş İLERİ, kaçış kararında sahne GERİYE akar.
-  void _vgBeastRaid(String? choiceId) {
-    final (ex, ey) = _villageEdgePoint();
-    final (cx, cy) = _villageCenterD();
-    _openVignette(EventIds.beastRaid, 'Ağaç hattına bakıyorlar', ex, ey);
-
-    if (choiceId == 'guards') {
-      // İki kişi kenara dizilir ve ORMANA döner — sırtı köye, yüzü karanlığa.
-      _role(
-        'ağaç hattını gözlüyor',
-        'oradan bir şey geliyor',
-        ex,
-        ey,
-        [
-          ActStep.goTo(ex, ey),
-          ActStep.face(ex * 2 - cx, ey * 2 - cy), // köyün TERSİNE bakar
-          const ActStep.work(12.0, pose: ActPose.stand),
-        ],
-        emotion: NpcEmotion.anger,
-        emotionDur: 12,
-      );
-      _role(
-        'nöbette',
-        'yanından ayrılmam',
-        ex + 1.5,
-        ey + 1,
-        [
-          ActStep.goTo(ex + 1.4, ey + 1.0),
-          ActStep.face(ex * 2 - cx, ey * 2 - cy),
-          const ActStep.work(11.0, pose: ActPose.stand),
-        ],
-        emotion: NpcEmotion.anger,
-        emotionDur: 11,
-      );
-    } else {
-      // Kaçış: kenardaki adam köye doğru koşar, ateşin başında soluklanır.
-      _role(
-        'köye koşuyor',
-        'kapıları kapatın',
-        ex,
-        ey,
-        [
-          ActStep.goTo(ex, ey),
-          ActStep.goTo(cx, cy),
-          ActStep.face(ex, ey),
-          const ActStep.work(6.0, pose: ActPose.stand),
-        ],
-        emotion: NpcEmotion.fear,
-        emotionDur: 10,
-      );
-    }
-
-    // Çoban: ağıla doğru sürüyü toplar (hayvan sistemi ayrı; bu onun gövdesi).
-    final barn =
-        _firstBuildingOf(BuildingType.barn) ??
-        _firstBuildingOf(BuildingType.stable);
-    if (barn != null) {
-      final (bx, by) = _centerOf(barn);
-      _role('sürüyü ağıla sokuyor', 'hepsi içeri girsin', bx, by, [
-        ActStep.goTo(bx + 1.2, by + 0.8),
-        ActStep.face(bx, by),
-        const ActStep.work(4.0, pose: ActPose.labor),
-        ActStep.goTo(bx - 1.2, by + 0.8),
-        ActStep.face(bx, by),
-        const ActStep.work(4.0, pose: ActPose.labor),
-      ], emotion: NpcEmotion.fear);
-    }
-
-    // Bir çocuk ateşin dibine kaçar ve ormana bakar.
-    final fire = _firepitBuilding;
-    if (fire != null) {
-      final (fx, fy) = _centerOf(fire);
-      _kidRole('ateşin dibine kaçtı', 'orada bir şey var', fx, fy, [
-        ActStep.goTo(fx + 0.8, fy + 0.8),
-        ActStep.face(ex, ey),
-        const ActStep.work(9.0, pose: ActPose.stand),
-      ], emotion: NpcEmotion.fear);
-    }
-  }
-
-  /// FIRTINA — köy dışarıda ne varsa içeri alır. Kimse kaçmaz; TOPLAR.
-  void _vgStorm() {
-    final ware = _firstBuildingOf(BuildingType.warehouse);
-    final fire = _firepitBuilding;
-    final (cx, cy) = ware != null ? _centerOf(ware) : _villageCenterD();
-    _openVignette(EventIds.storm, 'Fırtınadan önce toplanıyor', cx, cy);
-
-    // A — dışarıdaki sepeti kapıp ambara sokar.
-    _role(
-      'malı içeri alıyor',
-      'ıslanmadan kaldıralım',
-      cx + 3,
-      cy + 2,
-      [
-        const ActStep.take(PropKind.basket),
-        ActStep.goTo(cx, cy),
-        ActStep.face(cx, cy),
-        const ActStep.work(1.8, pose: ActPose.stoop),
-        const ActStep.put(),
-        ActStep.goTo(cx + 2.5, cy + 1.8),
-        const ActStep.take(PropKind.sack),
-        ActStep.goTo(cx, cy),
-        const ActStep.work(1.6, pose: ActPose.stoop),
-        const ActStep.put(),
-      ],
-      emotion: NpcEmotion.fear,
-    );
-
-    // B — ateşi kurtarmaya odun taşır (ıslanırsa ocak söner: [_SceneFire]).
-    if (fire != null) {
-      final (fx, fy) = _centerOf(fire);
-      _role('ateşe odun yığıyor', 'ocak sönmesin', fx + 2, fy + 2, [
-        const ActStep.take(PropKind.firewood),
-        ActStep.goTo(fx + 0.9, fy + 0.7),
-        ActStep.face(fx, fy),
-        const ActStep.work(2.4, pose: ActPose.stoop),
-        const ActStep.put(),
-        const ActStep.work(2.0, pose: ActPose.labor),
-      ], emotion: NpcEmotion.fear);
-    }
-
-    // C — kepenk kapatıyor: KENDİ evinin önünde eğilip doğrulur.
-    // Adayı önce seçip evini okuyoruz; `near` olarak onun bulunduğu yeri
-    // veriyoruz ki `_role` büyük olasılıkla aynı kişiyi seçsin — "eve" değil
-    // "en yakın kişiyi eve" göndermek başkasının kapısında kepenk kapattırırdı.
-    final c = _castNear(cx, cy);
-    if (c != null) {
-      final home = c.homeBuilding;
-      final (hx, hy) = home is BuildingEntity
-          ? _centerOf(home)
-          : (c.gridX, c.gridY);
-      _role(
-        'kepenkleri kapatıyor',
-        'rüzgâr camı kırmasın',
-        c.gridX,
-        c.gridY,
-        [
-          ActStep.goTo(hx + 0.8, hy + 1.0),
-          ActStep.face(hx, hy),
-          const ActStep.work(3.0, pose: ActPose.labor),
-          const ActStep.work(1.4, pose: ActPose.stoop),
-          const ActStep.work(3.0, pose: ActPose.labor),
-        ],
-        emotion: NpcEmotion.fear,
-      );
-    }
-  }
-
-  /// YANGIN — kuyu ile ev arasında DOLU kovalar gidip gelir.
-  ///
-  /// Kuraklığın ikizi ve zıddı: aynı kuyu, aynı kova, ama burada kova DOLAR ve
-  /// koşarak taşınır. Zincir hissi iki taşıyıcının kaydırılmış (staggered)
-  /// başlangıcından doğar — biri dönerken öteki gidiyordur.
-  void _vgHouseFire(String? choiceId) {
-    final burning = _burningBuildings.isNotEmpty
-        ? _burningBuildings.first
-        : null;
-    final (bx, by) = burning != null ? _centerOf(burning) : _villageCenterD();
-    final well =
-        _firstBuildingOf(BuildingType.well) ??
-        _firstBuildingOf(BuildingType.fountain);
-    final (wx, wy) = well != null ? _centerOf(well) : _villageCenterD();
-    // Odak: kuyu ile yangının ORTASI — zincirin tamamı kadraja girsin.
-    _openVignette(
-      EventIds.houseFire,
-      'Kova zinciri',
-      (bx + wx) / 2,
-      (by + wy) / 2,
-    );
-
-    if (choiceId == 'retreat') {
-      // Vazgeçildi: iki kişi eve bakar, biri dizlerinin üstüne çöker.
-      _role(
-        'evin yanışını seyrediyor',
-        'yetişemedik',
-        bx + 3,
-        by + 2,
-        [
-          ActStep.goTo(bx + 2.4, by + 1.8),
-          ActStep.face(bx, by),
-          const ActStep.work(4.0, pose: ActPose.stand),
-          const ActStep.work(7.0, pose: ActPose.kneel),
-        ],
-        emotion: NpcEmotion.grief,
-        emotionDur: 11,
-      );
-      _role('geri çekiliyor', 'ateş çok büyük', bx - 2, by + 2, [
-        ActStep.goTo(bx - 2.2, by + 1.6),
-        ActStep.face(bx, by),
-        const ActStep.work(9.0, pose: ActPose.stand),
-      ], emotion: NpcEmotion.fear);
-      return;
-    }
-
-    // Taşıyıcı — kuyudan doldurur, yangına koşar, suyu atar, geri döner.
-    List<ActStep> carrier(double offX, double offY, double delay) => [
-      if (delay > 0) ActStep.work(delay, pose: ActPose.stand),
-      ActStep.goTo(wx + offX, wy + offY),
-      const ActStep.take(PropKind.bucketEmpty),
-      ActStep.face(wx, wy),
-      const ActStep.work(1.6, pose: ActPose.stoop), // doldurur
-      const ActStep.put(),
-      const ActStep.take(PropKind.bucketFull), // ağır → yavaş yürür
-      ActStep.goTo(bx + offX, by + offY),
-      ActStep.face(bx, by),
-      const ActStep.work(1.2, pose: ActPose.labor), // suyu savurur
-      const ActStep.put(),
-      ActStep.goTo(wx + offX, wy + offY), // ikinci tur
-      const ActStep.take(PropKind.bucketEmpty),
-      ActStep.face(wx, wy),
-      const ActStep.work(1.6, pose: ActPose.stoop),
-      const ActStep.put(),
-      const ActStep.take(PropKind.bucketFull),
-      ActStep.goTo(bx + offX, by + offY),
-      ActStep.face(bx, by),
-      const ActStep.work(1.2, pose: ActPose.labor),
-      const ActStep.put(),
-    ];
-
-    _role(
-      'kova taşıyor',
-      'su yetiştirmem lazım',
-      wx,
-      wy,
-      carrier(0.9, 0.6, 0),
-      emotion: NpcEmotion.fear,
-      emotionDur: 14,
-    );
-    _role(
-      'kova taşıyor',
-      'zincir kopmasın',
-      bx,
-      by,
-      carrier(-0.9, 0.9, 2.6),
-      emotion: NpcEmotion.fear,
-      emotionDur: 14,
-    );
-
-    // Zincirin ortasındaki adam: kımıldamaz, elden ele verir.
-    _role(
-      'zincirin ortasında',
-      'elden ele veriyoruz',
-      (bx + wx) / 2,
-      (by + wy) / 2,
-      [
-        ActStep.goTo((bx + wx) / 2, (by + wy) / 2),
-        ActStep.face(bx, by),
-        const ActStep.work(14.0, pose: ActPose.labor),
-      ],
-      emotion: NpcEmotion.fear,
-      emotionDur: 14,
-    );
-  }
-
-  /// OZAN — çocuk yola koşup karşılar, ateş başında çember kurulur.
-  /// Müzik/dans aktivitelerini [_stageCelebration] yürütür; vinyet KARŞILAMA
-  /// ânını ekler (olayın "geliyor" hissi sahnede yoktu).
-  void _vgBard() {
-    final (ex, ey) = _villageEdgePoint();
-    final fire = _firepitBuilding;
-    final (fx, fy) = fire != null ? _centerOf(fire) : _villageCenterD();
-    _openVignette(EventIds.bard, 'Ozanı karşılıyorlar', fx, fy);
-
-    _kidRole(
-      'ozanı karşılamaya koştu',
-      'türkü söyleyen geliyor',
-      ex,
-      ey,
-      [
-        ActStep.goTo(ex, ey),
-        ActStep.face(ex, ey),
-        const ActStep.work(2.0, pose: ActPose.stand),
-        ActStep.goTo(fx + 1.0, fy + 0.8), // ozanı köye çeker
-        ActStep.face(fx, fy),
-        const ActStep.work(5.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.joy,
-    );
-
-    _role('ozana yer açıyor', 'buraya otursun', fx, fy, [
-      ActStep.goTo(fx + 1.4, fy - 0.6),
-      ActStep.face(fx, fy),
-      const ActStep.work(2.4, pose: ActPose.labor), // kütük çekiyor
-      const ActStep.work(6.0, pose: ActPose.stand),
-    ], emotion: NpcEmotion.joy);
-
-    _role(
-      'ozana ekmek getiriyor',
-      'yoldan gelene bir lokma',
-      fx + 3,
-      fy + 2,
-      [
-        const ActStep.take(PropKind.bread),
-        ActStep.goTo(fx - 1.2, fy + 0.9),
-        ActStep.face(fx, fy),
-        const ActStep.work(1.6, pose: ActPose.stoop),
-        const ActStep.put(),
-        const ActStep.work(5.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.joy,
-    );
-  }
-
-  /// KERVAN — pazarda yük iner, çuval ambara taşınır, sepetle eve dönülür.
-  void _vgCaravan() {
-    final market = _firstBuildingOf(BuildingType.market);
-    final (mx, my) = market != null ? _centerOf(market) : _villageCenterD();
-    final ware = _firstBuildingOf(BuildingType.warehouse);
-    _openVignette(EventIds.caravan, 'Kervanın yükü iniyor', mx, my);
-
-    // A — pazarda pazarlık, sepetle eve.
-    final a = _castNear(mx, my);
-    final aHome = a?.homeBuilding;
-    final (ax, ay) = aHome is BuildingEntity
-        ? _centerOf(aHome)
-        : (mx + 3, my + 3);
-    _role(
-      'pazarda pazarlık ediyor',
-      'kervandan bir şeyler alacağım',
-      mx,
-      my,
-      [
-        ActStep.goTo(mx + 1.0, my + 0.8),
-        ActStep.face(mx, my),
-        const ActStep.work(4.0, pose: ActPose.stand),
-        const ActStep.take(PropKind.basket),
-        ActStep.goTo(ax, ay),
-        const ActStep.work(1.4, pose: ActPose.stoop),
-        const ActStep.put(),
-      ],
-      emotion: NpcEmotion.joy,
-    );
-
-    // B — çuvalı ambara indirir (kervanın yükü gözle görünür olsun).
-    if (ware != null) {
-      final (wx, wy) = _centerOf(ware);
-      _role(
-        'kervanın yükünü indiriyor',
-        'çuvalları ambara',
-        mx,
-        my,
-        [
-          ActStep.goTo(mx - 1.0, my + 0.9),
-          ActStep.face(mx, my),
-          const ActStep.work(1.8, pose: ActPose.stoop),
-          const ActStep.take(PropKind.sack),
-          ActStep.goTo(wx, wy),
-          ActStep.face(wx, wy),
-          const ActStep.work(1.6, pose: ActPose.stoop),
-          const ActStep.put(),
-          ActStep.goTo(mx - 1.0, my + 0.9),
-          const ActStep.take(PropKind.sack),
-          ActStep.goTo(wx, wy),
-          const ActStep.work(1.6, pose: ActPose.stoop),
-          const ActStep.put(),
-        ],
-        emotion: NpcEmotion.joy,
-        emotionDur: 12,
-      );
-    }
-
-    // C — çocuk tezgâhın önüne yapışır.
-    _kidRole('tezgâhın önünde', 'onu görmek istiyorum', mx, my, [
-      ActStep.goTo(mx + 0.7, my + 1.2),
-      ActStep.face(mx, my),
-      const ActStep.work(9.0, pose: ActPose.stand),
-    ], emotion: NpcEmotion.wonder);
-  }
-
-  /// BEREKET — tarlada biçilir, dolu sepet ambara taşınır, istif yapılır.
-  void _vgBounty() {
-    // Odak: ekini olgun bir tarla; yoksa ambar; o da yoksa merkez.
-    double tx, ty;
-    final ripe = _farmTiles.where((f) => f.stage >= 3).toList();
-    final ware = _firstBuildingOf(BuildingType.warehouse);
-    if (ripe.isNotEmpty) {
-      final f = ripe[_rng.nextInt(ripe.length)];
-      tx = f.col.toDouble();
-      ty = f.row.toDouble();
-    } else if (ware != null) {
-      (tx, ty) = _centerOf(ware);
-    } else {
-      (tx, ty) = _villageCenterD();
-    }
-    final (wx, wy) = ware != null ? _centerOf(ware) : (tx + 4, ty + 3);
-    _openVignette(EventIds.bounty, 'Hasat taşınıyor', tx, ty);
-
-    // İki hasatçı, kaydırılmış başlangıçla: tarla ↔ ambar akışı sürekli görünür.
-    List<ActStep> reaper(double off, double delay) => [
-      if (delay > 0) ActStep.work(delay, pose: ActPose.stand),
-      ActStep.goTo(tx + off, ty + off * 0.5),
-      ActStep.face(tx, ty),
-      const ActStep.work(3.2, pose: ActPose.labor), // biçiyor
-      const ActStep.take(PropKind.basket),
-      ActStep.goTo(wx + off, wy),
-      ActStep.face(wx, wy),
-      const ActStep.work(1.6, pose: ActPose.stoop),
-      const ActStep.put(),
-      ActStep.goTo(tx + off, ty + off * 0.5),
-      const ActStep.work(3.0, pose: ActPose.labor),
-      const ActStep.take(PropKind.basket),
-      ActStep.goTo(wx + off, wy),
-      const ActStep.work(1.4, pose: ActPose.stoop),
-      const ActStep.put(),
-    ];
-
-    _role(
-      'hasadı taşıyor',
-      'başak sapı büküyor',
-      tx,
-      ty,
-      reaper(0.8, 0),
-      emotion: NpcEmotion.joy,
-      emotionDur: 14,
-    );
-    _role(
-      'hasadı taşıyor',
-      'bu yıl bereket var',
-      tx,
-      ty,
-      reaper(-0.9, 2.4),
-      emotion: NpcEmotion.joy,
-      emotionDur: 14,
-    );
-
-    // Ambar kapısında istifçi — akışın vardığı yer boş kalmasın.
-    if (ware != null) {
-      _role(
-        'ambarda istif yapıyor',
-        'hepsi sığacak mı bakalım',
-        wx,
-        wy,
-        [
-          ActStep.goTo(wx + 1.2, wy + 0.9),
-          ActStep.face(wx, wy),
-          const ActStep.work(13.0, pose: ActPose.labor),
-        ],
-        emotion: NpcEmotion.joy,
-        emotionDur: 13,
-      );
-    }
-  }
-
-  /// SULH — iki küskün hane meydanda buluşur, biri ekmeğini uzatır, tanık bakar.
-  /// [_stageReconciliation] hanenin SAYISINI onarır; bu sahne onun görünür ânı.
-  void _vgAccord() {
-    final hall = _firstBuildingOf(BuildingType.townhall) ?? _firepitBuilding;
-    final (cx, cy) = hall != null ? _centerOf(hall) : _villageCenterD();
-    _openVignette(EventIds.accord, 'İki hane barışıyor', cx, cy);
-
-    // A — küskün hanenin adamı; ekmeği o uzatır (barışı teklif eden taraf).
-    final grieved = _houses.mostAggrieved;
-    final a = _role(
-      'barışmaya geldi',
-      'bu iş burada bitsin',
-      cx,
-      cy,
-      [
-        const ActStep.take(PropKind.bread),
-        ActStep.goTo(cx - 0.9, cy + 0.6),
-        ActStep.face(cx + 0.9, cy + 0.6),
-        const ActStep.work(2.4, pose: ActPose.stand),
-        const ActStep.work(1.2, pose: ActPose.stoop), // ekmeği uzatır
-        const ActStep.put(),
-        const ActStep.work(6.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.love,
-      prefer: (v) => grieved != null && v.surname == grieved,
-    );
-
-    // B — karşı hane. Aynı soyadı seçilmesin: barış tek hanede olmaz.
-    _role(
-      'elini uzatıyor',
-      'küskünlük yeter',
-      cx + 2,
-      cy + 1,
-      [
-        ActStep.goTo(cx + 0.9, cy + 0.6),
-        ActStep.face(cx - 0.9, cy + 0.6),
-        const ActStep.work(3.0, pose: ActPose.stand),
-        const ActStep.work(1.2, pose: ActPose.stoop), // ekmeği alır
-        const ActStep.work(6.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.love,
-      prefer: (v) =>
-          a != null && v.surname.isNotEmpty && v.surname != a.surname,
-    );
-
-    // C — tanık: köy bu ânı görmeli, yoksa barış dedikodu olarak kalır.
-    _role(
-      'barışa tanık',
-      'gözlerimle gördüm',
-      cx - 2,
-      cy + 2,
-      [
-        ActStep.goTo(cx - 2.0, cy + 1.8),
-        ActStep.face(cx, cy),
-        const ActStep.work(11.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.wonder,
-      emotionDur: 11,
-    );
-  }
+  // Yeni olay koreografileri bağımsız paketler olarak buraya bağlanır.
 
   /// EŞİK — heyet püskürtüldü. Köy heyetle kendi meydanı ARASINA dizilir.
   ///
@@ -1045,191 +393,6 @@ extension _SceneVignette on _VillageSceneState {
   ///
   /// Cümlesi: *aramızdan geçemezsiniz*. Bu yüzden koreografi tek şey yapar —
   /// hat kurulur ve DURUR. Kimse ileri atılmaz: saldırı değil, set.
-  void _vgThreshold({required bool won, required ImperialDefensePlan plan}) {
-    final (cx, cy) = _villageCenterD();
-    final ax = _impAnchorCol, ay = _impAnchorRow;
-    // Heyetten köye bakan birim vektör + ona dik olan (hattın açıldığı eksen).
-    final dx = cx - ax, dy = cy - ay;
-    final len = sqrt(dx * dx + dy * dy);
-    final (ux, uy) = len < 0.001 ? (0.0, 1.0) : (dx / len, dy / len);
-    final (px, py) = (-uy, ux);
-    // Hattın ortası: heyetin 3 tile önü. Daha yakını askerlerin içine girer,
-    // daha uzağı "kaçmış köy" gibi durur.
-    final lx = ax + ux * 3.0, ly = ay + uy * 3.0;
-
-    _openVignette(
-      kThresholdVignetteId,
-      won ? '${plan.title}: eşik tutuluyor' : '${plan.title}: hat kırılıyor',
-      lx,
-      ly,
-    );
-
-    // Kadro yarıçapı DAR: heyet eşikte bekliyor, haritanın öbür ucundan koşan
-    // adam hat kurulduktan çok sonra varır (bkz. [_castNear] radius).
-    const r = 15.0;
-
-    // Hat üstünde bir yer — [off] dik eksende sağa/sola, [back] köye doğru geri.
-    (double, double) spot(double off, double back) =>
-        (lx + px * off + ux * back, ly + py * off + uy * back);
-
-    // A — MUHAFIZ, hattın ortası. Elinde nesne yok: silahı zaten kendisi.
-    final (gx, gy) = spot(0, 0);
-    final guard = _role(
-      'eşikte duruyor',
-      'buradan öteye geçemezler',
-      gx,
-      gy,
-      [
-        ActStep.goTo(gx, gy),
-        ActStep.face(ax, ay),
-        const ActStep.work(1.0, pose: ActPose.stand),
-        const ActStep.work(1.4, pose: ActPose.labor),
-        const ActStep.work(1.0, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        ActStep.work(5.0, pose: won ? ActPose.stand : ActPose.slump),
-      ],
-      emotion: NpcEmotion.anger,
-      emotionDur: 13,
-      radius: r,
-      prefer: (v) => v.type == VillagerType.guard,
-    );
-    _deployThreshold(guard, gx, gy, ax);
-
-    // B — TIRPAN. Aleti önce eline alır, hatta öyle yürür: köyün silahlanması
-    // ayrı bir hazırlık değil, elindekini kaldırmasıdır.
-    final (sx, sy) = spot(1.7, 0.2);
-    final scythe = _role(
-      'tırpanla hatta durdu',
-      'tarlada da bu vardı elimde',
-      sx,
-      sy,
-      [
-        const ActStep.take(PropKind.scythe),
-        ActStep.goTo(sx, sy),
-        ActStep.face(ax, ay),
-        const ActStep.work(1.4, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        const ActStep.work(0.8, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        ActStep.work(4.0, pose: won ? ActPose.stand : ActPose.slump),
-        const ActStep.put(), // heyet dönünce tırpan iner
-        const ActStep.work(1.5, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.anger,
-      emotionDur: 12,
-      radius: r,
-    );
-    _deployThreshold(scythe, sx, sy, ax);
-
-    // C — BALTA, hattın öbür ucu. İki farklı siluet = derme çatma bir kalabalık;
-    // aynı nesneden iki tane koymak "asker" gibi durururdu.
-    final (bx, by) = spot(-1.7, 0.2);
-    final axe = _role(
-      'baltayla hatta durdu',
-      'kimse ambarımıza dokunmayacak',
-      bx,
-      by,
-      [
-        const ActStep.take(PropKind.axe),
-        ActStep.goTo(bx, by),
-        ActStep.face(ax, ay),
-        const ActStep.work(1.2, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        const ActStep.work(0.9, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        ActStep.work(4.0, pose: won ? ActPose.stand : ActPose.slump),
-        const ActStep.put(),
-        const ActStep.work(1.5, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.anger,
-      emotionDur: 12,
-      radius: r,
-    );
-    _deployThreshold(axe, bx, by, ax);
-
-    // D — İKİNCİ SIRA. Hat tek sıra kalırsa "üç kişi" görünür; arkada duran bir
-    // gövde onu KALABALIĞA çevirir.
-    final (rx, ry) = spot(0.9, 1.8);
-    final reserve = _role(
-      'hattın arkasında',
-      'öndekini yalnız bırakmam',
-      rx,
-      ry,
-      [
-        ActStep.goTo(rx, ry),
-        ActStep.face(ax, ay),
-        const ActStep.work(12.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.fear,
-      emotionDur: 12,
-      radius: r,
-    );
-    _deployThreshold(reserve, rx, ry, ax);
-
-    // İki kanat — merkez çizgisi düello gibi kalmasın; gündelik aletlerden
-    // kurulmuş gerçek bir köy safı ekran boyunca genişlesin.
-    final (fx, fy) = spot(3.2, 0.7);
-    final rightWing = _role(
-      'sağ kanadı tutuyor',
-      'yanımızı açık bırakmayacağız',
-      fx,
-      fy,
-      [
-        const ActStep.take(PropKind.axe),
-        ActStep.goTo(fx, fy),
-        ActStep.face(ax, ay),
-        const ActStep.work(1.6, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        const ActStep.work(0.8, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        ActStep.work(6.0, pose: won ? ActPose.stand : ActPose.slump),
-        const ActStep.put(),
-      ],
-      emotion: NpcEmotion.anger,
-      emotionDur: 13,
-      radius: r,
-    );
-    _deployThreshold(rightWing, fx, fy, ax);
-
-    final (lx2, ly2) = spot(-3.2, 0.7);
-    final leftWing = _role(
-      'sol kanadı tutuyor',
-      'komşumun yanından çekilmeyeceğim',
-      lx2,
-      ly2,
-      [
-        const ActStep.take(PropKind.scythe),
-        ActStep.goTo(lx2, ly2),
-        ActStep.face(ax, ay),
-        const ActStep.work(1.4, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        const ActStep.work(0.9, pose: ActPose.stand),
-        const ActStep.work(1.5, pose: ActPose.labor),
-        ActStep.work(6.0, pose: won ? ActPose.stand : ActPose.slump),
-        const ActStep.put(),
-      ],
-      emotion: NpcEmotion.anger,
-      emotionDur: 13,
-      radius: r,
-    );
-    _deployThreshold(leftWing, lx2, ly2, ax);
-
-    // E — ÇOCUK, hattın epey gerisinde. Korunan tarafı görünür kılar: hat
-    // birinin ÖNÜNDE duruyorsa hat olur.
-    final (kx, ky) = spot(-0.6, 4.2);
-    _kidRole(
-      'hattın gerisinden bakıyor',
-      'babam orada duruyor',
-      kx,
-      ky,
-      [
-        ActStep.goTo(kx, ky),
-        ActStep.face(ax, ay),
-        const ActStep.work(11.0, pose: ActPose.stand),
-      ],
-      emotion: NpcEmotion.wonder,
-    );
-  }
 }
 
 /// Sahnedeki vinyet — roller, odak noktası ve kalan ömür.
@@ -1252,11 +415,27 @@ class Vignette {
   /// Kalan ömür (sn). Sıfırlanınca kadro koşulsuz salıverilir.
   double life;
 
+  /// Saf yönetmendeki plan kimliği (`eventId:variant`).
+  final String sceneKey;
+
+  /// O an çalışan beat. UI/prova ve olay paketlerinin gözlem yüzeyi.
+  String beatId = '';
+
+  /// Olay dosyasının yalnız kendi beat'lerinde çalıştırdığı dünya kancaları.
+  final Map<String, VoidCallback> onBeatEnter;
+
+  /// true olduğunda olay paketi kalabalık/başrol koreografisinin tamamını
+  /// üstlenmiştir; scene_events eski generic rally/celebration'ı bindirmez.
+  final bool ownsChorus;
+
   Vignette({
     required this.eventId,
     required this.title,
     required this.gx,
     required this.gy,
     required this.life,
+    required this.sceneKey,
+    this.onBeatEnter = const {},
+    this.ownsChorus = false,
   });
 }

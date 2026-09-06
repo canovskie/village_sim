@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Ateş yakıt sistemi — köyün ateşi artık beslenmek ister. Yakıt zamanla
 /// tükenir; bir köylü (ateşçi) stoktan ODUN ya da KÖMÜR alıp ateşe taşır.
@@ -22,11 +22,13 @@ extension _SceneFire on _VillageSceneState {
   /// kabaca 9 odun ya da 4 kömür eder: hazırlık yapmayı gerektirir, ama
   /// hazırlıksız köyü de öldürmez (sönmek geri dönülebilir).
   static const double _kFireBurnDaysWinter = 1.25;
+
   /// Bu seviyenin altına inince ateşçi odun taşımaya çağrılır.
   static const double _kFireRefuelThreshold = 0.55;
 
   /// Ocak Nöbeti Fermanı yürürlükteyken eşik — ateş yarıya inmeden beslenir.
   static const double _kFireWatchThreshold = 0.85;
+
   /// Bir odunun kattığı yakıt — dolu ateş ~3 odun (hafif odun vergisi).
   static const double _kFuelPerLog = 0.35;
 
@@ -34,11 +36,14 @@ extension _SceneFire on _VillageSceneState {
   /// doldurur. Kömür pazarda odundan pahalı (bkz. kMarketSellRates), o yüzden
   /// ocağa atmanın bedeli var; karşılığı da taşıma trafiğinin yarıya inmesi.
   static const double _kFuelPerCoal = 0.80;
+
   /// Ateşçi atama taraması (sn).
   static const double _kFirekeeperScanSec = 1.5;
+
   /// Odun stoğu bu seviyenin ALTINA inince "odun azalıyor" dilekçesi (erken
   /// uyarı — ateş sönmeden önce oyuncu önlem alabilsin).
   static const int _kWoodLowWarn = 5;
+
   /// Uyarı histerezi: stok bu seviyeye çıkınca yeniden "sağlıklı" sayılır
   /// (bir sonraki düşüşte yine uyarı çıkabilir).
   static const int _kWoodHealthy = 12;
@@ -50,6 +55,7 @@ extension _SceneFire on _VillageSceneState {
     '🔥 Ateş söndü. Küller soğumadan karanlık çöktü; odun lazım.',
     '🔥 Ocak kendi kendine söndü. Kimse elini ısıtacak yer bulamıyor.',
   ];
+
   /// Kışın ocak hem hızlı yer hem kömürle beslenir — sönerse sesi de bunu der.
   static const _kFireDiedWinterPool = [
     '🔥 Kışın ortasında ocak sustu. Odun ya da kömür, ne bulunursa gerek.',
@@ -76,7 +82,7 @@ extension _SceneFire on _VillageSceneState {
   /// diğerine düşülür; ikisi de yoksa null → ateşçi çağrılmaz, ocak söner.
   ResourceKind? _pickFireFuel() {
     final preferCoal = _season == Season.winter;
-    final first  = preferCoal ? ResourceKind.coal : ResourceKind.wood;
+    final first = preferCoal ? ResourceKind.coal : ResourceKind.wood;
     final second = preferCoal ? ResourceKind.wood : ResourceKind.coal;
     if (_stockpile.get(first) > 0) return first;
     if (_stockpile.get(second) > 0) return second;
@@ -90,8 +96,10 @@ extension _SceneFire on _VillageSceneState {
     // 1) Yakıt tükenişi.
     if (fire.fireFuel > 0) {
       fire.fireFuel =
-          (fire.fireFuel - dt / (_fireBurnDaysNow * kGameDaySeconds))
-              .clamp(0.0, 1.0);
+          (fire.fireFuel - dt / (_fireBurnDaysNow * kGameDaySeconds)).clamp(
+            0.0,
+            1.0,
+          );
     }
 
     // 2) Sönme / yeniden yanma geçişleri (kenar tetikli).
@@ -127,10 +135,7 @@ extension _SceneFire on _VillageSceneState {
     }
     if (_woodHealthy && wood < _kWoodLowWarn) {
       _woodHealthy = false;
-      if (_pendingPetition == null) {
-        final p = PetitionSystem.byId('woodLow');
-        if (p != null) _presentPetition(p);
-      }
+      _requestSystemPetition(PetitionIds.woodLow);
     }
   }
 
@@ -142,8 +147,9 @@ extension _SceneFire on _VillageSceneState {
     // Kazanç: ocak pratikte hiç sönmez (moral düşüşü + fireDied dilekçesi
     // ortadan kalkar). Bedel açık ve kendiliğinden: eşik yükseldikçe kütük
     // sıklaşır, odun ambarı belirgin hızlı erir. Fermanın murmur'ı tam bunu der.
-    final threshold =
-        _policies.hearthWatch ? _kFireWatchThreshold : _kFireRefuelThreshold;
+    final threshold = _policies.hearthWatch
+        ? _kFireWatchThreshold
+        : _kFireRefuelThreshold;
     if (fire.fireFuel >= threshold) return;
     final fuel = _pickFireFuel();
     if (fuel == null) return; // ne odun ne kömür → ateşçi çaresiz
@@ -207,8 +213,7 @@ extension _SceneFire on _VillageSceneState {
     final fuel = _firekeeperFuel;
     if (fuel != null && _stockpile.get(fuel) > 0) {
       _stockpile.add(fuel, -1);
-      final gain =
-          fuel == ResourceKind.coal ? _kFuelPerCoal : _kFuelPerLog;
+      final gain = fuel == ResourceKind.coal ? _kFuelPerCoal : _kFuelPerLog;
       fire.fireFuel = (fire.fireFuel + gain).clamp(0.0, 1.0);
       v.lookToward(fx, fy);
       v.feel(NpcEmotion.content, 1.6); // ocağı besledi
@@ -219,9 +224,12 @@ extension _SceneFire on _VillageSceneState {
 
   /// Ateş söndü — köy karanlıkta/soğukta. Köy çapı huzursuzluk + dilekçe.
   void _onFireDied() {
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         _season == Season.winter ? _kFireDiedWinterPool : _kFireDiedPool,
-        _voice(null, seed: _stableSeed('ateşsöndü', _dayCount))));
+        _voice(null, seed: _stableSeed('ateşsöndü', _dayCount)),
+      ),
+    );
     _feelVillage(NpcEmotion.fear, 8, -0.12);
     // Ocak (yuva) en çok yaralanır; inananlar (ayin ateşi) onu izler.
     _nudgeHousesByEstate(Estate.hearth, moodDelta: -0.12);
@@ -230,17 +238,18 @@ extension _SceneFire on _VillageSceneState {
     _nudgeHousesByEstate(Estate.artisans, moodDelta: -0.05);
     pushPolicyMorale(-0.06, 4.0);
 
-    // Dilekçe: köy odun seferberliği bekliyor (boşsa anında sun).
-    if (_pendingPetition == null) {
-      final p = PetitionSystem.byId('fireDied');
-      if (p != null) _presentPetition(p);
-    }
+    // Dilekçe: masa doluysa kaybolmaz, merkezi karar sırasında bekler.
+    _requestSystemPetition(PetitionIds.fireDied);
   }
 
   /// Ateş yeniden canlandı — köy ısındı.
   void _onFireRelit() {
-    _showNotification(Voice.say(
-        _kFireRelitPool, _voice(null, seed: _stableSeed('ateşyandı', _dayCount))));
+    _showNotification(
+      Voice.say(
+        _kFireRelitPool,
+        _voice(null, seed: _stableSeed('ateşyandı', _dayCount)),
+      ),
+    );
     _feelVillage(NpcEmotion.joy, 6, 0.08);
     _nudgeHousesByEstate(Estate.hearth, moodDelta: 0.06);
   }

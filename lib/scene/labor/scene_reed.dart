@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Saz yatağı sistemi — evsizlerin "self-service" barınma döngüsü.
 ///
@@ -306,6 +306,10 @@ extension _SceneReed on _VillageSceneState {
     _applyLawUpkeep();
     _cycle.skipNightToMorning();
     _lastTimeOfDay = _cycle.timeOfDay;
+    // Bu bir görev değil, kuruluş anlatısının kısa dünya geçişidir. İşaret diğer
+    // sistemlerin çadır adımını sabaha kadar açmaması ve eski kayıt uyumluluğu
+    // için tutulur; görev sayısına QuestBook.completedCount ile girmez.
+    _completedQuests.add('firstNight');
     AudioManager.instance.playSfx(Sfx.roosterCrow);
     _easeToBaseSpeed();
   }

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// KÖY DEFTERİ — köy içi işlerin TEK kapısı (UI omurgası).
 ///
@@ -476,26 +476,6 @@ extension _SceneDivan on _VillageSceneState {
                 'çekiniyor.',
           ]),
           pressure: (1.0 - _stockpile.food / (mouths * 2.0)).clamp(0.2, 0.95),
-          tone: PetitionTone.ominous,
-        ),
-      );
-    }
-
-    // Yaz kuraklığı zemini — işlenen tarla varken güneş ekini tehdit eder.
-    final hasCrops = _farmTiles.any((t) => t.isGrowing || t.readyToHarvest);
-    if (_season == Season.summer && hasCrops) {
-      brewing.add(
-        DivanMatter(
-          icon: '☀️',
-          title: 'Güneş ekini yakıyor',
-          sub: _agendaLine('drought', const [
-            'Toprak çatladı. Kuyudan su çeken sıraya girdi; çiftçiler yakında '
-                'senden su isteyecek.',
-            'Başaklar öğlen vakti başını eğiyor. Bu sıcak bir hafta daha '
-                'sürerse hasat yarıya iner.',
-            'Tarlalar susuz. Kuyunun ipi kısaldı, çiftçilerin sabrı da.',
-          ]),
-          pressure: 0.35,
           tone: PetitionTone.ominous,
         ),
       );

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// KARARIN SOKAKTAKİ İZİ — dilekçe, olay ve kanunların ortak dünya katmanı.
 ///
@@ -84,8 +84,9 @@ extension _SceneGovernanceAction on _VillageSceneState {
         break;
       }
     }
-    final actor = _governanceActor();
-    if (actor == null || leader == null) return;
+    if (leader == null) return;
+    final actor = _governanceActor(nearX: leader.gridX, nearY: leader.gridY);
+    if (actor == null) return;
     final warehouse = _firstBuildingOf(BuildingType.warehouse);
     final (tx, ty) = warehouse != null
         ? (_standSpotFor(warehouse, actor) ?? _centerOf(warehouse))
@@ -104,6 +105,7 @@ extension _SceneGovernanceAction on _VillageSceneState {
       const ActStep.work(1.5, pose: ActPose.stoop),
       const ActStep.put(),
     ]);
+    _wrapUpActiveCaravan();
   }
 
   void _startEventAftermath(EventOutcome event, EventChoice choice) {
@@ -383,6 +385,8 @@ extension _SceneGovernanceAction on _VillageSceneState {
     VillagerEntity? preferred,
     String? name,
     VillagerEntity? excluding,
+    double? nearX,
+    double? nearY,
   }) {
     bool suitable(VillagerEntity v) =>
         !identical(v, excluding) &&
@@ -403,6 +407,17 @@ extension _SceneGovernanceAction on _VillageSceneState {
     }
     final pool = _villagers.where(suitable).toList();
     if (pool.isEmpty) return null;
+    if (nearX != null && nearY != null) {
+      pool.sort(
+        (a, b) => _wdist(
+          a.gridX,
+          a.gridY,
+          nearX,
+          nearY,
+        ).compareTo(_wdist(b.gridX, b.gridY, nearX, nearY)),
+      );
+      return pool.first;
+    }
     return pool[_rng.nextInt(pool.length)];
   }
 }

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Sahnenin metin ağzı — bir cümlenin dokunacağı köy gerçeklerini toplar.
 ///

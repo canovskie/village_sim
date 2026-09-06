@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Köy Akışı — görev tamamlanmasını izler, GÖRSEL ödül dağıtır, politika-türevli
 /// Tüzük kademesini ilerletir. No-fail: yalnızca pozitif. Kaynak ödülü YOK;
@@ -30,19 +30,16 @@ extension _SceneFlow on _VillageSceneState {
       population: _villagers.length,
       stock: _stockpile,
       policies: _policies,
-      decorCount: _decor.length,
       charterTier: _charterTier,
       // GEÇ OYUN — köyün ne kurduğu kadar ne BİLDİĞİ ve ne kadar YERLEŞTİĞİ.
       craftCount: _knownCrafts.length,
-      woodHarvested: _woodHarvested,
+      productiveBeehiveCount: _productiveBeehiveCount(),
       roadCount: _roadSystem.all.length,
       connectedProductionSites: _connectedProductionSites(),
       // Kimlik seçilmez, mühürlerin toplamından doğar (bkz. scene_regime);
       // "ılımlı" = henüz bir duruş yok demek.
       regimeNamed: _regimeIdentity.regime != VillageRegime.moderate,
       dayCount: _dayCount,
-      reedBedCount: _reedBeds.length,
-      foundingTentIllnessTriggered: _foundingTentIllnessTriggered,
       // HANELER — geç kademe merdiveni kararları ölçer, binaları değil.
       loyalHouses: _houseCountWhere((s) => s == HouseStance.loyal),
       withheldHouses: _houseCountWhere((s) => s.withholds),
@@ -51,11 +48,11 @@ extension _SceneFlow on _VillageSceneState {
       charter: reckoning.charter,
       grit: reckoning.grit,
       legacy: reckoning.legacy,
-      standing: reckoning.standing,
       // Tamamlanmış her yıl bir kış; imparatorluk ziyareti ayrı baskı.
       // Bu toplam yalnız tarihsel kapıdır, sonuç kefeleri ayrıca aranır.
       pressuresWeathered: yearsPassed + _imperialVisits,
       speakerNames: _founderNames(),
+      storyNotes: _storyQuestNotes(),
     );
   }
 
@@ -69,6 +66,29 @@ extension _SceneFlow on _VillageSceneState {
     buildings: _buildings,
     roadTiles: [for (final road in _roadSystem.all) (road.col, road.row)],
   );
+
+  /// En az üç çiçeği menzilinde tutan kovan gerçekten yerleşmiş sayılır.
+  /// Görev, dünya üreticisinin toplam dekorunu değil doğrudan kovan çevresini
+  /// okur; oyuncu tek bakışta yerleşimin neden tuttuğunu anlayabilir.
+  int _productiveBeehiveCount() {
+    var productive = 0;
+    for (final b in _buildings) {
+      if (b.type != BuildingType.beehive) continue;
+      final meta = kBuildingMeta[BuildingType.beehive]!;
+      final cx = b.col + meta.cols * 0.5;
+      final cy = b.row + meta.rows * 0.5;
+      final radius2 = meta.effectRadius * meta.effectRadius;
+      var flowers = 0;
+      for (final d in _decor) {
+        if (d.crushed || !isFlowerDecorKind(d.kind)) continue;
+        final dx = d.col + 0.5 - cx;
+        final dy = d.row + 0.5 - cy;
+        if (dx * dx + dy * dy <= radius2 && ++flowers >= 3) break;
+      }
+      if (flowers >= 3) productive++;
+    }
+    return productive;
+  }
 
   /// Üyesi olan hanelerden duruşu koşulu sağlayanların sayısı.
   int _houseCountWhere(bool Function(HouseStance) test) {
@@ -184,16 +204,32 @@ extension _SceneFlow on _VillageSceneState {
         _showNotification('✓ ${q.label}');
       }
       if (q.id == 'lumber') {
-        // İlk üretim gerçekten çalıştı: kısıtlı katalog ve kapalı
+        // Oyuncunun hamlesi kulübeyi kurmaktır; ilk NPC darbesini görev diye
+        // bekletmeyiz. Kurulan odun düzeni marangozluğu doğal olarak açar ve
+        // yaşayan bir elde tutar.
+        final pioneer = _villagers
+            .where((v) => !v.isDying && v.job?.role == JobRole.woodcutter)
+            .firstOrNull;
+        final holder = pioneer ?? asker ?? _villagers.firstOrNull;
+        if (holder != null &&
+            (holder.mastery[Craft.carpentry] ?? 0) <
+                _SceneCraft._kMasteryHolderThreshold) {
+          holder.gainMastery(
+            Craft.carpentry,
+            _SceneCraft._kMasteryHolderThreshold,
+          );
+        }
+        _knownCrafts.add(Craft.carpentry);
+        // İlk üretim düzeni kuruldu: kısıtlı katalog ve kapalı
         // yönetim kapıları aynı karede açılır. Ayrı bir modal yok;
         // kontrol devri dünyanın akmayı sürdürdüğü tek bir cümledir.
         _chronicle(
-          'İlk odun indi; kuruluşun üretim temeli atıldı.',
+          'Oduncu kulübesi kuruldu; kuruluşun üretim temeli atıldı.',
           icon: '🌿',
           milestone: true,
         );
         _showNotification(
-          '🌿 Odun akışı başladı — şimdi su ve tarla temelini at.',
+          '🌿 Odun düzeni kuruldu — şimdi su ve tarla temelini at.',
         );
       }
       break; // bir scan'de bir ödül → sürekli, sakin akış
@@ -201,14 +237,13 @@ extension _SceneFlow on _VillageSceneState {
 
     // Kademe atlama — politika-odaklı Tüzük ilerlemesi (büyük kutlama).
     final newTier = QuestBook.charterTier(
-      _completedQuests.length,
+      QuestBook.completedCount(_completedQuests),
       _policies.enactedCount,
     );
     if (newTier > _charterTier) {
       _charterTier = newTier;
       final tier = QuestBook.tierOf(newTier);
       _grantVisualReward(VisualReward.landmark);
-      _reactFestival(); // ateşe toplanma + dans (scene_petitions şablonu)
       // Kademe TÖRENSEL an: köy artık dışarıda başka bir adla anılıyor —
       // cümle "köyünüz" değil, köyün KENDİ adıyla kurulur.
       _showNotification(
@@ -216,8 +251,7 @@ extension _SceneFlow on _VillageSceneState {
       );
       // Eskiden burada kademe filmi oynardı. Merdiven altı basamak olduğu için
       // tam ekran film koşuda ALTI kez araya giriyordu — o sıklıkta bir film
-      // artık tören değil kesinti. Kademe anı dünyada zaten tam kadro
-      // anlatılıyor: landmark ödülü + ateş başı şenlik + köyün yeni adı.
+      // artık tören değil kesinti.
       _chronicle(
         '$_villageName "${tier.name}" oldu',
         icon: tier.icon,
@@ -301,17 +335,6 @@ extension _SceneFlow on _VillageSceneState {
         _stepBeacon = fp == null
             ? null
             : (fp.col + fp.cols / 2.0, fp.row + fp.rows / 2.0);
-
-      case QuestPointer.reedBeds:
-        final bed = _reedBeds.firstOrNull;
-        if (bed != null) {
-          _stepBeacon = (bed.gridX, bed.gridY);
-        } else {
-          final fp = _firepitBuilding;
-          _stepBeacon = fp == null
-              ? null
-              : (fp.col + fp.cols / 2.0, fp.row + fp.rows / 2.0);
-        }
 
       case QuestPointer.villageCenter:
         _stepBeacon = _villageHeart();

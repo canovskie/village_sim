@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// build() içeriğini konsept başına alt-metotlara böler: gökyüzü, oyun canvas'ı,
 /// HUD, alt araç çubuğu, seçim panelleri, overlay'ler, ipuçları.
@@ -140,7 +140,7 @@ extension _SceneUi on _VillageSceneState {
                       roadPreviewSurface: _placingRoad,
                       roadPreviewVersion: _roadPreviewV,
                       revealTiles: _revealTiles(),
-                      time: _time,
+                      time: _time + (_imperialBattle?.elapsed ?? 0),
                       overlayTop: _cycle.overlayTop,
                       overlayBottom: _cycle.overlayBottom,
                       rainIntensity: _cycle.rainIntensity,
@@ -212,6 +212,7 @@ extension _SceneUi on _VillageSceneState {
                       ambientStrength: _cycle.ambientStrength,
                       eventTint: _fxTint,
                       activeFx: _fxActiveIds,
+                      fxPlayback: _fxPlayback,
                       burningBuildings: _burningBuildings,
                       birdFlocks: _birdFlocks,
                       beeSwarms: _beeSwarms,
@@ -271,7 +272,6 @@ extension _SceneUi on _VillageSceneState {
           ),
           starving: !_godMode && _stockpile.food < _starveRamp,
           eventLabel: _eventLabel,
-          stockCapacity: _godMode ? (1 << 30) : _stats.stockCapacity,
           showOre: _showOreInHud,
           fullPulse: sin(_time * 3.2) * 0.5 + 0.5,
           onboarding:
@@ -281,7 +281,13 @@ extension _SceneUi on _VillageSceneState {
           effectTimeLeft: _eventMoraleLeft,
           effectDuration: _activeEvent?.duration ?? 1,
           effectPositive: _eventMorale >= 0,
-          onToggleDev: () => setStateHere(() => _devPanelOpen = !_devPanelOpen),
+          onToggleDev: () => setStateHere(() {
+            if (kVillageTesterMode) {
+              _villageTesterPanelOpen = !_villageTesterPanelOpen;
+            } else {
+              _devPanelOpen = !_devPanelOpen;
+            }
+          }),
           muted: SettingsModel.instance.muted,
           onToggleMute: () => setStateHere(SettingsModel.instance.toggleMute),
           godMode: _godMode,
@@ -325,16 +331,14 @@ extension _SceneUi on _VillageSceneState {
             catalogOpen: _mobileBuildCatalogOpen,
             onCatalogOpenChanged: (open) =>
                 setStateHere(() => _mobileBuildCatalogOpen = open),
-            buildModeActive:
-                _placing != null ||
-                _farmMode ||
-                _lumberMode ||
-                _mineMode ||
-                _roadMode,
+            buildModeActive: _placing != null || _roadMode,
             onDefter: () => _openLedger(LedgerSection.tuzuk),
             onDivan: () => _openLedger(LedgerSection.divan),
             onRoster: () => _openLedger(LedgerSection.nufus),
             buildSegment: _commandBuildSegment(),
+            toolSegment: _hasFire && !_foundingModeActive
+                ? _buildTerrainTools()
+                : null,
             context: _commandContext(),
           ),
         ),
@@ -389,17 +393,33 @@ extension _SceneUi on _VillageSceneState {
     // Masaüstünde kategori ve kartlar tek katalog yüzeyidir. Önceki iki ayrı
     // AppPanel üst üste küçük kapsüller gibi duruyor, içerik tek bir araçken
     // görsel olarak iki farklı pencere hissi veriyordu.
-    return AppPanel(
-      padding: EdgeInsets.zero,
-      accent: AppUi.accent,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildCategoryTabs(),
-          Container(height: 1, color: AppUi.line),
-          _buildCategoryTransition(embedded: true),
-        ],
+    final itemCount = _buildCategory == BuildCategory.araziYol
+        ? RoadSurface.values.length + 1
+        : BuildingType.values
+              .where(
+                (type) =>
+                    kBuildingMeta.containsKey(type) &&
+                    kBuildingCategory[type] == _buildCategory,
+              )
+              .length;
+    final catalogWidth = max(
+      480.0,
+      min(860.0, BuildingPanel.preferredDesktopWidth(itemCount)),
+    );
+    return SizedBox(
+      width: catalogWidth,
+      child: AppPanel(
+        padding: EdgeInsets.zero,
+        accent: AppUi.accent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildCategoryTabs(),
+            Container(height: 1, color: AppUi.line),
+            _buildCategoryTransition(embedded: true),
+          ],
+        ),
       ),
     );
   }
@@ -407,7 +427,8 @@ extension _SceneUi on _VillageSceneState {
   /// Kuruluş kararları arasındaki kısa otomatik emek anı. Alakasız bina
   /// kartları açmak yerine köyün ne yaptığını tek satırda söyler.
   Widget _foundingWorkStatus() {
-    final waitingFirstNight = _currentStep?.quest.id == 'firstNight';
+    final waitingFirstNight =
+        _dayCount == 1 && !_completedQuests.contains('firstNight');
     final lumberReady = _buildings.any(
       (b) => b.type == BuildingType.lumberCamp,
     );
@@ -709,7 +730,7 @@ extension _SceneUi on _VillageSceneState {
                   ? '${active.quest.minYear}. yıl: ${active.quest.label}'
                   : active.quest.label,
               tierName: tier.name,
-              done: _completedQuests.length,
+              done: QuestBook.completedCount(_completedQuests),
               total: QuestBook.all.length,
               onOpen: () => _openLedger(LedgerSection.tuzuk),
               hint: yearLocked
@@ -747,7 +768,7 @@ extension _SceneUi on _VillageSceneState {
   }
 
   /// Seçili kategorinin içeriği — bina kategorisinde palet, Arazi/Yol'da
-  /// yol döşeme + Tarla/Kes/Kaz modları.
+  /// yalnız yol döşeme araçları. Tarla/Kes/Kaz komuta çubuğunda bağımsızdır.
   Widget _buildCategoryContent({required bool embedded}) {
     if (_buildCategory == BuildCategory.araziYol) {
       final tools = _buildLandRoadTools();
@@ -832,7 +853,7 @@ extension _SceneUi on _VillageSceneState {
       );
     }
     final count = _buildCategory == BuildCategory.araziYol
-        ? 7
+        ? RoadSurface.values.length + 1
         : BuildingType.values
               .where(
                 (type) =>
@@ -1097,46 +1118,48 @@ extension _SceneUi on _VillageSceneState {
     return true;
   }
 
-  /// Arazi/Yol sekmesi içeriği — yol döşeme + Tarla/Kes/Kaz modları.
+  /// Arazi/Yol sekmesi içeriği — yalnız yol döşeme ve yol silme araçları.
   Widget _buildLandRoadTools() {
+    return RoadPanel(
+      stockpile: _stockpile,
+      selected: _placingRoad,
+      onSelect: (s) => setStateHere(() {
+        _mobileBuildCatalogOpen = false;
+        _placing = null;
+        _ghost = null;
+        _farmMode = false;
+        _farmStart = null;
+        _farmEnd = null;
+        _farmTapAnchor = null;
+        _lumberMode = false;
+        _mineMode = false;
+        _roadErase = false;
+        _placingRoad = _placingRoad == s ? null : s;
+        _clearRoadDrag();
+      }),
+      eraseSelected: _roadErase,
+      onSelectErase: () => setStateHere(() {
+        _mobileBuildCatalogOpen = false;
+        _placing = null;
+        _ghost = null;
+        _farmMode = false;
+        _farmStart = null;
+        _farmEnd = null;
+        _farmTapAnchor = null;
+        _lumberMode = false;
+        _mineMode = false;
+        _placingRoad = null;
+        _roadErase = !_roadErase;
+        _clearRoadDrag();
+      }),
+    );
+  }
+
+  /// Kataloğun dışında, inşa kapısının yanında duran hızlı arazi araçları.
+  Widget _buildTerrainTools() {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        RoadPanel(
-          stockpile: _stockpile,
-          selected: _placingRoad,
-          onSelect: (s) => setStateHere(() {
-            _mobileBuildCatalogOpen = false;
-            _placing = null;
-            _ghost = null;
-            _farmMode = false;
-            _farmStart = null;
-            _farmEnd = null;
-            _farmTapAnchor = null;
-            _lumberMode = false;
-            _mineMode = false;
-            _roadErase = false;
-            _placingRoad = _placingRoad == s ? null : s;
-            _clearRoadDrag();
-          }),
-          eraseSelected: _roadErase,
-          onSelectErase: () => setStateHere(() {
-            _mobileBuildCatalogOpen = false;
-            _placing = null;
-            _ghost = null;
-            _farmMode = false;
-            _farmStart = null;
-            _farmEnd = null;
-            _farmTapAnchor = null;
-            _lumberMode = false;
-            _mineMode = false;
-            _placingRoad = null;
-            _roadErase = !_roadErase;
-            _clearRoadDrag();
-          }),
-        ),
-        const SizedBox(width: 6),
         ModeButton(
           icon: '🌾',
           label: 'Tarla',
@@ -1537,8 +1560,16 @@ extension _SceneUi on _VillageSceneState {
   /// [BuildingEntity.userPaused] değerini okur.
   void _toggleBuildingPaused(BuildingEntity building) {
     setStateHere(() {
+      final wasActive = building.isActive;
       building.userPaused = !building.userPaused;
-      if (building.userPaused) building.isActive = false;
+      if (building.userPaused) {
+        // İlk aktif karede yoğunluk henüz tick edilmemiş olabilir; sönüşün
+        // yine de 1'den başlaması için mantık bayrağını kapatmadan yakala.
+        if (wasActive && building.activityLevel <= 0) {
+          building.activityLevel = 1.0;
+        }
+        building.isActive = false;
+      }
       // Otomatik kadro iki saniyelik normal taramayı beklemeden yeni talebi
       // görsün. Elle mühürlenmiş el yerini korur, bina açılınca geri döner.
       _jobSyncCd = 0;

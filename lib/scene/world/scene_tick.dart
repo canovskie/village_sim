@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 extension _SceneDeathMarkers on _VillageSceneState {
   /// Ölümün evde görünür bir izi: 8 saniyelik yas işareti ve aynı evdeki
@@ -134,6 +134,17 @@ extension _SceneTick on _VillageSceneState {
       if (hadRealtimeVisual) _frame.value = _frame.value + 1;
       return;
     }
+    if (_imperialPhase == ImperialVisitPhase.clashing) {
+      final battleDt =
+          raw *
+          (kProbeOn && kDevSpeedBoostOverride > 0 ? kDevSpeedBoostOverride : 1);
+      _updateActiveFx(battleDt);
+      _tickImperialClash(battleDt);
+      if (kProbeOn && kProbeSaveRoundtrip) _tickProbe(battleDt);
+      _tickWatchCamera(battleDt);
+      _frame.value++;
+      return;
+    }
     // setState yerine sim mutate + _frame.value++ → outer ağaç rebuild olmaz,
     // sadece ListenableBuilder bağlı bölgeler repaint olur.
     _advanceWorldClock(dt);
@@ -187,6 +198,25 @@ extension _SceneTick on _VillageSceneState {
     // Şafak — gün doğumu eşiğini (0.25) geçince horoz öter (bir kez/gün).
     if (_lastTimeOfDay < 0.25 && _cycle.timeOfDay >= 0.25) {
       AudioManager.instance.playSfx(Sfx.roosterCrow);
+      final roofs = _buildings
+          .where(
+            (b) =>
+                b.fn?.role == BuildingRole.housing ||
+                b.type == BuildingType.barn ||
+                b.type == BuildingType.chickenCoop ||
+                b.type == BuildingType.townhall,
+          )
+          .toList(growable: false);
+      if (roofs.isNotEmpty && _cycle.rainIntensity < 0.55) {
+        final roof = roofs[_rng.nextInt(roofs.length)];
+        _birdFlocks.add(
+          BirdFlock.spawnFromRoof(
+            _rng,
+            roofX: roof.col + roof.cols * 0.5,
+            roofY: roof.row + roof.rows * 0.5,
+          ),
+        );
+      }
     }
     _lastTimeOfDay = _cycle.timeOfDay;
     // Mevsim dönümü — gün değişince mevsim de değişmiş olabilir.
@@ -281,6 +311,10 @@ extension _SceneTick on _VillageSceneState {
     final glowK = 1 - exp(-dt * 0.55);
     for (final b in _buildings) {
       if (b.fn?.role != BuildingRole.housing) continue;
+      b.updateHouseholdSleepCue(
+        now: _time,
+        isMorning: _cycle.dayLight >= kDawnThreshold,
+      );
       final target = b.occupants == 0 ? 0.0 : b.awakeOccupants / b.occupants;
       b.windowGlow += (target - b.windowGlow) * glowK;
     }
@@ -401,13 +435,12 @@ extension _SceneTick on _VillageSceneState {
         (moraleTarget - _morale) * (dt * kMoraleEaseRate).clamp(0.0, 1.0);
     _morale = _morale.clamp(0.0, 1.0);
 
-    // Konut suyu, pazar geliri, stok kapasitesi, amenite morali. Köy morali
+    // Konut suyu, pazar geliri ve amenite morali. Köy morali
     // (bireysel ortalama) pasif geçer.
     _stats = updateBuildings(
       dt: dt,
       buildings: _buildings,
       stockpile: _stockpile,
-      enforceCapacity: !_godMode,
       morale: _morale,
     );
     // Ahır bonusunu taşıyıcılara uygula
@@ -454,15 +487,21 @@ extension _SceneTick on _VillageSceneState {
           // tüketilir. >0 iken değirmen "çalışıyor" → çalışma dumanı + panel.
           if (b.grindPulse > 0) b.grindPulse -= dt;
           b.isActive = b.grindPulse > 0 && !b.userPaused;
-          if (!b.userPaused) {
-            // Değirmen kanatları operasyonel olduğu sürece döner; un öğütme
-            // darbesi yalnızca duman/toz ve paneldeki "çalışıyor" durumunu
-            // belirler. Sakin, ağır tempo: yaklaşık 10.5 saniyede bir tur.
-            // Sim durursa veya bina duraklatılırsa açı ilerlemez.
-            b.millRotorAngle = (b.millRotorAngle + dt * 0.60) % (2 * pi);
-          }
         default:
           break;
+      }
+
+      // Mantık bayrağı anlık değişebilir; dünya hareketi yarım saniyelik
+      // yoğunluk eğrisiyle açılır/kapanır. Değirmen üretim darbesi olmasa da
+      // duraklatılmadığı sürece döner, dolayısıyla hedefi pause bayrağıdır.
+      final activityTarget = b.type == BuildingType.mill
+          ? !b.userPaused
+          : b.isActive && !b.userPaused;
+      b.updateActivityLevel(dt, operational: activityTarget);
+      if (b.type == BuildingType.mill && b.activityLevel > 0.001) {
+        // Yaklaşık 10.5 saniyede bir tur; duraklatınca son açıya yavaşlar.
+        b.millRotorAngle =
+            (b.millRotorAngle + dt * 0.60 * b.activityLevel) % (2 * pi);
       }
     }
   }
@@ -500,6 +539,7 @@ extension _SceneTick on _VillageSceneState {
       if (_foundingCouncilPending && _foundingCouncilTargets.containsKey(v)) {
         continue;
       }
+      final wasInsideBuilding = v.isInsideBuilding;
       v.update(
         npcDt,
         kCols,
@@ -510,6 +550,10 @@ extension _SceneTick on _VillageSceneState {
         dayLight: _cycle.dayLight,
         rainIntensity: _cycle.rainIntensity,
       );
+      if (!wasInsideBuilding && v.isInsideBuilding) {
+        final home = v.homeBuilding;
+        if (home is BuildingEntity) home.triggerDoorPulse(_time);
+      }
     }
     // Doğal ölüm — ömrü dolan yaşlılar köyden ayrılır. Taşıma işi varsa
     // önce bitirsin (yerde öksüz kutu/balya kalmasın). Belediye yerini doldurur.
@@ -605,9 +649,16 @@ extension _SceneTick on _VillageSceneState {
         topologyChanged = true;
       }
     }
-    if (_roadOrders.any((o) => o.completed)) topologyChanged = true;
+    for (final road in _roadOrders) {
+      if (!road.completed) continue;
+      if (!road.topologyCommitted) {
+        road.topologyCommitted = true;
+        topologyChanged = true;
+      }
+      road.completionCue = max(0.0, road.completionCue - dt);
+    }
     _orders.removeWhere((o) => o.completed);
-    _roadOrders.removeWhere((o) => o.completed);
+    _roadOrders.removeWhere((o) => o.completed && o.completionCue <= 0);
     // World topology değişti → NPC'ler cached path'i invalidate etsin +
     // anchor sistemi yeni binalara göre slot'ları yenilesin.
     if (topologyChanged) {
@@ -695,7 +746,14 @@ extension _SceneTick on _VillageSceneState {
     // _runFisher/_runFlorist) — cevher/yiyecek üretimi + sulama orada.
     // Ağıl: inekler otlar, çobanlar sağar. Sağım = +1 food (balıkçı pattern).
     for (final c in _cows) {
-      c.update(npcDt, _rng, waterTiles: obstacles);
+      c.update(
+        npcDt,
+        _rng,
+        waterTiles: obstacles,
+        // Bu eşik storm ses/şimşek eşiğinden önce: hayvanlar fırtına patlamadan
+        // rastgele otlamayı bırakıp ahır/kümes önüne toplanır.
+        seekStormShelter: _cycle.rainIntensity > 0.48,
+      );
     }
     // Doğal ölüm — ömrü dolan hayvan anlık silinmez: görünür biçimde çöker+solar
     // (köylüyle simetrik), animasyon bitince listeden çıkar. Chill: kaynak cezası
@@ -783,6 +841,10 @@ extension _SceneTick on _VillageSceneState {
     // yansır → donuk değil akıcı.
     for (final v in _villagers) {
       v.smoothMotion(dt);
+      v.tickMudFootprints(
+        dt,
+        muddy: _cycle.rainIntensity > 0.28 && _season != Season.winter,
+      );
     }
 
     // Meşale fade — köylüler gece dışarıda dolaşırken torch yansın.
@@ -805,17 +867,6 @@ extension _SceneTick on _VillageSceneState {
       f.update(dt);
     }
     _birdFlocks.removeWhere((f) => f.isDead);
-
-    // Ambient göktaşı yağmuru — geri sayım gün boyu akar; süresi dolduğunda
-    // yalnız gece (yıldızlar görünürken) tetiklenir. Karar yok: köylüler izler,
-    // moral artar. Seyrek, özel bir cozy ödül.
-    if (_hasFire) {
-      _meteorShowerTimer -= dt;
-      if (_meteorShowerTimer <= 0 && _cycle.dayLight < 0.28) {
-        _startMeteorShower();
-        _meteorShowerTimer = (5.0 + _rng.nextDouble() * 4.0) * kGameDaySeconds;
-      }
-    }
 
     // Sazlık yeniden büyür — biçilmiş kümeler su kenarında yavaşça olgunlaşır
     // (yenilenebilir kaynak). Birkaç küme, her frame ucuz.
@@ -872,30 +923,6 @@ extension _SceneTick on _VillageSceneState {
       if (near(v.gridX, v.gridY)) return true;
     }
     return false;
-  }
-
-  /// Ambient göktaşı yağmuru gösterisini başlatır — gökyüzü fx + uyumayan
-  /// köylüler başını kaldırıp izler (🌠 bubble) + birkaçı ateşe toplanır +
-  /// köy moralı artar. Karar/soru yok; saf bir cozy gece ödülü.
-  void _startMeteorShower() {
-    const dur = kGameDaySeconds * 0.35; // birkaç dakikalık gece gösterisi
-    const e = EventEffect(fx: EventFx.meteorShower, duration: dur);
-    _activeFx.add(ActiveFx(e, dur));
-    addCameraShake(4, dur: 0.7); // hafif huşû titreşimi (juice)
-    for (final v in _villagers) {
-      if (v.isSleeping || v.isInsideBuilding) continue;
-      // Baş üstünde 🌠 YOK. Hayranlık zaten GÖVDEDE var: `NpcEmotion.wonder`
-      // köylüyü doğrultup yukarı kaldırıyor (bkz. game_drawables emoLift).
-      // Baloncuk onun üstüne olayın ADINI yazıyordu — süresini duyguya
-      // devrettik, gösteriyi izleyen kalabalık aynı süre boyunca doğrulmuş
-      // durur.
-      v.feel(NpcEmotion.wonder, 6 + _rng.nextDouble() * 4, moodDelta: 0.12);
-    }
-    _gatherAtFire(dur, max: 8);
-    pushPolicyMorale(0.06, 2.0);
-    _showNotification(
-      '🌠 Gökyüzü göktaşı yağmuruyla doldu — köy başını kaldırıp izledi.',
-    );
   }
 
   /// Arı sürülerini mevcut kovanlardan türetir. Var olan sürüler pozisyona

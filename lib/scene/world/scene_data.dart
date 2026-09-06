@@ -1,5 +1,5 @@
-import '../systems/event_system.dart';
-import '../systems/law_book.dart';
+import '../../systems/events/event_system.dart';
+import '../../systems/governance/law_book.dart';
 
 /// Sahnede aktif olan bir EventEffect örneği — banner kapansa da efekt
 /// kendi süresince yaşar (animasyon süresi != moral süresi olabilir).

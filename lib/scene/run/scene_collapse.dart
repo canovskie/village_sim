@@ -1,8 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// KAYBETME EŞİĞİ — ayrılık ve dağılma.
 ///
-/// Saf kurallar `systems/village_collapse.dart`'ta; burası onları köye bağlar.
+/// Saf kurallar `systems/run/village_collapse.dart`'ta; burası onları köye bağlar.
 /// İki kademe var ve ikincisi birincinin sonucudur:
 ///
 ///   1. **AYRILIK** — kopuş basamağında ([HouseStance.defiant]) yeterince gün

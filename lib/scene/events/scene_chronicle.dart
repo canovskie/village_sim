@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Vakanüvis — köyün kalıcı hikâye güncesi (kronik) + başarım/dönüm noktası
 /// sistemi. [[project_staged_events]] Faz 4: sahnelenmiş olayların 5. evresi
@@ -111,6 +111,7 @@ extension _SceneChronicle on _VillageSceneState {
     (BuildingType.market, 'Pazar kuruldu. Tezgâhlar ilk kez doldu.', '🛒'),
     (BuildingType.tavern, 'Taverna açıldı. Akşamın gidecek bir yeri var.', '🍺'),
     (BuildingType.church, 'Kilise dikildi. Çan ilk kez çaldı.', '⛪'),
+    (BuildingType.chapel, 'Şapel açıldı. İlk mum kapının yanında yandı.', '⛪'),
   ];
 
   /// Şu an sağlanan tüm başarımlar (id, başlık, ikon). Hem canlı tarama

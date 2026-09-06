@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Sürekli reaktif "canlı köy" katmanı — olaylar ve eylemler köyde GÖRÜNÜR,
 /// **gövde diliyle** (postür + dönüp bakma) yankı bulur.

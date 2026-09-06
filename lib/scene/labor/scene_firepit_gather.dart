@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Ateş başı toplanma — akşam saatlerinde boştaki köylüler ateşe gelir,
 /// anchor slot tutup oturur (warm). 3+ kişi oturduğunda yaşlı bir köylü

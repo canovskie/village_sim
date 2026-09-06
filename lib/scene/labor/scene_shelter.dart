@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// ÇADIR & OCAK — barınağın ateşe uzaklığı kışın bir bedele dönüşür.
 ///

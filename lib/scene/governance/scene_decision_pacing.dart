@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Saf [DecisionPacing] kuyruğundaki bir dilekçenin sahne payload'u.
 class _PacedPetition {
@@ -33,7 +33,7 @@ extension _SceneDecisionPacing on _VillageSceneState {
     VillagerEntity? author,
     Map<String, String> extra = const {},
   }) {
-    final crime = petition.id == 'crimeVerdict';
+    final crime = petition.id == PetitionIds.crimeVerdict;
     final admission = _decisionPacing.request(
       crime ? HeavyDecisionKind.crimeVerdict : HeavyDecisionKind.petition,
       atDay: _decisionDay,
@@ -49,6 +49,27 @@ extension _SceneDecisionPacing on _VillageSceneState {
     );
     // request() aynı anda daha eski bir queued kararı da terfi ettirebilir.
     _dispatchActiveDecision();
+  }
+
+  /// Sahne-güdümlü bir dilekçeyi kaybetmeden merkezi karar kuyruğuna alır.
+  /// Aynı kriz hâlihazırda görünür ya da sıradaysa ikinci kopya üretilmez.
+  bool _requestSystemPetition(
+    String petitionId, {
+    VillagerEntity? author,
+    Map<String, String> extra = const {},
+  }) {
+    final alreadyScheduled =
+        _pendingPetition?.id == petitionId ||
+        _queuedPetition?.id == petitionId ||
+        _pacedPetitions.any((entry) => entry.petition.id == petitionId) ||
+        _petitionFollowUps.any((entry) => entry.id == petitionId);
+    if (alreadyScheduled) return false;
+    _requestPacedPetition(
+      PetitionSystem.requireById(petitionId),
+      author: author,
+      extra: extra,
+    );
+    return true;
   }
 
   /// Seçimli olay ağırdır; seçimsiz olaylar buraya uğramadan uygulanır.

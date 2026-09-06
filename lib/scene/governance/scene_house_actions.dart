@@ -1,8 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// HANE EYLEMLERİ — oyuncunun hanelere karşı harekete geçtiği katman (uygulama).
 ///
-/// Kurallar ve bedeller SAF katmanda (`systems/house_action.dart`, testli);
+/// Kurallar ve bedeller SAF katmanda (`systems/governance/house_action.dart`, testli);
 /// burası o kararları köye İŞLER: kaynak, hane hâli/nüfuzu, huzursuzluk, moral,
 /// kronik ve görünür tepki. Meclis masasında bir reise dokununca açılan kart
 /// bu metotları çağırır.
@@ -18,9 +18,9 @@ extension _SceneHouseActions on _VillageSceneState {
 
   /// Bir hanenin canlı üyeleri.
   List<VillagerEntity> _houseMembers(String surname) => [
-        for (final v in _villagers)
-          if (!v.isDying && v.surname == surname) v,
-      ];
+    for (final v in _villagers)
+      if (!v.isDying && v.surname == surname) v,
+  ];
 
   /// Bu haneye yakın geçmişte kaç sert eylem yapıldı (bedel katlayıcı).
   int _houseHarshCount(String surname) =>
@@ -39,14 +39,15 @@ extension _SceneHouseActions on _VillageSceneState {
 
   /// Eylemin sonucu — UI önizlemede, sahne uygulamada AYNI değerleri kullanır.
   HouseActionOutcome _houseActionOutcome(
-          HouseActionKind kind, String surname) =>
-      outcomeOf(
-        kind,
-        members: _houseMembers(surname).length,
-        recentHarsh: _houseHarshCount(surname),
-        authoritarian: _compassPos.authority >= 0.15,
-        grantTier: _grantTierFor(surname) ?? 2,
-      );
+    HouseActionKind kind,
+    String surname,
+  ) => outcomeOf(
+    kind,
+    members: _houseMembers(surname).length,
+    recentHarsh: _houseHarshCount(surname),
+    authoritarian: _compassPos.authority >= 0.15,
+    grantTier: _grantTierFor(surname) ?? 2,
+  );
 
   // ── Uygulama ───────────────────────────────────────────────────────────────
 
@@ -62,14 +63,20 @@ extension _SceneHouseActions on _VillageSceneState {
 
     setStateHere(() {
       // 1) Kaynak.
-      if (o.gold != 0) _stockpile.gold = (_stockpile.gold + o.gold).clamp(0, 1 << 30);
-      if (o.food != 0) _stockpile.food = (_stockpile.food + o.food).clamp(0, 1 << 30);
+      if (o.gold != 0) {
+        _stockpile.gold = (_stockpile.gold + o.gold).clamp(0, 1 << 30);
+      }
+      if (o.food != 0) {
+        _stockpile.food = (_stockpile.food + o.food).clamp(0, 1 << 30);
+      }
 
       // 2) Hedef hane + öteki haneler (köy izler).
       if (o.targetMood != 0 || o.targetSway != 0) {
-        _houses.nudge(surname,
-            moodDelta: o.targetMood,
-            swayGain: o.targetSway > 0 ? o.targetSway : 0);
+        _houses.nudge(
+          surname,
+          moodDelta: o.targetMood,
+          swayGain: o.targetSway > 0 ? o.targetSway : 0,
+        );
         // nudge yalnız POZİTİF nüfuz ekler; kırılma ayrıca uygulanır.
         if (o.targetSway < 0) _drainHouseSway(surname, -o.targetSway);
       }
@@ -156,15 +163,23 @@ extension _SceneHouseActions on _VillageSceneState {
     b.occupants = movers.length;
 
     head.feel(NpcEmotion.joy, 6.0, moodDelta: 0.10);
-    _lifeEvent(head, '${_grantTierName(tier)} bağışı aldı',
-        icon: '🎁', milestone: true);
+    _lifeEvent(
+      head,
+      '${_grantTierName(tier)} bağışı aldı',
+      icon: '🎁',
+      milestone: true,
+    );
     _chronicle(
-        '$surname Hanesine ${_grantTierName(tier).toLowerCase()} bağışlandı; '
-        'ocakları bu akşam yeni bir çatının altında yandı.',
-        icon: '🎁', milestone: true, kind: ChronicleKind.decision);
+      '$surname Hanesine ${_grantTierName(tier).toLowerCase()} bağışlandı; '
+      'ocakları bu akşam yeni bir çatının altında yandı.',
+      icon: '🎁',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
     _showNotification(
-        '🎁 $surname Hanesi ${_grantTierName(tier).toLowerCase()} aldı — '
-        'minnet de nüfuz da onların.');
+      '🎁 $surname Hanesi ${_grantTierName(tier).toLowerCase()} aldı — '
+      'minnet de nüfuz da onların.',
+    );
   }
 
   /// Bu haneye bağışlanacak MÜLK KADEMESİ — hâlihazırda oturdukları en iyi
@@ -180,23 +195,27 @@ extension _SceneHouseActions on _VillageSceneState {
   }
 
   String _grantTierName(int tier) => switch (tier) {
-        4 => 'Konak',
-        3 => 'Taş Ev',
-        _ => 'Ahşap Ev',
-      };
+    4 => 'Konak',
+    3 => 'Taş Ev',
+    _ => 'Ahşap Ev',
+  };
 
   BuildingType _grantTypeFor(int tier, String surname) => switch (tier) {
-        4 => BuildingType.manor,
-        3 => surname.hashCode.isEven
-            ? BuildingType.stoneHouseBlue
-            : BuildingType.stoneHouseGreen,
-        _ => BuildingType.woodenHouse,
-      };
+    4 => BuildingType.manor,
+    3 =>
+      surname.hashCode.isEven
+          ? BuildingType.stoneHouseBlue
+          : BuildingType.stoneHouseGreen,
+    _ => BuildingType.woodenHouse,
+  };
 
   /// Bağışlanan konutu hanenin mevcut evine YAKIN boş bir yere diker. Yer
   /// bulunamazsa null (çağıran bedeli iade eder).
   BuildingEntity? _buildGrantedHome(
-      String surname, int tier, VillagerEntity head) {
+    String surname,
+    int tier,
+    VillagerEntity head,
+  ) {
     final type = _grantTypeFor(tier, surname);
     final home = head.homeBuilding as BuildingEntity?;
     final (vcx, vcy) = _villageCenter();
@@ -214,7 +233,8 @@ extension _SceneHouseActions on _VillageSceneState {
           b.ownerSurname = surname; // mülkün sahibi belli
           _buildings.add(b);
           _onBuildingCompleted(
-              BuildOrder(type: type, col: c, row: r)..completed = true);
+            BuildOrder(type: type, col: c, row: r)..completed = true,
+          );
           _anchorSystem.rebuild(_buildings);
           return b;
         }
@@ -229,8 +249,11 @@ extension _SceneHouseActions on _VillageSceneState {
     for (final v in members.take(4)) {
       v.feel(NpcEmotion.grief, 5.0, moodDelta: -0.08);
     }
-    _chronicle('$surname Hanesi meydanda cezalandırıldı; kimse sesini çıkarmadı.',
-        icon: '⚖', kind: ChronicleKind.decision);
+    _chronicle(
+      '$surname Hanesi meydanda cezalandırıldı; kimse sesini çıkarmadı.',
+      icon: '⚖',
+      kind: ChronicleKind.decision,
+    );
     _showNotification('⚖ $surname Hanesine ceza kesildi.');
   }
 
@@ -247,13 +270,18 @@ extension _SceneHouseActions on _VillageSceneState {
     final hidden = _houses.drainStash(surname);
     if (hidden > 0) _stockpile.food += hidden;
     _chronicle(
-        '$surname Hanesinin ambarı mühürlendi: ${o.gold} altın, '
-        '${o.food + hidden} kile köyün kesesine yazıldı.',
-        icon: '🏚', milestone: true, kind: ChronicleKind.decision);
-    _showNotification(hidden > 0
-        ? '🏚 $surname Hanesinin malına el kondu — sakladıkları $hidden kile '
-            'de ambara indi.'
-        : '🏚 $surname Hanesinin malına el kondu — köy bunu konuşacak.');
+      '$surname Hanesinin ambarı mühürlendi: ${o.gold} altın, '
+      '${o.food + hidden} kile köyün kesesine yazıldı.',
+      icon: '🏚',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
+    _showNotification(
+      hidden > 0
+          ? '🏚 $surname Hanesinin malına el kondu — sakladıkları $hidden kile '
+                'de ambara indi.'
+          : '🏚 $surname Hanesinin malına el kondu — köy bunu konuşacak.',
+    );
   }
 
   /// 💍 NİKÂH BAĞLA — iki haneyi kanla bağlar. Hür rejimde öneri, baskıda
@@ -274,9 +302,12 @@ extension _SceneHouseActions on _VillageSceneState {
     groom.feel(NpcEmotion.fear, 4.0, moodDelta: -0.06);
     final other = bride.surname == surname ? groom.surname : bride.surname;
     _chronicle(
-        '${bride.name} ile ${groom.name} nikâhla bağlandı — $surname ile $other '
-        'artık aynı kandan sayılıyor.',
-        icon: '💍', milestone: true, kind: ChronicleKind.decision);
+      '${bride.name} ile ${groom.name} nikâhla bağlandı — $surname ile $other '
+      'artık aynı kandan sayılıyor.',
+      icon: '💍',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
     _showNotification('💍 ${bride.name} ile ${groom.name} nikâha bağlandı.');
   }
 
@@ -314,8 +345,12 @@ extension _SceneHouseActions on _VillageSceneState {
   void _actExile(String surname) {
     final head = headOfHouse(_houseMembers(surname));
     if (head == null) return;
-    _chronicle('$surname Hanesinin reisi ${head.name} yola vuruldu.',
-        icon: '🚷', milestone: true, kind: ChronicleKind.decision);
+    _chronicle(
+      '$surname Hanesinin reisi ${head.name} yola vuruldu.',
+      icon: '🚷',
+      milestone: true,
+      kind: ChronicleKind.decision,
+    );
     _exileVillager(head); // mevcut sürgün mekanizması (kronik + moral + tepki)
   }
 
@@ -324,14 +359,21 @@ extension _SceneHouseActions on _VillageSceneState {
   void _actScheme(String surname) {
     final share = _houses.swayShare(surname);
     final risk = schemeExposureChance(
-        authority: _compassPos.authority, targetSwayShare: share);
+      authority: _compassPos.authority,
+      targetSwayShare: share,
+    );
     final exposed = _rng.nextDouble() < risk;
-    logDev('🕯 entrika: $surname · ifşa riski %${(risk * 100).round()} → '
-        '${exposed ? 'İFŞA' : 'sessiz'}');
+    logDev(
+      '🕯 entrika: $surname · ifşa riski %${(risk * 100).round()} → '
+      '${exposed ? 'İFŞA' : 'sessiz'}',
+    );
 
     if (!exposed) {
-      _chronicle('$surname Hanesinin işleri sebepsiz aksadı; kimse nedenini bilmiyor.',
-          icon: '🕯', kind: ChronicleKind.decision);
+      _chronicle(
+        '$surname Hanesinin işleri sebepsiz aksadı; kimse nedenini bilmiyor.',
+        icon: '🕯',
+        kind: ChronicleKind.decision,
+      );
       _showNotification('🕯 İş görüldü. Kimse bir şey bilmiyor.');
       return;
     }
@@ -346,9 +388,12 @@ extension _SceneHouseActions on _VillageSceneState {
       v.feel(NpcEmotion.anger, 6.0, moodDelta: -0.14);
     }
     _chronicle(
-        'Fısıltı büyüdü: $surname Hanesinin başına gelenler tesadüf değilmiş. '
-        'Parmaklar seni gösteriyor.',
-        icon: '👁', milestone: true, kind: ChronicleKind.crisis);
+      'Fısıltı büyüdü: $surname Hanesinin başına gelenler tesadüf değilmiş. '
+      'Parmaklar seni gösteriyor.',
+      icon: '👁',
+      milestone: true,
+      kind: ChronicleKind.crisis,
+    );
     _showNotification('👁 Entrikan ifşa oldu — köy senden şüpheleniyor.');
   }
 
@@ -411,9 +456,11 @@ extension _SceneHouseIntrigue on _VillageSceneState {
     // komplo kurmasın, entrika NADİR ve anlamlı kalsın.
     final chance = (0.10 + worstScore * 0.22).clamp(0.0, 0.55);
     final roll = _rng.nextDouble();
-    logDev('🕯 hane entrikası: ${worst.surname} · kırgınlık '
-        '${worstScore.toStringAsFixed(2)} · şans %${(chance * 100).round()} '
-        '→ ${roll < chance ? 'İŞ ÇEVİRDİ' : 'sessiz'}');
+    logDev(
+      '🕯 hane entrikası: ${worst.surname} · kırgınlık '
+      '${worstScore.toStringAsFixed(2)} · şans %${(chance * 100).round()} '
+      '→ ${roll < chance ? 'İŞ ÇEVİRDİ' : 'sessiz'}',
+    );
     if (roll >= chance) return;
 
     _runHouseIntrigue(worst);
@@ -442,11 +489,15 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           _houses.nudge(ally.surname, swayGain: 0.7);
           _unrest = (_unrest + 0.05).clamp(0.0, 1.0);
           _chronicle(
-              '${h.surname} ile ${ally.surname} haneleri sofrayı birleştirdi. '
-              'İki küskün bir arada, artık tek ses.',
-              icon: '🤝', milestone: true, kind: ChronicleKind.crisis);
+            '${h.surname} ile ${ally.surname} haneleri sofrayı birleştirdi. '
+            'İki küskün bir arada, artık tek ses.',
+            icon: '🤝',
+            milestone: true,
+            kind: ChronicleKind.crisis,
+          );
           _showNotification(
-              '🤝 ${h.surname} ve ${ally.surname} el sıkıştı — bu ittifak sana karşı.');
+            '🤝 ${h.surname} ve ${ally.surname} el sıkıştı — bu ittifak sana karşı.',
+          );
 
         case 'hoard':
           // Ambarı saklar: köy kesesi/erzağı sessizce eksilir.
@@ -456,18 +507,25 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           _stockpile.food = (_stockpile.food - food).clamp(0, 1 << 30);
           _houses.nudge(h.surname, moodDelta: 0.04); // işlerine geldi
           _chronicle(
-              '${h.surname} Hanesi payını ambara götürmedi; defterde eksik var.',
-              icon: '🏚', kind: ChronicleKind.crisis);
-          _showNotification('🏚 ${h.surname} Hanesi mahsulünü sakladı '
-              '(−$gold altın, −$food erzak).');
+            '${h.surname} Hanesi payını ambara götürmedi; defterde eksik var.',
+            icon: '🏚',
+            kind: ChronicleKind.crisis,
+          );
+          _showNotification(
+            '🏚 ${h.surname} Hanesi mahsulünü sakladı '
+            '(−$gold altın, −$food erzak).',
+          );
 
         case 'stoke':
           // Husumet körükler — kan davası köyü zehirler, fatura sana çıkar.
           if (_devIgniteFeud()) {
             _unrest = (_unrest + 0.06).clamp(0.0, 1.0);
             _chronicle(
-                '${h.surname} Hanesi eski bir husumeti kaşıdı; kan yeniden aktı.',
-                icon: '🩸', milestone: true, kind: ChronicleKind.crisis);
+              '${h.surname} Hanesi eski bir husumeti kaşıdı; kan yeniden aktı.',
+              icon: '🩸',
+              milestone: true,
+              kind: ChronicleKind.crisis,
+            );
             _showNotification('🩸 ${h.surname} Hanesi husumeti körükledi.');
           }
 
@@ -477,18 +535,25 @@ extension _SceneHouseIntrigue on _VillageSceneState {
           pushPolicyMorale(-0.05, 3.0);
           _nudgeOtherHouses(h.surname, -0.03);
           _chronicle(
-              '${h.surname} Hanesi meclisi kendi çatısı altında topladı. '
-              'Konuşulanı sen duymadın.',
-              icon: '⚖', milestone: true, kind: ChronicleKind.crisis);
-          _showNotification('⚖ ${h.surname} Hanesi meclisi sana karşı topluyor.');
+            '${h.surname} Hanesi meclisi kendi çatısı altında topladı. '
+            'Konuşulanı sen duymadın.',
+            icon: '⚖',
+            milestone: true,
+            kind: ChronicleKind.crisis,
+          );
+          _showNotification(
+            '⚖ ${h.surname} Hanesi meclisi sana karşı topluyor.',
+          );
 
         default: // rumor
           pushPolicyMorale(-0.035, 3.0);
           _nudgeOtherHouses(h.surname, -0.04);
           _unrest = (_unrest + 0.03).clamp(0.0, 1.0);
           _chronicle(
-              'Köyde bir söylenti dolaşıyor; kaynağı ${h.surname} Hanesinin kapısı.',
-              icon: '👁', kind: ChronicleKind.crisis);
+            'Köyde bir söylenti dolaşıyor; kaynağı ${h.surname} Hanesinin kapısı.',
+            icon: '👁',
+            kind: ChronicleKind.crisis,
+          );
           _showNotification('👁 ${h.surname} Hanesi arkandan konuşuyor.');
       }
     });
@@ -501,20 +566,19 @@ extension _SceneHouseIntrigue on _VillageSceneState {
 extension _SceneMassSeizure on _VillageSceneState {
   /// Kamulaştırılabilecek konutlar (sakini olsun olmasın, konut olan her yapı).
   List<BuildingEntity> _privateHomes() => [
-        for (final b in _buildings)
-          if ((b.fn?.housingCapacity ?? 0) > 0 && b.ownerSurname != kPublicOwner)
-            b,
-      ];
+    for (final b in _buildings)
+      if ((b.fn?.housingCapacity ?? 0) > 0 && b.ownerSurname != kPublicOwner) b,
+  ];
 
   bool get _massSeizureDone => _villageMemory.contains(kMassSeizureFlag);
 
   HouseActionGate _massSeizureGate() => massSeizureGate(
-        authority: _compassPos.authority,
-        economy: _compassPos.economy,
-        sealedLaws: _policies.sealed,
-        alreadyDone: _massSeizureDone,
-        houseCount: _houses.houseCount,
-      );
+    authority: _compassPos.authority,
+    economy: _compassPos.economy,
+    sealedLaws: _policies.sealed,
+    alreadyDone: _massSeizureDone,
+    houseCount: _houses.houseCount,
+  );
 
   /// Divan'daki kamulaştırma kartı — kapalıysa GEREKÇESİYLE görünür ki oyuncu
   /// bu yolun var olduğunu ve neyin eksik olduğunu bilsin.
@@ -527,7 +591,7 @@ extension _SceneMassSeizure on _VillageSceneState {
       label: 'MÜLKİYETİ KALDIR',
       detail: gate.open
           ? 'Köydeki $homes konutun tapusu köye geçer. Hiçbir hane bir daha '
-              '"benim" diyemez. Geri dönüşü yok.'
+                '"benim" diyemez. Geri dönüşü yok.'
           : gate.reason!,
       effects: gate.open
           ? [
@@ -577,9 +641,11 @@ extension _SceneMassSeizure on _VillageSceneState {
       _villageMemory.add(kMassSeizureFlag);
 
       _chronicle(
-          'Mülkiyet kaldırıldı. ${homes.length} konutun tapusu köye geçti; '
-          'o gece hiçbir kapı kendi kilidiyle kapanmadı.',
-          icon: '⚑', milestone: true);
+        'Mülkiyet kaldırıldı. ${homes.length} konutun tapusu köye geçti; '
+        'o gece hiçbir kapı kendi kilidiyle kapanmadı.',
+        icon: '⚑',
+        milestone: true,
+      );
       _showNotification('⚑ Mülkiyet kaldırıldı — artık her çatı köyün.');
     });
   }

@@ -1,8 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// ORTA OYUN DERSLERİ — kuruluştan sonra açılan sistemlerin öğretmeni.
 ///
-/// Ders kataloğu ve tetikleri `systems/village_lessons.dart`'ta (saf); burası
+/// Ders kataloğu ve tetikleri `systems/run/village_lessons.dart`'ta (saf); burası
 /// onları köye bağlar. Sahnenin işi üç şey:
 ///   1. Köyün hâlini derslerin anlayacağı dile çevirmek ([_lessonContext]).
 ///   2. Dersi DOĞRU ANDA açmak — yani oyuncu başka bir işin içinde değilken.

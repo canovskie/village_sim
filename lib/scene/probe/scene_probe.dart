@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// PROVA — köyün yaşadığının SAYIYLA kanıtı.
 ///
@@ -71,9 +71,11 @@ extension _SceneProbe on _VillageSceneState {
       try {
         final encoded = jsonEncode(captureWorld());
         kProbeWorldJson = encoded;
-        restoreWorld(
-          Map<String, dynamic>.from(
-            jsonDecode(encoded) as Map<String, dynamic>,
+        setStateHere(
+          () => restoreWorld(
+            Map<String, dynamic>.from(
+              jsonDecode(encoded) as Map<String, dynamic>,
+            ),
           ),
         );
         kProbeSaveError = '';
@@ -88,8 +90,10 @@ extension _SceneProbe on _VillageSceneState {
       final raw = kProbeRestoreJson;
       kProbeRestoreJson = '';
       try {
-        restoreWorld(
-          Map<String, dynamic>.from(jsonDecode(raw) as Map<String, dynamic>),
+        setStateHere(
+          () => restoreWorld(
+            Map<String, dynamic>.from(jsonDecode(raw) as Map<String, dynamic>),
+          ),
         );
         kProbeSaveError = '';
       } catch (e) {
@@ -97,12 +101,53 @@ extension _SceneProbe on _VillageSceneState {
       }
     }
 
+    if (kProbeStoryDepartLead.isNotEmpty) {
+      final thread = StoryThreads.threadOf(kProbeStoryDepartLead);
+      kProbeStoryDepartLead = '';
+      _storyCasts[thread]?.lead?.startLeaving(0, 0);
+    }
+    kProbeStoryReport = _storyCasts.entries
+        .map((e) {
+          final people = [e.value.lead, e.value.partner]
+              .map(
+                (v) => v == null
+                    ? 'missing'
+                    : '${v.name} free=${_storyFree(v)} job=${v.job?.role} '
+                          'intent=${v.mind.intent.kind}/${v.mind.intent.priority} '
+                          'inside=${v.isInsideBuilding} sleeping=${v.isSleeping} act=${v.act?.label} '
+                          'cool=${v.socialCooldown} partner=${_storyPartner(v)?.name} xy=${v.gridX},${v.gridY}',
+              )
+              .join(' | ');
+          return '${e.key.name} active=${_storyBondActive(e.key)} day=$_dayCount '
+              'met=${e.value.lastMeetingDay} light=${_cycle.dayLight} '
+              'rain=${_cycle.rainIntensity} $people';
+        })
+        .join('; ');
+    kProbeStoryMeetingVisible = _storyCasts.values.any(
+      (cast) =>
+          cast.lastMeetingDay == _dayCount &&
+          identical(cast.lead?.convoPartner, cast.partner) &&
+          cast.lead?.act != null &&
+          cast.lead?.prop != PropKind.none &&
+          cast.partner?.act != null &&
+          cast.partner?.prop != PropKind.none,
+    );
     kProbePendingPetition = _pendingPetition?.id ?? '';
+    kProbeQueuedPetitions = _pacedPetitions
+        .map((payload) => payload.petition.id)
+        .join(',');
+    if (kProbeRequestPetition.isNotEmpty) {
+      final petitionId = kProbeRequestPetition;
+      kProbeRequestPetition = '';
+      _requestSystemPetition(petitionId);
+    }
     if (kProbeDecideNow) {
       final p = _pendingPetition;
       if (p != null && p.options.isNotEmpty) {
         kProbeDecideNow = false;
-        _resolvePetition(p, p.options.first);
+        final option = kProbeDecisionOption.clamp(0, p.options.length - 1);
+        kProbeDecisionOption = 0;
+        _resolvePetition(p, p.options[option]);
       } else {
         _petitionTimer = 0; // kuyruk hemen açılsın (yönetişim uyanıksa)
       }

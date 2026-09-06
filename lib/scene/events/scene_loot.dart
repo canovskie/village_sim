@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// GÖMÜLÜ ZULA — çalınan malın dünyadaki hâli (Faz 4).
 ///

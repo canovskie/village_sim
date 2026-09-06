@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Dünya kurulumu + uzamsal sorgular + nüfus/ev sayım helper'ları.
 /// part of main.dart — State'in tüm private alanlarına erişim.
@@ -311,11 +311,46 @@ extension _SceneWorld on _VillageSceneState {
         }
       }
     }
+
+    // Görünmez yaya ağı yalnız topoloji değişince yeniden hesaplanır. Normal
+    // oyunda PathContext sürümü yeterli; referans/capture köyleri binaları
+    // doğrudan ekleyebildiği için bina yerleşimini de imzaya katıyoruz.
+    var pedestrianSignature =
+        _pathContext.version * 31 +
+        _buildings.length * 17 +
+        _obstacles.length * 7 +
+        _softObs.length;
+    for (final building in _buildings) {
+      pedestrianSignature =
+          (pedestrianSignature * 31 +
+              building.type.index * 17 +
+              building.col * 7 +
+              building.row) &
+          0x7FFFFFFF;
+    }
+
+    // Set referansı sabit: PathContext yeni içeriği anında görür.
+    if (_pedestrianNetworkSignature != pedestrianSignature) {
+      _pedestrianTiles
+        ..clear()
+        ..addAll(
+          buildPedestrianNetwork(
+            buildings: _buildings,
+            blockedTiles: _obstacles,
+            softTiles: _softObs,
+            squeezeTiles: _squeezeTiles,
+            roadSystem: _roadSystem,
+          ),
+        );
+      _pedestrianNetworkSignature = pedestrianSignature;
+    }
   }
 
   // ── World generation ───────────────────────────────────────────────────────
 
   void _generateWorld({int? forceSeed}) {
+    // Koreografi geçici sunumdur; yeni dünya eski kadro/beat sahipliğini taşımaz.
+    _releaseVignette();
     _worldSeed = forceSeed ?? Random().nextInt(0x7FFFFFFF);
     final result = WorldGenerator(_worldSeed).generate();
 
@@ -337,6 +372,8 @@ extension _SceneWorld on _VillageSceneState {
     _orders.clear();
     _roadOrders.clear();
     _roadSystem.clear();
+    _pedestrianTiles.clear();
+    _pedestrianNetworkSignature = -1;
     _placingRoad = null;
     _roadErase = false;
     _clearRoadDrag();

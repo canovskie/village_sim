@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// SAHNE ARAYÜZÜ — bildirim, dev günlüğü, imparatorluk uyarısı, ipucu şeridi.
 ///
@@ -6,6 +6,180 @@ part of '../main.dart';
 /// farklı ama hedef aynı ([_VillageSceneState]) — çağıranlar için hiçbir
 /// şey değişmez, metotlar aynen taşındı.
 extension _SceneUiOverlays on _VillageSceneState {
+  Widget buildVillageTesterOverlay() => ListenableBuilder(
+    listenable: _hudFrame,
+    builder: (_, _) {
+      if (!_villageTesterPanelOpen) {
+        return Positioned(
+          top: 10,
+          right: 10,
+          child: SafeArea(
+            child: Material(
+              color: Colors.transparent,
+              child: IconButton.filled(
+                key: const ValueKey('village-tester-open'),
+                tooltip: 'Canlı köy testerını aç',
+                onPressed: () =>
+                    setStateHere(() => _villageTesterPanelOpen = true),
+                icon: const Icon(Icons.science_outlined),
+              ),
+            ),
+          ),
+        );
+      }
+
+      final homeless = _villagers.where((v) => v.homeBuilding == null).length;
+      final pending = _orders.where((o) => !o.completed).length;
+      final warnings = <String>[
+        if (_stockpile.food < _starveRamp)
+          'Yiyecek kritik: ${_stockpile.food} / ${_starveRamp.ceil()}',
+        if (homeless > 0) '$homeless köylünün kalıcı evi yok',
+        if (pending > 0 && _jobCount(JobRole.builder) == 0)
+          '$pending şantiye var fakat atanmış inşaatçı yok',
+        if (_cycle.rainIntensity > 0.6) 'Fırtına eşiği etkin',
+      ];
+      final effectiveSpeed = _timeScale <= 0
+          ? 0.0
+          : _timeScale * _devSpeedBoost;
+
+      void setTesterSpeed(double speed) {
+        setStateHere(() {
+          if (speed <= 0) {
+            _timeScale = 0;
+            _speedIdx = _VillageSceneState._speedSteps.indexOf(0.0);
+            return;
+          }
+          _timeScale = 1;
+          _speedIdx = 0;
+          _devSpeedBoost = speed;
+        });
+      }
+
+      void setTesterWeather(VillageTesterWeather weather) {
+        setStateHere(() {
+          switch (weather) {
+            case VillageTesterWeather.clear:
+              _cycle.rainIntensity = 0;
+              kDevForceSnowfall = false;
+            case VillageTesterWeather.rain:
+              _cycle.rainIntensity = 0.52;
+              kDevForceSnowfall = false;
+            case VillageTesterWeather.storm:
+              _cycle.rainIntensity = 0.9;
+              kDevForceSnowfall = false;
+            case VillageTesterWeather.snow:
+              _cycle.rainIntensity = 0;
+              kDevForceSnowfall = true;
+          }
+        });
+      }
+
+      return Positioned(
+        top: 12,
+        right: 12,
+        child: SafeArea(
+          child: VillageTesterPanel(
+            snapshot: VillageTesterSnapshot(
+              day: _dayCount,
+              villagers: _villagers.length,
+              buildings: _buildings.length,
+              pendingOrders: pending,
+              homeless: homeless,
+              food: _stockpile.food,
+              wood: _stockpile.wood,
+              stone: _stockpile.stone,
+              iron: _stockpile.iron,
+              timeOfDay: _cycle.timeOfDay,
+              speed: effectiveSpeed,
+              rainIntensity: _cycle.rainIntensity,
+              snowing: kDevForceSnowfall,
+              godMode: _godMode,
+              season: _season,
+              warnings: warnings,
+            ),
+            onHide: () => setStateHere(() => _villageTesterPanelOpen = false),
+            onSetSpeed: setTesterSpeed,
+            onSetTime: (value) => setStateHere(() => _cycle.timeOfDay = value),
+            onSetWeather: setTesterWeather,
+            onAddResource: (kind, amount) => setStateHere(() {
+              _stockpile.add(kind, amount);
+              final value = _stockpile.get(kind);
+              if (value < 0) _stockpile.add(kind, -value);
+            }),
+            onToggleGod: () => setStateHere(() => _godMode = !_godMode),
+            onSpawnVillager: () {
+              final hearth = _firepitBuilding;
+              if (hearth == null) {
+                _showNotification('Önce doğal akışta ocağı kur');
+                return;
+              }
+              setStateHere(() => _spawnGrownVillager(hearth));
+            },
+            onWakeAll: () => setStateHere(() {
+              for (final villager in _villagers) {
+                villager.isInsideBuilding = false;
+                villager.sleepTarget = null;
+                villager.sleepIsHome = false;
+              }
+            }),
+            onStartChat: () {
+              if (!_devStartChat()) {
+                _showNotification('Yan yana iki yetişkin köylü bulunamadı');
+              }
+            },
+            onStartDance: () {
+              if (!_devStartDance()) {
+                _showNotification('Yan yana iki yetişkin köylü bulunamadı');
+              }
+            },
+            onStartConflict: () {
+              if (!_devStartConflict()) {
+                _showNotification('Yan yana iki uygun yetişkin bulunamadı');
+              }
+            },
+            onStartCrime: () => setStateHere(() {
+              if (!_devRandomCrime()) {
+                _showNotification(
+                  _activeCrime != null
+                      ? 'Zaten bir suç işleniyor'
+                      : 'Uygun fail veya hedef bulunamadı',
+                );
+              }
+            }),
+            onSpawnCaravan: () => _spawnTesterVisitor(VisitorKind.caravan),
+            onSpawnTraveler: () => _spawnTesterVisitor(VisitorKind.traveler),
+            onSpawnStranger: () => _spawnTesterVisitor(VisitorKind.stranger),
+            onClearActivities: () => setStateHere(_devClearActivities),
+            onClearEffects: () => setStateHere(() {
+              _activeFx.clear();
+              _eventMorale = 0;
+              _eventMoraleLeft = 0;
+              _eventLabel = null;
+              _activeEvent = null;
+              _activeEventLeft = 0;
+            }),
+            onFreshRun: widget.onRestartRun,
+          ),
+        ),
+      );
+    },
+  );
+
+  void _spawnTesterVisitor(VisitorKind kind) {
+    var count = 0;
+    setStateHere(() {
+      count = _spawnVisibleTestVisitor(kind);
+      _devPanelOpen = false;
+      if (kVillageTesterMode) _villageTesterPanelOpen = false;
+    });
+    final icon = switch (kind) {
+      VisitorKind.caravan => '🛒',
+      VisitorKind.traveler => '🥾',
+      VisitorKind.stranger => '👤',
+    };
+    _showNotification('$icon ${kind.label} geldi · $count ziyaretçi');
+  }
+
   String get _foundingTesterPhase {
     if (_foundingCouncilPending) return '1 · Kurucular halka oluyor';
     if (identical(_activeCutscene, kOpeningCutscene)) {
@@ -26,10 +200,7 @@ extension _SceneUiOverlays on _VillageSceneState {
     }
     if (!_completedQuests.contains('well')) return '7 · Kuyu yeri bekleniyor';
     if (!_completedQuests.contains('farm')) return '8 · Tarla alanı bekleniyor';
-    if (!_completedQuests.contains('tentIllness')) {
-      return '9 · Çadırın sonucu sahneleniyor';
-    }
-    if (!_completedQuests.contains('house')) return '10 · İlk dam kuruluyor';
+    if (!_completedQuests.contains('house')) return '9 · İlk dam kuruluyor';
     return '✓ Doğal kuruluş tamamlandı';
   }
 
@@ -47,7 +218,6 @@ extension _SceneUiOverlays on _VillageSceneState {
         ('Odun', _completedQuests.contains('lumber')),
         ('Kuyu', _completedQuests.contains('well')),
         ('Tarla', _completedQuests.contains('farm')),
-        ('Hastalık', _completedQuests.contains('tentIllness')),
         ('Ev', _completedQuests.contains('house')),
       ];
 
@@ -266,32 +436,23 @@ extension _SceneUiOverlays on _VillageSceneState {
     listenable: _frame,
     builder: (_, _) {
       final raiding = _imperialPhase == ImperialVisitPhase.raiding;
-      final beat = imperialBattleBeat(_imperialClashTimer);
+      final battle = _imperialBattle;
       final line = raiding
           ? (_impStruck
-                ? '${(_imperialRaidScenario?.target.label ?? 'MEYDAN').toUpperCase()} VURULDU · KOLON ÇEKİLİYOR'
-                : 'HAT KIRILDI · ${(_imperialRaidScenario?.target.label ?? 'MEYDAN').toUpperCase()} HEDEFTE')
-          : switch (beat) {
-              ImperialBattleBeat.mustering =>
-                '${_imperialDefensePlan.title.toUpperCase()} · SAFLAR KURULUYOR',
-              ImperialBattleBeat.firstImpact => 'İLK DARBE · MIZRAKLAR İNDİ',
-              ImperialBattleBeat.counterstrike => 'KÖY KARŞILIK VERİYOR',
-              ImperialBattleBeat.finalPush =>
-                _imperialBattleWon
-                    ? 'SON İTİŞ · HEYET GERİLİYOR'
-                    : 'SON İTİŞ · HAT ÇÖZÜLÜYOR',
-              ImperialBattleBeat.result =>
-                _imperialBattleWon ? 'EŞİK TUTULDU' : 'EŞİK DÜŞTÜ',
-            };
-      final progress = raiding ? 1.0 : _imperialBattleProgress;
+                ? 'BASKIN BİTTİ · KOLON ÇEKİLİYOR'
+                : 'ASKERLER HEDEFE İLERLİYOR')
+          : battle?.report ?? 'Savunucular toplanıyor.';
+      final progress = battle?.balance ?? 0.0;
       return Positioned(
         top: useCompactGameUi(context) ? 54 : 126,
         left: 0,
         right: 0,
-        child: IgnorePointer(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Center(
             child: AppReveal(
               child: Container(
+                constraints: const BoxConstraints(maxWidth: 390),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 8,
@@ -322,29 +483,97 @@ extension _SceneUiOverlays on _VillageSceneState {
                           height: 30,
                         ),
                         const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              (_imperialRaidScenario?.title ??
-                                      'Eşik Muharebesi')
-                                  .toUpperCase(),
-                              style: AppUi.label.copyWith(
-                                color: AppUi.rust,
-                                fontSize: 8,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                (_imperialRaidScenario?.title ??
+                                        'Eşik Muharebesi')
+                                    .toUpperCase(),
+                                style: AppUi.label.copyWith(
+                                  color: AppUi.rust,
+                                  fontSize: 8,
+                                ),
                               ),
-                            ),
-                            Text(
-                              line,
-                              style: AppUi.label.copyWith(
-                                color: AppUi.accent,
-                                fontSize: 10,
+                              Text(
+                                line,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppUi.label.copyWith(
+                                  color: AppUi.accent,
+                                  fontSize: 10,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),
+                    if (battle != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        'Köy: ${battle.activeCount(BattleSide.village)}  ·  İmparatorluk: ${battle.activeCount(BattleSide.empire)}  ·  ${battle.elapsed.floor()} sn',
+                        style: AppUi.body.copyWith(
+                          fontSize: 11,
+                          color: AppUi.textHi,
+                        ),
+                      ),
+                      Text(
+                        'Hedef: ${_imperialRaidScenario?.target.label ?? "köy"} · ${_imperialDefensePlan.title}',
+                        style: AppUi.body.copyWith(
+                          fontSize: 10,
+                          color: AppUi.textLo,
+                        ),
+                      ),
+                      if (battle.occupation > 0)
+                        Text(
+                          'Hedef ele geçiriliyor: %${(battle.occupation / 6 * 100).round()}',
+                          style: AppUi.body.copyWith(
+                            fontSize: 10,
+                            color: AppUi.rust,
+                          ),
+                        ),
+                      if (battle.result == null)
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 4,
+                          children: [
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppUi.accentSoft,
+                              ),
+                              onPressed: () {
+                                _imperialDefensePlan = battle.hasBarricade
+                                    ? ImperialDefensePlan.barricade
+                                    : ImperialDefensePlan.holdLine;
+                                battle.plan = _imperialDefensePlan;
+                              },
+                              child: const Text('Hattı tut'),
+                            ),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppUi.accentSoft,
+                              ),
+                              onPressed: () {
+                                battle.plan = _imperialDefensePlan =
+                                    ImperialDefensePlan.counterCharge;
+                              },
+                              child: const Text('İlerle'),
+                            ),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppUi.accentSoft,
+                              ),
+                              onPressed: () {
+                                battle.withdraw();
+                                _settleImperialBattle();
+                              },
+                              child: const Text('Geri çekil'),
+                            ),
+                          ],
+                        ),
+                    ],
                     const SizedBox(height: 6),
                     SizedBox(
                       width: 230,
@@ -353,9 +582,7 @@ extension _SceneUiOverlays on _VillageSceneState {
                         minHeight: 3,
                         backgroundColor: AppUi.surface0,
                         valueColor: AlwaysStoppedAnimation<Color>(
-                          raiding || (!_imperialBattleWon && progress > 0.62)
-                              ? AppUi.rust
-                              : AppUi.accent,
+                          raiding || progress < .35 ? AppUi.rust : AppUi.accent,
                         ),
                       ),
                     ),
@@ -376,13 +603,36 @@ extension _SceneUiOverlays on _VillageSceneState {
     // gezinme öğesini örtmemeli. Telefonda toast alta iner (komuta çubuğunun
     // üstüne): orada yalnız içeriğin üstünden geçer, hiçbir kontrolü kapatmaz.
     final compact = useCompactGameUi(context);
-    final toast = Center(
-      child: AppReveal(
-        child: AppChip(label: _notification!, color: AppUi.accent, solid: true),
-      ),
-    );
+    final news = _notification!;
+    // Kayıt, hız ve geçersiz tıklama gibi arayüz cevapları köy haberi kılığına
+    // girmez. Aynı yayın sırasını kullanır ama küçük, tek satırlık geri bildirim
+    // olarak çizilir. Büyük plaket yalnız köyde gerçekten olanı anlatır.
+    final Widget toast = news.topic == VillageNewsTopic.system
+        ? AppReveal(
+            key: ValueKey(news.dedupeKey),
+            child: AppChip(
+              label: news.rawMessage,
+              color: switch (news.tone) {
+                VillageNewsTone.critical ||
+                VillageNewsTone.caution => AppUi.rust,
+                VillageNewsTone.favorable => AppUi.sage,
+                VillageNewsTone.neutral => AppUi.accent,
+              },
+              solid: true,
+            ),
+          )
+        : NotificationPlaque.news(
+            news: news,
+            compact: compact,
+            pendingCount: _notificationFeed.pendingCount,
+          );
     if (!compact) {
-      return Positioned(top: 70, left: 0, right: 0, child: toast);
+      return Positioned(
+        top: 76,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(child: Center(child: toast)),
+      );
     }
     return Positioned(
       left: 0,
@@ -391,7 +641,7 @@ extension _SceneUiOverlays on _VillageSceneState {
       // Katalog açıldığında bu hat araç kartlarının üstünden geçebilir.
       // Bildirim yalnız bilgi taşır; görünürken alttaki Tarla/Yol düğmesini
       // kilitlememeli. Dokunuşu palete geçir.
-      child: IgnorePointer(child: toast),
+      child: IgnorePointer(child: Center(child: toast)),
     );
   }
 

@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// KURULUŞ ÖĞRETİCİSİ — "şimdi ne yapacağım"ın ekrandaki karşılığı.
 ///
@@ -12,7 +12,7 @@ part of '../main.dart';
 /// Önce "kademe 0"dı, yani kuruluşun dokuz adımının dokuzu da rehberliydi:
 /// oyuncu köyü kurarken sürekli birinin parmağını izliyordu, öğretici
 /// öğretmiyor EŞLİK EDİYORDU. Şimdi kapsam adımın kendisinde yazıyor
-/// ([Quest.guided]). Kuruluşta yalnız dört adım rehberli; Kanunname
+/// ([Quest.guided]). Kuruluşta yalnız üç adım rehberli; Kanunname
 /// rehberi ise Belediye kurulana kadar hiç doğmaz.
 ///
 /// İkinci daralma iş vermeydi: "bir köylüye tıkla, İŞ bölümünden Toplayıcı de"
@@ -134,23 +134,7 @@ extension _SceneGuide on _VillageSceneState {
       return null;
     }
 
-    // ── 3) DÜNYA ADIMI ────────────────────────────────────────────────────
-    // Saz yatak düğme değildir ama dünyada gerçek, görünür bir hedeftir.
-    if (q.pointer == QuestPointer.reedBeds && _stepBeacon != null) {
-      final target = _stepBeacon!;
-      final spot = _guideScreenOf(target.$1, target.$2);
-      if (spot == null) return null;
-      return GuideCue(
-        spot: spot,
-        radius: 58,
-        title: 'Saz yataklara bak',
-        body:
-            'Kurucular ilk gece ateşin çevresinde burada uyuyacak. Zamanı '
-            'hızlandır; sabah olmadan çadır aşaması açılmaz.',
-      );
-    }
-
-    // ── 4) HEDEFSİZ ADIM ──────────────────────────────────────────────────
+    // ── 3) HEDEFSİZ ADIM ──────────────────────────────────────────────────
     return null;
   }
 

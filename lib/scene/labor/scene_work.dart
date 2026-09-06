@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Sivil mesleklerin İŞ DÖNGÜLERİ — çoban / avcı / değirmenci / hancı / rahip.
 ///
@@ -26,8 +26,8 @@ extension _SceneWork on _VillageSceneState {
     if (_weaponCraftTimer > 0) return;
     final smiths = _villagers
         .where((v) => !v.isDying && v.type == VillagerType.blacksmith)
-        .length;
-    if (smiths == 0) return;
+        .toList(growable: false);
+    if (smiths.isEmpty) return;
     if (_stockpile.iron < 2 || _stockpile.coal < 1) {
       _weaponCraftTimer = 6.0;
       return;
@@ -35,7 +35,10 @@ extension _SceneWork on _VillageSceneState {
     _stockpile.iron -= 2;
     _stockpile.coal -= 1;
     _stockpile.weapons += 1;
-    _weaponCraftTimer = _kWeaponCraftTime / smiths.clamp(1, 3);
+    _weaponCraftTimer = _kWeaponCraftTime / smiths.length.clamp(1, 3);
+    final smith = smiths[_rng.nextInt(smiths.length)];
+    smith.strikeAtForge();
+    AudioManager.instance.playSfx(Sfx.workHit);
     _showNotification('🔨 Demirci bir savunma silahı hazırladı.');
   }
 
@@ -122,7 +125,7 @@ extension _SceneWork on _VillageSceneState {
       case VillagerType.innkeeper:
         return _postReachable(BuildingType.tavern, v);
       case VillagerType.priest:
-        return _postReachable(BuildingType.church, v);
+        return _priestPost(v) != null;
       case VillagerType.guard:
         // Nöbet tutulacak bir yer varsa muhafızın işi HEP vardır.
         return _watchPost(v) != null;
@@ -214,7 +217,10 @@ extension _SceneWork on _VillageSceneState {
         case VillagerType.innkeeper:
           _workHost(v, BuildingType.tavern, NpcEmotion.joy);
         case VillagerType.priest:
-          _workHost(v, BuildingType.church, NpcEmotion.content);
+          final post = _priestPost(v);
+          if (post != null) {
+            _workHost(v, post.type, NpcEmotion.content);
+          }
         case VillagerType.guard:
           _workGuard(v);
         default:
@@ -257,7 +263,7 @@ extension _SceneWork on _VillageSceneState {
       final b = switch (v.type) {
         VillagerType.miller => _nearestOf(BuildingType.mill, v),
         VillagerType.innkeeper => _nearestOf(BuildingType.tavern, v),
-        VillagerType.priest => _nearestOf(BuildingType.church, v),
+        VillagerType.priest => _priestPost(v),
         _ => null,
       };
       String where = '';
@@ -501,6 +507,23 @@ extension _SceneWork on _VillageSceneState {
   }
 
   // ── Yardımcılar ───────────────────────────────────────────────────────────
+
+  /// Rahip, ulaşabildiği en yakın kilise veya şapelde dua edenleri karşılar.
+  BuildingEntity? _priestPost(VillagerEntity v) {
+    BuildingEntity? best;
+    var bestD = double.infinity;
+    for (final type in [BuildingType.church, BuildingType.chapel]) {
+      final b = _nearestOf(type, v);
+      if (b == null || _standSpotFor(b, v) == null) continue;
+      final (bx, by) = _centerOf(b);
+      final d = _wdist(bx, by, v.gridX, v.gridY);
+      if (d < bestD) {
+        best = b;
+        bestD = d;
+      }
+    }
+    return best;
+  }
 
   /// Köylüye en yakın, verilen türde bina — yoksa null.
   /// NOT: `_buildings` yalnız TAMAMLANMIŞ binaları tutar (inşaat halindekiler

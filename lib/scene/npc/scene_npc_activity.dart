@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 // ── Sohbet konuları — her konu sıralı bir replik ikonu dizisi. Karşılıklı
 // sohbette çift bu diziyi sırayla "söyler" → baloncuk anlamlı görünür
@@ -39,6 +39,7 @@ extension _SceneNpcActivity on _VillageSceneState {
     // Yüzünü karşısındakine dön — sohbet ediyormuş gibi.
     v.facingRight = partner.gridX >= v.gridX;
     partner.facingRight = v.gridX >= partner.gridX;
+    _onStoryConversation(v, partner);
     v.feel(NpcEmotion.content, dur, moodDelta: 0.03);
     partner.feel(NpcEmotion.content, dur, moodDelta: 0.03);
     return true;
@@ -211,7 +212,8 @@ extension _SceneNpcActivity on _VillageSceneState {
   /// biriyle sohbete oturmazsın. Bu, hafızanın en sessiz ama en okunur
   /// sonucudur — bir suçtan sonra köyde konuşmalar seyrelir, fail yalnız kalır.
   VillagerEntity? _findNearbyIdle(VillagerEntity v) {
-    for (final o in _villagers) {
+    final preferred = _storyPartner(v);
+    for (final o in [?preferred, ..._villagers]) {
       if (identical(o, v)) continue;
       if (o.isInsideBuilding ||
           o.isSleeping ||

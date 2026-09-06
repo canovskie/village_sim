@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Zümre / Hizip katmanı — yönetişimin kalbi. Dilekçe (ve ileride ferman)
 /// kararları zümrelerin moralini + nüfuzunu oynatır; köy yavaşça bir kimliğe
@@ -370,34 +370,36 @@ extension _SceneEstates on _VillageSceneState {
     _removeVillager(v);
   }
 
-  /// Dilekçeyi GETİRECEK köylüyü seçer: dilekçenin zümresinden EN MUTSUZ
-  /// (düşük moralli) somut biri — şikayetin gerçek sahibi. Zümre üyesi yoksa
-  /// köyün en mutsuzu. Tam determinist olmasın diye en düşük moralli birkaç
-  /// aday arasından seçilir. Yazar asla boş kalmaz.
+  /// Dilekçeyi GETİRECEK köylüyü seçer. İçerik, olay kimliğiyle buraya dal
+  /// ekletmek yerine [Petition.authorKind] üzerinden ihtiyaç duyduğu gerçek
+  /// yüzü bildirir. Özel profil yoksa zümrenin en mutsuz birkaç üyesinden biri
+  /// konuşur; zümre de yoksa bütün köyden seçilir.
   VillagerEntity? _pickPetitionAuthor(Petition p) {
-    // Meslek değiştirme dilekçesi belirli bir köylüye aittir: kırgın olan.
-    if (p.id == 'professionCalling') {
-      final r = _resentfulVillager();
-      if (r != null) return r;
-    }
-    // Hane karşılığı: konuşan, elini çeken hanenin REİSİDİR — metindeki
-    // {hane}/{ad} ondan gelir ve hükümler (`_appeaseWithholdingHouse`) doğru
-    // haneye iner. Yazar yanlış seçilirse hüküm başka haneye vururdu.
-    if (p.id == 'houseWithholding') {
-      final sn = _withholdingHouseSurname;
-      if (sn != null) {
-        final head = _headOfSurname(sn);
-        if (head != null) return head;
-      }
-    }
-    // Sulh dilekçesi: kan davasının yaşayan bir tarafı konuşur.
-    if (p.id == 'feudReconcile') {
-      final f = _feudMember();
-      if (f != null) return f;
-    }
     final alive = _villagers.where((v) => !v.isDying).toList();
     if (alive.isEmpty) return null;
     var pool = alive;
+    switch (p.authorKind) {
+      case PetitionAuthorKind.any:
+        break;
+      case PetitionAuthorKind.unwedAdultMan:
+        final matching = alive
+            .where((v) =>
+                v.isMale &&
+                !v.wed &&
+                v.lifeStage == LifeStage.adult)
+            .toList();
+        if (matching.isNotEmpty) pool = matching;
+      case PetitionAuthorKind.resentfulVillager:
+        final v = _resentfulVillager();
+        if (v != null) return v;
+      case PetitionAuthorKind.withholdingHouseHead:
+        final surname = _withholdingHouseSurname;
+        final v = surname == null ? null : _headOfSurname(surname);
+        if (v != null) return v;
+      case PetitionAuthorKind.feudMember:
+        final v = _feudMember();
+        if (v != null) return v;
+    }
     final e = p.estate;
     if (e != null) {
       final est = alive

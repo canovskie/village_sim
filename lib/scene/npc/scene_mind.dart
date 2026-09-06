@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// KÖYLÜNÜN AKLI — sahne tarafı: dürtüleri dünyadan besler, teklifleri toplar,
 /// hakemi çalıştırır.
@@ -128,7 +128,8 @@ extension _SceneMind on _VillageSceneState {
 
       case IntentKind.inform:
         // Anlatacak bir şeyi kalmadıysa ya da köyde muhafız yoksa vazgeçer.
-        if (v.memory.strongestReportable == null || _nearestGuardFor(v) == null) {
+        if (v.memory.strongestReportable == null ||
+            _nearestGuardFor(v) == null) {
           m.clear();
         }
 
@@ -177,11 +178,15 @@ extension _SceneMind on _VillageSceneState {
   /// düşünmez. Buradaki liste kasten dar: "meşgul" kavramı hakemin işi değil,
   /// önceliklerin işi — meşguliyet [IntentPriority] ile ifade edilir.
   bool _canDeliberate(VillagerEntity v) {
-    if (v.isDying || v.isLeaving || v.isSleeping || v.isInsideBuilding) return false;
+    if (v.isDying || v.isLeaving || v.isSleeping || v.isInsideBuilding) {
+      return false;
+    }
     if (v.isCarrying) return false; // yük taşırken bırakıp gitmez
     if (v.injuryDays > 0) return false; // yaralı dinleniyor
     if (v.sickDays > 0) return false; // hasta dinleniyor (iyileşir/atlatır)
-    if (v.laborDays > 0) return false; // kürek cezasında — hareketi _tickConvictLabor sürer
+    if (v.laborDays > 0) {
+      return false; // kürek cezasında — hareketi _tickConvictLabor sürer
+    }
     // Tören/dayatma altındaysa teklif toplanmaz (hakem zaten bölemez ama
     // boşuna puan hesaplamayalım).
     if (v.mind.intent.priority >= IntentPriority.ceremony) return false;
@@ -226,7 +231,9 @@ extension _SceneMind on _VillageSceneState {
     if (v.isSleeping) {
       m.satisfy(Drive.fatigue, 0.5 * dt);
     } else {
-      final toil = v.hasActiveJob ? 1.45 : (v.mind.owns(IntentKind.work) ? 1.2 : 1.0);
+      final toil = v.hasActiveJob
+          ? 1.45
+          : (v.mind.owns(IntentKind.work) ? 1.2 : 1.0);
       m.pushDrive(Drive.fatigue, r.fatigue * toil, dt);
     }
 
@@ -247,7 +254,11 @@ extension _SceneMind on _VillageSceneState {
     } else if (cold > 0) {
       // Ocaktan uzak çadırda üşüme daha hızlı birikir (bkz. scene_shelter):
       // uykuda bile dinmez, doldukça köylüyü gecenin ortasında kaldırır.
-      m.pushDrive(Drive.chill, r.perDay(2.2) * cold * _chillDriveMultiplierOf(v), dt);
+      m.pushDrive(
+        Drive.chill,
+        r.perDay(2.2) * cold * _chillDriveMultiplierOf(v),
+        dt,
+      );
     } else {
       m.satisfy(Drive.chill, r.decay * dt);
     }
@@ -290,7 +301,8 @@ extension _SceneMind on _VillageSceneState {
   bool _atFoodSpot(VillagerEntity v) {
     if (v.isWalking) return false;
     for (final b in _buildings) {
-      final ok = b.type == BuildingType.market ||
+      final ok =
+          b.type == BuildingType.market ||
           b.type == BuildingType.tavern ||
           b.type == BuildingType.warehouse ||
           identical(b, v.homeBuilding);
@@ -347,6 +359,7 @@ extension _SceneMind on _VillageSceneState {
     add(_bidWork(v));
     add(_bidRest(v));
     add(_bidHearth(v));
+    add(_bidStoryVisit(v));
     add(_bidSocial(v));
     add(_bidForage(v));
     add(_bidErrand(v));
@@ -375,7 +388,9 @@ extension _SceneMind on _VillageSceneState {
     if (urge < 0.20) return null; // bu köyde kimse konuşmaz
     return Bid(
       kind: IntentKind.inform,
-      score: (0.8 + urge * 1.4) * r.strength *
+      score:
+          (0.8 + urge * 1.4) *
+          r.strength *
           jitterFor(v.personalitySeed, IntentKind.inform),
       reason: 'gördüğünü devriyeye anlatmaya koşuyor',
       priority: IntentPriority.need,
@@ -392,7 +407,8 @@ extension _SceneMind on _VillageSceneState {
     // sıradan öncelik. Yoksa köylü tuğla taşırken sohbete dalar.
     final committed = v.hasActiveJob;
     final purpose = v.mind.drive(Drive.purpose);
-    final score = (committed ? 1.8 : 0.55 + urgency(purpose, threshold: 0.20) * 1.4) *
+    final score =
+        (committed ? 1.8 : 0.55 + urgency(purpose, threshold: 0.20) * 1.4) *
         _pressure.workDrive *
         jitterFor(v.personalitySeed, IntentKind.work);
     return Bid(
@@ -417,7 +433,10 @@ extension _SceneMind on _VillageSceneState {
     if (spot == null) return null;
     return Bid(
       kind: IntentKind.rest,
-      score: u * 1.5 * _pressure.homePull *
+      score:
+          u *
+          1.5 *
+          _pressure.homePull *
           jitterFor(v.personalitySeed, IntentKind.rest),
       reason: 'yorgun, evine çekiliyor',
       priority: IntentPriority.need,
@@ -435,7 +454,11 @@ extension _SceneMind on _VillageSceneState {
     final like = v.personality.likes.atFireAffinity ? 1.35 : 1.0;
     return Bid(
       kind: IntentKind.hearth,
-      score: u * 1.4 * like * _pressure.firePull *
+      score:
+          u *
+          1.4 *
+          like *
+          _pressure.firePull *
           jitterFor(v.personalitySeed, IntentKind.hearth),
       reason: 'üşümüş, ateş başına gidiyor',
       priority: IntentPriority.need,
@@ -458,24 +481,35 @@ extension _SceneMind on _VillageSceneState {
     final lonely = urgency(v.mind.drive(Drive.company), threshold: 0.30);
     // Karşısındakinin bilmediği taze bir haberim var mı? (dedikodu yakıtı)
     final news = v.memory.strongestTellable;
-    final hasNews = news != null && !partner.memory.knows(news.kind, news.subject);
+    final hasNews =
+        news != null && !partner.memory.knows(news.kind, news.subject);
     // GÜNDÜZ MEYDAN MUHABBETİ — köy yalnız gece ateş başında sosyalleşiyordu;
     // gündüz meydan/kuyu/pazar çevresinde boşta yan yana gelen iki köylü, yalnız
     // ya da anlatacak haberi olmasa bile iki laf eder. Errand sistemi zaten
     // insanları buralara çekiyor; eksik olan "varınca birlikte oyalanma"ydı.
-    final atSquare = _cycle.dayLight > 0.5 &&
+    final atSquare =
+        _cycle.dayLight > 0.5 &&
         (_nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.townhall), 4.5) ||
-         _nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.well), 4.0) ||
-         _nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.market), 4.5));
-    final smalltalk = atSquare ? 0.35 : 0.0;
+            _nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.well), 4.0) ||
+            _nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.market), 4.5));
+    final smalltalk = identical(_storyPartner(v), partner)
+        ? 0.8
+        : atSquare
+        ? 0.35
+        : 0.0;
     if (lonely <= 0 && !hasNews && smalltalk <= 0) return null;
 
     final base = lonely + (hasNews ? 0.7 : 0.0) + smalltalk;
     return Bid(
       kind: IntentKind.social,
-      score: base * 1.1 * (0.6 + _pressure.outspoken * 1.3) *
+      score:
+          base *
+          1.1 *
+          (0.6 + _pressure.outspoken * 1.3) *
           jitterFor(v.personalitySeed, IntentKind.social),
-      reason: hasNews ? 'duyduğunu anlatmak istiyor' : 'birine iki laf etmek istiyor',
+      reason: hasNews
+          ? 'duyduğunu anlatmak istiyor'
+          : 'birine iki laf etmek istiyor',
       priority: IntentPriority.routine,
       begin: () => _startSocialFor(v),
     );
@@ -511,7 +545,8 @@ extension _SceneMind on _VillageSceneState {
     final act = _errandAct(v, dest);
     return Bid(
       kind: IntentKind.errand,
-      score: (0.45 + hungry * 1.3) *
+      score:
+          (0.45 + hungry * 1.3) *
           jitterFor(v.personalitySeed, IntentKind.errand),
       reason: hungry > 0 && dest.kind == BuildingType.market
           ? 'karnını doyurmaya gidiyor'
@@ -529,10 +564,14 @@ extension _SceneMind on _VillageSceneState {
     if (_activeCrime != null) return null; // aynı anda tek suç (sözleşme)
     if (!_crimeEligible(v)) return null;
     if (_crimeClimate <= 0) return null;
-    final desperation = urgency(v.mind.drive(Drive.hunger), threshold: 0.55) * 1.6 +
+    final desperation =
+        urgency(v.mind.drive(Drive.hunger), threshold: 0.55) * 1.6 +
         _criminality(v) * 0.9;
     if (desperation <= 0) return null;
-    final score = desperation * _crimeClimate * 0.42 *
+    final score =
+        desperation *
+        _crimeClimate *
+        0.42 *
         jitterFor(v.personalitySeed, IntentKind.crime);
     // Suç NADİR olmalı: en yüksek teklif bile eşiği aşmadıkça yeltenilmez.
     // Bu eşik, "köy suç çukuru değil" sözleşmesinin akıl tarafındaki karşılığı.
@@ -567,19 +606,32 @@ extension _SceneMind on _VillageSceneState {
     final (point, slot) = claim;
     final cx = point.building.col + point.building.cols / 2.0;
     final cy = point.building.row + point.building.rows / 2.0;
-    final dur = _kMindSitMin + _rng.nextDouble() * (_kMindSitMax - _kMindSitMin);
+    final dur =
+        _kMindSitMin + _rng.nextDouble() * (_kMindSitMax - _kMindSitMin);
     v.assignSit(slot.col, slot.row, cx, cy, dur, () => point.release(slot, v));
   }
 
   /// Sohbet/müzik/dans başlat — bağlam hangisini uygun kılıyorsa.
   void _startSocialFor(VillagerEntity v) {
     final night = _cycle.dayLight < 0.45;
-    final atTavern = _nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.tavern), 3.5);
-    final atFire = _nearAny(v.gridX, v.gridY, _spotsOf(BuildingType.firepit), 4.0);
+    final atTavern = _nearAny(
+      v.gridX,
+      v.gridY,
+      _spotsOf(BuildingType.tavern),
+      3.5,
+    );
+    final atFire = _nearAny(
+      v.gridX,
+      v.gridY,
+      _spotsOf(BuildingType.firepit),
+      4.0,
+    );
     final festive = atTavern || (atFire && night);
     final r = _rng.nextDouble();
     bool started = false;
-    if (festive && r < 0.25) {
+    if (_storyPartner(v) != null) {
+      started = _tryStartChatFor(v);
+    } else if (festive && r < 0.25) {
       started = _tryStartDanceFor(v);
     } else if (festive && r < 0.50) {
       started = _tryStartMusicFor(v);

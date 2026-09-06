@@ -1,8 +1,8 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// HANE KARŞILIĞI — hanenin geri çektiği şeyin köyde GÖRÜNDÜĞÜ yer.
 ///
-/// Saf merdiven `systems/house_stance.dart`'ta; burası onu köyün dört gerçek
+/// Saf merdiven `systems/governance/house_stance.dart`'ta; burası onu köyün dört gerçek
 /// koluna bağlar. Hane katmanının bugüne dek eksik olan yarısı bu dört kol:
 ///
 ///   1. EMEK   — küskün hanenin üyeleri işe çıkmaz (`_houseWithholdsLabor`,

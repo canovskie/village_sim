@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// Arazi / reveal — **ZOOM KISITLAMASI** modeli.
 ///
@@ -47,7 +47,7 @@ extension _SceneLand on _VillageSceneState {
   ///  • Organik: bina sayısıyla — köy büyüyünce bu baskın gelir, yani hikâye
   ///    kendiliğinden PASİFLEŞİR ve dünya sessizce açılmaya devam eder.
   double get _landExpansionTarget {
-    final story = _completedQuests.length * 1.5; // hikâye beat'leri
+    final story = QuestBook.completedCount(_completedQuests) * 1.5;
     final organic = _buildings.length * 0.5; // köyün büyümesi
     return landExpansionTarget(
       start: _VillageSceneState._kSpanStart,

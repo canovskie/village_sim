@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// DIŞ DÜNYA TRAFİĞİ — kervan, yolcu ve yabancılar haritanın bir kenarından
 /// girer, köyde amaçlarına göre oyalanır ve karşı kenardan yoluna devam eder.
@@ -64,6 +64,11 @@ extension _SceneMerchant on _VillageSceneState {
   void _prepareVisitorCapture() {
     if (kCaptureVisitorsSpawned) return;
     kCaptureVisitorsSpawned = true;
+    // Referans köy bazen son kurulan binayı seçili bırakır; bilgi paneli
+    // kervanın üstünü kapatırsa bu aracın görsel doğrulaması anlamsızlaşır.
+    _selectedBuilding = null;
+    _selectedVillager = null;
+    _detailExpanded = false;
     _spawnMerchant(VisitorKind.caravan);
     for (final m in _merchants) {
       m.gridX = m.browseX;
@@ -155,7 +160,10 @@ extension _SceneMerchant on _VillageSceneState {
     final groupId = (_dayCount << 11) ^ _rng.nextInt(1 << 11);
 
     final baseVisit = switch (kind) {
-      VisitorKind.caravan => 0.56 * kGameDaySeconds,
+      // Karar mühleti boyunca kalacak kadar uzun, oyuncu karar verdikten sonra
+      // meydanı işgal etmeyecek kadar kısa. Sonuçta [_wrapUpActiveCaravan]
+      // kalan süreyi ayrıca birkaç saniyeye indirir.
+      VisitorKind.caravan => 0.18 * kGameDaySeconds,
       VisitorKind.traveler => 0.34 * kGameDaySeconds,
       VisitorKind.stranger => 0.22 * kGameDaySeconds,
     };
@@ -246,6 +254,54 @@ extension _SceneMerchant on _VillageSceneState {
     _announceVisitor(kind, groupId);
   }
 
+  /// Dev/test menüsünden çağrılan ziyaretçiyi haritanın görünmeyen köşesinde
+  /// dakikalarca yürütmez. Gerçek [entering] evresini korur; yalnız rotanın son
+  /// birkaç karesine alır ve kamerayı öncüye çevirir. Böylece düğmenin sonucu
+  /// anında görülürken selamlama → oyalanma → ayrılma zinciri aynen çalışır.
+  int _spawnVisibleTestVisitor(VisitorKind kind) {
+    _merchants.clear();
+    _spawnMerchant(kind);
+
+    MerchantEntity? focus;
+    for (final visitor in _merchants) {
+      final dx = visitor.browseX - visitor.gridX;
+      final dy = visitor.browseY - visitor.gridY;
+      final distance = sqrt(dx * dx + dy * dy);
+      if (distance > 0.01) {
+        final approach = min(5.5, distance);
+        final (x, y) = _nearestLand(
+          visitor.browseX - dx / distance * approach,
+          visitor.browseY - dy / distance * approach,
+        );
+        visitor.gridX = x;
+        visitor.gridY = y;
+        visitor.renderX = x;
+        visitor.renderY = y;
+        visitor.targetCol = visitor.browseX;
+        visitor.targetRow = visitor.browseY;
+        visitor.phase = MerchantPhase.entering;
+        visitor.isWalking = true;
+      }
+      if (visitor.hasCart || (focus == null && visitor.isGroupLeader)) {
+        focus = visitor;
+      }
+    }
+
+    final target = focus ?? _merchants.firstOrNull;
+    if (target != null && !_viewSize.isEmpty) {
+      _zoom = max(_zoom, 1.18);
+      _cameraCentered = true;
+      _centerCameraOnUV(
+        target.gridX - target.gridY,
+        target.gridX + target.gridY,
+        _viewSize,
+      );
+    }
+    _merchantTimer = _nextVisitorGap();
+    _writeVisitorCaptureReport();
+    return _merchants.length;
+  }
+
   /// Omen boyunca yoldan gelen kervanı karar açılırken pazar/han durağına
   /// ulaştırır. Karar kartı “geldi” dediğinde araba hâlâ harita kenarında olmaz.
   void _settleActiveCaravan() {
@@ -265,6 +321,17 @@ extension _SceneMerchant on _VillageSceneState {
     }
   }
 
+  /// Ticaret/karar bittiğinde arabanın ve bütün yolcuların aynı kısa pencere
+  /// içinde toparlanmasını sağlar. Grup üyeleri ayrı sayaçlarla doğsa da biri
+  /// meydanda unutulmaz.
+  void _wrapUpActiveCaravan() {
+    for (final m in _merchants) {
+      if (m.visitorKind == VisitorKind.caravan && !m.finished) {
+        m.wrapUpVisit();
+      }
+    }
+  }
+
   void _addVisitor({
     required VisitorKind kind,
     required int groupId,
@@ -281,14 +348,19 @@ extension _SceneMerchant on _VillageSceneState {
     bool hasCart = false,
     VillagerType visualType = VillagerType.merchant,
   }) {
-    // Girişte üst üste doğmasın, durakta da tek piksele yığılmasın. Küçük
-    // diyagonal ofset izometrik yolda doğal bir takip kolu üretir.
-    final spread = offset * 0.36;
-    final (mx, my) = _nearestLand(sx - spread, sy + spread);
-    final (tx, ty) = _nearestLand(
-      bx + (offset.isEven ? spread : -spread),
-      by + (offset.isEven ? -spread * 0.45 : spread * 0.45),
-    );
+    // Yolda art arda gelirler; mola yerinde ise arabanın tek ankrajına
+    // yığılmayıp etrafında okunur bir yarım halka kurarlar. Eski 0.36 tile
+    // farkı oyun ölçeğinde birkaç piksele düşüyor, üç insanı tek sprite
+    // gibi gösteriyordu.
+    final trail = offset * 0.52;
+    final (mx, my) = _nearestLand(sx - trail, sy + trail);
+    final (stopDx, stopDy) = switch (offset) {
+      0 => (0.0, 0.0), // araba
+      1 => (1.20, -0.50), // kervan başı: tezgâha yakın, sağ ön
+      2 => (0.25, 1.25), // yükçü: arabanın önünde
+      _ => (-0.90, 1.70), // yolcu: sol ön, arabanın arkasında kalmaz
+    };
+    final (tx, ty) = _nearestLand(bx + stopDx, by + stopDy);
     _merchants.add(
       MerchantEntity(
         startCol: mx,
@@ -340,7 +412,9 @@ extension _SceneMerchant on _VillageSceneState {
       );
     }
     final (cx, cy) = _villageCenter();
-    return _nearestLand(cx.toDouble(), cy.toDouble());
+    // Han/pazar yoksa arabayı meydanın tam göbeğine çakma; merkezdeki gündelik
+    // hayat görünür kalsın, kervan yol kenarında kısa mola versin.
+    return _nearestLand(cx + 4.0, cy + 2.5);
   }
 
   void _announceVisitor(VisitorKind kind, int groupId) {

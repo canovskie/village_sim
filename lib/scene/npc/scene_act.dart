@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// EYLEM YÜRÜTÜCÜSÜ — varış noktaları gerçek iş olur.
 ///
@@ -109,7 +109,11 @@ extension _SceneAct on _VillageSceneState {
   /// buraya karışmaz. [pose] `null` verilince duruş ve iş-aleti temizlenir
   /// (köylü yürümeye/başka işe geçti). İş villager'ları errand nesnesi taşımaz,
   /// dolayısıyla [prop] alanı tümüyle bu yardımcıya aittir.
-  void _setWorkPose(VillagerEntity v, ActPose? pose, {PropKind prop = PropKind.none}) {
+  void _setWorkPose(
+    VillagerEntity v,
+    ActPose? pose, {
+    PropKind prop = PropKind.none,
+  }) {
     if (v.act != null) return; // errand sahnesi sürüyor — dokunma
     // Suç sahnesi de sürüyor olabilir. Hırsız Act sistemini KULLANMAZ (suçun
     // kendi evre makinesi var) → `v.act` null'dır ve bu yardımcı onun çuvalını
@@ -135,7 +139,6 @@ extension _SceneAct on _VillageSceneState {
     final (dx, dy) = home is BuildingEntity
         ? _centerOf(home)
         : (v.gridX, v.gridY);
-
     switch (t.kind) {
       // ── KUYU — köyün en okunur mikro-sahnesi: eğil, doldur, taşı, boşalt.
       case BuildingType.well:
@@ -212,15 +215,18 @@ extension _SceneAct on _VillageSceneState {
 
       // ── MABET / MECLİS — durup bekleme (elde nesne yok, ama duruş var).
       case BuildingType.church:
+      case BuildingType.chapel:
       case BuildingType.townhall:
         return Act(
-            t.kind == BuildingType.church ? 'mabette' : 'meydanda duruyor', [
-          ActStep.goTo(t.x, t.y),
-          ActStep.face(t.x, t.y),
-          // Mabette dua / meydanda durma = stand (idle duruş). Bare work()
-          // varsayılanı labor'dı → dua ederken ritmik el işi mimikliyordu.
-          ActStep.work(4.0 + _rng.nextDouble() * 4.0, pose: ActPose.stand),
-        ]);
+          t.kind == BuildingType.townhall ? 'meydanda duruyor' : 'mabette',
+          [
+            ActStep.goTo(t.x, t.y),
+            ActStep.face(t.x, t.y),
+            // Mabette dua / meydanda durma = stand (idle duruş). Bare work()
+            // varsayılanı labor'dı → dua ederken ritmik el işi mimikliyordu.
+            ActStep.work(4.0 + _rng.nextDouble() * 4.0, pose: ActPose.stand),
+          ],
+        );
 
       // ── SAHNESİZ GİDİŞ — gezinti, komşu ziyareti. Uydurma iş yok.
       default:

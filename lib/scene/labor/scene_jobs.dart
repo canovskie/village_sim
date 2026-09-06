@@ -1,4 +1,4 @@
-part of '../main.dart';
+part of '../../main.dart';
 
 /// İŞ ATAMA + YÜRÜTME — anonim işçi avatarlarının (BuilderEntity/FarmFarmer/…)
 /// yerini alan sistem. Bina-doğumlu işleri artık GERÇEK köylüler yapar; her
@@ -677,8 +677,14 @@ extension _SceneJobs on _VillageSceneState {
           }
         }
         if (store != null) {
-          store.deliveryPulse = 1.0;
-          store.deliveryTally++;
+          final label = switch (box.type) {
+            ResourceBoxType.woodChunk => '+1 odun',
+            ResourceBoxType.stoneBox => '+1 taş',
+            ResourceBoxType.ironBox => '+1 demir',
+            ResourceBoxType.coalBox => '+1 kömür',
+            ResourceBoxType.foodBasket => '+${box.amount} yiyecek',
+          };
+          store.showDeliveryFeedback(_time, label);
         }
       },
       onCancelled: (wasPickedUp) {
@@ -796,11 +802,12 @@ extension _SceneJobs on _VillageSceneState {
         continue;
       }
       final job = v.job!;
+      final completedBefore = job.completedCycles;
       // ÂDET — köyün usulüne aykırı iş AĞIR ilerler (bkz. village_custom).
       // Tek çarpan, tek yer: panelde yazan uyarı ile burada uygulanan yavaşlama
       // aynı `judge()` çağrısından çıkar, iki liste yoktur.
       // Âdet çarpanı × ÜŞÜME cezası. Titreyen el iş görmez: kışın üşümesi
-      // dolan köylü yavaşlar (bkz. systems/winter.dart chillWorkPenalty).
+      // dolan köylü yavaşlar (bkz. systems/world/winter.dart chillWorkPenalty).
       // Eşikli — hafif üşüme kimseyi yavaşlatmaz, yoksa kış boyunca köy
       // sürekli ağır çekim olurdu.
       final cm =
@@ -837,6 +844,7 @@ extension _SceneJobs on _VillageSceneState {
         default:
           break;
       }
+      if (job.completedCycles > completedBefore) v.markWorkFinished();
       // TEMAS SESİ — karakter/alet/hedefin kullandığı aynı keyframe. Seçili ya
       // da takipteki köylü her vuruşta duyulur; uzak köy dokusu seyrek kalır.
       final audibleTool =
@@ -1013,7 +1021,7 @@ extension _SceneJobs on _VillageSceneState {
       job.progress = (job.timer / r.surface.buildDuration).clamp(0.0, 1.0);
       job.reportCycle(job.timer, r.surface.buildDuration);
       if (job.timer >= r.surface.buildDuration) {
-        r.completed = true;
+        r.markCompleted();
         // Eski kayıt/araç akışları yol emri verilirken temizlememiş
         // olabilir; yol sprite'ı zemini almadan önce son kez sahiplen.
         _clearDecorTile(r.col, r.row);
