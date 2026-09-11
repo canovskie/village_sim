@@ -74,8 +74,9 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
                 label: s.short,
                 badge: widget.badges[s] ?? 0,
                 selected: _sec == s,
-                guideId:
-                    s == LedgerSection.kanun ? GuideAnchors.sectionKanun : null,
+                guideId: s == LedgerSection.kanun
+                    ? GuideAnchors.sectionKanun
+                    : null,
                 onTap: () => setState(() => _sec = s),
               ),
           ],
@@ -88,10 +89,8 @@ class _LedgerBoardShellState extends State<_LedgerBoardShell> {
             // Varsayılan layout Stack'i ORTALAR ve çocuğu gevşek sınırlarla
             // ölçer; tahtanın her sütunu SINIRLI yükseklik istediği için
             // (BoardPager kaç satır sığdığını oradan hesaplar) expand şart.
-            layoutBuilder: (current, previous) => Stack(
-              fit: StackFit.expand,
-              children: [...previous, ?current],
-            ),
+            layoutBuilder: (current, previous) =>
+                Stack(fit: StackFit.expand, children: [...previous, ?current]),
             transitionBuilder: (child, anim) => FadeTransition(
               opacity: anim,
               child: SlideTransition(
@@ -167,7 +166,6 @@ extension LedgerMobileBoards on VillageLedger {
     );
   }
 
-
   // ── DİVAN ─────────────────────────────────────────────────────────────────
   //
   // İki sütun. Solda GÜNDEM (defterin işi: yanıt bekleyen meseleler), sağda
@@ -214,15 +212,17 @@ extension LedgerMobileBoards on VillageLedger {
               const minCouncil = 92.0;
               // Kart tahtada SABİT boylu (bkz. [_MassSeizureCard.compact]);
               // rezerv tahmin değil, kartın gerçek boyu.
-              final seizureH =
-                  massSeizure != null ? _MassSeizureCard.boardHeight + 8 : 0.0;
+              final seizureH = massSeizure != null
+                  ? _MassSeizureCard.boardHeight + 8
+                  : 0.0;
               final reserved =
                   seizureH + (seats.isNotEmpty ? minCouncil + 8 : 0.0);
               final rows = houses.isEmpty
                   ? 0
-                  : ((c.maxHeight - reserved - 8) / rowH)
-                        .floor()
-                        .clamp(0, houses.length < 4 ? houses.length : 4);
+                  : ((c.maxHeight - reserved - 8) / rowH).floor().clamp(
+                      0,
+                      houses.length < 4 ? houses.length : 4,
+                    );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -304,13 +304,22 @@ extension LedgerMobileBoards on VillageLedger {
         BoardCol(
           flex: 48,
           head: 'KÖYÜN KADEMESİ',
-          headTrailing: BoardCount('${charterTier + 1}/${QuestBook.tiers.length}'),
+          headTrailing: BoardCount(
+            '${charterTier + 1}/${QuestBook.tiers.length}',
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (int i = 0; i < QuestBook.tiers.length; i++) ...[
                 if (i > 0) const SizedBox(height: 5),
-                Expanded(child: _MiniTier(index: i, tier: QuestBook.tiers[i], doneCount: done.length, ledger: this)),
+                Expanded(
+                  child: _MiniTier(
+                    index: i,
+                    tier: QuestBook.tiers[i],
+                    doneCount: done.length,
+                    ledger: this,
+                  ),
+                ),
               ],
             ],
           ),
@@ -350,8 +359,11 @@ extension LedgerMobileBoards on VillageLedger {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const GameIcon(GameIconData.chevron,
-                          size: 11, color: AppUi.accentSoft),
+                      const GameIcon(
+                        GameIconData.chevron,
+                        size: 11,
+                        color: AppUi.accentSoft,
+                      ),
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
@@ -392,36 +404,47 @@ extension LedgerMobileBoards on VillageLedger {
     return ChronicleFilter(
       entries: chronicle,
       compact: true,
-      builder: (_, entries, chips) => BoardRow(
-        children: [
-          BoardCol(
-            head: milestoneCount > 0
-                ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
-                : 'BÜYÜK ANLAR',
-            headTrailing: BoardCount('${entries.length} kayıt'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                chips,
-                Expanded(
-                  child: BoardPager(
-                    count: entries.length,
-                    columns: 2,
-                    rowH: 42,
-                    rowGap: 6,
-                    emptyText: Voice.pick(const [
-                      'Defterin bu sayfası boş. Köy henüz anlatılacak bir şey yaşamadı.',
-                      'Henüz yazılacak bir şey yok — ilk büyük gün gelmedi.',
-                      'Kronik sayfası temiz. Bu da bir başlangıç.',
-                    ], seed),
-                    itemBuilder: (_, i) => _MiniChronicle(entry: entries[i]),
+      builder: (_, entries, chips) {
+        final traces = recentDecisionTraces(chronicle);
+        final shown = entries.length == chronicle.length
+            ? <ChronicleEntry>[
+                ...traces,
+                ...entries.where((e) => !traces.contains(e)),
+              ]
+            : entries;
+        return BoardRow(
+          children: [
+            BoardCol(
+              head: traces.isNotEmpty
+                  ? 'KARARIN İZİ · GÜNCE'
+                  : milestoneCount > 0
+                  ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
+                  : 'BÜYÜK ANLAR',
+              headTrailing: BoardCount('${shown.length} kayıt'),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  chips,
+                  Expanded(
+                    child: BoardPager(
+                      count: shown.length,
+                      columns: 2,
+                      rowH: 54,
+                      rowGap: 5,
+                      emptyText: Voice.pick(const [
+                        'Defterin bu sayfası boş. Köy henüz anlatılacak bir şey yaşamadı.',
+                        'Henüz yazılacak bir şey yok — ilk büyük gün gelmedi.',
+                        'Kronik sayfası temiz. Bu da bir başlangıç.',
+                      ], seed),
+                      itemBuilder: (_, i) => _MiniChronicle(entry: shown[i]),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 }
@@ -450,8 +473,12 @@ class _MiniMatter extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
       child: Row(
         children: [
-          SemanticIcon(m.icon,
-              size: 14, color: c, fallback: GameIconData.scroll),
+          SemanticIcon(
+            m.icon,
+            size: 14,
+            color: c,
+            fallback: GameIconData.scroll,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -621,8 +648,12 @@ class _MiniTier extends StatelessWidget {
         children: [
           Opacity(
             opacity: passed || current ? 1 : 0.45,
-            child: SemanticIcon(tier.icon,
-                size: 13, color: c, fallback: GameIconData.crown),
+            child: SemanticIcon(
+              tier.icon,
+              size: 13,
+              color: c,
+              fallback: GameIconData.crown,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -660,8 +691,11 @@ class _MiniTier extends StatelessWidget {
           if (current)
             Text('ŞİMDİ', style: AppUi.label.copyWith(fontSize: 8, color: c))
           else
-            GameIcon(passed ? GameIconData.star : GameIconData.door,
-                size: 10, color: c),
+            GameIcon(
+              passed ? GameIconData.star : GameIconData.door,
+              size: 10,
+              color: c,
+            ),
         ],
       ),
     );
@@ -682,8 +716,11 @@ class _MiniQuest extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       child: Row(
         children: [
-          GameIcon(questGlyph(state.quest.id),
-              size: 12, color: on ? AppUi.accent : AppUi.textLo),
+          GameIcon(
+            questGlyph(state.quest.id),
+            size: 12,
+            color: on ? AppUi.accent : AppUi.textLo,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -699,7 +736,10 @@ class _MiniQuest extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               'SIRADAKİ',
-              style: AppUi.label.copyWith(fontSize: 7.5, color: AppUi.accentSoft),
+              style: AppUi.label.copyWith(
+                fontSize: 7.5,
+                color: AppUi.accentSoft,
+              ),
             ),
           ],
         ],
@@ -726,8 +766,12 @@ class _MiniChronicle extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: SemanticIcon(e.icon,
-                size: 13, color: AppUi.textLo, fallback: GameIconData.scroll),
+            child: SemanticIcon(
+              e.icon,
+              size: 13,
+              color: AppUi.textLo,
+              fallback: GameIconData.scroll,
+            ),
           ),
           const SizedBox(width: 7),
           Expanded(
@@ -742,10 +786,10 @@ class _MiniChronicle extends StatelessWidget {
                         color: AppUi.textLo,
                       ),
                     ),
-                  TextSpan(text: e.text),
+                  TextSpan(text: e.trace?.ledgerLine ?? e.text),
                 ],
               ),
-              maxLines: 2,
+              maxLines: e.trace == null ? 2 : 3,
               overflow: TextOverflow.ellipsis,
               style: e.milestone
                   ? AppUi.body.copyWith(

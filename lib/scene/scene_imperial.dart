@@ -510,6 +510,22 @@ extension _SceneImperial on _VillageSceneState {
     // ilişkinin bozulduğu zaten heyetin duruşunda ve komutanın sözünde okunuyor,
     // ayrı bir film istemiyor.
     final firstEver = _imperialVisits == 0;
+    if (firstEver) {
+      final shift = switch (_foundingChoiceId) {
+        'seed' => 0.02,
+        'tools' => 0.04,
+        'people' => -0.02,
+        _ => 0.0,
+      };
+      _imperialFavor = (_imperialFavor + shift).clamp(0.0, 1.0);
+      _chronicle(switch (_foundingChoiceId) {
+        'seed' => 'İlk heyet dolu azık sandığını gördü; köyü tedbirli saydı.',
+        'tools' => 'İlk heyet alet sandığını gördü; köyü düzenli saydı.',
+        'people' =>
+          'İlk heyet kalabalık kafileyi saydı; defteri ihtiyatla açtı.',
+        _ => 'İlk heyet kuruluş yükünü tarttı; tarafsız kaldı.',
+      }, icon: '⚔️');
+    }
     final conscriptFilm = demand.isConscript && _impFilmsShown.add('conscript');
     final grudgeFilm = _impGrudge && _impFilmsShown.add('grudge');
     final cinematic = firstEver || conscriptFilm || grudgeFilm;

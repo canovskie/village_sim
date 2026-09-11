@@ -579,6 +579,7 @@ class _CutscenePlayerState extends State<CutscenePlayer>
   Widget _caravanChoice() {
     final touch = useTouchUi(context);
     final screen = MediaQuery.sizeOf(context);
+    final wideTouch = touch && screen.width >= 700;
     return Positioned.fill(
       child: SafeArea(
         child: Padding(
@@ -586,10 +587,11 @@ class _CutscenePlayerState extends State<CutscenePlayer>
           child: Center(
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: touch ? 540 : 760,
+                maxWidth: touch ? screen.width - 24 : 760,
                 maxHeight: touch ? screen.height - 24 : 520,
               ),
               child: Container(
+                height: touch ? screen.height - 24 : null,
                 padding: EdgeInsets.fromLTRB(
                   touch ? 14 : 18,
                   touch ? 14 : 18,
@@ -605,8 +607,20 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                   boxShadow: AppUi.softShadow,
                 ),
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: touch ? MainAxisSize.max : MainAxisSize.min,
                   children: [
+                    Text(
+                      _shot.lines.last.text,
+                      maxLines: touch ? 2 : 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: AppUi.body.copyWith(
+                        color: AppUi.textMid,
+                        fontSize: touch ? 12 : 13,
+                        height: 1.25,
+                      ),
+                    ),
+                    SizedBox(height: touch ? 6 : 10),
                     Text(
                       'ARABAYA NE YÜKLEDİK?',
                       style: AppUi.label.copyWith(
@@ -620,19 +634,20 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                       style: AppUi.body.copyWith(color: AppUi.textMid),
                     ),
                     const SizedBox(height: 12),
-                    if (touch)
-                      SizedBox(
-                        // Column'un yüksekliği içerikten türediği için burada
-                        // Expanded kullanılamaz: telefonda kartlar sonsuz
-                        // yüksekliğe açılıp başlık ve alt metinle çakışıyordu.
-                        height: (screen.height - 24).clamp(260.0, 420.0),
-                        child: PageView.builder(
-                          itemCount: FoundingChoice.all.length,
-                          itemBuilder: (_, index) =>
-                              _caravanCard(FoundingChoice.all[index]),
+                    if (wideTouch)
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final c in FoundingChoice.all) ...[
+                              Expanded(child: _caravanCard(c)),
+                              if (c != FoundingChoice.all.last)
+                                const SizedBox(width: 6),
+                            ],
+                          ],
                         ),
                       )
-                    else
+                    else if (!touch)
                       IntrinsicHeight(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -644,11 +659,19 @@ class _CutscenePlayerState extends State<CutscenePlayer>
                             ],
                           ],
                         ),
+                      )
+                    else
+                      Expanded(
+                        child: PageView.builder(
+                          itemCount: FoundingChoice.all.length,
+                          itemBuilder: (_, index) =>
+                              _caravanCard(FoundingChoice.all[index]),
+                        ),
                       ),
                     if (touch) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Kartı yana kaydır · Birini seç',
+                        'Yüklerden birini seç',
                         style: AppUi.label.copyWith(color: AppUi.textLo),
                       ),
                     ],

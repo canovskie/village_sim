@@ -17,8 +17,10 @@ part of '../main.dart';
 extension _SceneWedding on _VillageSceneState {
   /// Kur taraması/jest throttle'ı (sn) — cozy, yavaş.
   static const double _kWeddingScan = 6.0;
+
   /// Kur olgunlaşma süresi (oyun günü) — bu kadar görünür kur sonrası dilekçe.
   static const double _kCourtshipDays = 0.8;
+
   /// Kur eşleşmesinde yaş-yakınlığı YUMUŞAK eğilimi: aday ağırlığı yaş farkıyla
   /// exp(-fark/ölçek) sönimler. Ölçek büyükse eğilim zayıf. Yetişkinlik bracket'i
   /// ~9.5 gün → 3.0 ölçek "yakın çift olası, uç fark nadir ama mümkün" verir.
@@ -111,8 +113,11 @@ extension _SceneWedding on _VillageSceneState {
     _courtshipTimer = _kCourtshipDays * kGameDaySeconds;
     w.feel(NpcEmotion.love, 3.0, moodDelta: 0.04);
     m.feel(NpcEmotion.love, 3.0, moodDelta: 0.04);
-    final ctx = _voice(w,
-        other: m, seed: _stableSeed('kur${w.name}${m.name}', _dayCount));
+    final ctx = _voice(
+      w,
+      other: m,
+      seed: _stableSeed('kur${w.name}${m.name}', _dayCount),
+    );
     _chronicle(Voice.say(_kCourtshipChroniclePool, ctx), icon: '💞');
     _showNotification(Voice.say(_kCourtshipPool, ctx));
   }
@@ -217,9 +222,13 @@ extension _SceneWedding on _VillageSceneState {
       _petitionOverdueTimer = 0;
       _petitionTimer = _petitionInterval();
     });
-    _showNotification('💔 Düğün dağıldı. Masadaki dilekçenin artık sahibi yok.');
-    _chronicle('Beklenen nikâh kıyılamadı. Çiftten geriye söz kaldı.',
-        icon: '💔');
+    _showNotification(
+      '💔 Düğün dağıldı. Masadaki dilekçenin artık sahibi yok.',
+    );
+    _chronicle(
+      'Beklenen nikâh kıyılamadı. Çiftten geriye söz kaldı.',
+      icon: '💔',
+    );
   }
 
   /// Görünür kur jesti (throttle'lı, abartısız): bakışma + kalp + ara sıra dans.
@@ -270,11 +279,16 @@ extension _SceneWedding on _VillageSceneState {
       v.lookToward(cc.toDouble(), cr.toDouble());
       v.feel(NpcEmotion.love, 3.0, moodDelta: 0.03);
     }
-    _showNotification(Voice.say(
+    _showNotification(
+      Voice.say(
         _kBetrothalPool,
-        _voice(bride,
-            other: groom,
-            seed: _stableSeed('nişan${bride.name}${groom.name}', _dayCount))));
+        _voice(
+          bride,
+          other: groom,
+          seed: _stableSeed('nişan${bride.name}${groom.name}', _dayCount),
+        ),
+      ),
+    );
   }
 
   /// Dilekçe çözüldü → düğünü dünyada SAHNELE. [grand] coşkulu (sinematik + büyük
@@ -290,7 +304,9 @@ extension _SceneWedding on _VillageSceneState {
 
     const dur = kGameDaySeconds * 0.5;
     AudioManager.instance.playSfx(Sfx.crowdApplause);
-    _activeFx.add(ActiveFx(const EventEffect(fx: EventFx.wedding, duration: dur), dur));
+    _activeFx.add(
+      ActiveFx(const EventEffect(fx: EventFx.wedding, duration: dur), dur),
+    );
     _feelVillage(NpcEmotion.love, 14, grand ? 0.18 : 0.12);
 
     VillagerEntity? bride, groom;
@@ -308,11 +324,18 @@ extension _SceneWedding on _VillageSceneState {
       final ctx = _voice(bride, other: groom, seed: seed);
       _chronicle(Voice.say(_kWedChroniclePool, ctx), icon: '💍');
       _award('first_wedding', 'Köyün ilk düğünü kutlandı', '💍');
-      _lifeEvent(bride, Voice.say(_kWedLifePool, ctx), icon: '💍',
-          milestone: true);
       _lifeEvent(
-          groom, Voice.say(_kWedLifePool, _voice(groom, other: bride, seed: seed)),
-          icon: '💍', milestone: true);
+        bride,
+        Voice.say(_kWedLifePool, ctx),
+        icon: '💍',
+        milestone: true,
+      );
+      _lifeEvent(
+        groom,
+        Voice.say(_kWedLifePool, _voice(groom, other: bride, seed: seed)),
+        icon: '💍',
+        milestone: true,
+      );
     }
 
     // Eskiden coşkulu düğün tam ekran 2B sinematikle açılırdı. Kaldırıldı:
@@ -330,22 +353,35 @@ extension _SceneWedding on _VillageSceneState {
   /// Dünya-içi alay: gelin & damat ateşin onur konuğu (yan yana, kalp baloncuğu),
   /// köy çevrede toplanır, birkaç çift halaya durur.
   void _stageWeddingProcession(
-      VillagerEntity? bride, VillagerEntity? groom, double dur,
-      {required bool grand}) {
+    VillagerEntity? bride,
+    VillagerEntity? groom,
+    double dur, {
+    required bool grand,
+  }) {
     final fire = _firepitBuilding;
     if (fire == null) return;
 
     // Onur konukları — ateşe taşınır (sit), kalpli baloncuk + sevinç.
     for (final v in [bride, groom]) {
       if (v == null || v.isSleeping || v.isDying) continue;
-      final claim =
-          _anchorSystem.claimNearestFirepitSit(v.gridX, v.gridY, v, maxDist: 999);
+      final claim = _anchorSystem.claimNearestFirepitSit(
+        v.gridX,
+        v.gridY,
+        v,
+        maxDist: 999,
+      );
       if (claim != null) {
         final (point, slot) = claim;
         final cx = point.building.col + point.building.cols / 2.0;
         final cy = point.building.row + point.building.rows / 2.0;
         v.assignSit(
-            slot.col, slot.row, cx, cy, dur, () => point.release(slot, v));
+          slot.col,
+          slot.row,
+          cx,
+          cy,
+          dur,
+          () => point.release(slot, v),
+        );
       }
       v.feel(NpcEmotion.love, dur, moodDelta: 0.10);
     }
@@ -354,17 +390,20 @@ extension _SceneWedding on _VillageSceneState {
     _gatherAtFire(dur, max: grand ? 8 : 5);
 
     // Birkaç çift halaya dursun (coşkuluda daha çok).
-    final idle = _villagers
-        .where((v) =>
-            !v.isInsideBuilding &&
-            !v.isSleeping &&
-            v.hasProfession &&
-            !v.isCarrying &&
-            !v.sitClaimed &&
-            !v.isDying &&
-            v.activity == VillagerActivity.none)
-        .toList()
-      ..shuffle(_rng);
+    final idle =
+        _villagers
+            .where(
+              (v) =>
+                  !v.isInsideBuilding &&
+                  !v.isSleeping &&
+                  v.hasProfession &&
+                  !v.isCarrying &&
+                  !v.sitClaimed &&
+                  !v.isDying &&
+                  v.activity == VillagerActivity.none,
+            )
+            .toList()
+          ..shuffle(_rng);
     int danced = 0;
     final maxDance = grand ? 4 : 2;
     for (final v in idle) {

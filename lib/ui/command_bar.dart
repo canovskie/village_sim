@@ -11,7 +11,7 @@ import 'mobile_ui.dart';
 /// alt araç çubuğu) TEK bir hatta toplar:
 ///   • SOL  — inşa paleti (kategori + kartlar) → [buildSegment]
 ///   • ORTA — seçili şeyin (bina/köylü) bağlam eylemleri → [context] (yoksa ipucu)
-///   • SAĞ  — derin menü kapıları (Defter / Divan / Nüfus)
+///   • SAĞ  — tek derin menü kapısı (Defter; Divan/Nüfus içeride bölüm)
 ///
 /// Üst HUD sade kalır; görev takibi ayrı ince [QuestTracker] (sağ üst). Böylece
 /// ekranda sürekli yalnız: HUD + görev takipçisi + tek alt çubuk kalır.
@@ -134,18 +134,6 @@ class _CommandBarState extends State<CommandBar> {
                     onTap: widget.onDefter,
                   ),
                 ),
-                const SizedBox(width: 4),
-                _MenuButton(
-                  icon: GameIconData.bank,
-                  label: 'Divan',
-                  onTap: widget.onDivan,
-                ),
-                const SizedBox(width: 4),
-                _MenuButton(
-                  icon: GameIconData.people,
-                  label: 'Nüfus',
-                  onTap: widget.onRoster,
-                ),
               ],
             ),
           ),
@@ -230,18 +218,6 @@ class _CommandBarState extends State<CommandBar> {
                             compact: true,
                             onTap: widget.onDefter,
                           ),
-                        ),
-                        _MenuButton(
-                          icon: GameIconData.bank,
-                          label: 'Divan',
-                          compact: true,
-                          onTap: widget.onDivan,
-                        ),
-                        _MenuButton(
-                          icon: GameIconData.people,
-                          label: 'Nüfus',
-                          compact: true,
-                          onTap: widget.onRoster,
                         ),
                       ],
                     ),
@@ -408,6 +384,9 @@ class CommandContext extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final compact = useCompactGameUi(context);
+    final showActionLabels = compact
+        ? actions.length == 1
+        : MediaQuery.sizeOf(context).width >= 1100;
     return Row(
       children: [
         // Başlık + (açıklama VEYA özet) — kalan alanı doldurur, metin sarar.
@@ -505,7 +484,7 @@ class CommandContext extends StatelessWidget {
             child: _ActionButton(
               action: actions[i],
               primary: i == 0,
-              showLabel: compact && actions.length == 1,
+              showLabel: showActionLabels,
             ),
           ),
         ],
@@ -547,7 +526,8 @@ class _ActionButtonState extends State<_ActionButton> {
     final disabled = a.onTap == null;
     final hot = _hover && !disabled;
     final compact = useCompactGameUi(context);
-    final labelled = compact && widget.showLabel;
+    final labelled = widget.showLabel;
+    final iconOnly = !labelled;
     // Sakin (de-Flash): birincil derin ember tonal, ikincil grafit; ışıma yok.
     final Color bg;
     final Color border;
@@ -570,12 +550,14 @@ class _ActionButtonState extends State<_ActionButton> {
         child: Opacity(
           opacity: disabled ? 0.45 : 1,
           child: Container(
-            width: compact && !labelled ? 44 : null,
+            width: iconOnly ? (compact ? 44 : 36) : null,
             height: compact ? 44 : null,
             constraints: compact
                 ? const BoxConstraints(minWidth: 44, minHeight: 44)
+                : iconOnly
+                ? const BoxConstraints(minWidth: 36, minHeight: 36)
                 : null,
-            padding: compact && !labelled
+            padding: iconOnly
                 ? EdgeInsets.zero
                 : EdgeInsets.symmetric(
                     horizontal: compact ? 10 : 13,
@@ -591,7 +573,7 @@ class _ActionButtonState extends State<_ActionButton> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 GameIcon(a.icon, size: 14, color: tint),
-                if (!compact || labelled) ...[
+                if (labelled) ...[
                   const SizedBox(width: 7),
                   Text(
                     a.label,
@@ -607,7 +589,7 @@ class _ActionButtonState extends State<_ActionButton> {
         ),
       ),
     );
-    return compact ? Tooltip(message: a.label, child: button) : button;
+    return iconOnly ? Tooltip(message: a.label, child: button) : button;
   }
 }
 
@@ -773,8 +755,8 @@ class QuestTracker extends StatelessWidget {
       // nadir uzun görevlerde kartın içi kayar, dünya ve komutlar kapanmaz.
       final screen = MediaQuery.sizeOf(context);
       final top = MobileUi.top(context) + MobileUi.barH + MobileUi.gap;
-      final bottom = MobileUi.bottom(context) +
-          MobileUi.actionH + MobileUi.gap * 2;
+      final bottom =
+          MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap * 2;
       final maxH = math.max(MobileUi.tap, screen.height - top - bottom);
       return MobileSurface(
         padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -806,14 +788,19 @@ class QuestTracker extends StatelessWidget {
                         Text(
                           '$done/$total',
                           style: AppUi.number.copyWith(
-                              fontSize: 11, color: AppUi.sage),
+                            fontSize: 11,
+                            color: AppUi.sage,
+                          ),
                         ),
                         if (hint != null) ...[
                           const SizedBox(width: 6),
                           Transform.rotate(
                             angle: open ? -1.5708 : 1.5708,
-                            child: const GameIcon(GameIconData.chevron,
-                                size: 13, color: AppUi.textLo),
+                            child: const GameIcon(
+                              GameIconData.chevron,
+                              size: 13,
+                              color: AppUi.textLo,
+                            ),
                           ),
                         ],
                       ],
@@ -855,7 +842,11 @@ class QuestTracker extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               child: Row(
                 children: [
-                  const GameIcon(GameIconData.scroll, size: 12, color: AppUi.accent),
+                  const GameIcon(
+                    GameIconData.scroll,
+                    size: 12,
+                    color: AppUi.accent,
+                  ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
@@ -907,8 +898,11 @@ class QuestTracker extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 2),
                       child: Transform.rotate(
                         angle: open ? -1.5708 : 1.5708,
-                        child: const GameIcon(GameIconData.chevron,
-                            size: 12, color: AppUi.textLo),
+                        child: const GameIcon(
+                          GameIconData.chevron,
+                          size: 12,
+                          color: AppUi.textLo,
+                        ),
                       ),
                     ),
                   ],

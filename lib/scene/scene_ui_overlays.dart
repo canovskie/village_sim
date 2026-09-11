@@ -63,7 +63,32 @@ extension _SceneUiOverlays on _VillageSceneState {
     final compact = useCompactGameUi(context);
     final toast = Center(
       child: AppReveal(
-        child: AppChip(label: _notification!, color: AppUi.accent, solid: true),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            AppChip(label: _notification!, color: AppUi.accent, solid: true),
+            if (_notificationAction != null && _notificationActionLabel != null)
+              AppButton(
+                label: _notificationActionLabel!,
+                icon: GameIconData.eye,
+                height: compact ? 44 : 36,
+                kind: AppButtonKind.filled,
+                onTap: () {
+                  final action = _notificationAction;
+                  setStateHere(() {
+                    _notification = null;
+                    _notificationActionLabel = null;
+                    _notificationAction = null;
+                    _notifId++;
+                  });
+                  action?.call();
+                },
+              ),
+          ],
+        ),
       ),
     );
     if (!compact) {

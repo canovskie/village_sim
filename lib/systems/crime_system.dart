@@ -19,20 +19,33 @@ library;
 /// Suçun ağırlığı — hafif suç serbest doğar, ağır suç SEBEP ister.
 enum CrimeSeverity { petty, grave }
 
+/// Suç bildirimindeki İzle eyleminin saf hedef seçimi. Fail ancak kimliği
+/// biliniyor ve hâlâ dünyadaysa hedef olur; aksi hâlde olay yeri korunur.
+({double x, double y}) crimeWatchTarget({
+  required bool culpritKnown,
+  required bool culpritAvailable,
+  required double culpritX,
+  required double culpritY,
+  required double sceneX,
+  required double sceneY,
+}) => culpritKnown && culpritAvailable
+    ? (x: culpritX, y: culpritY)
+    : (x: sceneX, y: sceneY);
+
 /// Köyde işlenebilen 10 suç.
 enum CrimeKind {
   // ── Hafif (gündelik) ──────────────────────────────────────────────────────
-  theft,        // Hırsızlık — ambardan/depodan mal aşırma
-  pickpocket,   // Yankesicilik — bir köylünün kesesini kesme
-  vandalism,    // Vandalizm — bir binaya zarar verme (tamir odun yer)
-  poaching,     // Kaçak avlanma — sürüden hayvan çalma/kesme
-  fraud,        // Dolandırıcılık — tartıda hile, köyün kesesinden altın aşırma
-  slander,      // İftira — bir köylünün adını lekeleme (küslük + hane hâli ↓)
+  theft, // Hırsızlık — ambardan/depodan mal aşırma
+  pickpocket, // Yankesicilik — bir köylünün kesesini kesme
+  vandalism, // Vandalizm — bir binaya zarar verme (tamir odun yer)
+  poaching, // Kaçak avlanma — sürüden hayvan çalma/kesme
+  fraud, // Dolandırıcılık — tartıda hile, köyün kesesinden altın aşırma
+  slander, // İftira — bir köylünün adını lekeleme (küslük + hane hâli ↓)
   // ── Ağır (sebebe bağlı) ───────────────────────────────────────────────────
-  arson,        // Kundakçılık — bina ateşe verilir
-  assault,      // Yaralama — kurban ağır yaralanır/sakat kalır
-  abduction,    // Adam kaçırma — kurban köyden götürülür (fidye)
-  assassination,// Suikast — kurban öldürülür (kan davası doğurabilir)
+  arson, // Kundakçılık — bina ateşe verilir
+  assault, // Yaralama — kurban ağır yaralanır/sakat kalır
+  abduction, // Adam kaçırma — kurban köyden götürülür (fidye)
+  assassination, // Suikast — kurban öldürülür (kan davası doğurabilir)
 }
 
 /// Bir suç türünün tanımı: kimliği, ağırlığı ve köyün ağzından metin havuzları.
@@ -42,23 +55,30 @@ enum CrimeKind {
 /// Yer tutucular: `{ad}` fail, `{öteki}` kurban, `{yer}` olay yeri, `{köy}`.
 class CrimeDef {
   final CrimeKind kind;
+
   /// Suçun adı — dilekçe/kronik içinde geçer ("hırsızlık").
   final String label;
+
   /// Aksan baloncuğu ikonu (eylem anında failin üstünde kısa görünür).
   final String icon;
   final CrimeSeverity severity;
+
   /// Havuz içi göreli ağırlık (aynı ağırlık sınıfı içinde).
   final double weight;
+
   /// Eylemin hedefte sürdüğü süre (sn) — oyuncunun suçüstü yakalama penceresi.
   final double actSeconds;
 
   /// KÖYÜN SEZGİSİ — suç başlarken çıkan, FAİLİ İSİMLENDİRMEYEN ipucu. Yalnız
   /// yeri söyler; oyuncu bakıp faili kendi bulur. `{yer}` doldurulur.
   final List<String> hintPool;
+
   /// Suç tamamlandı, fail kaçtı (yakalanmadı) — köy zararı fark eder.
   final List<String> deedPool;
+
   /// Kronik (fail meçhul) — kuru vakanüvis dili, isim YOK.
   final List<String> annalPool;
+
   /// Kronik (fail suçüstü yakalandı) — `{ad}` fail.
   final List<String> caughtAnnalPool;
 
@@ -83,7 +103,6 @@ abstract final class CrimeSystem {
     // ════════════════════════════════════════════════════════════════════════
     // HAFİF SUÇLAR — yoksunluk/mutsuzluk besler, sebep şartı yok
     // ════════════════════════════════════════════════════════════════════════
-
     CrimeKind.theft: CrimeDef(
       kind: CrimeKind.theft,
       label: 'hırsızlık',
@@ -261,7 +280,6 @@ abstract final class CrimeSystem {
     // ════════════════════════════════════════════════════════════════════════
     // AĞIR SUÇLAR — SEBEP ister (kan davası / kin / sefalet / dip moral)
     // ════════════════════════════════════════════════════════════════════════
-
     CrimeKind.arson: CrimeDef(
       kind: CrimeKind.arson,
       label: 'kundakçılık',

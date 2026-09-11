@@ -21,9 +21,9 @@ final GlobalKey _boundaryKey = GlobalKey();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  kCaptureMode = true;     // açılış sinematiğini atla
+  kCaptureMode = true; // açılış sinematiğini atla
   kCaptureShowcase = true; // showcase köyü (depo + ağıl + sürü + muhafız)
-  kCaptureCrime = true;    // suç test yatağı: olasılık kapısını atla
+  kCaptureCrime = true; // suç test yatağı: olasılık kapısını atla
   // NİZAM_SEAL=1 → kılıç kolu baştan mühürlü (Kürek Cezası + Hane Sicili testi).
   kCaptureSealNizam = (Platform.environment['NIZAM_SEAL'] ?? '0') == '1';
   // NO_GUARD=1 → muhafızsız köy: suç tamamlanıp KAÇAR. Registry yoksa şüphe
@@ -37,13 +37,21 @@ Future<void> main() async {
   //                            // şüphe birikir, asayiş dilekçesi gelir
   kCaptureZoom = 0.85;
 
-  runApp(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: RepaintBoundary(
-      key: _boundaryKey,
-      child: const VillageScene(),
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: RepaintBoundary(
+        key: _boundaryKey,
+        // Suç döngüsü ateş, nüfus ve muhafız ister. Boş yeni-oyun sahnesi
+        // kuruluş öğreticisinde kaldığı için harness 75 saniye boyunca hiç suç
+        // kuramıyordu; referans köy bu önkoşulları deterministik olarak sağlar.
+        child: const VillageScene(
+          referenceVillage: true,
+          slotId: 'crime-capture',
+        ),
+      ),
     ),
-  ));
+  );
 
   while (!kCaptureSceneReady) {
     await Future<void>.delayed(const Duration(milliseconds: 200));
@@ -51,13 +59,20 @@ Future<void> main() async {
 
   // Suç döngüsünü izle — evreler dönerken telemetriyi sık bas (evre geçişleri
   // birkaç saniye sürer; 3 sn'lik örnekleme hepsini yakalar).
+  var watchCaptured = false;
   for (int s = 3; s <= 75; s += 3) {
     await Future<void>.delayed(const Duration(seconds: 3));
     stdout.writeln('CRIME@${s}s  $kCaptureCrimeReport');
+    if (!watchCaptured && kCaptureCrimeReport.contains('fail=')) {
+      watchCaptured = await captureBoundary(
+        _boundaryKey,
+        '/tmp/crime_watch.png',
+        pixelRatio: 1.5,
+      );
+    }
   }
   stdout.writeln('NIZAM_SEAL=${kCaptureSealNizam ? 1 : 0}');
 
   await captureBoundary(_boundaryKey, '/tmp/crime.png', pixelRatio: 1.5);
   exit(0);
 }
-

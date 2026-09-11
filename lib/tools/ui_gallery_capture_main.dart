@@ -180,21 +180,77 @@ final _demoQuests = QuestBook.activeQuests(
 );
 
 const _demoChronicle = <ChronicleEntry>[
-  ChronicleEntry(day: 1, icon: '🔥', text: 'Ateş yakıldı, köy kuruldu.'),
+  ChronicleEntry(
+    day: 1,
+    icon: '🔥',
+    text: 'Alet yüklü kafile ateşi yaktı.',
+    kind: ChronicleKind.decision,
+    trace: DecisionTrace(
+      sourceDecision: 'Aletler yüklendi',
+      firstOutcome: 'İlk dam çabuk kalktı',
+      affected: 'Demirhan Hanesi öne çıktı',
+      laterOutcome: 'Ustaların sözü ağırlaştı',
+      reckoningAxis: 'Kuruluş yemini',
+      weight: 2,
+    ),
+  ),
   ChronicleEntry(
     day: 9,
     icon: '💍',
     text: 'Ayşe ile Kemal ateş başında evlendi.',
     milestone: true,
+    kind: ChronicleKind.decision,
+    trace: DecisionTrace(
+      sourceDecision: 'Nikâha köy şahit edildi',
+      firstOutcome: 'İki ocak birleşti',
+      affected: 'Demirhan Hanesi büyüdü',
+      laterOutcome: 'Birlik kuvvet buldu',
+      reckoningAxis: 'Hane sadakati',
+    ),
   ),
-  ChronicleEntry(day: 15, icon: '📜', text: 'Komşuluk beratı mühürlendi.'),
+  ChronicleEntry(
+    day: 15,
+    icon: '📜',
+    text: 'Komşuluk beratı mühürlendi.',
+    kind: ChronicleKind.decision,
+    trace: DecisionTrace(
+      sourceDecision: 'Komşuluk beratı mühürlendi',
+      firstOutcome: 'Ortak ambar açıldı',
+      affected: 'Aksoy Hanesi pay aldı',
+      laterOutcome: 'Kıtlık sofrası bölüşüldü',
+      reckoningAxis: 'Birlik',
+      weight: 2,
+    ),
+  ),
   ChronicleEntry(
     day: 21,
     icon: '⚔',
     text: 'Aksoy ile Karaca arasında kan davası başladı.',
     milestone: true,
+    kind: ChronicleKind.decision,
+    trace: DecisionTrace(
+      sourceDecision: 'Kan bedeli reddedildi',
+      firstOutcome: 'Karaca Hanesi küstü',
+      affected: 'İki hane birbirinden çekildi',
+      laterOutcome: 'Harman eli azaldı',
+      reckoningAxis: 'Adalet',
+      weight: 3,
+    ),
   ),
-  ChronicleEntry(day: 26, icon: '🌾', text: 'İlk harman kaldırıldı.'),
+  ChronicleEntry(
+    day: 26,
+    icon: '🌾',
+    text: 'İlk harman köy adına kaldırıldı.',
+    kind: ChronicleKind.decision,
+    trace: DecisionTrace(
+      sourceDecision: 'Harman müşterek sayıldı',
+      firstOutcome: 'Kiler doldu',
+      affected: 'Yoksul ocaklar kışı gördü',
+      laterOutcome: 'Birlik yeniden güçlendi',
+      reckoningAxis: 'Ortak emek',
+      weight: 2,
+    ),
+  ),
 ];
 
 const _agenda = <DivanMatter>[

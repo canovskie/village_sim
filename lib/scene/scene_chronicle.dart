@@ -24,25 +24,42 @@ extension _SceneChronicle on _VillageSceneState {
   /// bir kararı yazıyorsan [ChronicleKind.decision], köyün başına GELEN bir şeyi
   /// yazıyorsan [ChronicleKind.crisis] geç — yoksa satır süzgeçte yanlış rafa
   /// düşer ve "ne karar vermiştim" listesi eksik kalır.
-  void _chronicle(String text,
-      {String icon = '📜',
-      bool milestone = false,
-      ChronicleKind kind = ChronicleKind.life}) {
-    _storyLog.add(ChronicleEntry(
+  void _chronicle(
+    String text, {
+    String icon = '📜',
+    bool milestone = false,
+    ChronicleKind kind = ChronicleKind.life,
+    DecisionTrace? trace,
+  }) {
+    _storyLog.add(
+      ChronicleEntry(
         day: _dayCount,
         icon: icon,
         text: text,
         milestone: milestone,
-        kind: kind));
+        kind: kind,
+        trace: trace,
+      ),
+    );
   }
 
   /// Bir KÖYLÜNÜN kişisel yaşam öyküsüne olay ekler — gün damgalı. Panelde
   /// zaman çizelgesi olarak okunur (bireye bağlanma). Köy-çapı `_chronicle`'ın
   /// birey karşılığı.
-  void _lifeEvent(VillagerEntity v, String text,
-      {String icon = '•', bool milestone = false}) {
-    v.life.add(ChronicleEntry(
-        day: _dayCount, icon: icon, text: text, milestone: milestone));
+  void _lifeEvent(
+    VillagerEntity v,
+    String text, {
+    String icon = '•',
+    bool milestone = false,
+  }) {
+    v.life.add(
+      ChronicleEntry(
+        day: _dayCount,
+        icon: icon,
+        text: text,
+        milestone: milestone,
+      ),
+    );
   }
 
   /// Yaşam-evresi geçişlerini yakalar (lifeStage türetilmiş — önceki evreyi
@@ -62,11 +79,19 @@ extension _SceneChronicle on _VillageSceneState {
         case LifeStage.youth:
           _lifeEvent(v, Voice.say(_kYouthLines, ctx), icon: '🌱');
         case LifeStage.adult:
-          _lifeEvent(v, Voice.say(_kAdultLines, ctx),
-              icon: '💪', milestone: true);
+          _lifeEvent(
+            v,
+            Voice.say(_kAdultLines, ctx),
+            icon: '💪',
+            milestone: true,
+          );
         case LifeStage.elder:
-          _lifeEvent(v, Voice.say(_kElderLines, ctx), icon: '🧓',
-              milestone: true);
+          _lifeEvent(
+            v,
+            Voice.say(_kElderLines, ctx),
+            icon: '🧓',
+            milestone: true,
+          );
         case LifeStage.child:
           break; // geriye geçiş olmaz
       }
@@ -109,7 +134,11 @@ extension _SceneChronicle on _VillageSceneState {
   static const List<(BuildingType, String, String)> _kFirstBuildings = [
     (BuildingType.well, 'Kuyu açıldı. Su artık köyün içinde.', '🪣'),
     (BuildingType.market, 'Pazar kuruldu. Tezgâhlar ilk kez doldu.', '🛒'),
-    (BuildingType.tavern, 'Taverna açıldı. Akşamın gidecek bir yeri var.', '🍺'),
+    (
+      BuildingType.tavern,
+      'Taverna açıldı. Akşamın gidecek bir yeri var.',
+      '🍺',
+    ),
     (BuildingType.church, 'Kilise dikildi. Çan ilk kez çaldı.', '⛪'),
   ];
 

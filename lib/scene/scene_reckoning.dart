@@ -83,8 +83,11 @@ extension _SceneReckoning on _VillageSceneState {
       // sessizce geçme: en azından kroniğe düşsün.
       if (!_reckoningHeralded) {
         _reckoningHeralded = true;
-        _chronicle('İmparatorluk defteri kapatmaya geldi.',
-            icon: '📜', milestone: true);
+        _chronicle(
+          'İmparatorluk defteri kapatmaya geldi.',
+          icon: '📜',
+          milestone: true,
+        );
       }
       _holdReckoning();
     }
@@ -95,14 +98,18 @@ extension _SceneReckoning on _VillageSceneState {
     final seed = _stableSeed('berat-ilan', _dayCount);
     _showNotification('📜 ${Voice.pick(_kHeraldLines, seed)}');
     _chronicle(Voice.pick(_kHeraldAnnal, seed), icon: '📜', milestone: true);
-    logDev('BERAT İLANI: yıl ${yearOf(_dayCount)}, '
-        'hesaplaşmaya ${daysUntilReckoning(_dayCount)} gün');
+    logDev(
+      'BERAT İLANI: yıl ${yearOf(_dayCount)}, '
+      'hesaplaşmaya ${daysUntilReckoning(_dayCount)} gün',
+    );
     final advice = karneAdvice(_reckoningInput());
     _chronicle(
-        'Hazırlık yılı: en hafif kefeler ${advice[0].label.toLowerCase()} ve '
-        '${advice[1].label.toLowerCase()}. İlki için: '
-        '${kKarneHints[advice[0].label]}.',
-        icon: '📯', kind: ChronicleKind.life);
+      'Hazırlık yılı: en hafif kefeler ${advice[0].label.toLowerCase()} ve '
+      '${advice[1].label.toLowerCase()}. İlki için: '
+      '${kKarneHints[advice[0].label]}.',
+      icon: '📯',
+      kind: ChronicleKind.life,
+    );
   }
 
   void _deliverKarne() {
@@ -110,16 +117,16 @@ extension _SceneReckoning on _VillageSceneState {
     final v = judge(input);
     final weak = karneAdvice(input).first;
     final seed = _stableSeed('karne', _dayCount);
-    _showNotification('📯 ${Voice.pick(const [
-      'Komutandan pusula geldi.',
-      'Heyetin katibi yıllık pusulayı bıraktı.',
-      'İmparatorluğun defterinden bir satır düştü.',
-    ], seed)} Bugün tartılsa: ${v.name}. En hafif kefe: '
-        '${weak.label.toLowerCase()}.');
+    _showNotification(
+      '📯 ${Voice.pick(const ['Komutandan pusula geldi.', 'Heyetin katibi yıllık pusulayı bıraktı.', 'İmparatorluğun defterinden bir satır düştü.'], seed)} Bugün tartılsa: ${v.name}. En hafif kefe: '
+      '${weak.label.toLowerCase()}.',
+    );
     _chronicle(
-        'Komutanın pusulası: bugün tartılsa ${v.name}. En hafif kefe '
-        '${weak.label.toLowerCase()}.',
-        icon: '📯', kind: ChronicleKind.life);
+      'Komutanın pusulası: bugün tartılsa ${v.name}. En hafif kefe '
+      '${weak.label.toLowerCase()}.',
+      icon: '📯',
+      kind: ChronicleKind.life,
+    );
   }
 
   /// Köyün beş yılını 0..1 aralığına çevirir. Ham birimler (kile, nüfuz,
@@ -146,8 +153,9 @@ extension _SceneReckoning on _VillageSceneState {
     // tavan sayılır (son kademenin istediği sayı); kimlik ayrı bir dilim
     // çünkü "çok mühür bastım ama hiçbir yöne yatmadım" bir duruş değildir.
     final policyPart = (_policies.enactedCount / 8.0).clamp(0.0, 1.0);
-    final identityPart =
-        _regimeIdentity.regime != VillageRegime.moderate ? 1.0 : 0.0;
+    final identityPart = _regimeIdentity.regime != VillageRegime.moderate
+        ? 1.0
+        : 0.0;
     final charter = (policyPart * 0.72 + identityPart * 0.28).clamp(0.0, 1.0);
 
     // KÖYÜN AĞIRLIĞI — nüfus ve refah. Elli can, son kademenin ölçüsü.
@@ -172,13 +180,13 @@ extension _SceneReckoning on _VillageSceneState {
   /// aralıklar eşit DEĞİL: serzeniş hâlâ çalışan bir hanedir (uyarı), el
   /// çekmek ise köyün elini gerçekten eksiltir — arada uçurum olmalı.
   double _stanceScore(HouseStance s) => switch (s) {
-        HouseStance.loyal => 1.0,
-        HouseStance.content => 0.78,
-        HouseStance.murmuring => 0.55,
-        HouseStance.withdrawn => 0.28,
-        HouseStance.hoarding => 0.14,
-        HouseStance.defiant => 0.0,
-      };
+    HouseStance.loyal => 1.0,
+    HouseStance.content => 0.78,
+    HouseStance.murmuring => 0.55,
+    HouseStance.withdrawn => 0.28,
+    HouseStance.hoarding => 0.14,
+    HouseStance.defiant => 0.0,
+  };
 
   /// HEYET DEFTERİ AÇTI — karar verilir, sinematik oynar, koşu kapanır.
   void _holdReckoning() {
@@ -200,9 +208,11 @@ extension _SceneReckoning on _VillageSceneState {
       icon: verdict.icon,
       milestone: true,
     );
-    logDev('HESAPLAŞMA: ${verdict.name} '
-        '(güç=${input.standing.toStringAsFixed(2)} '
-        'itibar=${input.favor.toStringAsFixed(2)})');
+    logDev(
+      'HESAPLAŞMA: ${verdict.name} '
+      '(güç=${input.standing.toStringAsFixed(2)} '
+      'itibar=${input.favor.toStringAsFixed(2)})',
+    );
 
     // Kaydı MÜHÜRLE — dağılmayla aynı sözleşme: kapanmış defter silinmez,
     // menüde okunabilir kalır (bkz. scene_save `_sealSaveAsEnded`).
@@ -210,10 +220,12 @@ extension _SceneReckoning on _VillageSceneState {
 
     // Sinematik önce, ekran sonra. `_playCutscene` capture modunda hiç
     // oynatmaz → orada bayrak baştan kapalı kalmalı, yoksa ekran hiç açılmaz.
-    final cs = reckoningCutscene(verdict,
-        village: _villageName,
-        favor: _imperialFavor,
-        seed: _stableSeed('hesaplaşma', _dayCount));
+    final cs = reckoningCutscene(
+      verdict,
+      village: _villageName,
+      favor: _imperialFavor,
+      seed: _stableSeed('hesaplaşma', _dayCount),
+    );
     _reckoningPlaying = !kCaptureMode;
     _playCutscene(cs, logEntry: '$_villageName hesaplaştı');
     setStateHere(() {});
@@ -221,26 +233,34 @@ extension _SceneReckoning on _VillageSceneState {
 
   /// Kapanış ekranı — koşunun karnesi.
   Widget buildReckoningScreen() => ReckoningScreen(
-        village: _villageName,
-        verdict: _reckoningVerdict ?? ReckoningVerdict.ilhak,
-        epilogue: verdictEpilogue(
-            _reckoningVerdict ?? ReckoningVerdict.ilhak, _regimeIdentity.regime),
-        identity: _regimeIdentity.title,
-        years: yearOf(_dayCount),
-        days: _dayCount,
-        population: _villagers.length,
-        rows: reckoningLedger(_reckoningInputCache ??
-            const ReckoningInput(
-                unity: 0, charter: 0, grit: 0, legacy: 0, favor: 0)),
-        // Kroniğin kilometre taşları — koşunun kendi özeti.
-        milestones: [
-          for (final e in _storyLog.reversed.take(6)) '${e.icon} ${e.text}',
-        ],
-        onExit: () {
-          _saveNow();
-          widget.onExitToMenu?.call();
-        },
-      );
+    village: _villageName,
+    verdict: _reckoningVerdict ?? ReckoningVerdict.ilhak,
+    epilogue: verdictEpilogue(
+      _reckoningVerdict ?? ReckoningVerdict.ilhak,
+      _regimeIdentity.regime,
+    ),
+    identity: _regimeIdentity.title,
+    years: yearOf(_dayCount),
+    days: _dayCount,
+    population: _villagers.length,
+    rows: reckoningLedger(
+      _reckoningInputCache ??
+          const ReckoningInput(
+            unity: 0,
+            charter: 0,
+            grit: 0,
+            legacy: 0,
+            favor: 0,
+          ),
+    ),
+    // Son satırlar değil: koşunun ağır kararı + hane/kuruluş bağı +
+    // kriz/toparlanması arasından seçilmiş üç gerçek iz.
+    milestones: selectReckoningHighlights(_storyLog),
+    onExit: () {
+      _saveNow();
+      widget.onExitToMenu?.call();
+    },
+  );
 
   /// PROVA kancası — hesaplaşma gerçek sahnede sürülebilsin diye
   /// (bkz. test/reckoning_probe_test.dart). Oyunda etkisiz.
@@ -269,51 +289,50 @@ extension _SceneReckoning on _VillageSceneState {
   /// üzereyken gelecek yılın takvimini göstermek, yanan evin içinde takvim
   /// okumaktır. İki şerit üst üste binmesin diye tek kapıdan geçer.
   Widget buildReckoningBanner() => ListenableBuilder(
-        listenable: _frame,
-        builder: (_, _) {
-          if (!_reckoningEnabled || _collapsed || _reckoningVerdict != null) {
-            return const SizedBox.shrink();
-          }
-          if (_collapse.vitality.visible) return const SizedBox.shrink();
-          if (!_reckoningHeralded) return const SizedBox.shrink();
-          final left = daysUntilReckoning(_dayCount);
-          return Positioned(
-            top: 8,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Center(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: const Color(0xE60C0D0F),
-                    borderRadius: BorderRadius.circular(AppUi.radiusSm),
-                    border: Border.all(color: const Color(0x66E9C552)),
+    listenable: _frame,
+    builder: (_, _) {
+      if (!_reckoningEnabled || _collapsed || _reckoningVerdict != null) {
+        return const SizedBox.shrink();
+      }
+      if (_collapse.vitality.visible) return const SizedBox.shrink();
+      if (!_reckoningHeralded) return const SizedBox.shrink();
+      final left = daysUntilReckoning(_dayCount);
+      return Positioned(
+        top: 8,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xE60C0D0F),
+                borderRadius: BorderRadius.circular(AppUi.radiusSm),
+                border: Border.all(color: const Color(0x66E9C552)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('📜', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 8),
+                  Text(
+                    left <= 0
+                        ? 'Heyet defteri açmak üzere'
+                        : 'Berat yılına $left gün',
+                    style: AppUi.body.copyWith(
+                      fontSize: 11.5,
+                      color: AppUi.gold,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('📜', style: TextStyle(fontSize: 12)),
-                      const SizedBox(width: 8),
-                      Text(
-                        left <= 0
-                            ? 'Heyet defteri açmak üzere'
-                            : 'Berat yılına $left gün',
-                        style: AppUi.body.copyWith(
-                          fontSize: 11.5,
-                          color: AppUi.gold,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ),
             ),
-          );
-        },
+          ),
+        ),
       );
+    },
+  );
 }
 
 // ── Beratın sesi ([[lib/text/voice.dart]]) ───────────────────────────────────

@@ -96,6 +96,37 @@ class _ActiveCrime {
 /// Sözleşme: köy suç çukuru DEĞİL. Aynı anda tek suç, uzun cooldown, muhafız
 /// caydırıcılığı, ağır suçlar SEBEP olmadan doğmaz.
 extension _SceneCrime on _VillageSceneState {
+  /// Suç bildirimindeki bağlamsal İzle eylemi. Fail bilinmiyorsa suç mahalli,
+  /// biliniyorsa yaşayan fail izlenir. Kamera kanalı mevcut vinyet/rehber
+  /// `İzle` kanalıdır; muhafız otomasyonuna veya NPC durumuna dokunmaz.
+  void _showCrimeNotification(
+    String message,
+    _ActiveCrime crime, {
+    bool culpritKnown = false,
+  }) {
+    final sceneX = crime.tx;
+    final sceneY = crime.ty;
+    _showNotification(
+      message,
+      actionLabel: 'İzle',
+      onAction: () {
+        _followedVillager = null;
+        final culprit = crime.culprit;
+        final target = crimeWatchTarget(
+          culpritKnown: culpritKnown,
+          culpritAvailable: !culprit.isDying && _villagers.contains(culprit),
+          culpritX: culprit.gridX,
+          culpritY: culprit.gridY,
+          sceneX: sceneX,
+          sceneY: sceneY,
+        );
+        _watchX = target.x;
+        _watchY = target.y;
+        _watchLeft = 3.2;
+      },
+    );
+  }
+
   /// Suç taraması (sn) — sık taranır ama çıkış olasılığı düşük → nadir.
   static const double _kCrimePoll = 5.0;
   // NOT: taban suç olasılığı (`_kCrimeBase`) KALDIRILDI — suç artık poll başına
@@ -705,7 +736,7 @@ extension _SceneCrime on _VillageSceneState {
 
     // Ağır suçta köy hafiften ürperir (sezgi) — hafif suçta sarsıntı yok.
     if (c.def.isGrave) addCameraShake(1.6, dur: 0.3);
-    _showNotification(
+    _showCrimeNotification(
       Voice.say(
         c.def.hintPool,
         _voice(
@@ -714,6 +745,7 @@ extension _SceneCrime on _VillageSceneState {
           extra: {'yer': c.place},
         ),
       ),
+      c,
     );
   }
 
@@ -1198,7 +1230,7 @@ extension _SceneCrime on _VillageSceneState {
       seed: _stableSeed('suç${c.kind.name}${v.name}', _dayCount),
       extra: {'yer': c.place},
     );
-    _showNotification(Voice.say(c.def.deedPool, ctx));
+    _showCrimeNotification(Voice.say(c.def.deedPool, ctx), c);
   }
 
   /// Kaçırılan kurban sahneden çekilir (ÖLÜM DEĞİL — çöküş animasyonu yok) ve
@@ -1312,6 +1344,11 @@ extension _SceneCrime on _VillageSceneState {
         milestone: c.def.isGrave,
         kind: ChronicleKind.crisis,
       );
+      _showCrimeNotification(
+        '📖 Sicil faili gösterdi: ${v.name}. Hüküm bekliyor.',
+        c,
+        culpritKnown: true,
+      );
       _openVerdict(v, c, prevented: false, guard: null);
       return;
     }
@@ -1321,8 +1358,10 @@ extension _SceneCrime on _VillageSceneState {
     if (!witnessed) {
       _crimeSuspicion++;
     } else {
-      _showNotification(
+      _showCrimeNotification(
         '👁️ Fail kaçtı ama gören oldu — köy adını fısıldıyor.',
+        c,
+        culpritKnown: true,
       );
     }
     _chronicle(
@@ -1337,20 +1376,22 @@ extension _SceneCrime on _VillageSceneState {
       milestone: c.def.isGrave,
       kind: ChronicleKind.crisis,
     );
-    _showNotification(
+    _showCrimeNotification(
       Voice.say(
         _kEscapedPool,
         _voice(null, seed: _stableSeed('kaçtı${v.name}', _dayCount)),
       ),
+      c,
     );
 
     if (_crimeSuspicion >= _kSuspicionThreshold) {
       _feelVillage(NpcEmotion.fear, 10, -0.05);
-      _showNotification(
+      _showCrimeNotification(
         Voice.say(
           _kSuspicionPool,
           _voice(null, seed: _stableSeed('şüphe$_crimeSuspicion', _dayCount)),
         ),
+        c,
       );
       if (_pendingPetition == null) {
         final p = PetitionSystem.byId('crimeWave');
@@ -1452,7 +1493,10 @@ extension _SceneCrime on _VillageSceneState {
     if (bellCovered && !c.bellRung) {
       c.bellRung = true;
       AudioManager.instance.playSfx(Sfx.bellChime);
-      _showNotification('🔔 Alarm çanı çaldı — devriye suç yerine çağrılıyor.');
+      _showCrimeNotification(
+        '🔔 Alarm çanı çaldı — devriye suç yerine çağrılıyor.',
+        c,
+      );
     }
     final range = c.done
         ? bellGuardResponseRange(
@@ -1594,8 +1638,10 @@ extension _SceneCrime on _VillageSceneState {
       seed: _stableSeed('yakala${v.name}', _dayCount),
       extra: {'muhafız': guard?.name ?? ''},
     );
-    _showNotification(
+    _showCrimeNotification(
       Voice.say(guard != null ? _kCaughtGuardPool : _kCaughtPlayerPool, ctx),
+      c,
+      culpritKnown: true,
     );
     _chronicle(
       Voice.say(c.def.caughtAnnalPool, ctx),

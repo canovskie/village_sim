@@ -30,6 +30,7 @@ library;
 import '../characters/villager_type.dart';
 import '../cutscene/cutscene.dart';
 import '../text/voice.dart';
+import 'chronicle.dart';
 import 'law_compass.dart';
 
 /// Görevlerin ve hesaplaşma karnesinin paylaştığı dört iç sütun.
@@ -287,6 +288,71 @@ const Map<String, String> kKarneHints = {
 
 String _band(double v, List<String> three) =>
     v < 0.34 ? three[0] : (v < 0.67 ? three[1] : three[2]);
+
+/// Koşunun finalinde gösterilecek üç GERÇEK iz.
+///
+/// Son üç satırı almak çoğu kez "kış geldi / yıl doldu / heyet geldi" gibi
+/// genel annalleri seçiyordu. Burada önce ağır karar, sonra hane/kuruluş bağı,
+/// sonra büyük kriz ya da toparlanma aranır; kalan yuva varsa kilometre taşıyla
+/// doldurulur. Aynı Chronicle satırı iki kez seçilmez.
+List<String> selectReckoningHighlights(
+  List<ChronicleEntry> chronicle, {
+  int count = 3,
+}) {
+  if (count <= 0 || chronicle.isEmpty) return const [];
+  final picked = <ChronicleEntry>[];
+
+  void add(ChronicleEntry? entry) {
+    if (entry != null && !picked.contains(entry) && picked.length < count) {
+      picked.add(entry);
+    }
+  }
+
+  final decisions = chronicle.where((e) => e.trace != null).toList()
+    ..sort((a, b) {
+      final byWeight = b.trace!.weight.compareTo(a.trace!.weight);
+      return byWeight != 0 ? byWeight : b.day.compareTo(a.day);
+    });
+  add(decisions.firstOrNull);
+
+  add(
+    chronicle.reversed.where((e) {
+      final t = e.trace;
+      if (t == null) return false;
+      final hay = '${t.sourceDecision} ${t.affected} ${t.laterOutcome}'
+          .toLowerCase();
+      return hay.contains('hane') ||
+          hay.contains('kurucu') ||
+          hay.contains('kuruluş') ||
+          hay.contains('soy');
+    }).firstOrNull,
+  );
+
+  add(
+    chronicle.reversed.where((e) {
+      final text = e.text.toLowerCase();
+      return e.kind == ChronicleKind.crisis ||
+          text.contains('kış') ||
+          text.contains('baskın') ||
+          text.contains('kayıp') ||
+          text.contains('öldü') ||
+          text.contains('toparlandı') ||
+          text.contains('kurtuldu') ||
+          text.contains('barıştı');
+    }).firstOrNull,
+  );
+
+  for (final e in chronicle.reversed) {
+    if (picked.length >= count) break;
+    if (e.milestone || e.kind == ChronicleKind.decision) add(e);
+  }
+  for (final e in chronicle.reversed) {
+    if (picked.length >= count) break;
+    add(e);
+  }
+
+  return [for (final e in picked) '${e.icon} ${e.trace?.ledgerLine ?? e.text}'];
+}
 
 /// HESAPLAŞMA SİNEMATİĞİ — koşunun son sahnesi.
 ///

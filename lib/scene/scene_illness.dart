@@ -207,14 +207,10 @@ extension _SceneIllness on _VillageSceneState {
       // kurasında öne çıkar. İki ihmale kadar çarpan 1.0'dır: kışın bir gece
       // ocağın sönmesi kimseyi hasta etmez.
       final neglectW = neglectIllnessMultiplier(_coldNeglectOf(v));
-      final bathRisk =
-          bathhouseIllnessRisk(_coveredByActiveBathhouse(v));
+      final bathRisk = bathhouseIllnessRisk(_coveredByActiveBathhouse(v));
       bathRiskSum += bathRisk;
       weights.add(
-        ageW *
-            (1.4 - v.morale.clamp(0.0, 1.0)) *
-            neglectW *
-            bathRisk,
+        ageW * (1.4 - v.morale.clamp(0.0, 1.0)) * neglectW * bathRisk,
       );
     }
     if (cands.isEmpty) return;

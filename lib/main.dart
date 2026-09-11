@@ -1277,6 +1277,11 @@ class _VillageSceneState extends State<VillageScene>
   /// false kalır → kapanışta varsayılan yük uygulanır.
   bool _foundingChoiceMade = false;
 
+  /// Kuruluş yükünün kalıcı kimliği. Kadro/stok ilk gün tüketilir; bu id ise
+  /// ileride dilekçe ağırlığına ve ilk imparatorluk tavrına küçük yankılar
+  /// taşır. Eski kayıtta yoksa dengeli varsayılır.
+  String _foundingChoiceId = FoundingChoice.fallback.id;
+
   /// Kafilenin haritaya giriş noktası (EKRAN eksenlerinde: u=c−r, v=c+r).
   /// Kuruluş kararı kadroyu değiştirdiğinde kafile yeniden doğar; aynı yerden
   /// doğmazsa kameranın ilk-frame kilidi (bkz. scene_input `_clampCamera`)
@@ -1348,9 +1353,29 @@ class _VillageSceneState extends State<VillageScene>
   /// işlenir. Oyuncu seçmeden atlarsa [_onCutsceneDone] varsayılanı uygular.
   void _onFoundingChoice(FoundingChoice c) {
     _foundingChoiceMade = true;
+    _foundingChoiceId = c.id;
     setStateHere(() {
       _applyFoundingChoice(c);
-      _chronicle('${c.icon} ${c.title}', icon: '🛒');
+      _chronicle(
+        '${c.icon} ${c.title}',
+        icon: '🛒',
+        kind: ChronicleKind.decision,
+        trace: DecisionTrace(
+          sourceDecision: 'Kuruluş yükü: ${c.title}',
+          firstOutcome: c.choiceSummary,
+          affected: 'Kurucu kafile',
+          laterOutcome: switch (c.id) {
+            'seed' => 'emekçilerin sözü dilekçelerde ağır basacak',
+            'tools' => 'zanaatkârların sözü ve ilk heyetin tavrı yumuşayacak',
+            'people' => 'ocakların sözü dilekçelerde ağır basacak',
+            _ => 'ilk hükümler dengeli tartılacak',
+          },
+          reckoningAxis: c.id == 'tools'
+              ? 'İmparatorlukla arası'
+              : 'Hane rızası',
+          weight: 2,
+        ),
+      );
     });
   }
 
@@ -1370,6 +1395,7 @@ class _VillageSceneState extends State<VillageScene>
       // kararla kurulmalı — varsayılan yük uygulanır (kadro/stok boşta kalmaz).
       if (!_foundingChoiceMade) {
         _foundingChoiceMade = true;
+        _foundingChoiceId = FoundingChoice.fallback.id;
         _applyFoundingChoice(FoundingChoice.fallback);
       }
       _firstFirePending = true;
@@ -1992,6 +2018,8 @@ class _VillageSceneState extends State<VillageScene>
 
   // ── Notification ───────────────────────────────────────────────────────────
   String? _notification;
+  String? _notificationActionLabel;
+  VoidCallback? _notificationAction;
   int _notifId = 0;
 
   // ── Dev olay günlüğü ───────────────────────────────────────────────────────
@@ -2241,16 +2269,30 @@ class _VillageSceneState extends State<VillageScene>
     });
   }
 
-  void _showNotification(String msg) {
+  void _showNotification(
+    String msg, {
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
     final id = ++_notifId;
     logDev(msg, tag: '📣');
-    setState(() => _notification = msg);
+    setState(() {
+      _notification = msg;
+      _notificationActionLabel = actionLabel;
+      _notificationAction = onAction;
+    });
     // Capture/prova harness'lerinde otokapatma timer'ını KURMA: banner görünmez
     // ve zorlanmış olay yağmurunda biriken 2 sn'lik Future.delayed'ler test
     // sonunda `!timersPending` assert'ini düşürür (prova testi yakaladı).
     if (kCaptureMode) return;
     Future.delayed(const Duration(seconds: 2), () {
-      if (mounted && _notifId == id) setState(() => _notification = null);
+      if (mounted && _notifId == id) {
+        setState(() {
+          _notification = null;
+          _notificationActionLabel = null;
+          _notificationAction = null;
+        });
+      }
     });
   }
 

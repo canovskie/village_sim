@@ -17,25 +17,37 @@ void main() {
       for (final type in kBuildingMeta.keys) {
         if (loreOf(type) == null) missing.add(type);
       }
-      expect(missing, isEmpty,
-          reason: 'künyesiz bina: ${missing.map((t) => t.name).join(', ')}');
+      expect(
+        missing,
+        isEmpty,
+        reason: 'künyesiz bina: ${missing.map((t) => t.name).join(', ')}',
+      );
     });
 
     test('her künyede en az bir ipucu ve iki tatlı not var', () {
       for (final entry in kBuildingLore.entries) {
-        expect(entry.value.tips, isNotEmpty,
-            reason: '${entry.key.name}: ipucu yok');
+        expect(
+          entry.value.tips,
+          isNotEmpty,
+          reason: '${entry.key.name}: ipucu yok',
+        );
         // Tek not = "tek string yazma" kuralının ihlali (voice.dart): aynı
         // binaya ikinci kez bakan aynı cümleyi görürdü.
-        expect(entry.value.notes.length, greaterThanOrEqualTo(2),
-            reason: '${entry.key.name}: not havuzu tek cümlelik');
+        expect(
+          entry.value.notes.length,
+          greaterThanOrEqualTo(2),
+          reason: '${entry.key.name}: not havuzu tek cümlelik',
+        );
       }
     });
 
     test('künye yalnız dikilebilen binaları anlatır', () {
       for (final type in kBuildingLore.keys) {
-        expect(kBuildingMeta.containsKey(type), isTrue,
-            reason: '${type.name} inşa edilemez ama künyesi var');
+        expect(
+          kBuildingMeta.containsKey(type),
+          isTrue,
+          reason: '${type.name} inşa edilemez ama künyesi var',
+        );
       }
     });
   });
@@ -65,43 +77,49 @@ void main() {
 
       // Ocağın dibi: sıcaklık 1.0 (bkz. hearth_warmth).
       expect(
-        tipState(hearth, const SiteFacts(hearthWarmth: 1.0, hasHearth: true,
-            hearthLit: true)),
+        tipState(
+          hearth,
+          const SiteFacts(hearthWarmth: 1.0, hasHearth: true, hearthLit: true),
+        ),
         SiteTipState.met,
       );
       // Köyün ucu: ocağın faydası bitmiş.
       expect(
-        tipState(hearth, const SiteFacts(hearthWarmth: 0.0, hasHearth: true,
-            hearthLit: true)),
+        tipState(
+          hearth,
+          const SiteFacts(hearthWarmth: 0.0, hasHearth: true, hearthLit: true),
+        ),
         SiteTipState.unmet,
       );
       // Eşik: moral/uyku sistemiyle AYNI sınırı kullanır.
       expect(
         tipState(
-            hearth,
-            const SiteFacts(
-                hearthWarmth: kColdShelterThreshold,
-                hasHearth: true,
-                hearthLit: true)),
+          hearth,
+          const SiteFacts(
+            hearthWarmth: kColdShelterThreshold,
+            hasHearth: true,
+            hearthLit: true,
+          ),
+        ),
         SiteTipState.met,
       );
     });
 
     test('ocak yok / sönük ise künye sebebini yazar', () {
-      final hearth = loreOf(BuildingType.tent)!
-          .tips
-          .firstWhere((t) => t.kind == SiteTipKind.hearth);
+      final hearth = loreOf(
+        BuildingType.tent,
+      )!.tips.firstWhere((t) => t.kind == SiteTipKind.hearth);
       expect(tipValue(hearth, const SiteFacts()), 'ocak yok');
       expect(tipValue(hearth, const SiteFacts(hasHearth: true)), 'ocak sönük');
     });
 
     test('oduncu ve maden ipuçları KURAL olarak işaretli', () {
-      final forest = loreOf(BuildingType.lumberCamp)!
-          .tips
-          .firstWhere((t) => t.kind == SiteTipKind.forest);
-      final vein = loreOf(BuildingType.mineBuilding)!
-          .tips
-          .firstWhere((t) => t.kind == SiteTipKind.oreVein);
+      final forest = loreOf(
+        BuildingType.lumberCamp,
+      )!.tips.firstWhere((t) => t.kind == SiteTipKind.forest);
+      final vein = loreOf(
+        BuildingType.mineBuilding,
+      )!.tips.firstWhere((t) => t.kind == SiteTipKind.oreVein);
       expect(forest.rule, isTrue);
       expect(vein.rule, isTrue);
       // Sağlanmadığında künye "!" (kurulamaz) der, sakin "○" değil.
@@ -111,20 +129,24 @@ void main() {
     });
 
     test('balıkçı: kıyı eşiği', () {
-      final shore = loreOf(BuildingType.fisherCabin)!
-          .tips
-          .firstWhere((t) => t.kind == SiteTipKind.shore);
-      expect(tipState(shore, const SiteFacts(shoreDist: kShoreNearTiles)),
-          SiteTipState.met);
-      expect(tipState(shore, const SiteFacts(shoreDist: kShoreNearTiles + 1)),
-          SiteTipState.unmet);
+      final shore = loreOf(
+        BuildingType.fisherCabin,
+      )!.tips.firstWhere((t) => t.kind == SiteTipKind.shore);
+      expect(
+        tipState(shore, const SiteFacts(shoreDist: kShoreNearTiles)),
+        SiteTipState.met,
+      );
+      expect(
+        tipState(shore, const SiteFacts(shoreDist: kShoreNearTiles + 1)),
+        SiteTipState.unmet,
+      );
       expect(tipState(shore, const SiteFacts()), SiteTipState.unmet);
     });
 
     test('menzilsiz bina ipucu nötr kalır (yanlış ✓ göstermez)', () {
-      final anywhere = loreOf(BuildingType.stable)!
-          .tips
-          .firstWhere((t) => t.kind == SiteTipKind.anywhere);
+      final anywhere = loreOf(
+        BuildingType.stable,
+      )!.tips.firstWhere((t) => t.kind == SiteTipKind.anywhere);
       expect(tipState(anywhere, const SiteFacts()), SiteTipState.neutral);
       expect(tipValue(anywhere, const SiteFacts()), isNull);
     });
@@ -143,25 +165,33 @@ void main() {
 
     test('taş konutlar kozmetik eş olduklarını açıkça söyler', () {
       expect(joined(BuildingType.stoneHouseBlue), contains('kozmetik varyant'));
-      expect(joined(BuildingType.stoneHouseGreen), contains('kozmetik varyant'));
+      expect(
+        joined(BuildingType.stoneHouseGreen),
+        contains('kozmetik varyant'),
+      );
     });
   });
 
   group('bal hızı — tek kaynak', () {
     test('çiçeksiz kovan 1.0, her çiçek arttırır, tavan var', () {
       expect(honeySpeedFromFlowers(0), 1.0);
-      expect(honeySpeedFromFlowers(1), closeTo(1.0 + kHoneyFlowerSpeedStep, 1e-9));
+      expect(
+        honeySpeedFromFlowers(1),
+        closeTo(1.0 + kHoneyFlowerSpeedStep, 1e-9),
+      );
       expect(honeySpeedFromFlowers(1000), kHoneySpeedMax);
     });
 
     test('kovan künyesi ölçülen çarpanı gösterir', () {
-      final flowers = loreOf(BuildingType.beehive)!
-          .tips
-          .firstWhere((t) => t.kind == SiteTipKind.flowers);
+      final flowers = loreOf(
+        BuildingType.beehive,
+      )!.tips.firstWhere((t) => t.kind == SiteTipKind.flowers);
       final label = tipValue(flowers, const SiteFacts(flowersNear: 5));
       expect(label, contains('5 çiçek'));
-      expect(label,
-          contains('×${honeySpeedFromFlowers(5).toStringAsFixed(1)}'));
+      expect(
+        label,
+        contains('×${honeySpeedFromFlowers(5).toStringAsFixed(1)}'),
+      );
     });
   });
 }

@@ -267,7 +267,8 @@ extension _SceneSave on _VillageSceneState {
     // modal açıkken de çalışabildiği için aktif talebi de aynı kuyruk formatında
     // sakla; aksi hâlde yüklemede karar sessizce kaybolurdu.
     final savedImperialDemand = _pacedImperialDemand ?? _imperialDemand;
-    final savedImperialRequestId = _pacedImperialRequestId ??
+    final savedImperialRequestId =
+        _pacedImperialRequestId ??
         (_decisionPacing.active?.kind == HeavyDecisionKind.imperial
             ? _decisionPacing.active!.id
             : null);
@@ -356,6 +357,7 @@ extension _SceneSave on _VillageSceneState {
       'achievedMilestones': _achievedMilestones.toList(),
       'oreDiscovered': _oreDiscovered.toList(),
       'villageName': _villageName,
+      'foundingChoiceId': _foundingChoiceId,
       'famineShown': _famineShown,
       'imperialFavor': _imperialFavor,
       'imperialTimer': _imperialTimer,
@@ -974,6 +976,9 @@ extension _SceneSave on _VillageSceneState {
       }
     }
     _villageName = (w['villageName'] as String?) ?? 'Köy';
+    _foundingChoiceId =
+        (w['foundingChoiceId'] as String?) ?? FoundingChoice.fallback.id;
+    _foundingChoiceMade = true;
     _imperialFavor = _d(w['imperialFavor'], 0.5);
     _imperialTimer = _d(w['imperialTimer'], 6.0 * kGameDaySeconds);
     _imperialDemand = null; // yüklemede aktif ziyaret yok

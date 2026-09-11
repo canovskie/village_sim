@@ -404,6 +404,29 @@ extension _SceneEvents on _VillageSceneState {
       timedOut ? 'Söz gelmedi. $annal' : annal,
       icon: base.icon,
       kind: ChronicleKind.decision,
+      trace: DecisionTrace(
+        sourceDecision:
+            '${base.title}: ${timedOut ? 'Söz verilmedi' : c.label}',
+        firstOutcome: c.resolutionMessage,
+        affected:
+            (c.foodDelta != 0 ||
+                c.woodDelta != 0 ||
+                c.stoneDelta != 0 ||
+                c.ironDelta != 0 ||
+                c.coalDelta != 0 ||
+                c.goldDelta != 0)
+            ? 'köy ambarı'
+            : 'köy halkı',
+        laterOutcome: c.moraleModifier > 0
+            ? 'birlik bir süre güçlenecek'
+            : c.moraleModifier < 0
+            ? 'birlik bir süre zayıflayacak'
+            : base.category == EventCategory.negative
+            ? 'bu olayın yükü sonraki günlerde taşınacak'
+            : 'bu karar köyün hafızasında kalacak',
+        reckoningAxis: c.moraleModifier != 0 ? 'Hane rızası' : 'Köy ağırlığı',
+        weight: base.severity == EventSeverity.major ? 3 : 2,
+      ),
     );
     _activeEvent = EventOutcome(
       id: base.id,

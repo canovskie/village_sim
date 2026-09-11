@@ -497,9 +497,7 @@ class VillageLedger extends StatelessWidget {
                       ? _LedgerBoardShell(
                           initial: initialSection,
                           badges: badges,
-                          hidden: {
-                            if (onOpenLaw == null) LedgerSection.kanun,
-                          },
+                          hidden: {if (onOpenLaw == null) LedgerSection.kanun},
                           identityHeader: mobileIdentity(),
                           boardFor: mobileBoardFor,
                           onClose: onClose,
@@ -585,10 +583,7 @@ class VillageLedger extends StatelessWidget {
             const SizedBox(height: 8),
             _identityBonusRow(),
           ],
-          if (karne.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _karneBlock(),
-          ],
+          if (karne.isNotEmpty) ...[const SizedBox(height: 16), _karneBlock()],
         ];
         // TELEFON YATAY: defterin gövdesine ~300dp kalıyor; masa + künye ilk
         // ekranı doldurunca Divan açıldığında YANIT BEKLEYEN İŞ görünmüyordu.
@@ -606,39 +601,44 @@ class VillageLedger extends StatelessWidget {
   }
 
   Widget _karneBlock() => Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AppSectionLabel('İMPARATORLUĞUN GÖZÜ — $karneYear. YIL'),
-          const SizedBox(height: 7),
-          for (final row in karne) ...[
-            Text(row.label,
-                style: AppUi.label.copyWith(color: AppUi.textMid)),
-            const SizedBox(height: 3),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: row.value.clamp(0.0, 1.0),
-                minHeight: 5,
-                backgroundColor: AppUi.surface2,
-                valueColor: const AlwaysStoppedAnimation(AppUi.gold),
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(row.note,
-                style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo)),
-            const SizedBox(height: 7),
-          ],
-          if (karneVerdict.isNotEmpty)
-            Text('Defter bugün kapansaydı: $karneVerdict',
-                style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.gold)),
-          if (karneAdviceLine.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
-              child: Text(karneAdviceLine,
-                  style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textMid)),
-            ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      AppSectionLabel('İMPARATORLUĞUN GÖZÜ — $karneYear. YIL'),
+      const SizedBox(height: 7),
+      for (final row in karne) ...[
+        Text(row.label, style: AppUi.label.copyWith(color: AppUi.textMid)),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: row.value.clamp(0.0, 1.0),
+            minHeight: 5,
+            backgroundColor: AppUi.surface2,
+            valueColor: const AlwaysStoppedAnimation(AppUi.gold),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          row.note,
+          style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textLo),
+        ),
+        const SizedBox(height: 7),
+      ],
+      if (karneVerdict.isNotEmpty)
+        Text(
+          'Defter bugün kapansaydı: $karneVerdict',
+          style: AppUi.bodyHi.copyWith(fontSize: 11, color: AppUi.gold),
+        ),
+      if (karneAdviceLine.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 3),
+          child: Text(
+            karneAdviceLine,
+            style: AppUi.body.copyWith(fontSize: 10.5, color: AppUi.textMid),
+          ),
+        ),
+    ],
+  );
 
   /// KANUNNAME sekmesi — yasa defteri + kararların köyde bıraktığı kalıcı iz.
   Widget _kararTab() {
@@ -730,8 +730,11 @@ class VillageLedger extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const GameIcon(GameIconData.chevron,
-                    size: 12, color: AppUi.accentSoft),
+                const GameIcon(
+                  GameIconData.chevron,
+                  size: 12,
+                  color: AppUi.accentSoft,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -794,8 +797,12 @@ class VillageLedger extends StatelessWidget {
         children: [
           Opacity(
             opacity: passed || current ? 1 : 0.45,
-            child: SemanticIcon(t.icon,
-                size: 15, color: AppUi.gold, fallback: GameIconData.crown),
+            child: SemanticIcon(
+              t.icon,
+              size: 15,
+              color: AppUi.gold,
+              fallback: GameIconData.crown,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -851,8 +858,11 @@ class VillageLedger extends StatelessWidget {
         children: [
           SizedBox(
             width: 20,
-            child: GameIcon(questGlyph(s.quest.id),
-                size: 12, color: on ? AppUi.accent : AppUi.textLo),
+            child: GameIcon(
+              questGlyph(s.quest.id),
+              size: 12,
+              color: on ? AppUi.accent : AppUi.textLo,
+            ),
           ),
           Expanded(
             child: Text(
@@ -899,6 +909,12 @@ class VillageLedger extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (_recentDecisionTraces.isNotEmpty) ...[
+            const AppSectionLabel('KARARIN İZİ — SON 5 SONUÇ'),
+            const SizedBox(height: 6),
+            for (final e in _recentDecisionTraces) _decisionTraceRow(e),
+            const SizedBox(height: 12),
+          ],
           AppSectionLabel(
             milestoneCount > 0
                 ? 'BÜYÜK ANLAR — 🏆 $milestoneCount BAŞARIM'
@@ -909,10 +925,49 @@ class VillageLedger extends StatelessWidget {
           if (filtered.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Text('Bu türde kayıt yok.',
-                  style: AppUi.body.copyWith(color: AppUi.textLo)),
+              child: Text(
+                'Bu türde kayıt yok.',
+                style: AppUi.body.copyWith(color: AppUi.textLo),
+              ),
             ),
           for (final e in filtered) _chronicleRow(e),
+        ],
+      ),
+    );
+  }
+
+  List<ChronicleEntry> get _recentDecisionTraces =>
+      recentDecisionTraces(chronicle);
+
+  Widget _decisionTraceRow(ChronicleEntry e) {
+    final trace = e.trace!;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: AppUi.gold.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(AppUi.radiusSm),
+        border: Border.all(color: AppUi.gold.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${e.day}. gün',
+            style: AppUi.label.copyWith(fontSize: 9, color: AppUi.textLo),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              trace.ledgerLine,
+              style: AppUi.body.copyWith(fontSize: 11.5, height: 1.4),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            trace.reckoningAxis.toUpperCase(),
+            style: AppUi.label.copyWith(fontSize: 7.5, color: AppUi.gold),
+          ),
         ],
       ),
     );
@@ -926,8 +981,12 @@ class VillageLedger extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.only(top: 1),
-            child: SemanticIcon(e.icon,
-                size: 15, color: AppUi.textLo, fallback: GameIconData.scroll),
+            child: SemanticIcon(
+              e.icon,
+              size: 15,
+              color: AppUi.textLo,
+              fallback: GameIconData.scroll,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1330,8 +1389,11 @@ class VillageLedger extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 6),
             child: Row(
               children: [
-                const GameIcon(GameIconData.handshake,
-                    size: 15, color: AppUi.sage),
+                const GameIcon(
+                  GameIconData.handshake,
+                  size: 15,
+                  color: AppUi.sage,
+                ),
                 const SizedBox(width: 9),
                 Expanded(
                   child: Text(
@@ -1383,8 +1445,12 @@ class VillageLedger extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  SemanticIcon(m.icon,
-                      size: 16, color: c, fallback: GameIconData.scroll),
+                  SemanticIcon(
+                    m.icon,
+                    size: 16,
+                    color: c,
+                    fallback: GameIconData.scroll,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -1693,15 +1759,20 @@ class VillageLedger extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SemanticIcon(s.stance.icon,
-                size: 11, color: tint, fallback: GameIconData.scales),
+            SemanticIcon(
+              s.stance.icon,
+              size: 11,
+              color: tint,
+              fallback: GameIconData.scales,
+            ),
             const SizedBox(width: 6),
             Text(
               s.stance.label,
               style: AppUi.body.copyWith(
-                  fontSize: 10.5,
-                  color: AppUi.textMid,
-                  fontWeight: FontWeight.w700),
+                fontSize: 10.5,
+                color: AppUi.textMid,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -1795,8 +1866,12 @@ class VillageLedger extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SemanticIcon(f.icon,
-              size: 11, color: f.color, fallback: GameIconData.star),
+          SemanticIcon(
+            f.icon,
+            size: 11,
+            color: f.color,
+            fallback: GameIconData.star,
+          ),
           const SizedBox(width: 5),
           Text(
             f.label,
@@ -1811,7 +1886,6 @@ class VillageLedger extends StatelessWidget {
     );
   }
 }
-
 
 /// DEFTER MÜHRÜ — köy içi işlerin TEK kapısı, hep ekranda. Eskiden bu mühür
 /// yalnız Divan'ı açardı; nüfus HUD ikonunda, hikâye ⚙ kümesinde, görevler ayrı
@@ -2201,10 +2275,7 @@ class _LedgerShellState extends State<_LedgerShell> {
             for (final s in _sections) ...[
               // Kuruluşun berat adımı bu rafı gösterir (bkz. scene_guide).
               if (s == LedgerSection.kanun)
-                GuideTarget(
-                  id: GuideAnchors.sectionKanun,
-                  child: _railItem(s),
-                )
+                GuideTarget(id: GuideAnchors.sectionKanun, child: _railItem(s))
               else
                 _railItem(s),
               const SizedBox(height: 6),
@@ -2247,10 +2318,12 @@ class _LedgerShellState extends State<_LedgerShell> {
             children: [
               Opacity(
                 opacity: on ? 1 : 0.72,
-                child: SemanticIcon(s.icon,
-                    size: 15,
-                    color: on ? AppUi.accentSoft : AppUi.textMid,
-                    fallback: GameIconData.scroll),
+                child: SemanticIcon(
+                  s.icon,
+                  size: 15,
+                  color: on ? AppUi.accentSoft : AppUi.textMid,
+                  fallback: GameIconData.scroll,
+                ),
               ),
               const SizedBox(width: 9),
               Expanded(
@@ -2352,10 +2425,12 @@ class _LedgerShellState extends State<_LedgerShell> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SemanticIcon(s.icon,
-                size: 13,
-                color: on ? AppUi.accentSoft : AppUi.textLo,
-                fallback: GameIconData.scroll),
+            SemanticIcon(
+              s.icon,
+              size: 13,
+              color: on ? AppUi.accentSoft : AppUi.textLo,
+              fallback: GameIconData.scroll,
+            ),
             const SizedBox(width: 7),
             Text(
               s.label,

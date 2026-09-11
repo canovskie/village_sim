@@ -8,8 +8,9 @@ import 'package:village_sim/systems/building_system.dart';
 import 'package:village_sim/ui/building_info_panel.dart';
 
 void main() {
-  testWidgets('geç dönem bina paneli gerçek uzmanlığını okutur',
-      (tester) async {
+  testWidgets('geç dönem bina paneli gerçek uzmanlığını okutur', (
+    tester,
+  ) async {
     const stats = VillageStats(
       stockCapacity: 120,
       morale: 0.55,
@@ -42,38 +43,24 @@ void main() {
       expect(tester.takeException(), isNull);
     }
 
-    final bathhouse = BuildingEntity(
-      type: BuildingType.bathhouse,
-      col: 0,
-      row: 0,
-    )
-      ..isActive = true
-      ..serviceTimer = kBathhouseFuelSeconds;
+    final bathhouse =
+        BuildingEntity(type: BuildingType.bathhouse, col: 0, row: 0)
+          ..isActive = true
+          ..serviceTimer = kBathhouseFuelSeconds;
     await show(bathhouse);
     expect(find.text('Bakım veriyor'), findsOneWidget);
     expect(find.text('+100%'), findsOneWidget);
 
-    final monument = BuildingEntity(
-      type: BuildingType.monument,
-      col: 0,
-      row: 0,
-    )..inscription = 'Açık Pazar · Demirhan Hanesi · 42. gün';
+    final monument = BuildingEntity(type: BuildingType.monument, col: 0, row: 0)
+      ..inscription = 'Açık Pazar · Demirhan Hanesi · 42. gün';
     await show(monument);
     expect(find.text(monument.inscription), findsOneWidget);
 
-    await show(BuildingEntity(
-      type: BuildingType.belltower,
-      col: 0,
-      row: 0,
-    ));
+    await show(BuildingEntity(type: BuildingType.belltower, col: 0, row: 0));
     expect(find.text('+60%'), findsOneWidget);
     expect(find.text('1'), findsWidgets);
 
-    await show(BuildingEntity(
-      type: BuildingType.caravanserai,
-      col: 0,
-      row: 0,
-    ));
+    await show(BuildingEntity(type: BuildingType.caravanserai, col: 0, row: 0));
     expect(find.text('%35 daha sık'), findsOneWidget);
     expect(find.text('%55 daha uzun'), findsOneWidget);
   });

@@ -738,10 +738,7 @@ class BuildingInfoPanel extends StatelessWidget {
         ];
       case CivicEffect.legacy:
         return [
-          Text(
-            'TAŞA KAZINAN',
-            style: AppUi.label.copyWith(letterSpacing: 0.6),
-          ),
+          Text('TAŞA KAZINAN', style: AppUi.label.copyWith(letterSpacing: 0.6)),
           const SizedBox(height: 5),
           Text(
             building.inscription.isEmpty
@@ -759,8 +756,8 @@ class BuildingInfoPanel extends StatelessWidget {
           ),
         ];
       case CivicEffect.visitorTrade:
-        final gapReduction =
-            ((1.0 - kCaravanseraiVisitGapMultiplier) * 100).round();
+        final gapReduction = ((1.0 - kCaravanseraiVisitGapMultiplier) * 100)
+            .round();
         final durationBonus =
             ((kCaravanseraiVisitDurationMultiplier - 1.0) * 100).round();
         return [
