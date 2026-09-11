@@ -130,7 +130,8 @@ extension _SceneEvents on _VillageSceneState {
   }
 
   /// Yeni olay paketi kendi mayalanma metnini tanımlayana kadar genel işaret.
-  String _omenText(EventOutcome e) => '${e.icon} Köyde bir kıpırtı var.';
+  String _omenText(EventOutcome e) =>
+      Voice.weave('${e.icon} ${e.messageFor(_eventSeed(e))}', _voice(null));
 
   /// Bir olayın metin tohumu: gün + olay kimliği. Aynı gün aynı olay → aynı
   /// varyant (banner, bildirim ve günce aynı cümleyi konuşur).
@@ -205,7 +206,8 @@ extension _SceneEvents on _VillageSceneState {
         _attachFxTargets(fx);
       }
     }
-    _reactToEvent(shown); // köy gövde diliyle tepki verir — iş değil, bekleyiş
+    _reactToEvent(shown); // köy gövde diliyle tepki verir
+    _stageEventResponse(shown, choiceId: null);
     _showNotification(
       '${e.icon} ${e.title}. Köy karar bekliyor.',
       headline: e.title,
@@ -348,6 +350,10 @@ extension _SceneEvents on _VillageSceneState {
     EventChoice c, {
     bool timedOut = false,
   }) {
+    if (!identical(base, _pendingChoice) ||
+        !(base.choices?.contains(c) ?? false)) {
+      return;
+    }
     if (!timedOut && !c.canAfford(_stockpile)) {
       _showNotification(
         'Bu karar için köyün kaynağı yetmiyor.',
@@ -397,6 +403,10 @@ extension _SceneEvents on _VillageSceneState {
     // Vakanüvis: kararın kuru izi ("Kova zinciri kuruldu. Ev kurtarıldı.").
     // Zaman aşımında iz "söz gelmedi" diye başlar — suskunluk da bir karardır
     // ve güncede öyle okunur.
+    final resolution = Voice.weave(
+      c.resolutionMessage,
+      _voice(null, seed: _eventSeed(base)),
+    );
     final annal = c.annal.isEmpty ? '${base.title}: ${c.label}' : c.annal;
     _chronicle(
       timedOut ? 'Söz gelmedi. $annal' : annal,
@@ -407,7 +417,7 @@ extension _SceneEvents on _VillageSceneState {
       id: base.id,
       title: base.title,
       icon: base.icon,
-      message: c.resolutionMessage,
+      message: resolution,
       category: base.category,
       severity: base.severity,
       foodDelta: c.foodDelta,
@@ -423,7 +433,7 @@ extension _SceneEvents on _VillageSceneState {
     _activeEventLeft = kEventBannerDuration;
     _reactToEvent(_activeEvent!); // çözüm sonrası köy gövde diliyle tepki verir
     _showNotification(
-      c.resolutionMessage,
+      resolution,
       headline: base.title,
       topic: VillageNewsTopic.village,
       tone: switch (base.category) {

@@ -151,6 +151,7 @@ const imperialRaidScenarios = <ImperialRaidScenario>[
         'Kalkanlar birbirine kilitlendi; kolon eşikte meydan muharebesi arıyor.',
     objective: 'Savunma hattını kırıp köyü boyun eğdirmek',
     target: ImperialRaidTarget.threshold,
+    minPopulation: 1,
     holdBonus: .06,
   ),
   ImperialRaidScenario(
@@ -430,6 +431,8 @@ ImperialRaidScenario selectImperialRaidScenario(
   int seed,
 ) {
   final eligible = eligibleImperialRaids(context);
-  // Demir Saf her bağlamda uygun olduğundan liste boş kalmaz.
+  // Dev panel doğal nüfus geçidini bilerek atlar. Katalog koşulları ileride
+  // değişse bile boş liste modulo-sı oyunu debugger'da dondurmamalı.
+  if (eligible.isEmpty) return imperialRaidScenarios.first;
   return eligible[seed.abs() % eligible.length];
 }

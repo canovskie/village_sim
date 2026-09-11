@@ -268,21 +268,17 @@ void _head(Canvas c, Color skin, {double y = -80}) {
   _smile(c, y);
 }
 
-/// Animasyonlu bacak: hip pivot (hipX, −36).
-/// Bacak + bot tam olarak yere (origin y=0) ulaşır; gölge orada çizilir.
+/// Eski meslek çizimlerinin bacak giriş noktası. Geometriyi ayrı bir rijit
+/// çubukla tekrar etmek yerine yeni eklemli/shaded bacakla paylaşır.
 void _leg(
   Canvas c,
   double hipX,
   double angle,
   Color hose,
-  Color boot,
-) {
-  c.save();
-  c.translate(hipX, -36);
-  c.rotate(angle);
-  c.drawRect(const Rect.fromLTWH(-4, 0, 8, 32), _f(hose));
-  c.drawRect(const Rect.fromLTWH(-5, 29, 10, 7), _f(boot));
-  c.restore();
+  Color boot, {
+  double legLift = 0,
+}) {
+  _shadedLeg(c, hipX, angle, hose, boot, legLift: legLift);
 }
 
 /// Animasyonlu kol: shoulder pivot (shoulderX, −68).

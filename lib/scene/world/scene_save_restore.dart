@@ -2,7 +2,6 @@ part of '../../main.dart';
 
 /// KAYIT — restore yarısı (JSON → state). Eski kayıt toleransı burada; capture ile birebir simetrik olmalı.
 extension _SceneSaveRestore on _VillageSceneState {
-
   // ── Restore (JSON → state) ──────────────────────────────────────────────────
 
   /// Kaydedilmiş dünyayı geri kurar. initState'ten (asset yüklemeden önce)
@@ -132,6 +131,7 @@ extension _SceneSaveRestore on _VillageSceneState {
     // 2) Skaler state.
     _time = _d(w['time']);
     _decisionPacing = DecisionPacing.fromJson(w['decisionPacing']);
+    _decisionCustoms = DecisionCustoms.fromJson(w['decisionCustoms']);
     _worldSeed = _i(w['worldSeed']);
     _dayCount = _i(w['dayCount'], 1);
     _lastTimeOfDay = _d(w['lastTimeOfDay']);
@@ -630,7 +630,11 @@ extension _SceneSaveRestore on _VillageSceneState {
 
     // 9) Dilekçe / meclis.
     final pid = w['pendingPetition'];
-    _pendingPetition = pid is String ? PetitionSystem.byId(pid) : null;
+    _pendingPetition = pid == PetitionIds.crimeVerdict
+        ? crimeVerdictFor(_policies.sealed)
+        : pid is String
+        ? PetitionSystem.byId(pid)
+        : null;
     final qid = w['queuedPetition'];
     _queuedPetition = qid is String ? PetitionSystem.byId(qid) : null;
     _queuedPresentDelay = _d(w['queuedPresentDelay']);
@@ -651,7 +655,6 @@ extension _SceneSaveRestore on _VillageSceneState {
     _crisisCooldown = _d(w['crisisCooldown']);
     _unrestStirShown = w['unrestStirShown'] == true;
     _regimeScan = 0;
-    _regimeCrisisUnrest = const {};
     _crimeSuspicion = _i(w['crimeSuspicion']);
     _crimePardons = _i(w['crimePardons']);
     // Eski kayıtta yok — o köyün suç geçmişi bilinmiyor. Affedilen/şüphe kadarı
@@ -1035,6 +1038,9 @@ extension _SceneSaveRestore on _VillageSceneState {
     v.targetRow = orphanedCarry ? v.gridY : _d(j['targetRow'], v.gridY);
     v.isFavorite = _b(j['isFavorite']);
     v.wed = _b(j['wed']);
+    v.avoidsMarriage = j.containsKey('avoidsMarriage')
+        ? _b(j['avoidsMarriage'])
+        : v.wardrobe == NpcWardrobe.flowing;
     // Üstlenilmiş iş rolü — atama detayı (claim/faz) _syncJobWorkforce'la kurulur.
     final jobRole = j['jobRole'] as String?;
     if (jobRole != null) {
@@ -1081,6 +1087,11 @@ extension _SceneSaveRestore on _VillageSceneState {
     final rawMastery = j['mastery'];
     if (rawMastery is Map) {
       rawMastery.forEach((k, val) => v.mastery[k as String] = _d(val));
+    }
+    final leaving = j['leavingTo'];
+    if (leaving is List && leaving.length == 2) {
+      v.job = null;
+      v.startLeaving(_d(leaving[0]), _d(leaving[1]));
     }
     return v;
   }

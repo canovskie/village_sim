@@ -203,6 +203,9 @@ extension _ScenePetitions on _VillageSceneState {
     VillagerEntity? author,
     Map<String, String> extra = const {},
   }) {
+    if (rawPetition.id == PetitionIds.crimeVerdict) {
+      rawPetition = crimeVerdictFor(_policies.sealed);
+    }
     final story = _prepareStoryPetition(rawPetition);
     if (StoryThreads.threadOf(rawPetition.id) != null) {
       if (story == null) return;
@@ -247,6 +250,7 @@ extension _ScenePetitions on _VillageSceneState {
       _petitionModalOpen = petitionRequiresPlayerVerdict(p.id, _charterTier);
     });
     _easeToBaseSpeed();
+    if (isVillageIssue(p.id)) _stageEventResponse(governanceEvent(p));
     // Sözcü dilekçesini fiziken getirir: merkeze yürür, bir süre bekler.
     _walkPetitionerToCenter(dwell: 0.10 * kGameDaySeconds);
     _showNotification(
@@ -314,7 +318,11 @@ extension _ScenePetitions on _VillageSceneState {
           v.hasProfession) {
         adults++;
       }
-      if (!v.isDying && v.isMale && !v.wed && v.lifeStage == LifeStage.adult) {
+      if (!v.isDying &&
+          v.isMale &&
+          !v.wed &&
+          !v.avoidsMarriage &&
+          v.lifeStage == LifeStage.adult) {
         unwedAdultMen++;
       }
     }
@@ -334,6 +342,17 @@ extension _ScenePetitions on _VillageSceneState {
       gold: _stockpile.gold,
       morale: _stats.morale,
       hasChurch: _churchBuilding != null,
+      hasWell: _buildings.any((b) => b.type == BuildingType.well),
+      hasElder: _villagers.any(
+        (v) => !v.isDying && !v.isLeaving && v.lifeStage == LifeStage.elder,
+      ),
+      cookingHouseholds: _villagers
+          .where(
+            (v) => !v.isDying && !v.isLeaving && v.job?.role == JobRole.cook,
+          )
+          .map((v) => v.surname)
+          .toSet()
+          .length,
       memory: _villageMemory,
       storyCasts: {
         for (final thread in StoryThread.values)
@@ -513,6 +532,7 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// Oyuncu bir seçeneği seçti: deltaları + morali + yasayı + fx'i uygula.
   void _resolvePetition(Petition p, PetitionOption o) {
+    if (!identical(p, _pendingPetition) || !p.options.contains(o)) return;
     if (_refreshLostStory(p)) return;
     final blocked = _petitionOptionBlockReason(o);
     if (blocked != null) {
@@ -545,7 +565,6 @@ extension _ScenePetitions on _VillageSceneState {
         oral: oral,
       );
       // Rejim krizinin şıkka bağlı huzursuzluk etkisi (yalnız regime.* için).
-      _applyRegimeChoice(p, o);
 
       // Hafıza: bu dilekçe bir süre tekrar random çıkmasın.
       _petitionCooldowns[p.id] = _time + _kPetitionRepeatCooldown;
@@ -655,6 +674,22 @@ extension _ScenePetitions on _VillageSceneState {
     }
     if (o.goldDelta != 0) {
       _stockpile.gold = (_stockpile.gold + o.goldDelta).clamp(0, 1 << 30);
+    }
+    _unrest = (_unrest + o.unrestDelta).clamp(0.0, 1.0);
+    if (o.unrestDelta < 0) _unrestStirShown = false;
+    switch (o.action) {
+      case PetitionAction.none:
+        break;
+      case PetitionAction.exileAgitator:
+        final rebel = _mostAggrieved();
+        if (rebel != null) _exileVillager(rebel);
+      case PetitionAction.settleCouncil:
+        _policies.inkDryUntilSim = _time;
+        _inkDryTotal = 0;
+      case PetitionAction.extendCouncil:
+        _policies.inkDryUntilSim =
+            max(_time, _policies.inkDryUntilSim) + kGameDaySeconds;
+        _inkDryTotal = _policies.inkDryUntilSim - _time;
     }
     _startDecisionProcess(p, o, author);
     if (o.presence == DecisionPresence.activeCaravan) {
@@ -1289,6 +1324,20 @@ extension _ScenePetitions on _VillageSceneState {
 
   /// Parşömen dilekçe modal'ı — köy durumu şeridiyle (bağlamla karar ver).
   Widget buildPetitionModal() {
+    final p = _pendingPetition!;
+    if (isVillageIssue(p.id)) {
+      return Positioned.fill(
+        child: EventChoiceModal(
+          event: governanceEvent(p),
+          stockpile: _stockpile,
+          blockedReason: (choice) =>
+              _petitionOptionBlockReason(p.options[int.parse(choice.id)]),
+          onChoose: (choice) =>
+              _resolvePetition(p, p.options[int.parse(choice.id)]),
+          onDismiss: _petitionNeedsPlayerVerdict ? null : _dismissPetition,
+        ),
+      );
+    }
     final oral = !_lawmakingUnlocked;
     return Positioned.fill(
       child: PetitionModal(

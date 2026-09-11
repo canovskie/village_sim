@@ -21,6 +21,7 @@ extension _SceneTick on _VillageSceneState {
   void _onTick(Duration elapsed) {
     final raw = ((elapsed - _last).inMicroseconds / 1e6).clamp(0.0, 0.1);
     _last = elapsed;
+    _tickNotifications(raw);
     // Pause/modal frames are normally completely static. Remember whether a
     // real-time overlay was alive before its countdown so its final hiding
     // frame is still delivered, but do not repaint the full game canvas at
@@ -844,6 +845,28 @@ extension _SceneTick on _VillageSceneState {
       v.tickMudFootprints(
         dt,
         muddy: _cycle.rainIntensity > 0.28 && _season != Season.winter,
+      );
+      final tile = (v.renderX.floor(), v.renderY.floor());
+      final road = _roadSystem.at(tile.$1, tile.$2)?.surface;
+      final hardSurface =
+          road == RoadSurface.stone || road == RoadSurface.woodBridge;
+      v.footstepTrail.update(
+        dt,
+        x: v.renderX,
+        y: v.renderY,
+        moving:
+            v.isWalking &&
+            v.moveIntensity > 0.2 &&
+            !v.isInsideBuilding &&
+            !v.isDying &&
+            !v.isSleeping,
+        surface: _waterTiles.contains(tile) && road == null
+            ? null
+            : _season == Season.winter
+            ? (hardSurface ? null : FootstepSurface.snow)
+            : _cycle.rainIntensity > 0.28
+            ? FootstepSurface.wet
+            : (hardSurface ? null : FootstepSurface.dust),
       );
     }
 
@@ -1761,7 +1784,10 @@ extension _SceneTick on _VillageSceneState {
     if (m.homeBuilding != targetHome) m.homeBuilding = targetHome;
     // Aile birleşim ödülü — köy 5 gün boyunca +%2 moral hisseder.
     pushPolicyMorale(0.02, 5.0);
-    _showNotification('💞 ${w.name} & ${m.name} aile kurdu.');
+    _showNotification('💞 ${w.name} & ${m.name} aile kurdu.',
+      topic: VillageNewsTopic.people, tone: VillageNewsTone.favorable,
+      priority: VillageNewsPriority.important,
+      eventKey: 'family.${w.personalitySeed}.${m.personalitySeed}');
   }
 
   // ── Ambarsız hasat uyarısı ─────────────────────────────────────────────

@@ -6,6 +6,7 @@ import '../characters/personality.dart';
 import '../characters/villager_type.dart';
 import '../core/constants.dart';
 import '../systems/events/chronicle.dart';
+import '../systems/npc/footstep_trail.dart';
 import '../systems/npc/villager_act.dart';
 import '../systems/npc/villager_memory.dart';
 import '../systems/npc/villager_mind.dart';
@@ -125,6 +126,9 @@ class VillagerEntity extends WorkerEntity {
   /// adayı seçilmez (scene_wedding kur sürecinin kapısı). Eş ölse bile true
   /// kalır — cozy: kimse zorla yeniden evlendirilmez.
   bool wed = false;
+
+  /// Divan tarafından tanınan evlenmeme tercihi.
+  bool avoidsMarriage = false;
 
   /// Bu köylünün KİŞİSEL yaşam öyküsü — doğum, reşit oluş, evlilik, çocuk,
   /// bilgelik, kayıp… Panelde zaman çizelgesi olarak okunur (bireye bağlanma).
@@ -478,6 +482,7 @@ class VillagerEntity extends WorkerEntity {
   /// Islak zeminde yürüyüşü kısa ömürlü ayak izlerine örnekler. Her kare iz
   /// üretmez: mesafe eşiği + 14 iz tavanı kalabalık köyde maliyeti sınırlar.
   final List<MudFootprintTrace> mudFootprints = [];
+  final FootstepTrail footstepTrail = FootstepTrail();
   double _mudSampleX = double.nan;
   double _mudSampleY = double.nan;
   bool _nextMudFootLeft = false;
@@ -820,6 +825,7 @@ class VillagerEntity extends WorkerEntity {
   /// AI donar (update erken döner), yalnız kenara yürüme sürer.
   bool isLeaving = false;
   double _leaveX = 0, _leaveY = 0;
+  (double, double) get leavingDestination => (_leaveX, _leaveY);
 
   /// Kenara vardı → sahne bir sonraki geçişte listeden çıkarabilir.
   bool leftVillage = false;

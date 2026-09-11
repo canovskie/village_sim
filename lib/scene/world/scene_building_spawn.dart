@@ -672,7 +672,10 @@ extension _SceneBuildingSpawn on _VillageSceneState {
       seed: _stableSeed('doğum${baby.name}', _dayCount),
       extra: {'bebek': baby.name},
     );
-    _showNotification(Voice.say(_kBirthPool, ctx));
+    _showNotification(Voice.say(_kBirthPool, ctx),
+      topic: VillageNewsTopic.people, tone: VillageNewsTone.favorable,
+      priority: VillageNewsPriority.important,
+      eventKey: 'birth.${baby.personalitySeed}');
     AudioManager.instance.playSfx(Sfx.birthJoy);
     _award('first_birth', 'Köyün ilk bebeği dünyaya geldi', '👶');
     // Yaşam öyküsü — bebeğin doğumu + ebeveynlerin yeni çocuğu (kuru, kısa).
@@ -824,7 +827,13 @@ extension _SceneBuildingSpawn on _VillageSceneState {
     VillagerEntity? lonely;
     BuildingEntity? home;
     for (final v in _villagers) {
-      if (v.lifeStage != LifeStage.adult || v.isDying) continue;
+      if (v.lifeStage != LifeStage.adult ||
+          v.isDying ||
+          v.isLeaving ||
+          v.wed ||
+          v.avoidsMarriage) {
+        continue;
+      }
       final h = v.homeBuilding as BuildingEntity?;
       if (h == null) continue;
       final f = h.fn;

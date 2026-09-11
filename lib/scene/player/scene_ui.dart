@@ -1280,6 +1280,32 @@ extension _SceneUi on _VillageSceneState {
 
   Widget buildSelectedBuildingPanel() {
     final selected = _selectedBuilding!;
+    if (_houseInteriorOpen && selected.type == BuildingType.woodenHouse) {
+      return Positioned.fill(
+        child: HomeInteriorScreen(
+          key: ObjectKey(selected),
+          decorSeed: HomeInteriorLayout.seedForHome(selected.col, selected.row),
+          residents: _villagers
+              .where((v) => v.homeBuilding == selected && !v.isDying)
+              .toList(),
+          residentSource: () => _villagers
+              .where((v) => v.homeBuilding == selected && !v.isDying)
+              .toList(),
+          daylightSource: () => _cycle.dayLight,
+          worldPaused: () =>
+              _timeScale == 0 ||
+              _activeCutscene != null ||
+              _imperialDemand != null ||
+              _collapsed,
+          onClose: () => setStateHere(() {
+            _houseInteriorOpen = false;
+            _selectedBuilding = null;
+            _detailExpanded = false;
+          }),
+          onManage: () => setStateHere(() => _houseInteriorOpen = false),
+        ),
+      );
+    }
     // Panel artık ekranın üst-ortasında — oyun alanı yanlarda/altta açık kalır,
     // ama panel görsel odak noktası olur. Soft tap-out backdrop ile arka plan
     // hafif kararır ve panel dışına tıklayınca kapanır.
@@ -1306,6 +1332,9 @@ extension _SceneUi on _VillageSceneState {
               compact: useCompactGameUi(context),
               child: BuildingInfoPanel(
                 building: selected,
+                onViewInterior: selected.type == BuildingType.woodenHouse
+                    ? () => setStateHere(() => _houseInteriorOpen = true)
+                    : null,
                 residents: _villagers
                     .where((v) => v.homeBuilding == selected)
                     .toList(),

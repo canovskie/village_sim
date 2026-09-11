@@ -1,5 +1,5 @@
 /// Köyde olup biteni kısa, öncelikli ve okunabilir haberlere dönüştüren saf
-/// içerik modeli. Sahne zamanlayıcıyı, UI ise yalnız çizimi sahiplenir.
+/// içerik ve yayın saati modeli. Sahne görünürlüğü, UI yalnız çizimi bağlar.
 library;
 
 enum VillageNewsTopic {
@@ -80,6 +80,7 @@ class VillageNews {
     VillageNewsTone? tone,
     VillageNewsPriority? priority,
     String stamp = 'ŞİMDİ',
+    String? eventKey,
   }) {
     final clean = _cleanMessage(message);
     final inferenceText = message.trim();
@@ -100,7 +101,7 @@ class VillageNews {
           priority ??
           _inferPriority(inferenceText, inferredTone, inferredTopic),
       stamp: stamp,
-      dedupeKey: _normalise('$resolvedHeadline $resolvedBody'),
+      dedupeKey: eventKey ?? _normalise('$resolvedHeadline $resolvedBody'),
     );
   }
 
@@ -113,6 +114,7 @@ class VillageNews {
     VillageNewsTone tone = VillageNewsTone.neutral,
     VillageNewsPriority priority = VillageNewsPriority.routine,
     String stamp = 'ŞİMDİ',
+    String? eventKey,
   }) {
     final cleanHeadline = headline.trim();
     final cleanBody = body.trim();
@@ -124,7 +126,7 @@ class VillageNews {
       tone: tone,
       priority: priority,
       stamp: stamp,
-      dedupeKey: _normalise('$cleanHeadline $cleanBody'),
+      dedupeKey: eventKey ?? _normalise('$cleanHeadline $cleanBody'),
     );
   }
 
@@ -158,7 +160,31 @@ class VillageNews {
   }
 
   static VillageNewsTopic _inferTopic(String clean) {
-    final text = clean.toLowerCase();
+    final text = clean.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+    if (_has(text, const [
+      'eksik malzeme',
+      'hız:',
+      'duraklatıldı',
+      'kayıt',
+      'kaydedildi',
+      'seçilen',
+      'yetersiz',
+      'için yer yok',
+      'uygun değil',
+    ])) {
+      return VillageNewsTopic.system;
+    }
+    if (_has(text, const [
+      '👶',
+      '💞',
+      '💔',
+      '🚪',
+      'doğdu',
+      'aile kurdu',
+      'hanesi',
+    ])) {
+      return VillageNewsTopic.people;
+    }
     if (_has(text, const [
       'imparator',
       'berat',
@@ -214,19 +240,21 @@ class VillageNews {
     ])) {
       return VillageNewsTopic.safety;
     }
-    if (_has(text, const [
-      'kış',
-      'kar',
-      'don',
-      'yağmur',
-      'fırtına',
-      'gök',
-      'mevsim',
-      'soğuk',
-      'ilkbahar',
-      'sonbahar',
-      'yaz ',
-    ])) {
+    if (RegExp(
+          r'(^|[^a-zçğıöşü])kar(ın|dan|la|lı)?($|[^a-zçğıöşü])',
+        ).hasMatch(text) ||
+        _has(text, const [
+          'kış',
+          'don',
+          'yağmur',
+          'fırtına',
+          'gök',
+          'mevsim',
+          'soğuk',
+          'ilkbahar',
+          'sonbahar',
+          'yaz ',
+        ])) {
       return VillageNewsTopic.weather;
     }
     if (_has(text, const [
@@ -288,7 +316,7 @@ class VillageNews {
   }
 
   static VillageNewsTone _inferTone(String clean) {
-    final text = clean.toLowerCase();
+    final text = clean.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
     if (_has(text, const [
       'köy dağıldı',
       'öldü',
@@ -304,6 +332,7 @@ class VillageNews {
       return VillageNewsTone.critical;
     }
     if (_has(text, const [
+      'eksik malzeme',
       'yetersiz',
       'başarısız',
       'yaralandı',
@@ -350,7 +379,13 @@ class VillageNews {
     VillageNewsTone tone,
     VillageNewsTopic topic,
   ) {
-    final text = clean.toLowerCase();
+    final text = clean.replaceAll('İ', 'i').replaceAll('I', 'ı').toLowerCase();
+    if (_has(text, const ['🚪', '💔', 'gitmeye hazırlan', 'çekip gitti'])) {
+      return VillageNewsPriority.urgent;
+    }
+    if (_has(text, const ['👶', 'doğdu', 'aile kurdu'])) {
+      return VillageNewsPriority.important;
+    }
     if (tone == VillageNewsTone.critical ||
         (topic == VillageNewsTopic.system && tone == VillageNewsTone.caution) ||
         _has(text, const [
@@ -383,8 +418,10 @@ class VillageNews {
     return VillageNewsPriority.routine;
   }
 
-  static bool _has(String text, List<String> needles) =>
-      needles.any(text.contains);
+  static bool _has(String text, List<String> needles) => needles.any(
+    (needle) =>
+        RegExp(r'(^|[^a-zçğıöşü0-9])' + RegExp.escape(needle)).hasMatch(text),
+  );
 
   static String _normalise(String text) =>
       text.toLowerCase().replaceAll(RegExp(r'[^a-zçğıöşü0-9]+'), ' ').trim();
@@ -402,82 +439,136 @@ class VillageNewsQueueUpdate {
 
 /// Acil haberi bekletmeyen, eş haberleri üst üste yığmayan küçük yayın sırası.
 class VillageNewsQueue {
+  /// Yalnız düşük öncelikli bekleyenlerin sınırı. Önemli ve acil kayıtlar
+  /// okunmadan atılmaz; aynı olayın varyantları dedupeKey ile birleşir.
   final int maxPending;
+  final Duration repeatDelay;
   VillageNews? _active;
   final List<VillageNews> _pending = [];
+  final Map<String, double> _remaining = {};
+  final Map<String, (double, VillageNewsPriority)> _recent = {};
+  double _clock = 0;
 
-  VillageNewsQueue({this.maxPending = 2}) : assert(maxPending > 0);
+  VillageNewsQueue({
+    this.maxPending = 2,
+    this.repeatDelay = const Duration(seconds: 30),
+  }) : assert(maxPending > 0);
 
   VillageNews? get active => _active;
   List<VillageNews> get pending => List.unmodifiable(_pending);
   int get pendingCount => _pending.length;
+  double get remainingFraction {
+    final news = _active;
+    if (news == null) return 0;
+    return ((_remaining[news.dedupeKey] ?? _duration(news)) / _duration(news))
+        .clamp(0.0, 1.0);
+  }
+
+  double _duration(VillageNews news) => news.readDuration.inMicroseconds / 1e6;
+
+  /// Saat gerçek görünür süreyi sayar. Gizlenen haber ve sıradaki haberin
+  /// bütçesi tükenmez; hızlandırılmış simülasyon bu saate etki etmez.
+  void advance(double seconds, {required bool visible}) {
+    if (seconds <= 0) return;
+    _clock += seconds;
+    _recent.removeWhere((_, value) => value.$1 <= _clock);
+    final news = _active;
+    if (!visible || news == null) return;
+    final left = (_remaining[news.dedupeKey] ?? _duration(news)) - seconds;
+    _remaining[news.dedupeKey] = left;
+    if (left <= 0) completeActive();
+  }
 
   VillageNewsQueueUpdate add(VillageNews news) {
-    if (_active?.dedupeKey == news.dedupeKey ||
-        _pending.any((item) => item.dedupeKey == news.dedupeKey)) {
-      return const VillageNewsQueueUpdate(
-        accepted: false,
-        activeChanged: false,
-      );
+    const rejected = VillageNewsQueueUpdate(
+      accepted: false,
+      activeChanged: false,
+    );
+    final recent = _recent[news.dedupeKey];
+    if (recent != null &&
+        recent.$1 > _clock &&
+        recent.$2.index >= news.priority.index) {
+      return rejected;
     }
-
-    // Rutin köy cümleleri dünyada zaten görülen davranışlardır. Büyük plakete
-    // yalnız doğrudan oyuncu geri bildirimi olan sistem satırları çıkabilir.
+    final current = _active;
+    if (current?.dedupeKey == news.dedupeKey) {
+      if (news.priority.index <= current!.priority.index) return rejected;
+      _active = news; // aynı olay ağırlaştı: yeni uyarının tam süresi var
+      _remaining[news.dedupeKey] = _duration(news);
+      return const VillageNewsQueueUpdate(accepted: true, activeChanged: true);
+    }
+    final duplicate = _pending.indexWhere((n) => n.dedupeKey == news.dedupeKey);
+    if (duplicate >= 0) {
+      if (_pending[duplicate].priority.index >= news.priority.index) {
+        return rejected;
+      }
+      _pending.removeAt(duplicate);
+    }
     if (news.priority == VillageNewsPriority.routine &&
         news.topic != VillageNewsTopic.system) {
-      return const VillageNewsQueueUpdate(
-        accepted: false,
-        activeChanged: false,
-      );
+      return rejected;
     }
 
-    final current = _active;
+    _remaining[news.dedupeKey] = _duration(news);
     if (current == null) {
       _active = news;
       return const VillageNewsQueueUpdate(accepted: true, activeChanged: true);
     }
-
-    // Gündelik ve yalnızca kayda değer haberler ekran doluyken eskir. Bunları
-    // saklamak, birkaç saniyelik canlılığı dakikalar süren haber seline çevirir.
-    if (news.priority.index < VillageNewsPriority.important.index) {
-      return const VillageNewsQueueUpdate(
-        accepted: false,
-        activeChanged: false,
-      );
-    }
-
-    // Karar/kriz, önündeki düşük önemli haberi keser. Yarım kalan haber ancak
-    // kendisi de karar veya krizse korunur; gündelik satır geri dönmez.
     if (news.priority.index > current.priority.index) {
       if (current.priority.index >= VillageNewsPriority.important.index) {
         _insertPending(current);
+      } else {
+        _remember(current);
       }
       _active = news;
-      _trim();
       return const VillageNewsQueueUpdate(accepted: true, activeChanged: true);
     }
-
     _insertPending(news);
-    _trim();
+    // Küçük gündelik haberler için kısa tampon; krizler bu sınırı paylaşmaz.
+    final ordinary = _pending
+        .where((n) => n.priority.index < VillageNewsPriority.important.index)
+        .toList();
+    if (ordinary.length > maxPending) {
+      final dropped = ordinary.last;
+      _pending.remove(dropped);
+      _remaining.remove(dropped.dedupeKey);
+    }
     return VillageNewsQueueUpdate(
-      accepted: _pending.any((item) => identical(item, news)),
+      accepted: _pending.contains(news),
       activeChanged: false,
     );
   }
 
+  void _remember(VillageNews news) {
+    _remaining.remove(news.dedupeKey);
+    _recent.remove(news.dedupeKey);
+    _recent[news.dedupeKey] = (
+      _clock + repeatDelay.inMicroseconds / 1e6,
+      news.priority,
+    );
+    if (_recent.length > 256) _recent.remove(_recent.keys.first);
+  }
+
   VillageNews? completeActive() {
+    if (_active != null) _remember(_active!);
     _active = _pending.isEmpty ? null : _pending.removeAt(0);
     return _active;
   }
 
+  /// Oyuncunun yeni eylem cevabı eskisinin yerini alabilir.
   void replace(VillageNews news) {
+    _remaining.clear();
     _active = news;
+    _remaining[news.dedupeKey] = _duration(news);
     _pending.clear();
   }
 
   void clear() {
     _active = null;
     _pending.clear();
+    _remaining.clear();
+    _recent.clear();
+    _clock = 0;
   }
 
   void _insertPending(VillageNews news) {
@@ -489,10 +580,5 @@ class VillageNewsQueue {
     } else {
       _pending.insert(before, news);
     }
-  }
-
-  void _trim() {
-    if (_pending.length <= maxPending) return;
-    _pending.removeLast();
   }
 }

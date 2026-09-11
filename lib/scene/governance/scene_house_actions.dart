@@ -316,7 +316,10 @@ extension _SceneHouseActions on _VillageSceneState {
   /// öteki hane tercih edilir — nikâh bir ittifaktır, rastgele değil.
   (VillagerEntity, VillagerEntity)? _findPoliticalMatch(String surname) {
     bool eligible(VillagerEntity v) =>
-        !v.isDying && !v.wed && v.lifeStage == LifeStage.adult;
+        !v.isDying &&
+        !v.wed &&
+        !v.avoidsMarriage &&
+        v.lifeStage == LifeStage.adult;
 
     final ours = _houseMembers(surname).where(eligible).toList();
     if (ours.isEmpty) return null;

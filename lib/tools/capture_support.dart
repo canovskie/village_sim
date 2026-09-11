@@ -35,6 +35,10 @@ Future<void> settleFrames(int ms) async {
   for (int i = 0; i < steps; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 16));
     if (b.schedulerPhase != SchedulerPhase.idle) continue;
+    // Pencere öne gelince motor kendi saatinde kare gönderebilir. Mobil
+    // capture ile aynı kural: elle sürülen saat motorun gerisine düşmesin.
+    final engineStamp = b.currentSystemFrameTimeStamp;
+    if (engineStamp > _stamp) _stamp = engineStamp;
     _stamp += const Duration(milliseconds: 16);
     b.handleBeginFrame(_stamp);
     b.handleDrawFrame();

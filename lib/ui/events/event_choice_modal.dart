@@ -22,6 +22,7 @@ class EventChoiceModal extends StatelessWidget {
   final void Function(EventChoice) onChoose;
   final VoidCallback? onDismiss;
   final ResourceBundle? stockpile;
+  final String? Function(EventChoice)? blockedReason;
 
   const EventChoiceModal({
     super.key,
@@ -29,6 +30,7 @@ class EventChoiceModal extends StatelessWidget {
     required this.onChoose,
     this.onDismiss,
     this.stockpile,
+    this.blockedReason,
   });
 
   Color get _accent => switch (event.category) {
@@ -293,13 +295,18 @@ class EventChoiceModal extends StatelessWidget {
     required bool compact,
     required bool dense,
   }) {
-    final enabled = stockpile == null || choice.canAfford(stockpile!);
-    return _ChoiceCard(
-      choice: choice,
-      accent: _accent,
-      compact: compact,
-      dense: dense,
-      onTap: enabled ? () => onChoose(choice) : null,
+    final reason = blockedReason?.call(choice);
+    final enabled =
+        reason == null && (stockpile == null || choice.canAfford(stockpile!));
+    return Tooltip(
+      message: reason ?? (!enabled ? 'Kaynak yetersiz' : ''),
+      child: _ChoiceCard(
+        choice: choice,
+        accent: _accent,
+        compact: compact,
+        dense: dense,
+        onTap: enabled ? () => onChoose(choice) : null,
+      ),
     );
   }
 }

@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Ev İçi Denemesi",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/tools/home_interior_main.dart",
+      "deviceId": "macos"
+    }
+  ]
+}

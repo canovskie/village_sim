@@ -2,7 +2,6 @@ part of '../../main.dart';
 
 /// SUÇA KARŞILIK — tanıklar, muhafız tepkisi, yakalama, yargı dilekçesi, cezalar, fidye ve dev kısayolları.
 extension _SceneCrimeJustice on _VillageSceneState {
-
   /// Suçu gören köylü gündelik rotasında yürümeye devam etmez: kısa süre
   /// durur, bedenini olay yerine çevirir; sonra hafızası/aklı uygunsa devriyeye
   /// ihbar teklifi doğal olarak kazanır. Bu kısa [Act] ceremony değildir;
@@ -272,7 +271,12 @@ extension _SceneCrimeJustice on _VillageSceneState {
       extra: {'muhafız': guard?.name ?? ''},
     );
     _showNotification(
-      Voice.say(guard != null ? _SceneCrime._kCaughtGuardPool : _SceneCrime._kCaughtPlayerPool, ctx),
+      Voice.say(
+        guard != null
+            ? _SceneCrime._kCaughtGuardPool
+            : _SceneCrime._kCaughtPlayerPool,
+        ctx,
+      ),
     );
     _chronicle(
       Voice.say(c.def.caughtAnnalPool, ctx),
@@ -300,62 +304,7 @@ extension _SceneCrimeJustice on _VillageSceneState {
     required bool prevented,
     VillagerEntity? guard,
   }) {
-    var p = PetitionSystem.requireById(PetitionIds.crimeVerdict);
-    // KÜREK CEZASI (NİZAM) — yürürlükteyse yargıya beşinci bir hüküm açılır:
-    // mahkûm sürülmez ya da idam edilmez, taş ocağına koşulur (köy taş kazanır,
-    // bir el eksilmez). Emek ekseninin sert ama üretken hükmü.
-    if (_policies.sealed.contains('nizam.labor')) {
-      p = p.withExtraOption(
-        const PetitionOption(
-          label: 'Kürek cezasına yolla',
-          detail:
-              '{suçlu} zindana atılır, taş ocağında çalıştırılır. Köy taş '
-              'kazanır; bir el de eksilmez.',
-          resolutionPool: [
-            '⛓ {suçlu} taş ocağına koşuldu. Kürek sesi meydana kadar geliyor.',
-            '⛓ Hüküm: kürek. {suçlu} borcunu taşla ödeyecek.',
-            '⛓ {suçlu} zindanı boyladı; sabah ilk taş ocağa indi.',
-          ],
-          moraleAmount: 0.02,
-          moraleDays: 3,
-          fx: PetitionFx.crimeLabor,
-          estateMood: [(Estate.laborers, 0.06), (Estate.faithful, -0.08)],
-        ),
-      );
-    }
-    // TÖVBE MEYDANI (DERGÂH) — kılıcın karşılığı. Fail ne sürülür ne dövülür:
-    // günahını meydanda söyler. Affın mekanik bedeli olan bağış sayacını
-    // ARTIRMAZ (bkz. [_sentenceToPenance]); caydırıcılığı utançtan gelir.
-    if (_policies.sealed.contains('dergah.penance')) {
-      p = p.withExtraOption(
-        const PetitionOption(
-          label: 'Tövbeye çağır',
-          detail:
-              '{suçlu} günahını meydanda, köyün önünde söyler. Ceza kesilmez; '
-              'bedel utançtır. Af gibi düzeni gevşetmez.',
-          resolutionPool: [
-            '🙏 {suçlu} meydana çıkarıldı. Günahını kendi ağzıyla söyleyecek.',
-            '🙏 Hüküm: tövbe. {suçlu} bedelini köyün gözü önünde ödeyecek.',
-            '🙏 {suçlu} tövbeye çağrıldı; meydan sessizce doldu.',
-          ],
-          moraleAmount: 0.03,
-          moraleDays: 3,
-          fx: PetitionFx.crimePenance,
-          estateMood: [
-            (Estate.faithful, 0.10),
-            (Estate.hearth, -0.06),
-            (Estate.artisans, -0.04),
-          ],
-        ),
-      );
-    }
-    // SÜRGÜN FERMANI (NİZAM) — mühürlü değilse köy kimseyi yola vuramaz.
-    // Hane sürgünü zaten bu fermanı şart koşuyordu (bkz. house_action.gateFor);
-    // yargı da aynı kapıdan geçsin, yoksa aynı hüküm bir kapıda yasak bir
-    // kapıda serbest olurdu.
-    if (!_policies.sealed.contains('nizam.exile')) {
-      p = p.without(const {PetitionFx.crimeExile});
-    }
+    final p = crimeVerdictFor(_policies.sealed);
     _accusedCriminal = culprit;
     final author = (c.victim != null && !c.victim!.isDying)
         ? c.victim
@@ -408,7 +357,10 @@ extension _SceneCrimeJustice on _VillageSceneState {
       icon: '🕊️',
       kind: ChronicleKind.decision,
     );
-    _showNotification(Voice.say(_SceneCrime._kPardonPool, ctx));
+    _showNotification(
+      Voice.say(_SceneCrime._kPardonPool, ctx),
+      eventKey: '_kPardonPool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// CEZA — meydanda teşhir. Suçlu kırılır (moral dibe iner, birkaç gün iş
@@ -431,7 +383,10 @@ extension _SceneCrimeJustice on _VillageSceneState {
       icon: '⛓️',
       kind: ChronicleKind.decision,
     );
-    _showNotification(Voice.say(_SceneCrime._kPunishPool, ctx));
+    _showNotification(
+      Voice.say(_SceneCrime._kPunishPool, ctx),
+      eventKey: '_kPunishPool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// SÜRGÜN — suçlu köyden atılır (mevcut sürgün mekanizması).
@@ -462,10 +417,8 @@ extension _SceneCrimeJustice on _VillageSceneState {
     v.activity = VillagerActivity.none;
     v.act = null;
     v.prop = PropKind.none;
-    _stockpile.stone = (_stockpile.stone + _SceneCrime._kLaborUpfrontStone).clamp(
-      0,
-      1 << 30,
-    );
+    _stockpile.stone = (_stockpile.stone + _SceneCrime._kLaborUpfrontStone)
+        .clamp(0, 1 << 30);
     _captureLaborCount++; // telemetri: kürek cezası kaç kez uygulandı
     v.feel(NpcEmotion.grief, 6.0, moodDelta: -0.20);
     v.crimeCooldown = _SceneCrime._kCrimeCooldown * 3;
@@ -524,7 +477,10 @@ extension _SceneCrimeJustice on _VillageSceneState {
       kind: ChronicleKind.decision,
     );
     _lifeEvent(v, Voice.say(_SceneCrime._kPenanceAnnalPool, ctx), icon: '🙏');
-    _showNotification(Voice.say(_SceneCrime._kPenancePool, ctx));
+    _showNotification(
+      Voice.say(_SceneCrime._kPenancePool, ctx),
+      eventKey: '_kPenancePool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// KÜREK CEZASI YÜRÜTÜCÜSÜ — mahkûmu gündüzleri taş ocağına koşar, günlük taş
@@ -647,7 +603,10 @@ extension _SceneCrimeJustice on _VillageSceneState {
       milestone: true,
       kind: ChronicleKind.decision,
     );
-    _showNotification(Voice.say(_SceneCrime._kRansomReturnPool, ctx));
+    _showNotification(
+      Voice.say(_SceneCrime._kRansomReturnPool, ctx),
+      eventKey: '_kRansomReturnPool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// Fidye reddedildi — rehin bir daha dönmez.
@@ -664,7 +623,10 @@ extension _SceneCrimeJustice on _VillageSceneState {
       milestone: true,
       kind: ChronicleKind.crisis,
     );
-    _showNotification(Voice.say(_SceneCrime._kRansomLostPool, ctx));
+    _showNotification(
+      Voice.say(_SceneCrime._kRansomLostPool, ctx),
+      eventKey: '_kRansomLostPool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   // ══════════════════════════════════════════════════════════════════════════

@@ -123,7 +123,10 @@ extension _SceneWedding on _VillageSceneState {
       seed: _stableSeed('kur${w.name}${m.name}', _dayCount),
     );
     _chronicle(Voice.say(_kCourtshipChroniclePool, ctx), icon: '💞');
-    _showNotification(Voice.say(_kCourtshipPool, ctx));
+    _showNotification(
+      Voice.say(_kCourtshipPool, ctx),
+      eventKey: '_kCourtshipPool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// Aynı evde yaşayan, karşı cins, kan bağı olmayan, henüz evlenmemiş iki
@@ -131,7 +134,12 @@ extension _SceneWedding on _VillageSceneState {
   (VillagerEntity, VillagerEntity)? _findCourtship() {
     final byHome = <Object, List<VillagerEntity>>{};
     for (final v in _villagers) {
-      if (v.lifeStage != LifeStage.adult || v.isDying || v.wed) continue;
+      if (v.lifeStage != LifeStage.adult ||
+          v.isDying ||
+          v.wed ||
+          v.avoidsMarriage) {
+        continue;
+      }
       // KOPMUŞ HANE KIZ/OĞUL VERMEZ — hane esirgemenin son basamağında köyle
       // akrabalık da kurmaz (bkz. scene_house_stance). Kur hiç başlamaz;
       // hane razı olunca aday havuzuna kendiliğinden döner.
@@ -177,7 +185,14 @@ extension _SceneWedding on _VillageSceneState {
 
   /// Nişanlı çift hâlâ geçerli mi (ikisi de hayatta, evlenmemiş, aynı evde yetişkin).
   bool _coupleStillValid(VillagerEntity a, VillagerEntity b) {
-    if (a.isDying || b.isDying || a.wed || b.wed) return false;
+    if (a.isDying ||
+        b.isDying ||
+        a.wed ||
+        b.wed ||
+        a.avoidsMarriage ||
+        b.avoidsMarriage) {
+      return false;
+    }
     if (a.lifeStage != LifeStage.adult || b.lifeStage != LifeStage.adult) {
       return false;
     }
@@ -202,6 +217,8 @@ extension _SceneWedding on _VillageSceneState {
       !b.isDying &&
       !a.wed &&
       !b.wed &&
+      !a.avoidsMarriage &&
+      !b.avoidsMarriage &&
       _villagers.contains(a) &&
       _villagers.contains(b);
 

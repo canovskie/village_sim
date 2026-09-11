@@ -517,7 +517,9 @@ extension _ScenePlacement on _VillageSceneState {
     final cost = meta.cost;
     if (!_stockpile.canAfford(cost)) {
       if (!silent) {
-        _showNotification('Eksik malzeme: ${_stockpile.formatMissing(cost)}');
+        _showNotification('Eksik malzeme: ${_stockpile.formatMissing(cost)}',
+          topic: VillageNewsTopic.system, tone: VillageNewsTone.caution,
+          eventKey: 'placement.resources');
       }
       return false;
     }

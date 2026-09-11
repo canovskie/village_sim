@@ -7,11 +7,14 @@ extension _ScenePetitionActorEffects on _VillageSceneState {
     PetitionActorEffect effect,
     VillagerEntity? author,
   ) {
-    if (author == null || author.isDying) return;
+    if (author == null || author.isDying || !_villagers.contains(author)) {
+      return;
+    }
     switch (effect) {
       case PetitionActorEffect.none:
         return;
       case PetitionActorEffect.flowingOutfit:
+        author.avoidsMarriage = true;
         author.wardrobe = NpcWardrobe.flowing;
         author.feel(NpcEmotion.joy, 5.0, moodDelta: 0.18);
         _reactNearby(
@@ -29,6 +32,7 @@ extension _ScenePetitionActorEffects on _VillageSceneState {
           milestone: true,
         );
       case PetitionActorEffect.traditionalOutfit:
+        author.avoidsMarriage = false;
         author.wardrobe = NpcWardrobe.traditional;
         author.feel(NpcEmotion.grief, 5.0, moodDelta: -0.18);
         _reactNearby(

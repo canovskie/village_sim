@@ -27,6 +27,8 @@ String _optionFingerprint(PetitionOption option) {
     option.moraleDays,
     option.fx,
     option.actorEffect,
+    option.action,
+    option.unrestDelta,
     option.presence,
     option.followUpId,
     option.setsFlags.join(','),

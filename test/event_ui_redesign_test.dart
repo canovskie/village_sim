@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:village_sim/systems/events/event_system.dart';
 import 'package:village_sim/ui/core/app_ui.dart';
+import 'package:village_sim/ui/core/mobile_ui.dart';
 import 'package:village_sim/ui/events/event_choice_modal.dart';
 import 'package:village_sim/ui/events/event_scene_card.dart';
 import 'package:village_sim/ui/hud/notification_plaque.dart';
@@ -122,4 +123,60 @@ void main() {
       greaterThan(74),
     );
   });
+  for (final screen in [const Size(760, 360), const Size(896, 414)]) {
+    testWidgets('haber ve işlem fişi mobil alana sığar: $screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = screen;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: screen,
+              textScaler: const TextScaler.linear(1.5),
+            ),
+            child: const Scaffold(
+              body: MobileTextFloor(
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: MobileUi.actionH + MobileUi.gap,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          NotificationPlaque(
+                            compact: true,
+                            pendingCount: 4,
+                            remainingFraction: .5,
+                            message:
+                                'Hane ayrılıyor: Kaya Hanesi arabalarını yükledi. Yarın öbür gün yola çıkarlar.',
+                          ),
+                          AppChip(
+                            label: 'Eksik malzeme: 10 odun, 4 taş, 2 demir',
+                            color: AppUi.rust,
+                            solid: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      final plaque = tester.getRect(find.byType(NotificationPlaque));
+      final chip = tester.getRect(find.byType(AppChip));
+      expect(plaque.top, greaterThanOrEqualTo(0));
+      expect(plaque.overlaps(chip), isFalse);
+      expect(chip.bottom, lessThanOrEqualTo(screen.height - MobileUi.actionH));
+    });
+  }
 }

@@ -19,6 +19,41 @@ dosyaların varlık sebebi budur.
 
 ## Canlı köy tester'ı
 
+### Hazır ev içi denemesi
+
+`home_interior_main.dart` doğrudan döşenmiş ahşap eve ve iki NPC'ye açılır.
+Menü, harita üretimi, kayıt yükleme veya bina kurma adımı yoktur.
+Gündelik yaşam, masa, ocak ve uyku senaryoları; gece/gündüz, duraklatma,
+1×/2× hız, sıfırlama ve yakınlaştırma kullanılabilir. Kapat düğmesi hazır evin
+dışına çıkar; eve dokunmak tekrar içeri alır.
+
+Başlığın sağındaki koltuk simgeli **Kır evi / Bitkili ev / Dokumalı ev** düğmesi
+üç döşeme ailesi arasında döner. Mobilya biçimleri, kilim/yorgan desenleri,
+seramikler ve bitkiler değişir; NPC senaryosu, zaman ve yakınlaştırma korunur.
+Saksı, sepet ve odun yığınına da dokunulabilir. Oyundaki evlerde bu çeşitlilik
+ev konumuna bağlıdır, izleyiciyi yeniden açınca rastgele değişmez.
+
+Yanındaki **ızgara simgeli yerleşim düğmesi** altı planı dolaşır: İki köşe,
+Yan yana, Açık sofra, Çapraz köşeler, Pencere yanı, Uzun duvar. Demo artık
+Uzun duvar + Dokumalı ev kombinasyonuyla açılır. Yerleşim değişince NPC'ler
+girişten yeni yollarını kurar; senaryo, saat, tarz ve yakınlaştırma korunur.
+Normal oyunda her ev kendi koordinatlarından ayrı bir kombinasyon üretir;
+yerleşim yeniden açma ve kayıt yükleme ile değişmez. Oyuncuya eşya sürükleme
+editörü eklenmemiştir, düzenler otomatik oluşturulur.
+
+macOS'ta `tools/run_home_interior.command` dosyasına çift tıklanabilir.
+VS Code çalıştırma listesindeki **Ev İçi Denemesi** de aynı girişi kullanır.
+
+```
+flutter run -d macos -t lib/tools/home_interior_main.dart
+INTERIOR_CAPTURE=/tmp/home_interior.png flutter run -d macos -t lib/tools/home_interior_main.dart
+```
+
+İlk prototip tek oda ve iki yatakla sınırlıdır. Oyunda ahşap eve tıklamak aynı
+izleyiciyi açar; içeride yalnız gerçekten evde bulunan sakinler görünür.
+Tester'daki masa/ocak/dolaşma döngüleri görsel provadır; ekonomi ve ihtiyaç
+sistemlerini çalıştırmaz. NPC kimliği mevcut karakter verisinden gelir.
+
 Günlük köy testi için `village_tester_main.dart` kullanılır. Rastgele, normal
 bir kuruluş açar; **hazır bina/NPC yerleştirmez ve god mode'u kendiliğinden
 açmaz**. Sağ üstteki üç sekmeli panelden canlı teşhis, sim hızı, saat, hava,

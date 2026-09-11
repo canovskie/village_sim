@@ -96,11 +96,13 @@ class AnimalRenderer {
     required bool isWalking,
     double scale = 1.0,
     double alpha = 1.0,
+    bool wearsBell = false,
   }) {
     _drawSpriteAnimal(_cow, canvas, center,
         facing: facing, walkPhase: walkPhase, isWalking: isWalking,
         drawH: 36.0 * scale, flipForWest: true, alpha: alpha,
         idle: _IdleMotion.graze);
+    if (wearsBell) _drawHerdBell(canvas, center, facing, scale, alpha);
   }
 
   /// Sheep çizimi. [center] = ekran üzerinde hayvanın taban (hoof) noktası.
@@ -113,11 +115,13 @@ class AnimalRenderer {
     required bool isWalking,
     double scale = 1.0,
     double alpha = 1.0,
+    bool wearsBell = false,
   }) {
     _drawSpriteAnimal(_sheep, canvas, center,
         facing: facing, walkPhase: walkPhase, isWalking: isWalking,
         drawH: 28.0 * scale, flipForWest: true, alpha: alpha,
         idle: _IdleMotion.graze);
+    if (wearsBell) _drawHerdBell(canvas, center, facing, scale, alpha);
   }
 
   /// Chicken çizimi — sheep gibi 4 yön × 4 frame; tüm yönler ayrı sprite,
@@ -135,6 +139,35 @@ class AnimalRenderer {
         facing: facing, walkPhase: walkPhase, isWalking: isWalking,
         drawH: 13.0 * scale, flipForWest: false, alpha: alpha,
         idle: _IdleMotion.peck);
+  }
+
+  static void _drawHerdBell(
+    Canvas canvas,
+    Offset center,
+    AnimalFacing facing,
+    double scale,
+    double alpha,
+  ) {
+    final dx = switch (facing) {
+      AnimalFacing.e => 10.0,
+      AnimalFacing.w => -10.0,
+      _ => 0.0,
+    };
+    final p = center + Offset(dx * scale, -13 * scale);
+    canvas.drawLine(
+      p + Offset(0, -3 * scale),
+      p,
+      Paint()
+        ..color = Color.fromRGBO(70, 49, 35, alpha)
+        ..strokeWidth = 1.5 * scale,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: p, width: 4.5 * scale, height: 4 * scale),
+        Radius.circular(scale),
+      ),
+      Paint()..color = Color.fromRGBO(190, 144, 63, alpha),
+    );
   }
 
   /// Ortak sprite çizim — kind'a göre source map değişir.

@@ -13,11 +13,15 @@ class NotificationPlaque extends StatelessWidget {
   final bool compact;
   final int pendingCount;
 
+  /// Sahnenin görünür süre saati; galeri yalnız animasyon kullanabilir.
+  final double? remainingFraction;
+
   const NotificationPlaque({
     super.key,
     required this.message,
     this.compact = false,
     this.pendingCount = 0,
+    this.remainingFraction,
   }) : _structuredNews = null;
 
   const NotificationPlaque.news({
@@ -25,6 +29,7 @@ class NotificationPlaque extends StatelessWidget {
     required VillageNews news,
     this.compact = false,
     this.pendingCount = 0,
+    this.remainingFraction,
   }) : _structuredNews = news,
        message = null;
 
@@ -216,8 +221,11 @@ class NotificationPlaque extends StatelessWidget {
                 right: compact ? 28 : 48,
                 bottom: compact ? 4 : 5,
                 child: TweenAnimationBuilder<double>(
-                  tween: Tween(begin: 1, end: AppUi.captureStatic ? .72 : 0),
-                  duration: AppUi.captureStatic
+                  tween: Tween(
+                    begin: 1,
+                    end: remainingFraction ?? (AppUi.captureStatic ? .72 : 0),
+                  ),
+                  duration: AppUi.captureStatic || remainingFraction != null
                       ? Duration.zero
                       : news.readDuration,
                   builder: (_, value, _) => Align(

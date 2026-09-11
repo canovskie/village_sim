@@ -38,7 +38,8 @@ Saf mantık `lib/systems/` altında (Flutter yok, test edilebilir), sahneye
 `lib/scene/` altındaki `main.dart` part'ları bağlar, `lib/ui/` yalnız çizer.
 Yeni mantık sahneye gömülmez.
 
-Rastgele olay altyapısı hazırdır ama katalog şu an bilinçli olarak boştur.
+Rastgele köy olayları seçim, zaman aşımı ve sahnede süren sonuçlar taşır.
+Kişi odaklı Divan talepleri ile ortak Köy Olayı ekranları ayrıdır.
 Dilekçeler içerik paketlerine ayrılır; sahne-güdümlü kritik kararlar katalogda
 zorunlu bağımlılık olarak doğrulanır. Üç kişisel hikâye, aynı köylülerle
 üç aşamada dallanır ve geç yıl hedeflerine bağlanır.

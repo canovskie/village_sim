@@ -133,6 +133,11 @@ extension _SceneForage on _VillageSceneState {
     }
 
     final tx = fp.col + fp.cols / 2.0, ty = fp.row + fp.rows / 2.0;
+    if (job.phase == 0 && !_hasCookingTurn(v)) {
+      job.working = false;
+      job.harvesting = false;
+      return;
+    }
     if (job.phase == 0) {
       final dx = v.gridX - tx, dy = v.gridY - ty;
       // Ocağın dibine değil KENARINA — ateşin üstüne basmasın (firepit walkable
@@ -162,6 +167,8 @@ extension _SceneForage on _VillageSceneState {
       if (_stockpile.food >= kCookFoodCost && _cookedMeals < _mealCap) {
         _stockpile.food -= kCookFoodCost;
         _cookedMeals += kCookMealsPerBatch;
+        _decisionCustoms.cookedHouses.add(v.surname);
+        job.phase = 0;
         job.finishCycle();
         fp.deliveryPulse = 1.0;
         fp.deliveryTally++;

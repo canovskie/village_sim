@@ -94,16 +94,25 @@ void main() {
       final swing = npcLegPose(6, i / 10, 1.6);
       expect(stance.ankle.$2, -5);
       expect(swing.ankle.$2, lessThan(stance.ankle.$2));
-      for (final p in [stance, swing]) {
-        expect(
-          sqrt(pow(p.hip.$1 - p.knee.$1, 2) + pow(p.hip.$2 - p.knee.$2, 2)),
-          closeTo(17, .001),
-        );
-        expect(
-          sqrt(pow(p.ankle.$1 - p.knee.$1, 2) + pow(p.ankle.$2 - p.knee.$2, 2)),
-          closeTo(17, .001),
-        );
-      }
+      expect((stance.ankle.$1 - stance.hip.$1).abs(), lessThanOrEqualTo(7));
+      expect((swing.ankle.$1 - swing.hip.$1).abs(), lessThanOrEqualTo(7));
     }
+  });
+
+  test('idle legs are straight instead of permanently kinked sideways', () {
+    for (final hipX in [-6.0, 6.0]) {
+      final pose = npcLegPose(hipX, 0, 0);
+      expect(pose.knee.$1, hipX);
+      expect(pose.ankle.$1, hipX);
+      expect(pose.hip.$2, lessThan(pose.knee.$2));
+      expect(pose.knee.$2, lessThan(pose.ankle.$2));
+    }
+  });
+
+  test('opposite steps mirror instead of bending both knees one way', () {
+    final left = npcLegPose(-6, 0.55, 1.6);
+    final right = npcLegPose(6, -0.55, 1.6);
+    expect(left.knee.$1 + right.knee.$1, closeTo(0, .0001));
+    expect(left.ankle.$1 + right.ankle.$1, closeTo(0, .0001));
   });
 }

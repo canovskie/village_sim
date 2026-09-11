@@ -606,9 +606,6 @@ extension _PainterFx on VillageGamePainter {
       withTail: !perfMode,
     );
 
-    // Yere çarpma — sahnede dağıtık periyodik splash slot'ları. perfMode'da atla.
-    if (!perfMode) _drawGroundSplashes(canvas, size, intensity);
-
     // Yoğun yağmurda hafif mavi-gri perde (atmosfer derinliği).
     if (intensity > 0.5) {
       final tintA = ((intensity - 0.5) * 0.30).clamp(0.0, 0.14);
@@ -668,15 +665,13 @@ extension _PainterFx on VillageGamePainter {
   }
 
   void _drawGroundSplashes(Canvas canvas, Size size, double intensity) {
-    // Sahne genelinde sabit slot pozisyonları + her slot kendi faz/periyod.
-    // count yoğunluğa lineer ölçek — zayıf yağmurda az splash, kuvvetlide çok.
-    // PERF: 55→38 (her splash ~4 AA op; toplam çarpan).
-    final count = (38 * intensity).round();
-    if (count == 0) return;
-
-    for (int i = 0; i < count; i++) {
-      final px = ((i * 7919 + 137) % 997) / 997.0 * size.width;
-      final py = ((i * 5717 + 281) % 991) / 991.0 * size.height;
+    // Zeminden sonra, yapılardan/aktörlerden önce: sıçrama çatıda yüzmez.
+    // Kamera hareketi slot konumunu/fazını değiştirmez.
+    for (final (gx, gy, i) in _ambientSites(size, spacing: 2)) {
+      if (waterTiles.contains((gx.floor(), gy.floor()))) continue;
+      if ((i % 101) / 101 > intensity) continue;
+      final p = gridToScreen(gx, gy, size, camera);
+      final px = p.dx, py = p.dy;
       // Her slot 1.4–2.0 sn'de bir splash (period kişiye özel).
       final period = 1.4 + ((i * 41) % 100) / 100.0 * 0.6;
       final phaseOff = ((i * 3413 + 89) % 983) / 983.0 * period;

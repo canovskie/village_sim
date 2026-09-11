@@ -61,43 +61,47 @@ final List<_PetitionDef> _kPersonalPetitions = [
     gravity: PetitionGravity.personal,
   ),
   _PetitionDef(
-    (c) => c.population >= 4,
+    (c) => c.population >= 4 && c.cookingHouseholds >= 2,
     1.05,
     const Petition(
       id: PetitionIds.ovenTurn,
       petitioner: 'Ocak komşuları',
       icon: '🥖',
-      title: 'Fırın Sırası',
+      title: 'Ocakta Ekmek Sırası',
       stakes: 'İki tepsi, tek sıcak taş.',
       bodyPool: [
         'İki hane sabah ekmeğini aynı anda pişirmek istiyor. Biri hamurun önce mayalandığını, öteki çocukların aç beklediğini söylüyor.',
-        'Ortak fırının önünde yine sıra kavgası çıktı. Kimin önce gireceğini Divan söylesin diyorlar.',
+        'Ortak ocağın önünde yine sıra kavgası çıktı. Kimin önce gireceğini Divan söylesin diyorlar.',
       ],
       options: [
         PetitionOption(
           label: 'Sırayı dönüşümlü tut',
+          setsFlags: ['oven.rotation'],
+          clearsFlags: ['oven.early'],
           detail: 'Her sabah başka hane önce girsin.',
           resolutionPool: [
-            '🥖 Fırın sırası günlere bölündü. Kapıdaki tartışma dindi.',
+            '🥖 Ocak sırası günlere bölündü. Kapıdaki tartışma dindi.',
           ],
-          annalPool: ['Ortak fırın için dönüşümlü sıra kondu.'],
+          annalPool: ['Ortak ocak için dönüşümlü sıra kondu.'],
           moraleAmount: 0.01,
           moraleDays: 1.0,
         ),
         PetitionOption(
           label: 'Erken gelen girsin',
-          detail: 'Fırının başına ilk varan taşı kullansın.',
+          setsFlags: ['oven.early'],
+          clearsFlags: ['oven.rotation'],
+          detail: 'Ocağın başına ilk varan taşı kullansın.',
           resolutionPool: [
-            '🌅 Fırın ilk gelene bırakıldı. O günden sonra köy biraz daha erken uyanmaya başladı.',
+            '🌅 Ocak ilk gelene bırakıldı. O günden sonra köy biraz daha erken uyanmaya başladı.',
           ],
-          annalPool: ['Ortak fırında erken gelenin önceliği kabul edildi.'],
+          annalPool: ['Ortak ocakda erken gelenin önceliği kabul edildi.'],
         ),
       ],
     ),
     gravity: PetitionGravity.personal,
   ),
   _PetitionDef(
-    (c) => c.population >= 3,
+    (c) => c.population >= 3 && c.hasElder,
     1.0,
     const Petition(
       id: PetitionIds.hearthSeat,
@@ -112,6 +116,8 @@ final List<_PetitionDef> _kPersonalPetitions = [
       options: [
         PetitionOption(
           label: 'Yaşlılara ayır',
+          setsFlags: ['hearth.elders'],
+          clearsFlags: ['hearth.cold'],
           detail: 'Ateşin yanı köyün yaşlılarının olsun.',
           resolutionPool: ['🔥 En sıcak taş yaşlılara ayrıldı.'],
           annalPool: ['Ocak başındaki sıcak yer yaşlılara ayrıldı.'],
@@ -120,6 +126,8 @@ final List<_PetitionDef> _kPersonalPetitions = [
         ),
         PetitionOption(
           label: 'En çok üşüyen otursun',
+          setsFlags: ['hearth.cold'],
+          clearsFlags: ['hearth.elders'],
           detail: 'Yer yaşa değil, o akşamki ihtiyaca göre verilsin.',
           resolutionPool: [
             '🔥 Ocak başında sabit yer kalmadı; üşüyen öne geçti.',
@@ -133,7 +141,7 @@ final List<_PetitionDef> _kPersonalPetitions = [
     gravity: PetitionGravity.personal,
   ),
   _PetitionDef(
-    (c) => c.population >= 4,
+    (c) => c.population >= 4 && c.hasWell,
     0.95,
     const Petition(
       id: PetitionIds.wellBucket,
@@ -148,6 +156,8 @@ final List<_PetitionDef> _kPersonalPetitions = [
       options: [
         PetitionOption(
           label: 'Yeni ortak kova yap',
+          setsFlags: ['well.shared'],
+          clearsFlags: ['well.personal'],
           detail: 'Ambardan odun ver; kuyu herkesin kalsın.',
           resolutionPool: ['🪣 Kuyunun yanına sağlam bir ortak kova asıldı.'],
           annalPool: ['Ortak kuyu için ambardan yeni kova yapıldı.'],
@@ -157,9 +167,11 @@ final List<_PetitionDef> _kPersonalPetitions = [
         ),
         PetitionOption(
           label: 'Herkes kovasını getirsin',
+          setsFlags: ['well.personal'],
+          clearsFlags: ['well.shared'],
           detail: 'Ortak ambar harcanmasın.',
           resolutionPool: [
-            '🪣 Kuyunun çevresi ayrı ayrı hane kovalarıyla doldu.',
+            '🪣 Haneler kuyu yoluna kendi kovalarıyla çıkmaya başladı.',
           ],
           annalPool: [
             'Kuyuda ortak kova kaldırıldı; her hane kendi kovasını getirdi.',
@@ -185,12 +197,16 @@ final List<_PetitionDef> _kPersonalPetitions = [
       options: [
         PetitionOption(
           label: 'Çan sürüde kalsın',
+          setsFlags: ['bell.always'],
+          clearsFlags: ['bell.day'],
           detail: 'Hayvanı bulmak sessizlikten önemli.',
           resolutionPool: ['🔔 Çan sürüde kaldı; sesi köy gecelerine karıştı.'],
           annalPool: ['Sürü çanının kullanılmasına devam edildi.'],
         ),
         PetitionOption(
           label: 'Gece çıkarılsın',
+          setsFlags: ['bell.day'],
+          clearsFlags: ['bell.always'],
           detail: 'Gündüz takılsın, ağılda susturulsun.',
           resolutionPool: ['🌙 Çan gün batınca çıkarılmaya başlandı.'],
           annalPool: ['Sürü çanının geceleri çıkarılması kararlaştırıldı.'],
@@ -218,6 +234,8 @@ final List<_PetitionDef> _kPersonalPetitions = [
       options: [
         PetitionOption(
           label: 'Bir saat türkü serbest',
+          setsFlags: ['music.hour'],
+          clearsFlags: ['music.quiet'],
           detail: 'Gün batımından sonra kısa süre söylensin.',
           resolutionPool: ['🎶 Ocak başı bir saat şenlendi, sonra köy sustu.'],
           annalPool: [
@@ -228,6 +246,8 @@ final List<_PetitionDef> _kPersonalPetitions = [
         ),
         PetitionOption(
           label: 'Gece sessiz olsun',
+          setsFlags: ['music.quiet'],
+          clearsFlags: ['music.hour'],
           detail: 'Türkü gündüz söylensin; ocak başı erken dağılsın.',
           resolutionPool: ['🌙 Gün batınca ocak başı sessizleşti.'],
           annalPool: ['Köyde gün batımından sonra sessizlik istendi.'],

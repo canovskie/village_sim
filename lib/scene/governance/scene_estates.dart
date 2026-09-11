@@ -386,6 +386,7 @@ extension _SceneEstates on _VillageSceneState {
             .where((v) =>
                 v.isMale &&
                 !v.wed &&
+                !v.avoidsMarriage &&
                 v.lifeStage == LifeStage.adult)
             .toList();
         if (matching.isNotEmpty) pool = matching;

@@ -440,6 +440,11 @@ class WorldPressure {
       b.crimeRisk *= 1.55;
       b.patrolDensity += 0.25;
     }
+    if (memory.contains('crime.patrol')) {
+      b.crimeRisk *= 1.75;
+      b.patrolDensity += 0.35;
+      b.patrolVigilance *= 1.20;
+    }
     if (memory.contains('holyDay.active')) {
       b.churchPull *= 1.15;
     }

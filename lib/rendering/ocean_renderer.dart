@@ -60,6 +60,9 @@ class OceanRenderer {
     final deep = _scale(const Color(0xFF143E5D), lit * 0.92);
     _p
       ..style = PaintingStyle.fill
+      // Dalga/parıltı pass'inin alpha'sı sonraki karede denizi soldurmasın.
+      ..color = const Color(0xFFFFFFFF)
+      ..blendMode = BlendMode.srcOver
       ..shader = ui.Gradient.linear(
         Offset.zero,
         Offset(size.width * 0.38, size.height),

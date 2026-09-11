@@ -267,7 +267,9 @@ extension _SceneCollapse on _VillageSceneState {
       if (!_schismWarned.add(s)) continue;
       final ctx = _voice(_headOfSurname(s),
           seed: _stableSeed('ayrılık$s', _dayCount), extra: {'hane': s});
-      _showNotification('🚪 ${Voice.say(_kSchismWarn, ctx)}');
+      _showNotification('🚪 ${Voice.say(_kSchismWarn, ctx)}',
+        topic: VillageNewsTopic.people, tone: VillageNewsTone.caution,
+        priority: VillageNewsPriority.urgent, eventKey: 'schism.warn.$s');
       _chronicle(Voice.say(_kSchismWarnAnnal, ctx), icon: '🚪', kind: ChronicleKind.crisis);
     }
 
@@ -287,7 +289,9 @@ extension _SceneCollapse on _VillageSceneState {
     final ctx = _voice(_headOfSurname(surname),
         seed: _stableSeed('göç$surname', _dayCount), extra: {'hane': surname});
 
-    _showNotification('💔 ${Voice.say(_kSchismLeave, ctx)}');
+    _showNotification('💔 ${Voice.say(_kSchismLeave, ctx)}',
+      topic: VillageNewsTopic.people, tone: VillageNewsTone.critical,
+      priority: VillageNewsPriority.urgent, eventKey: 'schism.left.$surname');
     _chronicle(
         '$surname Hanesi ${_villageWith(Suffix.ablative)} ayrıldı: '
         '${members.length} can, $hidden kile.',

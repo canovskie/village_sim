@@ -107,6 +107,9 @@ extension _SceneNpcActivity on _VillageSceneState {
   }
 
   bool _tryStartMusicFor(VillagerEntity v) {
+    if (!DecisionCustoms.musicAllowed(_villageMemory, _cycle.timeOfDay)) {
+      return false;
+    }
     v.activity = VillagerActivity.music;
     v.chatBubbleIcon = '🎸';
     v.chatBubbleTime = 9 + _rng.nextDouble() * 5;
@@ -115,6 +118,9 @@ extension _SceneNpcActivity on _VillageSceneState {
   }
 
   bool _tryStartDanceFor(VillagerEntity v) {
+    if (!DecisionCustoms.musicAllowed(_villageMemory, _cycle.timeOfDay)) {
+      return false;
+    }
     final partner = _findNearbyIdle(v);
     if (partner == null) return false;
     final dur = 7 + _rng.nextDouble() * 4;

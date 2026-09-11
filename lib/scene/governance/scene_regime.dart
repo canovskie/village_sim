@@ -319,205 +319,27 @@ extension _SceneRegime on _VillageSceneState {
     _crisisCooldown = 6.0 * kGameDaySeconds;
     // Her kriz kalıcı bir iz bırakır — atlatsan bile köy bir şey kaybeder.
     _regimeRot = (_regimeRot + Regime.kRotPerCrisis).clamp(0.0, 1.0);
-    final (title, body) = Regime.crisisText(c);
+    final (title, _) = Regime.crisisText(c);
     addCameraShake(2.2, dur: 0.5);
     _chronicle(title, icon: '🔥', milestone: true, kind: ChronicleKind.crisis);
 
-    final options = <PetitionOption>[];
-    final unrestByLabel = <String, double>{};
-
     switch (c) {
       case RegimeCrisis.revolt:
-        // Dünyada olan: en küskün köylü çekip gider.
         final quitter = _mostAggrieved();
         if (quitter != null) _emigrateVillager(quitter);
         pushPolicyMorale(-0.07, 5.0);
-        options.addAll([
-          const PetitionOption(
-            label: 'Meydana in, taviz ver',
-            detail: 'Kese açılır, öfke iner.',
-            resolutionPool: [
-              '👑 Meydanda konuştun. Kese hafifledi, omuzlar gevşedi.',
-            ],
-            goldDelta: -15,
-            moraleAmount: 0.06,
-            moraleDays: 5,
-            estateMood: [(Estate.laborers, 0.10), (Estate.hearth, 0.08)],
-          ),
-          const PetitionOption(
-            label: 'Elebaşını bul, sürgün et',
-            detail: 'Korku susturur — bir süreliğine.',
-            resolutionPool: [
-              '👑 Elebaşı köyden sürüldü. Meydan sustu; bakışlar susmadı.',
-            ],
-            moraleAmount: -0.05,
-            moraleDays: 4,
-            estateMood: [
-              (Estate.hearth, -0.10),
-              (Estate.faithful, -0.08),
-              (Estate.artisans, 0.04),
-            ],
-          ),
-          const PetitionOption(
-            label: 'Aldırma',
-            detail: 'Duymazdan gel; kaynayan kaynasın.',
-            resolutionPool: ['👑 Aldırmadın. Ambar arkasındaki halka büyüdü.'],
-            moraleAmount: -0.04,
-            moraleDays: 4,
-          ),
-        ]);
-        unrestByLabel['Meydana in, taviz ver'] = -0.50;
-        unrestByLabel['Elebaşını bul, sürgün et'] = -0.28;
-        unrestByLabel['Aldırma'] = 0.06;
-
       case RegimeCrisis.deadlock:
-        // Dünyada olan: divan donar — mürekkep bir buçuk gün ıslak kalır.
         _policies.inkDryUntilSim = _time + 1.5 * kGameDaySeconds;
         _inkDryTotal = 1.5 * kGameDaySeconds;
-        options.addAll([
-          const PetitionOption(
-            label: 'Arabulucu ata',
-            detail: 'Dışarıdan bir söz, düğümü çözer (10 akçe).',
-            resolutionPool: [
-              '🤝 Arabulucu masaya oturdu. Divan üç gün sonra ilk kez dağıldı.',
-            ],
-            goldDelta: -10,
-            moraleAmount: 0.05,
-            moraleDays: 4,
-            estateMood: [(Estate.hearth, 0.06), (Estate.laborers, 0.05)],
-          ),
-          const PetitionOption(
-            label: 'Meclisi dağıt, kararı sen ver',
-            detail: 'Düğüm çözülür — meşruiyet çözülmez.',
-            resolutionPool: [
-              '🤝 Meclisi dağıttın. Karar çıktı; kimse alkışlamadı.',
-            ],
-            moraleAmount: -0.05,
-            moraleDays: 4,
-            estateMood: [(Estate.laborers, -0.10), (Estate.hearth, -0.06)],
-          ),
-          const PetitionOption(
-            label: 'Bekle, konuşsunlar',
-            detail: 'Meşru ama yavaş; divan bir gün daha kilitli.',
-            resolutionPool: [
-              '🤝 Bekledin. Meclis hâlâ konuşuyor, defter hâlâ kapalı.',
-            ],
-            estateMood: [(Estate.laborers, 0.04)],
-          ),
-        ]);
-        unrestByLabel['Arabulucu ata'] = -0.45;
-        unrestByLabel['Meclisi dağıt, kararı sen ver'] = -0.30;
-        unrestByLabel['Bekle, konuşsunlar'] = -0.12;
-
       case RegimeCrisis.idleness:
-        // Dünyada olan: tezgâh soğur (_regimeWorkMul zaten kısıyor) + ambar
-        // eriyor; köy bunu sofrada hissetsin.
         _stockpile.food = (_stockpile.food - 12).clamp(0, 1 << 30);
-        options.addAll([
-          const PetitionOption(
-            label: 'Denetçi koy',
-            detail: 'Kim ne yaptı yazılır (12 akçe).',
-            resolutionPool: [
-              '⚖ Denetçi tezgâh tezgâh geziyor. İş yürüdü; keyif kaçtı.',
-            ],
-            goldDelta: -12,
-            estateMood: [(Estate.laborers, -0.08), (Estate.artisans, 0.05)],
-          ),
-          const PetitionOption(
-            label: 'Çok çalışana fazla pay',
-            detail: 'Eşitlikten bir tutam ödün.',
-            resolutionPool: [
-              '⚖ Fazla çalışana fazla pay. Tezgâh ısındı, sofrada mırıltı var.',
-            ],
-            moraleAmount: 0.04,
-            moraleDays: 5,
-            estateMood: [(Estate.artisans, 0.12), (Estate.laborers, -0.08)],
-          ),
-          const PetitionOption(
-            label: 'Bir şey yapma',
-            detail: 'Pay eşit kalsın, heves nasılsa döner.',
-            resolutionPool: ['⚖ Bir şey yapmadın. Tezgâh soğumaya devam etti.'],
-            moraleAmount: -0.03,
-            moraleDays: 4,
-          ),
-        ]);
-        unrestByLabel['Denetçi koy'] = -0.40;
-        unrestByLabel['Çok çalışana fazla pay'] = -0.50;
-        unrestByLabel['Bir şey yapma'] = 0.05;
-
       case RegimeCrisis.inequality:
-        // Dünyada olan: en yoksul hane çöker (mood) — makas görünür olsun.
         final poor = _poorestHouse();
         if (poor != null) _houses.nudge(poor, moodDelta: -0.10);
-        options.addAll([
-          const PetitionOption(
-            label: 'Zenginden al, muhtaca ver',
-            detail: 'Kese 20 akçe hafifler, sofra dolar.',
-            resolutionPool: [
-              '🏪 Pay dağıtıldı. Sazlıktaki yatak bu gece boş kaldı.',
-            ],
-            goldDelta: -20,
-            moraleAmount: 0.06,
-            moraleDays: 5,
-            estateMood: [(Estate.laborers, 0.12), (Estate.artisans, -0.08)],
-          ),
-          const PetitionOption(
-            label: 'Hayrat kur',
-            detail: 'Veren el görünsün; makas kapanmaz ama acı diner.',
-            resolutionPool: [
-              '🏪 Hayrat kuruldu. Kapıda sıra var ama kimse aç dönmüyor.',
-            ],
-            goldDelta: -8,
-            moraleAmount: 0.04,
-            moraleDays: 5,
-            estateMood: [(Estate.faithful, 0.12), (Estate.hearth, 0.06)],
-          ),
-          const PetitionOption(
-            label: 'Pazar kendi dengesini bulur',
-            detail: 'Karışma; kese dolsun.',
-            resolutionPool: [
-              '🏪 Karışmadın. Kese doldu, sazlıktaki yatak sayısı da arttı.',
-            ],
-            goldDelta: 15,
-            moraleAmount: -0.05,
-            moraleDays: 5,
-            estateMood: [(Estate.artisans, 0.10), (Estate.laborers, -0.10)],
-          ),
-        ]);
-        unrestByLabel['Zenginden al, muhtaca ver'] = -0.50;
-        unrestByLabel['Hayrat kur'] = -0.35;
-        unrestByLabel['Pazar kendi dengesini bulur'] = 0.08;
-
       case RegimeCrisis.none:
         return;
     }
-
-    _regimeCrisisUnrest = unrestByLabel;
-    _presentPetition(
-      Petition(
-        id: 'regime.crisis.${c.name}',
-        petitioner: 'Köyün hâli',
-        icon: _regimeIdentity.icon,
-        title: title,
-        bodyPool: [body],
-        stakes:
-            'Rejimin bedeli — kararsız kalırsan huzursuzluk kaynamaya devam eder.',
-        tone: PetitionTone.ominous,
-        options: options,
-      ),
-    );
-  }
-
-  /// Kriz dilekçesinin seçilen şıkkının huzursuzluğa etkisi. [_resolvePetition]
-  /// içinden çağrılır — kaynak/moral/zümre etkileri zaten genel motora akar,
-  /// buradan yalnız rejime özel sayaç oynar.
-  void _applyRegimeChoice(Petition p, PetitionOption o) {
-    if (!p.id.startsWith('regime.')) return;
-    final d = _regimeCrisisUnrest[o.label];
-    _regimeCrisisUnrest = const {};
-    if (d == null) return;
-    _unrest = (_unrest + d).clamp(0.0, 1.0);
-    if (d < 0) _unrestStirShown = false;
+    _requestSystemPetition('regime.crisis.${c.name}');
   }
 
   /// Köyün en küskün (hane hâli en düşük) yetişkini — isyanda çekip giden o.
@@ -525,7 +347,7 @@ extension _SceneRegime on _VillageSceneState {
     VillagerEntity? worst;
     var worstMood = 2.0;
     for (final v in _villagers) {
-      if (v.isDying || v.isChild || v.surname.isEmpty) continue;
+      if (v.isDying || v.isLeaving || v.isChild || v.surname.isEmpty) continue;
       final m = _houses.moodOf(v.surname);
       if (m < worstMood) {
         worstMood = m;
@@ -609,12 +431,19 @@ extension _SceneRegime on _VillageSceneState {
   void _councilResolvePetition() {
     final p = _pendingPetition;
     if (p == null || p.options.isEmpty) return;
+    final available = p.options
+        .where((o) => _petitionOptionBlockReason(o) == null)
+        .toList();
+    if (available.isEmpty) {
+      _escalateOverduePetition();
+      return;
+    }
     final i = Regime.pickCouncilOption(
-      p.options,
+      available,
       mood: _estateMoodMap(),
       villageMorale: _stats.morale,
     );
-    final o = p.options[i];
+    final o = available[i];
     _showNotification('🏛 Meclis sen olmadan karar verdi: ${o.label}');
     _chronicle(
       'Meclis "${p.title}" için kendi kararını verdi: ${o.label}.',

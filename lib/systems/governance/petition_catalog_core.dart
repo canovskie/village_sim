@@ -136,6 +136,7 @@ final List<_PetitionDef> _kCorePetitions = [
           moraleDays: 4,
           fx: PetitionFx.crimeWatch,
           setsFlags: ['crime.watch'],
+          clearsFlags: ['crime.patrol'],
           estateMood: [(Estate.hearth, 0.10), (Estate.laborers, -0.05)],
         ),
         PetitionOption(
@@ -151,6 +152,9 @@ final List<_PetitionDef> _kCorePetitions = [
           moraleAmount: 0.05,
           moraleDays: 4,
           fx: PetitionFx.crimeWatch,
+          presence: DecisionPresence.villageGuard,
+          setsFlags: ['crime.patrol'],
+          clearsFlags: ['crime.watch'],
           estateMood: [(Estate.hearth, 0.08), (Estate.artisans, 0.04)],
         ),
         PetitionOption(
@@ -164,7 +168,6 @@ final List<_PetitionDef> _kCorePetitions = [
           ],
           moraleAmount: -0.06,
           moraleDays: 4,
-          fx: PetitionFx.crimeWatch,
           estateMood: [(Estate.hearth, -0.10)],
         ),
       ],

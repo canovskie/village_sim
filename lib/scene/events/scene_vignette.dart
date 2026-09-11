@@ -22,15 +22,80 @@ extension _SceneVignette on _VillageSceneState {
   // YÖNETMEN
   // ══════════════════════════════════════════════════════════════════════════
 
-  /// Katalog olayları için boş bağlantı noktası. Yeni olay paketi kendi
-  /// koreografisini buradan kaydeder.
+  /// Köy olayı önce insanları meselenin yerine toplar; karardan sonra
+  /// seçeneğin işi aynı mekânda görünür. Kaynak sonuçları burada uygulanmaz.
   void _stageVignette(EventOutcome e, {String? choiceId}) {
+    final supported =
+        isVillageIssue(e.id) ||
+        EventSystem.events.any((item) => item.id == e.id);
+    if (!supported) return;
     _releaseVignette();
+    var target = _villageCenterD();
+    final building = switch (e.id) {
+      EventIds.muddyWell ||
+      PetitionIds.wellBucket => _firstBuildingOf(BuildingType.well),
+      EventIds.marketSurplus => _firstBuildingOf(BuildingType.market),
+      EventIds.approachingStorm => _firstBuildingOf(BuildingType.woodenHouse),
+      PetitionIds.ovenTurn ||
+      PetitionIds.hearthSeat ||
+      PetitionIds.quietEvening => _firepitBuilding,
+      _ => _firstBuildingOf(BuildingType.townhall),
+    };
+    if (building != null) target = _centerOf(building);
+    final choice = e.choices?.where((c) => c.id == choiceId).firstOrNull;
+    final kind = choice?.aftermath?.kind;
+    final prop = switch (kind) {
+      GovernanceBeatKind.waterDuty => PropKind.bucketEmpty,
+      GovernanceBeatKind.repairDuty => PropKind.firewood,
+      GovernanceBeatKind.marketDuty ||
+      GovernanceBeatKind.warehouseDuty => PropKind.sack,
+      GovernanceBeatKind.celebration => PropKind.bread,
+      _ => PropKind.none,
+    };
+    _openVignette(e.id, e.title, target.$1, target.$2);
+    for (var i = 0; i < 3; i++) {
+      final spot = _freeSpotNear(target.$1, target.$2, 2.0 + i * 0.4) ?? target;
+      final steps = <ActStep>[
+        ActStep.goTo(spot.$1, spot.$2),
+        ActStep.face(target.$1, target.$2),
+        if (prop != PropKind.none) ActStep.take(prop),
+        ActStep.work(
+          5.0 + i,
+          pose: prop == PropKind.none ? ActPose.stand : ActPose.stoop,
+        ),
+        const ActStep.put(),
+      ];
+      _role(
+        e.title,
+        Voice.say(const [
+          'Köyün ortak meselesi için komşularıyla buluşuyor.',
+        ], _voice(null)),
+        target.$1,
+        target.$2,
+        steps,
+        emotion: choiceId == null ? NpcEmotion.wonder : NpcEmotion.content,
+      );
+    }
+    if (e.id == EventIds.marketSurplus && choiceId == 'share') {
+      _kidRole(
+        e.title,
+        Voice.say(const ['Komşuların kurduğu sofraya gidiyor.'], _voice(null)),
+        target.$1,
+        target.$2,
+        [
+          ActStep.goTo(target.$1 + 2, target.$2 + 2),
+          const ActStep.take(PropKind.bread),
+          const ActStep.work(4, pose: ActPose.sip),
+          const ActStep.put(),
+        ],
+        emotion: NpcEmotion.joy,
+      );
+    }
+    _announceVignette();
   }
 
   /// Sahne kurulduktan sonraki ortak kuyruk: günlük satırı, prova telemetrisi,
   /// capture harness'ının otomatik kamerası.
-  // ignore: unused_element — retained event-package staging hook.
   void _announceVignette() {
     final vg = _vignette;
     if (vg != null) {
@@ -164,7 +229,6 @@ extension _SceneVignette on _VillageSceneState {
 
   /// Sahneyi açar — sonraki [_role] çağrıları bu sahneye yazılır.
   /// [gx],[gy] kamera odağı: "İzle"ye basınca kadraja gelecek nokta.
-  // ignore: unused_element — retained event-package staging hook.
   void _openVignette(
     String eventId,
     String title,
@@ -200,7 +264,6 @@ extension _SceneVignette on _VillageSceneState {
   /// [reason] köylü panelinde görünecek birinci ağız sebep — boş bırakılamaz.
   /// Uygun kimse yoksa `null` döner ve koreografi o rolsüz devam eder: sahne
   /// eksik oynanır ama ASLA yarım kilitlenmez.
-  // ignore: unused_element — retained event-package staging hook.
   VillagerEntity? _role(
     String label,
     String reason,
@@ -336,7 +399,6 @@ extension _SceneVignette on _VillageSceneState {
 
   /// Çocuk rolü — yola koşan, merakla bakan gövde. Yetişkin filtresinin
   /// tersine çevrilmiş hâli; bulunamazsa rol düşer.
-  // ignore: unused_element — retained event-package staging hook.
   VillagerEntity? _kidRole(
     String label,
     String reason,

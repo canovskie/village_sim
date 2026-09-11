@@ -142,17 +142,35 @@ extension _SceneAct on _VillageSceneState {
     switch (t.kind) {
       // ── KUYU — köyün en okunur mikro-sahnesi: eğil, doldur, taşı, boşalt.
       case BuildingType.well:
-        return Act('kuyudan su taşıyor', [
-          ActStep.goTo(t.x, t.y),
-          const ActStep.take(PropKind.bucketEmpty),
-          ActStep.face(t.x, t.y),
-          const ActStep.work(2.6, pose: ActPose.stoop),
-          const ActStep.put(),
-          const ActStep.take(PropKind.bucketFull),
-          ActStep.goTo(dx, dy),
-          const ActStep.work(1.4, pose: ActPose.stoop),
-          const ActStep.put(),
-        ]);
+        final ownBucket = _villageMemory.contains('well.personal');
+        final sharedBucket = _villageMemory.contains('well.shared');
+        return Act(
+          ownBucket
+              ? 'kendi kovasıyla su taşıyor'
+              : sharedBucket
+              ? 'ortak kovayla su taşıyor'
+              : 'kuyudan su taşıyor',
+          [
+            if (ownBucket) ...[
+              ActStep.goTo(dx, dy),
+              const ActStep.take(PropKind.bucketEmpty),
+            ],
+            ActStep.goTo(t.x, t.y),
+            if (!ownBucket) const ActStep.take(PropKind.bucketEmpty),
+            ActStep.face(t.x, t.y),
+            const ActStep.work(2.6, pose: ActPose.stoop),
+            const ActStep.put(),
+            const ActStep.take(PropKind.bucketFull),
+            ActStep.goTo(dx, dy),
+            const ActStep.work(1.4, pose: ActPose.stoop),
+            const ActStep.put(),
+            if (sharedBucket) ...[
+              const ActStep.take(PropKind.bucketEmpty),
+              ActStep.goTo(t.x, t.y),
+              const ActStep.put(),
+            ],
+          ],
+        );
 
       // ── PAZAR — tezgâhta bekle, pazarlık et, sepetle dön.
       case BuildingType.market:

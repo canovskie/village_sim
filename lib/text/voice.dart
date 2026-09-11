@@ -2,6 +2,8 @@ import 'dart:math';
 
 import '../world/season.dart';
 
+part 'home_interior_voice.dart';
+
 /// Köyün SESİ — oyuncunun okuduğu her cümle buradan geçer.
 ///
 /// İki iş yapar:

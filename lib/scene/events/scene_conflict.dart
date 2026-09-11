@@ -598,10 +598,16 @@ extension _SceneConflict on _VillageSceneState {
       );
       // Escalation/yaralanma kendi bildirimini verdiyse base'i tekrarlama.
       if (!escalated && !injuryPlanned) {
-        _showNotification(Voice.say(_kBrawlPool, ctx));
+        _showNotification(
+          Voice.say(_kBrawlPool, ctx),
+          eventKey: '_kBrawlPool.${ctx.name}.${ctx.other}.${ctx.day}',
+        );
       }
     } else {
-      _showNotification(Voice.say(_kArguePool, ctx));
+      _showNotification(
+        Voice.say(_kArguePool, ctx),
+        eventKey: '_kArguePool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
     }
   }
 
@@ -1208,7 +1214,10 @@ extension _SceneConflict on _VillageSceneState {
         milestone: true,
         kind: ChronicleKind.crisis,
       );
-      _showNotification(Voice.say(_kCrippledPool, ctx));
+      _showNotification(
+        Voice.say(_kCrippledPool, ctx),
+        eventKey: '_kCrippledPool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
     } else {
       final days = severe
           ? (2.0 + _rng.nextDouble() * 2.0)
@@ -1354,7 +1363,10 @@ extension _SceneConflict on _VillageSceneState {
         milestone: true,
         kind: ChronicleKind.crisis,
       );
-      _showNotification(Voice.say(_kRevengePool, ctx));
+      _showNotification(
+        Voice.say(_kRevengePool, ctx),
+        eventKey: '_kRevengePool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
     } else if (feudFormed) {
       _chronicle(
         Voice.say(_kFeudStartChroniclePool, ctx),
@@ -1362,7 +1374,10 @@ extension _SceneConflict on _VillageSceneState {
         milestone: true,
         kind: ChronicleKind.crisis,
       );
-      _showNotification(Voice.say(_kFeudStartPool, ctx));
+      _showNotification(
+        Voice.say(_kFeudStartPool, ctx),
+        eventKey: '_kFeudStartPool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
     } else {
       _chronicle(
         Voice.say(_kKillChroniclePool, ctx),
@@ -1370,7 +1385,10 @@ extension _SceneConflict on _VillageSceneState {
         milestone: true,
         kind: ChronicleKind.crisis,
       );
-      _showNotification(Voice.say(_kKillPool, ctx));
+      _showNotification(
+        Voice.say(_kKillPool, ctx),
+        eventKey: '_kKillPool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
     }
     return true;
   }
@@ -1524,7 +1542,10 @@ extension _SceneConflict on _VillageSceneState {
       milestone: wasFeud,
       kind: ChronicleKind.decision,
     );
-    _showNotification(Voice.say(_kExilePool, ctx));
+    _showNotification(
+      Voice.say(_kExilePool, ctx),
+      eventKey: '_kExilePool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// İDAM — oyuncunun en sert yetkisi. 2B sahnede halk toplanır, mahkûm yere
@@ -1571,7 +1592,10 @@ extension _SceneConflict on _VillageSceneState {
       milestone: true,
       kind: ChronicleKind.decision,
     );
-    _showNotification(Voice.say(_kExecutePool, ctx));
+    _showNotification(
+      Voice.say(_kExecutePool, ctx),
+      eventKey: '_kExecutePool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
   }
 
   /// DEBUG (DevPanel): iki ayrı aileden köylü seçip ölümcül bir kavga +

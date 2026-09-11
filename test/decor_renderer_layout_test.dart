@@ -15,9 +15,24 @@ void main() {
       );
     });
 
-    test('diger dekorlarin mevcut ankrajini degistirmez', () {
+    test('bush varyantlarini kendi gorunur tabanindan zemine oturtur', () {
+      expect(
+        DecorRenderer.groundingShiftFor(DecorKind.bushSmall, 0, 30),
+        closeTo(5.390625, 0.0001),
+      );
+      expect(
+        DecorRenderer.groundingShiftFor(DecorKind.bushSmall, 1, 30),
+        closeTo(6.328125, 0.0001),
+      );
+      expect(
+        DecorRenderer.groundingShiftFor(DecorKind.bushSmall, 2, 30),
+        closeTo(6.5625, 0.0001),
+      );
+    });
+
+    test('ankraj gerektirmeyen dekorlari degistirmez', () {
       expect(DecorRenderer.groundingShiftFor(DecorKind.stump, 0, 32), 0);
-      expect(DecorRenderer.groundingShiftFor(DecorKind.bushSmall, 2, 30), 0);
+      expect(DecorRenderer.groundingShiftFor(DecorKind.daisy, 2, 20), 0);
     });
 
     test('gecersiz varyanti en yakin gecerli ankraja sinirlar', () {

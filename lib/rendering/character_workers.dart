@@ -46,8 +46,8 @@ void _farmer(
 // ─── 2. TÜCCAR ────────────────────────────────────────────────────────────
 void _merchant(Canvas c, _Anim anim) {
   _shadow(c, anim);
-  _leg(c, -6, anim.legL, _woolDark, _leatherDk);
-  _leg(c, 6, anim.legR, _woolDark, _leatherDk);
+  _leg(c, -6, anim.legL, _woolDark, _leatherDk, legLift: anim.legLiftL);
+  _leg(c, 6, anim.legR, _woolDark, _leatherDk, legLift: anim.legLiftR);
   c.save();
   _applyTorsoTransform(c, anim);
   // Pelerin
@@ -93,8 +93,22 @@ void _merchant(Canvas c, _Anim anim) {
 // ─── 3. DEMİRCİ ───────────────────────────────────────────────────────────
 void _blacksmith(Canvas c, _Anim anim, {bool handsBusy = false}) {
   _shadow(c, anim);
-  _leg(c, -6, anim.legL, const Color(0xFF3A3028), _leatherDk);
-  _leg(c, 6, anim.legR, const Color(0xFF3A3028), _leatherDk);
+  _leg(
+    c,
+    -6,
+    anim.legL,
+    const Color(0xFF3A3028),
+    _leatherDk,
+    legLift: anim.legLiftL,
+  );
+  _leg(
+    c,
+    6,
+    anim.legR,
+    const Color(0xFF3A3028),
+    _leatherDk,
+    legLift: anim.legLiftR,
+  );
   c.save();
   _applyTorsoTransform(c, anim);
   // Geniş tunik
@@ -129,8 +143,22 @@ void _blacksmith(Canvas c, _Anim anim, {bool handsBusy = false}) {
 // ─── 4. MUHAFIZ ───────────────────────────────────────────────────────────
 void _guard(Canvas c, _Anim anim, {bool handsBusy = false}) {
   _shadow(c, anim);
-  _leg(c, -6, anim.legL, const Color(0xFF504838), const Color(0xFF303028));
-  _leg(c, 6, anim.legR, const Color(0xFF504838), const Color(0xFF303028));
+  _leg(
+    c,
+    -6,
+    anim.legL,
+    const Color(0xFF504838),
+    const Color(0xFF303028),
+    legLift: anim.legLiftL,
+  );
+  _leg(
+    c,
+    6,
+    anim.legR,
+    const Color(0xFF504838),
+    const Color(0xFF303028),
+    legLift: anim.legLiftR,
+  );
   c.save();
   _applyTorsoTransform(c, anim);
   // Gambeson
@@ -205,8 +233,22 @@ void _armWithShield(Canvas c, double shoulderX, double angle) {
 // ─── 7. MADENCİ ───────────────────────────────────────────────────────────
 void _miner(Canvas c, _Anim anim) {
   _shadow(c, anim);
-  _leg(c, -6, anim.legL, const Color(0xFF3A3028), _leatherDk);
-  _leg(c, 6, anim.legR, const Color(0xFF3A3028), _leatherDk);
+  _leg(
+    c,
+    -6,
+    anim.legL,
+    const Color(0xFF3A3028),
+    _leatherDk,
+    legLift: anim.legLiftL,
+  );
+  _leg(
+    c,
+    6,
+    anim.legR,
+    const Color(0xFF3A3028),
+    _leatherDk,
+    legLift: anim.legLiftR,
+  );
   c.save();
   _applyTorsoTransform(c, anim);
 
@@ -260,8 +302,22 @@ void _miner(Canvas c, _Anim anim) {
 // ─── 9. BALIKÇI (idle draw — VillagerType.fisher için) ────────────────────
 void _fisherIdle(Canvas c, _Anim anim) {
   _shadow(c, anim);
-  _leg(c, -6, anim.legL, const Color(0xFF3A5060), _leatherDk);
-  _leg(c, 6, anim.legR, const Color(0xFF3A5060), _leatherDk);
+  _leg(
+    c,
+    -6,
+    anim.legL,
+    const Color(0xFF3A5060),
+    _leatherDk,
+    legLift: anim.legLiftL,
+  );
+  _leg(
+    c,
+    6,
+    anim.legR,
+    const Color(0xFF3A5060),
+    _leatherDk,
+    legLift: anim.legLiftR,
+  );
   c.save();
   _applyTorsoTransform(c, anim);
   // Açık mavi balıkçı gömleği

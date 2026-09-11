@@ -6,12 +6,19 @@ import 'package:village_sim/systems/events/event_system.dart';
 import 'package:village_sim/systems/governance/petition_system.dart';
 
 void main() {
-  test('olay kataloğu bilinçli olarak boş kalır', () {
-    expect(EventSystem.events, isEmpty);
+  test('köy olaylarının koşullu ve seçimli içeriği bulunur', () {
+    expect(EventSystem.events.length, greaterThanOrEqualTo(3));
+    for (final event in EventSystem.events) {
+      expect(event.needsChoice, isTrue);
+      expect(event.canFire, isNotNull);
+      expect(event.timeoutChoice!.requiresResources, isFalse);
+      expect(event.timeoutChoice!.canAfford(ResourceBundle()), isTrue);
+    }
   });
 
   test('boş katalog seçicileri güvenle null döndürür', () {
-    final event = EventSystem.roll(
+    final event = EventSystem.rollFrom(
+      const [],
       Random(1),
       EventContext(
         population: 0,

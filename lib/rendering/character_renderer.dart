@@ -13,6 +13,7 @@ part 'character_body.dart';
 part 'character_workers.dart';
 part 'character_shaded.dart';
 part 'character_roles.dart';
+part 'character_interior.dart';
 
 /// İki elle yük taşırken kolların omuz-pivot açıları. Canvas'ta +açı aşağı
 /// doğru uzanan kolu SOLA, -açı SAĞA yatırır; dolayısıyla sol kol negatif,
@@ -255,7 +256,6 @@ enum CharGesture {
 // Ayaklar canvas orijininde (y=0). Çağıran save/translate/scale/restore yapar.
 
 class CharacterRenderer {
-
   /// Bir NPC çizmeden ÖNCE köyün hâlini yaz. Yabancı (imparatorluk) için
   /// sıfır geçilir: köyün ambarı onun kumaşını soldurmaz.
   ///

@@ -2,7 +2,6 @@ part of '../../main.dart';
 
 /// KAYIT — capture yarısı (state → JSON). Yeni bir alan eklerken restore yarısına da ekle (scene_save_restore).
 extension _SceneSaveCapture on _VillageSceneState {
-
   // ── Capture (state → JSON) ──────────────────────────────────────────────────
 
   /// Tüm dünyayı JSON-uyumlu bir map'e çevirir.
@@ -136,6 +135,7 @@ extension _SceneSaveCapture on _VillageSceneState {
       // Yalnız timer'ları yazmak yetmez: kuyruk kaybolursa oyuncunun önüne
       // gelmemiş karar sessizce buharlaşır.
       'decisionPacing': _decisionPacing.toJson(),
+      'decisionCustoms': _decisionCustoms.toJson(),
       'pacedPetitions': [
         for (final payload in _pacedPetitions)
           {
@@ -419,6 +419,9 @@ extension _SceneSaveCapture on _VillageSceneState {
       'targetRow': transientCarry ? v.gridY : v.targetRow,
       'isFavorite': v.isFavorite,
       'wed': v.wed,
+      'avoidsMarriage': v.avoidsMarriage,
+      if (v.isLeaving)
+        'leavingTo': [v.leavingDestination.$1, v.leavingDestination.$2],
       // Üstlenilmiş iş — yalnız rol adı; faz/sayaç/claim geçici (açılışta
       // _syncJobWorkforce yeniden kurar, tıpkı workCooldown gibi).
       if (v.hasActiveJob) 'jobRole': v.job!.role.name,

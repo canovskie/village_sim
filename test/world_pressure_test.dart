@@ -47,6 +47,13 @@ WorldPressure p({
     );
 
 void main() {
+  test('ücretli devriye gözü ve yakalanma riskini gerçekten artırır', () {
+    final base = p();
+    final patrol = p(memory: {'crime.patrol'});
+    expect(patrol.patrolDensity, greaterThan(base.patrolDensity));
+    expect(patrol.patrolVigilance, greaterThan(base.patrolVigilance));
+    expect(patrol.crimeRisk, greaterThan(base.crimeRisk));
+  });
   group('nötr köy', () {
     test('mühürsüz köy tam nötrdür — sistem kendiliğinden gürültü üretmez', () {
       final n = p();

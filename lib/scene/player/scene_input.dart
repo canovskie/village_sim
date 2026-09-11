@@ -515,6 +515,7 @@ extension _SceneInput on _VillageSceneState {
         if (b != null) {
           setStateHere(() {
             _selectedBuilding = b;
+            _houseInteriorOpen = b.type == BuildingType.woodenHouse;
             _selectedVillager = null;
             _selectedSiteId = null;
             // Bina dekor değil, dünya üstündeki yönetim kapısıdır. Özellikle

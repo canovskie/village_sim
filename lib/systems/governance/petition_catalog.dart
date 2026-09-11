@@ -20,4 +20,5 @@ final List<_PetitionDef> _kPetitionDefs = [
   ..._kLifecyclePetitions,
   ..._kPersonalPetitions,
   ..._kStoryPetitions,
+  ..._kRegimePetitions,
 ];

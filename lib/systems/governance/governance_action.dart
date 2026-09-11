@@ -6,7 +6,7 @@
 
 /// Bir seçenek, metninde adı geçen hangi dış aktörü gerçekten görmeyi şart
 /// koşuyor? `none` dışındaki seçenek dünyada kanıt yoksa seçilemez.
-enum DecisionPresence { none, activeCaravan }
+enum DecisionPresence { none, activeCaravan, villageGuard }
 
 /// Kararın anında delta vermek yerine başlattığı yolculuk/iş.
 enum DecisionProcessKind { marketWoodRun, emergencyWoodRun }
@@ -390,7 +390,3 @@ const lawSignatures = <String, LawSignature>{
     'Muhassıl Fermanı',
   ),
 };
-
-/// Yeni olay paketi kendi kalıcı davranışını tanımlayana kadar iz bırakmaz.
-GovernanceAftermathSpec? aftermathForChoice(String eventId, String choiceId) =>
-    null;

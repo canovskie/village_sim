@@ -63,6 +63,9 @@ class AnimalEntity {
   /// dönerdi. Mevsim sonbahara dönünce sıfırlanır (bkz. scene_winter).
   bool shorn = false;
 
+  /// Köy kararından her tick türetilir; ayrı bir kayıt otoritesi değildir.
+  bool wearsBell = false;
+
   /// Yaş (oyun günü). Zamanla yaşam evresi ilerler; [lifespanDays]'i geçince
   /// hayvan sakince hayata veda eder (chill: kaynak cezası yok).
   double ageDays;

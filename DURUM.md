@@ -1,6 +1,6 @@
 # DURUM — projenin o anki hâli
 
-**Son güncelleme: 6 Eylül 2026.**
+**Son güncelleme: 8 Eylül 2026.**
 
 Bu dosya değişen proje durumunu anlatır. Kalıcı çalışma kuralları için
 [CLAUDE.md](CLAUDE.md), kod haritası için `lib/main.dart` başındaki HARİTA
@@ -9,10 +9,9 @@ yorumuna bak.
 ## Kısa özet
 
 Oynanış omurgası, kayıt sistemi, yaşayan köy simülasyonu ve yönetişim katmanı
-çalışır durumda. Statik analiz temizdir ve tam test süiti geçmektedir. En büyük
-ürün boşluğu içeriktir: rastgele olay motoru hazır olmasına rağmen olay kataloğu
-boş; dilekçe kataloğunda altı gündelik, altı sistem-güdümlü karar ve üç hikâyenin
-on sekiz başlangıç/devam/kapanış girdisi var.
+çalışır durumda. Statik analiz temizdir ve tam test süiti geçmektedir. Rastgele olay kataloğunda kuyu onarımı, fazla zahire ve fırtına hazırlığı
+içeriği vardır. Yönetişim kataloğu altı gündelik, altı sistem-güdümlü karar,
+on sekiz hikâye girdisi ve kayıtla geri kurulan dört rejim krizi taşır.
 
 Çalışma ağacı kapsamlı ve henüz commitlenmemiş bir dönüşüm taşımaktadır. Bu
 nedenle yeni işlerde toplu geri alma, bütün depoyu mekanik olarak formatlama ve
@@ -20,13 +19,56 @@ eski dosyaları varsayımla diriltme yapılmamalıdır.
 
 ## Ölçüler
 
+### Ev içi prototip ve dekor çeşitliliği (8 Eylül)
+
+- Ahşap eve dokunmak çatısı/ön duvarları açık tek oda izleyicisini açar.
+  Ev bilgileri ve iç görünüm arasında geçiş yapılabilir.
+- Ayrı çizilen iki yatak, masa/tabure, ocak, raf, sandık, kilim, kap kacak,
+  perde ve kurutulan otlar; ahşap döşeme, gün/gece rengi, ateş ve buhar.
+- Üç döşeme ailesi: kır evi, bitkili ev, dokumalı ev. Yatak başlıkları,
+  oval/tahta masalar, minder/sırtlık, bombeli/boyalı sandıklar, hasır/desenli
+  kilimler ve yamalı/işlemeli yorganlar biçim ve desen bakımından ayrılır.
+- Saksılar, raf/pencere bitkileri, asılı saksı, çiçekler, kurutulmuş otlar,
+  duvar dokuması, çelenk ve resim; hasır sepet, odun, mum, tabak ve kumaş yığınları.
+  Yapraklar hafif salınır. Yeni zemin eşyaları yol engeli ve dokunma hedefidir.
+- Denemede başlıktaki döşeme düğmesi üç aileyi NPC/zamanı sıfırlamadan değiştirir.
+  Oyunda döşeme evin konumundan kararlı biçimde türetilir; yeni kayıt alanı yoktur
+  ve bu çeşitlilik meslek, varlık veya üretim iddiası taşımaz.
+- Her evin artık ayrı mobilya yerleşimi vardır: altı temel plan, bağımsız
+  sofra/yatak/raf/sandık/dekor kaymaları ve üç döşeme ailesi birleşir. Konumlar
+  çakışmasız Cantor eşlemesiyle tohumlanır; kayıttaki col/row aynı düzeni üretir.
+  Bu sürümde eski evler de otomatik yeni kombinasyonlarını alır.
+- `systems/npc/home_interior_layout.dart` çizim, dokunma, yatak/masa/ocak hedefi,
+  pencere noktası ve yürüyüş için tek kaynaktır. Arka duvara dönen raf ve ocağa
+  göre yer değiştiren pencereler/yerel ateş parıltısı da plana bağlıdır.
+- Denemedeki ızgara simgeli yerleşim düğmesi altı planı dolaşır. Tarz, senaryo,
+  saat ve yakınlaştırma korunur; NPC'ler yeni planda girişten yollarını kurar.
+  Dar pencerede yerleşim/tarz kontrolleri ayrı kaydırılabilir satıra geçer.
+- İçerideki NPC'ler aynı ten/saç/sakal kimliğiyle sade ev kıyafeti kullanır;
+  masaya oturma, ocakla uğraşma, yatakta kapalı göz/nefes ve kalkış geçişleri var.
+- Mobilya engelleri üzerinde yarım-tile yol arama. Model görsel ve geçici;
+  dış dünya koordinatı, iş, ihtiyaç veya kayıt durumunu değiştirmez.
+- `tools/run_home_interior.command` / `lib/tools/home_interior_main.dart`
+  doğrudan hazır ev ve iki NPC açar. Hazır senaryolar, zaman/ışık kontrolleri,
+  yakınlaştırma ve dışarı çıkıp eve tekrar tıklama bulunur.
+- Oyun bağlantısı gerçek evdeki sakinleri gösterir; dışarıda olanları gizler.
+  İlk kapsam yalnız ahşap ev ve iki yataktır; tester'daki gündelik döngüler
+  henüz köylü AI'ının ev içi ihtiyaç/üretim davranışları değildir.
+- Yol/poz yaşam döngüsü, mobil deneme ekranı ve gerçek oyunda ev tıklama →
+  içeri → ev bilgileri → geri akışı hedefli testlerle doğrulandı.
+  Üç döşemenin gün/gece çizimi, mobil döşeme geçişi ve yeni eşyalara dokunma
+  da test edilir; görsel karşılaştırma `/tmp/home_interior_styles.png` üretir.
+  Yerleşimler `/tmp/home_interior_layouts.png` ile karşılaştırılır; örnek 400
+  evin ayrı/kararlı tasarımı, 600 yerleşimin çakışma/sınırları, tüm planların
+  eylem yolları ve gerçek köyde iki farklı eve girme test kapsamındadır.
+
 | Alan | Güncel durum |
 |---|---|
 | Dart kaynak | 337 dosya, yaklaşık 132 bin satır (`lib/`) |
 | Test | 125 dosya, yaklaşık 18 bin satır (`test/`) |
 | `flutter analyze` | Temiz |
 | Varlıklar | 137 MB; 91 MB `assets/buildings/` |
-| İçerik | 10 suç türü, 30 dilekçe, 0 rastgele olay |
+| İçerik | 10 suç türü, 34 yönetişim kararı, 3 rastgele köy olayı |
 | Geliştirici araçları | 39 Dart dosyası, 37 ayrı `*_main.dart` giriş noktası |
 
 Test sayısı belgeye sabitlenmez; katalog ve sözleşme testleri geliştikçe sayı
@@ -46,6 +88,46 @@ hızla eskimektedir. Doğru kaynak `flutter test` çıktısıdır.
   paneli.
 - Saf sistem testleri, gerçek sahne prova testleri, mobil yerleşim testleri ve
   capture/tester araçları.
+
+## 7 Eylül karar bütünlüğü
+
+- Dilekçe maliyeti, kanun ve aktör varlığı ortak uygulama kapısında denetlenir.
+  Meclis de yalnız uygulanabilir seçeneklerden karar verir; boş ambar bedava
+  müdahale sağlayamaz.
+- Yargı seçenekleri ilk sunum, kuyruktan çıkış ve yüklemede aynı kanunlardan
+  kurulur. Rejim krizleri katalogdan geri gelir; huzursuzluk ve eylem etkileri
+  düğme metnine bağlı değildir. Sürgün gerçek ayrılış başlatır ve ayrılış
+  yürüyüşü de kaydedilir.
+- Ortak köy meseleleri `EventChoiceModal`, kişiye bağlı talepler
+  `PetitionModal` kullanır. Haber plaketi sonuç duyurmaya devam eder.
+- Ocakta pişirme sırası, kuyu kovası, sıcak yerde öncelik, akşam müziği ve
+  sürü çanı kalıcı usuller olarak gündelik davranışlara bağlandı. Muhafız
+  takviyesi gerçek devriye/görüş etkisi taşır; asayişi yok saymak şüpheyi silmez.
+- Evlenmeme tercihi kıyafetten bağımsız kaydedilir; düğün ve eşleştirme
+  yolları, dışarıdan eş çağırma dahil, bu tercihi gözetir.
+- Üç rastgele köy olayının koşulu, maliyeti, pasif kolu, kısa koreografisi ve
+  kayıtla süren çalışma izi vardır.
+- Doğrulama: karar sözleşmeleri, gerçek sahnede kaynak/kanun/kriz/ayrılış ve
+  tercih kayıtları, üç olayın görünürlüğü/sonucu/zaman aşımı, 896×414 ve
+  760×360 karar yerleşimleri. Tam süit 967 test geçti; son düzeltmelerin
+  ardından ilgili 46 test yeniden geçti. `flutter analyze` temiz.
+
+## 7 Eylül hareket ve atmosfer
+
+- Köylü adımları kuru zeminde kısa toz, yağmurda sıçrama, karda sönümlenen
+  ayak izi üretir. İzler dünya koordinatında, mesafeye bağlı ve kişi başına
+  sınırlıdır; kapalı mekân, durma, ışınlanma ve sert kuru yüzeyler iz üretmez.
+- Yağmurun yere çarpması dünya katmanına taşındı: pan/zoom ile zeminden
+  kopmaz, binalar ve karakterler sıçramayı örter.
+- Polen ve ateşböcekleri görünür dünya hücrelerinden türetilir; yakın kadrajda
+  yoğunluk kaybolmaz. Kışta kapanır, yağmurda yumuşakça söner. Çalı çevresindeki
+  kelebekler köylü yaklaşınca yükselir; şafak/alacakaranlıkta su üstünde alçak
+  sis süzülür. Yeni atmosfer katmanları performans modunda atlanır.
+- Deniz çiziminde önceki karenin dalga alpha'sının arka plana sızması düzeltildi.
+- Adım yaşam döngüsü/çizimi ve gerçek köy bağlantısı hedefli testlerle doğrulandı.
+  `flutter test test/atmosphere_preview_dump.dart`, aynı kadrajın altı atmosfer
+  önizlemesini `/tmp/village_atmosphere.png` olarak üretir. Yaşayan köy capture'ı
+  sabit yatay kadraj kullanır; ortak kare pompalama motor saatini takip eder.
 
 ## 6 Eylül kod temizliği ve kavram klasörleri
 
@@ -70,6 +152,29 @@ hızla eskimektedir. Doğru kaynak `flutter test` çıktısıdır.
   tanesi (living_probe "hırsızlık tam sahne") tam süitte bir kez düştü, tek
   başına üç koşuda üçü de geçti; süit yüküne bağlı kararsızlık, taşımayla
   ilgili değil (kod satırı değişmedi, yalnız dosya taşındı).
+
+## 8 Eylül haber bütünlüğü
+
+- Doğum, aile kurma, büyüme ve hane ayrılık haberleri açık konu/önemle
+  gönderilir. Eksik malzeme sistem cevabıdır; kişi adının içindeki `kar`
+  hecesi haberin hava konusu sayılmasına neden olmaz.
+- Önemli ve acil haberler okunmadan kuyruktan atılmaz. Gündelik gelişmelerin
+  kısa tamponu ayrıdır. Oyuncunun işlem fişi krizle aynı anda görünür;
+  yeni tıklama önceki işlem cevabını günceller.
+- Yayın saati saf `VillageNewsQueue` içinde, gerçek görünür süreyle yürür.
+  Panel, ders/olay kartı, sinematik, savaş, başka sayfa ve uygulama arka planı
+  okuma bütçesini tüketmez. Dönüş karesi gizli süreyi saate eklemez. Plaketin
+  süre çizgisi de aynı kalan bütçeyi çizer; ayrı otomatik kapanma timer'ı yok.
+- Ders/olay kartı ile plaket aynı anda çizilmez; haber sonra kaldığı yerden
+  devam eder. Sim duraklatılsa bile görünür haberin okuma süresi ilerler.
+- Olay kimliği metin varyantlarını birleştirir. Kişisel yaşam, çatışma ve
+  yargı haberlerinin tekrarlanan havuzları kişi/olay kimliği taşır. Okunan
+  haber 30 saniye tekrar etmez; başka kişi ve ağırlaşan uyarı engellenmez.
+- Doğrulama: saf model/kuyruk testleri; gerçek sahnede işlem fişi, kısa panel
+  açıp kapama, uygulama arka planı, dört acil haberin okunması ve ders kartı
+  sırasında bekleyiş provası geçti. 760×360 ve 896×414 alanda 1.5× yazı
+  ölçeğinde haber + işlem fişi yerleşimi de test edildi. İlgili 29 test
+  geçti; `flutter analyze` temiz.
 
 ## 6 Eylül haber plaketi
 
@@ -131,21 +236,18 @@ hızla eskimektedir. Doğru kaynak `flutter test` çıktısıdır.
 
 ## Açık işler — öncelik sırasıyla
 
-### 1. Rastgele olay içeriği yok
+### 1. Köy olayı paketlerini genişletme
 
-`EventOutcome`, seçim, zaman aşımı, efekt, koreografi, UI ve kayıt altyapısı
-duruyor; `EventSystem.events` ise boştur. Yeni olaylar tek tek motor dosyasına
-gömülmemeli, `lib/systems/events/` altında içerik paketi olarak eklenmelidir.
-Her seçimli olayın pasif zaman-aşımı kolu ve sahnede görünen karşılığı olmalıdır.
+İlk paket kuyu, pazar ve hava gündemini kapsar. Yeni paketlerde de koşul,
+ücretli müdahale, bedelsiz pasif zaman aşımı ve dünyada görünen sonuç
+sözleşmeleri korunmalıdır (`village_event_catalog.dart`).
 
-### 2. Dilekçe gündemi dar
+### 2. Geç oyun gündemini genişletme
 
-Rastgele havuzda altı kişisel/gündelik dilekçe ile koşullu asayiş kararı vardır.
-Diğer beş katalog girdisi yalnız sahne olaylarının zorunlu karar yüzeyidir.
-Üç kişisel hikâye artık aynı aktörlerle dallanıp üçüncü/beşinci yıl gündemine
-uzanıyor. Daha geniş topluluk, kurum, zümre ve rejim gündemleri içerik ister.
-Önce communal, sonra civic/critical paketleri eklenmelidir; her paket mevcut
-`petition_catalog_test` sözleşmesini geçmelidir.
+Kişisel hikâyeler üçüncü/beşinci yıl gündemine uzanır; dört rejim krizi artık
+kalıcı katalog girdileridir. Topluluk, kurum ve zümrelerin daha uzun karar
+zincirleri için ek içerik yazılabilir. Ortak meseleler Köy Olayı panelinde,
+kişiye bağlı talepler portreli Divan ekranında sunulur.
 
 ### 3. Depo hijyeni tamamlanmadı
 

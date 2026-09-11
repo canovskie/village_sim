@@ -18,6 +18,7 @@ import '../../systems/labor/building_specialization.dart';
 import '../../systems/labor/building_system.dart';
 import '../../systems/world/hearth_warmth.dart';
 import '../../systems/world/winter.dart';
+import '../../text/voice.dart';
 import '../../world/animal_entity.dart';
 import '../core/app_ui.dart';
 import '../core/mobile_ui.dart';
@@ -95,6 +96,7 @@ class BuildingInfoPanel extends StatelessWidget {
   /// panelden Divan'a taşındı; belediye yönetişimin koltuğu olduğu için burada
   /// yalnızca oraya açılan bir kapı kalır. null = kapı gösterilmez.
   final VoidCallback? onOpenDivan;
+  final VoidCallback? onViewInterior;
 
   /// KIŞ TABLOSU — yalnız tezgâhın durduğu binada (ambar; ambar yoksa ocak
   /// başı) ve yalnız sonbahar/kışta dolu gelir. null = bu panelin kışla işi yok.
@@ -143,6 +145,7 @@ class BuildingInfoPanel extends StatelessWidget {
     this.festivalGoldCost = 5,
     this.planning,
     this.onOpenDivan,
+    this.onViewInterior,
     this.hearthWarmth,
     this.winter = false,
     this.winterReadiness,
@@ -1139,6 +1142,16 @@ class BuildingInfoPanel extends StatelessWidget {
   List<_Action> _managementActions() {
     final fn = _fn;
     final out = <_Action>[];
+    if (onViewInterior != null) {
+      out.add(
+        _Action(
+          icon: GameIconData.home,
+          label: HomeInteriorVoice.enter,
+          tint: AppUi.accentSoft,
+          onTap: onViewInterior,
+        ),
+      );
+    }
 
     if (fn?.role == BuildingRole.trade) {
       for (final e in kMarketSellRates.entries) {

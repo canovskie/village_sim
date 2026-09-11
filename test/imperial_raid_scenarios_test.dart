@@ -129,6 +129,22 @@ void main() {
     expect(a.kind, b.kind);
   });
 
+  test('dev summon has a safe scenario below the natural population gate', () {
+    final tinyVillage = context(
+      year: 1,
+      population: 1,
+      night: false,
+      rain: false,
+      buildings: false,
+    );
+
+    expect(eligibleImperialRaids(tinyVillage), isNotEmpty);
+    expect(
+      selectImperialRaidScenario(tinyVillage, 731).kind,
+      ImperialRaidKind.shieldWall,
+    );
+  });
+
   test('scenarios change force, losses, loot and tactical answer', () {
     expect(
       imperialRaidScenarios.map((s) => s.attackDelta).toSet().length,

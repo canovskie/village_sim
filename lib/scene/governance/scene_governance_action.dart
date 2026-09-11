@@ -19,8 +19,40 @@ extension _SceneGovernanceAction on _VillageSceneState {
   );
 
   String? _petitionOptionBlockReason(PetitionOption option) {
+    if (!option.canAfford(_stockpile)) {
+      return Voice.say(const [
+        'Bu karar için köyün kaynağı yetmiyor.',
+      ], _voice(null));
+    }
+    if (option.actorEffect != PetitionActorEffect.none &&
+        (_petitionAuthor == null ||
+            _petitionAuthor!.isDying ||
+            _petitionAuthor!.isLeaving ||
+            !_villagers.contains(_petitionAuthor))) {
+      return Voice.say(const [
+        'Bu talebin sahibi artık köyde değil.',
+      ], _voice(null));
+    }
+    final law = option.requiredLaw;
+    if (law != null && !_policies.sealed.contains(law)) {
+      return Voice.say(const [
+        'Bu hüküm için gerekli ferman yürürlükte değil.',
+      ], _voice(null));
+    }
+    if (option.action == PetitionAction.exileAgitator &&
+        _mostAggrieved() == null) {
+      return Voice.say(const [
+        'Köyde bu hükmün uygulanabileceği biri kalmadı.',
+      ], _voice(null));
+    }
     return switch (option.presence) {
       DecisionPresence.none => null,
+      DecisionPresence.villageGuard =>
+        _villagers.any(
+              (v) => v.type == VillagerType.guard && !v.isDying && !v.isLeaving,
+            )
+            ? null
+            : 'Köyde görev alabilecek muhafız yok.',
       DecisionPresence.activeCaravan =>
         _hasActiveCaravan ? null : 'Köyde kervan yok — bu yük satın alınamaz',
     };
@@ -109,7 +141,7 @@ extension _SceneGovernanceAction on _VillageSceneState {
   }
 
   void _startEventAftermath(EventOutcome event, EventChoice choice) {
-    final spec = aftermathForChoice(event.id, choice.id);
+    final spec = choice.aftermath;
     if (spec == null) return;
     _governanceAftermath.removeWhere((a) => a.id == event.id);
     _governanceAftermath.add(
@@ -124,6 +156,7 @@ extension _SceneGovernanceAction on _VillageSceneState {
   }
 
   void _tickGovernanceActions(double dt) {
+    _tickDecisionCustoms(dt);
     _completeDecisionProcesses();
     _tickEventAftermath();
     _tickLawSignatures();
@@ -220,8 +253,12 @@ extension _SceneGovernanceAction on _VillageSceneState {
     _lawBehaviorNextSim = _time + (staged ? 0.30 : 0.08) * kGameDaySeconds;
   }
 
-  bool _stageGovernanceBeat(GovernanceBeatKind kind, String source) {
-    final actor = _governanceActor();
+  bool _stageGovernanceBeat(
+    GovernanceBeatKind kind,
+    String source, {
+    VillagerEntity? actorOverride,
+  }) {
+    final actor = actorOverride ?? _governanceActor();
     if (actor == null) return false;
     final center = _villageCenterD();
     var target = center;

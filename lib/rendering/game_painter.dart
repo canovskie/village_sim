@@ -21,6 +21,7 @@ import '../entities/worker_entity.dart';
 import '../farm/farm_renderer.dart';
 import '../farm/farm_tile.dart';
 import '../systems/events/event_system.dart';
+import '../systems/npc/footstep_trail.dart';
 import '../systems/npc/villager_act.dart';
 import '../systems/npc/villager_mind.dart';
 import '../systems/world/decor_population.dart';
@@ -68,9 +69,11 @@ import 'tool_renderer.dart';
 import 'tree_renderer.dart';
 import 'vehicle_renderer.dart';
 import 'water_renderer.dart';
+import 'wind.dart';
 import 'world_landmark_renderer.dart';
 
 part 'game_ambient.dart';
+part 'game_surface_motion.dart';
 part 'game_drawables.dart';
 part 'game_drawables_building.dart';
 part 'game_drawables_villager.dart';
@@ -653,6 +656,11 @@ class VillageGamePainter extends CustomPainter {
     if (!perfMode) _drawBuildingShadows(canvas, size);
     _drawRoads(canvas, size);
     _drawMudFootprints(canvas, size);
+    _drawFootsteps(canvas, size);
+    if (!perfMode && season != Season.winter && rainIntensity > 0.01) {
+      _drawGroundSplashes(canvas, size, rainIntensity);
+    }
+    if (!perfMode) _drawRiverMist(canvas, size);
     if (farmSelection != null) _drawFarmSelection(canvas, size);
     if (lumberSelection != null) _drawLumberSelection(canvas, size);
     if (mineSelection != null) _drawMineSelection(canvas, size);
@@ -682,6 +690,7 @@ class VillageGamePainter extends CustomPainter {
       _drawLampMoths(canvas, size);
       _drawFireflies(canvas, size);
       _drawPollen(canvas, size);
+      _drawButterflies(canvas, size);
       _drawSeasonParticles(canvas, size);
       _drawBirdFlocks(canvas, size);
       _drawBeeSwarms(canvas, size);

@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import '../../core/resources.dart';
 import '../../text/voice.dart';
 import '../../world/season.dart';
 import '../events/story_threads.dart';
@@ -12,6 +13,8 @@ part 'petition_catalog_core.dart';
 part 'petitions/lifecycle_petitions.dart';
 part 'petitions/personal_petitions.dart';
 part 'petitions/story_petitions.dart';
+part 'petitions/regime_petitions.dart';
+part 'petitions/verdict_options.dart';
 
 /// Katalog ile sahne arasındaki kararlı kimlik sözleşmesi.
 ///
@@ -119,6 +122,9 @@ enum PetitionAuthorKind {
 /// somut sonucu taşır.
 enum PetitionActorEffect { none, flowingOutfit, traditionalOutfit }
 
+/// Karar metninden bağımsız, dünyada yürütülen eylem.
+enum PetitionAction { none, exileAgitator, settleCouncil, extendCouncil }
+
 /// Bir dilekçedeki tek seçenek: oyuncunun verebileceği karar + sonuçları.
 /// Etkiler bildirimsel (declarative) — sahne `_resolvePetition` ile uygular:
 /// kaynak deltaları, geçici moral (pushPolicyMorale), yasa yürürlüğe sokma,
@@ -193,6 +199,8 @@ class PetitionOption {
 
   /// Kararın dilekçe sahibinde bıraktığı kalıcı görsel sonuç.
   final PetitionActorEffect actorEffect;
+  final PetitionAction action;
+  final double unrestDelta;
 
   const PetitionOption({
     required this.label,
@@ -215,6 +223,8 @@ class PetitionOption {
     this.presence = DecisionPresence.none,
     this.process,
     this.actorEffect = PetitionActorEffect.none,
+    this.action = PetitionAction.none,
+    this.unrestDelta = 0,
   });
 
   /// Bu seçeneğin metinlerini bağlamla doldurur (bkz. [Petition.spoken]).
@@ -243,7 +253,23 @@ class PetitionOption {
     presence: presence,
     process: process,
     actorEffect: actorEffect,
+    action: action,
+    unrestDelta: unrestDelta,
   );
+
+  bool canAfford(ResourceBundle stock) =>
+      stock.food >= -foodDelta &&
+      stock.wood >= -woodDelta &&
+      stock.stone >= -stoneDelta &&
+      stock.iron >= -ironDelta &&
+      stock.gold >= -goldDelta;
+
+  String? get requiredLaw => switch (fx) {
+    PetitionFx.crimeExile => 'nizam.exile',
+    PetitionFx.crimeLabor => 'nizam.labor',
+    PetitionFx.crimePenance => 'dergah.penance',
+    _ => action == PetitionAction.exileAgitator ? 'nizam.exile' : null,
+  };
 
   /// UI etki chip'leri — (ikon, etiket) çiftleri.
   List<(String, String)> get effectChips {
@@ -421,6 +447,9 @@ class PetitionContext {
 
   /// Köyde tamamlanmış bir kilise var mı — anma dilekçelerini açar.
   final bool hasChurch;
+  final bool hasWell;
+  final bool hasElder;
+  final int cookingHouseholds;
 
   /// Köyün kalıcı hafızası — geçmiş kararların bıraktığı bayraklar. Dilekçeler
   /// bunu okuyup dallanır (ör. 'cult.active' varsa farklı dilekçeler açılır).
@@ -525,6 +554,9 @@ class PetitionContext {
     required this.gold,
     required this.morale,
     required this.hasChurch,
+    this.hasWell = false,
+    this.hasElder = false,
+    this.cookingHouseholds = 0,
     this.memory = const {},
     this.storyCasts = const {},
     this.aggrievedEstate,

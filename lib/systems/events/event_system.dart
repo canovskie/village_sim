@@ -1,10 +1,14 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../buildings/building_entity.dart';
+import '../../buildings/building_type.dart';
+import '../../characters/life_stage.dart';
 import '../../core/resources.dart';
 import '../../text/voice.dart';
+import '../governance/governance_action.dart';
 
 part 'event_catalog.dart';
+part 'village_event_catalog.dart';
 
 /// Olayların KALICI kimlikleri. Kod bir olayı BUNLARLA tanır — asla başlıkla.
 /// Başlık oyuncunun gördüğü metindir ve serbestçe yeniden yazılabilir; id ise
@@ -12,6 +16,9 @@ part 'event_catalog.dart';
 abstract final class EventIds {
   /// Zanaat açma akışının sistem-içi kararı; rastgele olay kataloğuna ait değil.
   static const specialistCaravan = 'specialistCaravan';
+  static const muddyWell = 'muddyWell';
+  static const marketSurplus = 'marketSurplus';
+  static const approachingStorm = 'approachingStorm';
 }
 
 /// Olay kategorisi — UI banner rengi ve filtre için.
@@ -147,6 +154,7 @@ class EventChoice {
 
   /// Bu seçenek için kısa "sonuç" mesajı — banner'da gösterilir.
   final String resolutionMessage;
+  final GovernanceAftermathSpec? aftermath;
 
   const EventChoice({
     required this.id,
@@ -164,6 +172,7 @@ class EventChoice {
     this.duration = 0,
     this.effect,
     this.requiresResources = false,
+    this.aftermath,
   });
 
   bool canAfford(ResourceBundle stock) =>

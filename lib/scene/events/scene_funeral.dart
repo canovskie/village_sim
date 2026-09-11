@@ -90,7 +90,10 @@ extension _SceneFuneral on _VillageSceneState {
       _gatherAtFire(dur, max: 7);
       _feelVillage(NpcEmotion.grief, 10, -0.12);
       // Cozy: moral cezası yok — kilise teselli eder, köy onurla uğurlar.
-      _showNotification(Voice.say(_kChurchFuneralPool, ctx));
+      _showNotification(
+        Voice.say(_kChurchFuneralPool, ctx),
+        eventKey: '_kChurchFuneralPool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
       return;
     }
 

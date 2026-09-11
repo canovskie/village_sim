@@ -598,7 +598,28 @@ extension _SceneMind on _VillageSceneState {
   /// hâli). Slot bulunamazsa niyet boşa düşer, hakem bir sonraki turda başka
   /// bir teklif seçer.
   void _seatAtFire(VillagerEntity v) {
-    final claim = _anchorSystem.claimNearestFirepitSit(v.gridX, v.gridY, v);
+    var claim = _anchorSystem.claimNearestFirepitSit(v.gridX, v.gridY, v);
+    if (claim == null &&
+        (_villageMemory.contains('hearth.elders') ||
+            _villageMemory.contains('hearth.cold'))) {
+      final candidates =
+          _villagers
+              .where(
+                (other) =>
+                    other.isSeatedAtFire &&
+                    other.mind.intent.priority < IntentPriority.ceremony &&
+                    _wdist(v.gridX, v.gridY, other.gridX, other.gridY) < 6 &&
+                    _hearthPriority(other) + 0.15 < _hearthPriority(v),
+              )
+              .toList()
+            ..sort((a, b) => _hearthPriority(a).compareTo(_hearthPriority(b)));
+      if (candidates.isNotEmpty) {
+        final other = candidates.first;
+        other.cancelSit();
+        other.mind.clear();
+        claim = _anchorSystem.claimNearestFirepitSit(v.gridX, v.gridY, v);
+      }
+    }
     if (claim == null) {
       v.mind.clear();
       return;

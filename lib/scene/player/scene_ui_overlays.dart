@@ -597,51 +597,49 @@ extension _SceneUiOverlays on _VillageSceneState {
   );
 
   Widget buildNotificationToast() {
-    // Sabit `top: 70` masaüstü varsayımıydı. iPhone 11'de (414dp yükseklik) o
-    // hat tam olarak Köy Defteri'nin SEKME şeridine denk geliyor ve bildirim
-    // TÜZÜK sekmesinin üstüne oturuyordu — geçici bir bildirim, kalıcı bir
-    // gezinme öğesini örtmemeli. Telefonda toast alta iner (komuta çubuğunun
-    // üstüne): orada yalnız içeriğin üstünden geçer, hiçbir kontrolü kapatmaz.
     final compact = useCompactGameUi(context);
-    final news = _notification!;
-    // Kayıt, hız ve geçersiz tıklama gibi arayüz cevapları köy haberi kılığına
-    // girmez. Aynı yayın sırasını kullanır ama küçük, tek satırlık geri bildirim
-    // olarak çizilir. Büyük plaket yalnız köyde gerçekten olanı anlatır.
-    final Widget toast = news.topic == VillageNewsTopic.system
-        ? AppReveal(
-            key: ValueKey(news.dedupeKey),
-            child: AppChip(
-              label: news.rawMessage,
-              color: switch (news.tone) {
-                VillageNewsTone.critical ||
-                VillageNewsTone.caution => AppUi.rust,
-                VillageNewsTone.favorable => AppUi.sage,
-                VillageNewsTone.neutral => AppUi.accent,
-              },
-              solid: true,
-            ),
-          )
-        : NotificationPlaque.news(
-            news: news,
-            compact: compact,
-            pendingCount: _notificationFeed.pendingCount,
-          );
-    if (!compact) {
-      return Positioned(
-        top: 76,
-        left: 0,
-        right: 0,
-        child: IgnorePointer(child: Center(child: toast)),
-      );
-    }
     return Positioned(
+      top: compact ? null : 76,
+      bottom: compact ? MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap : null,
       left: 0,
       right: 0,
-      bottom: MobileUi.bottom(context) + MobileUi.actionH + MobileUi.gap,
-      // Katalog açıldığında bu hat araç kartlarının üstünden geçebilir.
-      // Bildirim yalnız bilgi taşır; görünürken alttaki Tarla/Yol düğmesini
-      // kilitlememeli. Dokunuşu palete geçir.
-      child: IgnorePointer(child: Center(child: toast)),
+      child: IgnorePointer(
+        child: ListenableBuilder(
+          listenable: _hudFrame,
+          builder: (_, _) {
+            if (!_newsWindowOpen) return const SizedBox.shrink();
+            final news = _notification;
+            final feedback = _feedbackFeed.active;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (news != null)
+                  NotificationPlaque.news(
+                    news: news, compact: compact,
+                    pendingCount: _notificationFeed.pendingCount,
+                    remainingFraction: _notificationFeed.remainingFraction,
+                  ),
+                if (feedback != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: AppReveal(
+                      key: ValueKey(feedback.dedupeKey),
+                      child: AppChip(
+                        label: feedback.rawMessage,
+                        color: switch (feedback.tone) {
+                          VillageNewsTone.critical || VillageNewsTone.caution => AppUi.rust,
+                          VillageNewsTone.favorable => AppUi.sage,
+                          VillageNewsTone.neutral => AppUi.accent,
+                        },
+                        solid: true,
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
     );
   }
 

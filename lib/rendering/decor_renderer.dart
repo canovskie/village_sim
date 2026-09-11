@@ -9,12 +9,13 @@ import 'wind.dart';
 /// Çimen üstü dekor sprite'larını yükler ve çizer.
 /// Her kind için 2-3 varyant; world generator önceden seçtiği variant'ı kullanırız.
 class DecorRenderer {
-  static const double _fallenLogSourceHeight = 128.0;
+  static const double _groundedDecorSourceHeight = 128.0;
 
   // PNG'lerin opak temas çizgisi tuvalin dibinde değil. Bu değerler alpha
   // >= 16 için ölçülen son pikselin alt kenarıdır; kalan bölüm saydam padding.
-  // Sprite'ı bu padding kadar aşağı almak, kütüğü gölgesine gerçekten oturtur.
+  // Sprite'ı bu padding kadar aşağı almak, objeyi gölgesine gerçekten oturtur.
   static const List<double> _fallenLogGroundEdges = [109.0, 114.0];
+  static const List<double> _bushSmallGroundEdges = [105.0, 101.0, 100.0];
 
   // kind → variant index → image
   static final Map<DecorKind, List<ui.Image?>> _imgs = {};
@@ -120,10 +121,15 @@ class DecorRenderer {
     int variant,
     double drawHeight,
   ) {
-    if (kind != DecorKind.fallenLog) return 0.0;
-    final safeVariant = variant.clamp(0, _fallenLogGroundEdges.length - 1);
-    final groundEdge = _fallenLogGroundEdges[safeVariant];
-    return drawHeight * (1.0 - groundEdge / _fallenLogSourceHeight);
+    final groundEdges = switch (kind) {
+      DecorKind.fallenLog => _fallenLogGroundEdges,
+      DecorKind.bushSmall => _bushSmallGroundEdges,
+      _ => null,
+    };
+    if (groundEdges == null) return 0.0;
+    final safeVariant = variant.clamp(0, groundEdges.length - 1);
+    final groundEdge = groundEdges[safeVariant];
+    return drawHeight * (1.0 - groundEdge / _groundedDecorSourceHeight);
   }
 
   /// Tile merkezinden çizim. [center] = gridToScreen(col+0.5, row+0.5).

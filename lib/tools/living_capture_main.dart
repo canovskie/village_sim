@@ -14,25 +14,48 @@ final GlobalKey _boundaryKey = GlobalKey();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  kCaptureMode = true;      // açılış sinematiğini atla
-  kCaptureShowcase = true;  // dolu köy: binalar, depo, ağıl, sürü, muhafız, meslekler
-  kCaptureZoom = 0.62;      // köyün bütünü kadraja girsin (asset hazır olunca çeker)
-  runApp(MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: RepaintBoundary(
-      key: _boundaryKey,
-      child: const VillageScene(),
+  kCaptureMode = true; // açılış sinematiğini atla
+  kCaptureShowcase =
+      true; // dolu köy: binalar, depo, ağıl, sürü, muhafız, meslekler
+  kCaptureZoom = 0.85;
+  kCaptureTimeOfDay = 0.45;
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: FittedBox(
+        child: MediaQuery(
+          data: const MediaQueryData(
+            size: Size(1280, 800),
+            devicePixelRatio: 1,
+          ),
+          child: SizedBox(
+            width: 1280,
+            height: 800,
+            child: RepaintBoundary(
+              key: _boundaryKey,
+              child: const VillageScene(),
+            ),
+          ),
+        ),
+      ),
     ),
-  ));
+  );
 
   var waited = 0;
   while (!kCaptureSceneReady && waited < 400) {
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await settleFrames(300);
     waited++;
   }
   // Köylüler evlerinden çıkıp işe/dağılsın diye birkaç saniye sim aksın.
-  await Future<void>.delayed(const Duration(seconds: 6));
-  await captureBoundary(_boundaryKey, '/tmp/village_living.png', pixelRatio: 1.5);
+  if (!kCaptureSceneReady) {
+    stdout.writeln('CAPTURE_FAIL: sahne hazır olmadı');
+    exit(1);
+  }
+  await settleFrames(6000);
+  await captureBoundary(
+    _boundaryKey,
+    '/tmp/village_living.png',
+    pixelRatio: 1.5,
+  );
   exit(0);
 }
-

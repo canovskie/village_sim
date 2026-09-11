@@ -160,15 +160,17 @@ extension _PainterAmbient on VillageGamePainter {
   // ki parlasın; gündüz/yağmurda görünmez.
   void _drawFireflies(Canvas canvas, Size size) {
     final strength = ((0.42 - dayLight) / 0.42).clamp(0.0, 1.0);
-    if (strength <= 0.01 || rainIntensity > 0.3) return;
-    // Zoom çok küçükse particle'lar görünmez derecede ufalır — kısıt.
-    final count = zoom < 0.4 ? 18 : (zoom < 0.7 ? 28 : 38);
-    for (int i = 0; i < count; i++) {
-      final h = i * 73856093;
-      final baseC = (h % 1000) / 1000.0 * kCols;
-      final baseR = ((h ~/ 1000) % 1000) / 1000.0 * kRows;
-      final gx = baseC + sin(time * 0.18 + i * 1.3) * 1.4;
-      final gy = baseR + cos(time * 0.15 + i * 2.1) * 1.1;
+    if (strength <= 0.01 ||
+        rainIntensity > 0.3 ||
+        season == Season.winter ||
+        zoom < 0.4) {
+      return;
+    }
+    final dry = (1 - rainIntensity / 0.3).clamp(0.0, 1.0);
+    for (final (baseC, baseR, i) in _ambientSites(size, spacing: 4)) {
+      if (waterTiles.contains((baseC.floor(), baseR.floor()))) continue;
+      final gx = baseC + sin(time * 0.48 + i * 1.3) * 0.55;
+      final gy = baseR + cos(time * 0.39 + i * 2.1) * 0.4;
       final p = _worldToScreen(gx, gy, size);
       if (p.dx < -20 ||
           p.dx > size.width + 20 ||
@@ -177,7 +179,7 @@ extension _PainterAmbient on VillageGamePainter {
         continue;
       }
       final tw = sin(time * 2.3 + i * 4.7) * 0.5 + 0.5;
-      final a = (strength * tw * tw * 205).round().clamp(0, 220);
+      final a = (strength * dry * tw * tw * 205).round().clamp(0, 220);
       if (a < 8) continue;
       final r = (1.6 + tw * 1.4) * zoom;
       // Blur yerine 2 katman concentric: dış soluk geniş, iç parlak çekirdek.
@@ -205,16 +207,19 @@ extension _PainterAmbient on VillageGamePainter {
   // böceklerinin gündüz karşılığı. Geceye doğru sönümlenir, yağmurda görünmez.
   void _drawPollen(Canvas canvas, Size size) {
     final strength = ((dayLight - 0.5) / 0.5).clamp(0.0, 1.0);
-    if (strength <= 0.02 || rainIntensity > 0.2) return;
-    // Zoom out'ta parçacıklar zaten görünmüyor — kısıt.
-    final count = zoom < 0.4 ? 0 : (zoom < 0.7 ? 24 : 46);
-    if (count == 0) return;
-    for (int i = 0; i < count; i++) {
-      final h = i * 40503;
-      final bc = (h % 1000) / 1000.0 * kCols;
-      final br = (h ~/ 1000 % 1000) / 1000.0 * kRows;
+    if (strength <= 0.02 ||
+        rainIntensity > 0.2 ||
+        season == Season.winter ||
+        zoom < 0.4) {
+      return;
+    }
+    final dry = (1 - rainIntensity / 0.2).clamp(0.0, 1.0);
+    for (final (bc, br, i) in _ambientSites(size)) {
+      if (waterTiles.contains((bc.floor(), br.floor()))) continue;
       final gx =
-          bc + sin(time * 0.35 + i * 1.1) * 1.6 + sin(time * 0.13 + i) * 0.9;
+          bc +
+          sin(time * 0.35 + i * 1.1) * 0.65 +
+          Wind.swayAt(bc, br, time, amp: 0.9);
       final gy = br + cos(time * 0.30 + i * 1.7) * 1.1;
       final p = _worldToScreen(gx, gy, size);
       if (p.dx < -10 ||
@@ -224,11 +229,79 @@ extension _PainterAmbient on VillageGamePainter {
         continue;
       }
       final tw = sin(time * 1.3 + i * 2.3) * 0.5 + 0.5;
-      final a = (strength * (0.35 + tw * 0.65) * 95).round().clamp(0, 110);
+      final a = (strength * dry * (0.35 + tw * 0.65) * 125).round().clamp(
+        0,
+        130,
+      );
       if (a < 6) continue;
       final r = (0.8 + tw * 0.9) * zoom;
       _pPollen.color = Color.fromARGB(a, 0xFF, 0xF2, 0xC8);
       canvas.drawCircle(p, r, _pPollen);
+    }
+  }
+
+  static final Paint _pButterfly = Paint()..isAntiAlias = true;
+
+  /// Çalı çevresinde konup kalkan küçük kelebekler. Toplayıcı yaklaşınca
+  /// uçuş yükselir; beden konumu simi etkilemez.
+  void _drawButterflies(Canvas canvas, Size size) {
+    if (zoom < 0.55 || season == Season.winter || season == Season.autumn) {
+      return;
+    }
+    final visibility =
+        ((dayLight - 0.6) / 0.4).clamp(0.0, 1.0) *
+        (1 - rainIntensity / 0.2).clamp(0.0, 1.0);
+    if (visibility < 0.02) return;
+    int drawn = 0;
+    for (final bush in berryBushes) {
+      final seed = bush.col * 31 + bush.row * 17;
+      if (seed % 3 != 0) continue;
+      final anchor = _worldToScreen(bush.col + 0.5, bush.row + 0.5, size);
+      if (anchor.dx < -50 ||
+          anchor.dx > size.width + 50 ||
+          anchor.dy < -20 ||
+          anchor.dy > size.height + 70) {
+        continue;
+      }
+      if (++drawn > 12) break;
+      double proximity = 0;
+      for (final v in villagers) {
+        if (v.isInsideBuilding || v.isDying) continue;
+        final dx = v.renderX - bush.col - 0.5;
+        final dy = v.renderY - bush.row - 0.5;
+        final d2 = dx * dx + dy * dy;
+        if (d2 < 4) proximity = max(proximity, 1 - sqrt(d2) / 2);
+      }
+      final phase = time * 0.85 + seed;
+      // Uzun konma, kısa süzülme: sürekli aynı orbitten daha okunur.
+      final flight = _smoothUnit((sin(phase * 0.55) + 0.25) / 0.8);
+      final lift = max(flight, proximity);
+      final p =
+          anchor +
+          Offset(
+            (sin(phase) * 13 + sin(phase * 1.9) * 4) * lift * zoom,
+            (-12 - lift * 18 + sin(phase * 1.6) * 4 * lift) * zoom,
+          );
+      final wing = (0.35 + sin(time * 19 + seed).abs() * 2.6) * zoom;
+      final alpha = visibility * 0.92;
+      _pButterfly.color =
+          (seed.isEven ? const Color(0xFFFFDC87) : const Color(0xFFDBE9F5))
+              .withValues(alpha: alpha);
+      for (final side in [-1.0, 1.0]) {
+        canvas.drawOval(
+          Rect.fromCenter(
+            center: p.translate(side * wing * 0.55, -wing * 0.2),
+            width: wing,
+            height: 3.2 * zoom,
+          ),
+          _pButterfly,
+        );
+      }
+      _pButterfly.color = const Color(0xFF574832).withValues(alpha: alpha);
+      canvas.drawOval(
+        Rect.fromCenter(center: p, width: 0.85 * zoom, height: 2.8 * zoom),
+        _pButterfly,
+      );
     }
   }
 

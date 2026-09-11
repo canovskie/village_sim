@@ -6,6 +6,33 @@ import 'package:village_sim/rendering/ocean_renderer.dart';
 
 void main() {
   test(
+    'dalga passinden kalan boya sonraki karede denizin alpha değerini değiştirmez',
+    () async {
+      Future<List<int>> frame() async {
+        final recorder = ui.PictureRecorder();
+        OceanRenderer.draw(Canvas(recorder), const Size(120, 80), time: 2);
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(120, 80);
+        picture.dispose();
+        final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        image.dispose();
+        return data!.buffer.asUint8List();
+      }
+
+      final first = await frame();
+      final second = await frame();
+      expect(second, orderedEquals(first));
+      for (var i = 3; i < second.length; i += 4) {
+        expect(
+          second[i],
+          255,
+          reason: 'deniz arka planı her karede opak olmalı',
+        );
+      }
+    },
+  );
+
+  test(
     'gökyüzü yansıması denizin üstünde ayrı bir gök katmanı oluşturmaz',
     () async {
       final recorder = ui.PictureRecorder();

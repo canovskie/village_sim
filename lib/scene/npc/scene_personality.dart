@@ -114,7 +114,10 @@ extension _ScenePersonality on _VillageSceneState {
     v.feel(NpcEmotion.wonder, 3.5, moodDelta: 0.06);
     _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.02);
     final ctx = _voice(v, seed: _stableSeed('büyüdü${v.name}', _dayCount));
-    _showNotification(Voice.say(_kGrewUpPool, ctx));
+    _showNotification(Voice.say(_kGrewUpPool, ctx),
+      topic: VillageNewsTopic.people, tone: VillageNewsTone.favorable,
+      priority: VillageNewsPriority.important,
+      eventKey: 'grown.${v.personalitySeed}');
     _chronicle(Voice.say(_kGrewUpChroniclePool, ctx), icon: '🌱');
   }
 
@@ -173,21 +176,30 @@ extension _ScenePersonality on _VillageSceneState {
       v.feel(NpcEmotion.wonder, 4.0, moodDelta: pioneer ? 0.14 : 0.10);
       _reactNearby(v.gridX, v.gridY, 4.0, NpcEmotion.joy, 2.0, moodDelta: 0.02);
       if (pioneer) {
-        _showNotification(Voice.say(_kCallingPioneerPool, ctx));
+        _showNotification(
+          Voice.say(_kCallingPioneerPool, ctx),
+          eventKey: '_kCallingPioneerPool.${ctx.name}.${ctx.other}.${ctx.day}',
+        );
         _chronicle(
           Voice.say(_kCallingPioneerChroniclePool, ctx),
           icon: '🌟',
           milestone: true,
         );
       } else {
-        _showNotification(Voice.say(_kCallingHeededPool, ctx));
+        _showNotification(
+          Voice.say(_kCallingHeededPool, ctx),
+          eventKey: '_kCallingHeededPool.${ctx.name}.${ctx.other}.${ctx.day}',
+        );
         _chronicle(Voice.say(_kCallingHeededChroniclePool, ctx), icon: '🌟');
       }
     } else {
       // Çağrısına rağmen ailesinin yoluna çekildi — buruk büyüme. Kalıcı
       // kırgınlık moral formülünden gelir ('gönlü başka işte').
       v.feel(NpcEmotion.content, 3.5, moodDelta: -0.05);
-      _showNotification(Voice.say(_kCallingMissedPool, ctx));
+      _showNotification(
+        Voice.say(_kCallingMissedPool, ctx),
+        eventKey: '_kCallingMissedPool.${ctx.name}.${ctx.other}.${ctx.day}',
+      );
       _chronicle(Voice.say(_kCallingMissedChroniclePool, ctx), icon: '🌫️');
     }
     // Çağrı kanalı — bu köylünün mesleği bir zanaat taşıyorsa ve köy henüz
@@ -245,7 +257,10 @@ extension _ScenePersonality on _VillageSceneState {
       other: b,
       seed: _stableSeed('dost${a.name}${b.name}', _dayCount),
     );
-    _showNotification(Voice.say(_kBondPool, ctx));
+    _showNotification(
+      Voice.say(_kBondPool, ctx),
+      eventKey: '_kBondPool.${ctx.name}.${ctx.other}.${ctx.day}',
+    );
     _chronicle(Voice.say(_kBondChroniclePool, ctx), icon: '🤝');
   }
 }

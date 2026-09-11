@@ -115,7 +115,7 @@ void main() {
       expect(queue.completeActive(), same(important));
     });
 
-    test('rutin ve kayda değer haberler ekran doluyken sıra oluşturmaz', () {
+    test('rutin köy cümlesi elenir, kayda değer haber kısa sırada korunur', () {
       final queue = VillageNewsQueue();
       queue.add(item('Aktif haber.', VillageNewsPriority.noteworthy));
 
@@ -127,12 +127,12 @@ void main() {
         queue
             .add(item('Bir gelişme.', VillageNewsPriority.noteworthy))
             .accepted,
-        isFalse,
+        isTrue,
       );
-      expect(queue.pending, isEmpty);
+      expect(queue.pending, hasLength(1));
     });
 
-    test('dolu sırada en düşük önemi dışarıda bırakır', () {
+    test('dolu sırada önemli haberler okunmadan atılmaz', () {
       final queue = VillageNewsQueue(maxPending: 2);
       queue.add(item('Aktif kriz.', VillageNewsPriority.urgent));
       final importantA = item('Önemli bir.', VillageNewsPriority.important);
@@ -141,11 +141,157 @@ void main() {
       queue.add(importantA);
       queue.add(importantB);
 
-      expect(queue.add(importantC).accepted, isFalse);
+      expect(queue.add(importantC).accepted, isTrue);
       expect(queue.pending.map((news) => news.rawMessage), [
         'Önemli bir.',
         'Önemli iki.',
+        'Önemli üç.',
       ]);
     });
+  });
+  test('doğum, aile ve son hane uyarısı boş ekranda kaybolmaz', () {
+    for (final message in [
+      '👶 Ayşe doğdu. Fatma sabaha kadar uyumadı, Ali kapıda bekledi.',
+      '👶 Fatma ile Ali’nin çocuğu oldu. Adını Ayşe koydular.',
+      '💞 Ayşe & Ali aile kurdu.',
+      '🚪 Kaya Hanesi arabalarını yükledi. Yarın öbür gün yola çıkarlar.',
+      '💔 Kaya Hanesi çekip gitti. Bir daha dönmeyecekler.',
+    ]) {
+      final news = VillageNews.fromMessage(message);
+      expect(news.topic, VillageNewsTopic.people);
+      expect(
+        news.priority.index,
+        greaterThanOrEqualTo(VillageNewsPriority.important.index),
+      );
+      expect(VillageNewsQueue().add(news).accepted, isTrue, reason: message);
+    }
+  });
+
+  test('eksik malzeme sistem cevabıdır; Kara adı hava konusu üretmez', () {
+    final error = VillageNews.fromMessage('Eksik malzeme: 10 🪵');
+    expect(error.topic, VillageNewsTopic.system);
+    expect(error.tone, VillageNewsTone.caution);
+    expect(VillageNewsQueue().add(error).accepted, isTrue);
+    expect(
+      VillageNews.fromMessage('Kara Hanesi barıştı.').topic,
+      VillageNewsTopic.people,
+    );
+    expect(
+      VillageNews.fromMessage('Kar yağmaya başladı.').topic,
+      VillageNewsTopic.weather,
+    );
+  });
+
+  test('arka arkaya gelen dört acil haberin hepsi okunur', () {
+    final queue = VillageNewsQueue(maxPending: 2);
+    final items = List.generate(
+      4,
+      (i) => VillageNews.fromMessage('Yangında $i numaralı köylü öldü.'),
+    );
+    for (final item in items) {
+      expect(queue.add(item).accepted, isTrue);
+    }
+    for (final item in items) {
+      expect(queue.active, same(item));
+      queue.completeActive();
+    }
+    expect(queue.active, isNull);
+  });
+
+  test('gizlenen süre bütçeden düşmez, sıradaki haber tam süre alır', () {
+    final queue = VillageNewsQueue();
+    final first = VillageNews.fromMessage('Divan karar bekliyor.');
+    final next = VillageNews.fromMessage('Bir başka dilekçe var.');
+    queue.add(first);
+    queue.add(next);
+    queue.advance(2, visible: true);
+    final remaining = queue.remainingFraction;
+    queue.advance(60, visible: false);
+    expect(queue.active, same(first));
+    expect(queue.remainingFraction, remaining);
+    queue.advance(
+      first.readDuration.inMilliseconds / 1000 - 2 + .01,
+      visible: true,
+    );
+    expect(queue.active, same(next));
+    expect(queue.remainingFraction, 1);
+  });
+
+  test('acil haberin kestiği önemli haber kalan süresiyle döner', () {
+    final queue = VillageNewsQueue();
+    final first = VillageNews.fromMessage('Divan karar bekliyor.');
+    queue.add(first);
+    queue.advance(2, visible: true);
+    final remaining = queue.remainingFraction;
+    queue.add(VillageNews.fromMessage('Köyde yangın çıktı.'));
+    queue.completeActive();
+    expect(queue.active, same(first));
+    expect(queue.remainingFraction, remaining);
+  });
+
+  test(
+    'olay kimliği varyantı ve yeni gösterimi bekletir, başka kişiyi engellemez',
+    () {
+      final queue = VillageNewsQueue(repeatDelay: const Duration(seconds: 30));
+      VillageNews item(String body, String key) => VillageNews.fromMessage(
+        body,
+        eventKey: key,
+        priority: VillageNewsPriority.important,
+      );
+      queue.add(item('Ayşe doğdu.', 'birth.1'));
+      expect(
+        queue.add(item('Evde bir ses daha var.', 'birth.1')).accepted,
+        isFalse,
+      );
+      queue.completeActive();
+      expect(
+        queue.add(item('Ayşe bugün dünyaya geldi.', 'birth.1')).accepted,
+        isFalse,
+      );
+      expect(queue.add(item('Ayşe doğdu.', 'birth.2')).accepted, isTrue);
+      queue.completeActive();
+      queue.advance(30, visible: false);
+      expect(
+        queue.add(item('Ayşe bugün dünyaya geldi.', 'birth.1')).accepted,
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'aynı olay ağırlaşırsa tekrar bekleme süresi acil uyarıyı engellemez',
+    () {
+      final queue = VillageNewsQueue();
+      queue.add(
+        VillageNews.fromMessage(
+          'Meydan gergin.',
+          eventKey: 'unrest',
+          priority: VillageNewsPriority.important,
+        ),
+      );
+      queue.completeActive();
+      expect(
+        queue
+            .add(
+              VillageNews.fromMessage(
+                'Köy dağılıyor.',
+                eventKey: 'unrest',
+                priority: VillageNewsPriority.urgent,
+              ),
+            )
+            .accepted,
+        isTrue,
+      );
+    },
+  );
+
+  test('gündelik tampon sınırlıdır ve acil haberin yerini alamaz', () {
+    final queue = VillageNewsQueue(maxPending: 2);
+    queue.add(VillageNews.fromMessage('Köyde yangın çıktı.'));
+    for (var i = 0; i < 10; i++) {
+      queue.add(VillageNews.fromMessage('Yolcu $i geldi.'));
+    }
+    expect(queue.pending, hasLength(2));
+    expect(queue.active!.priority, VillageNewsPriority.urgent);
   });
 }

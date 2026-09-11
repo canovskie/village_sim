@@ -56,6 +56,7 @@
 //                        scene_petition_actor_effects dilekçe sahibinde kalan iz
 //   scene_decision_pacing ağır kararların ortak kuyruğu (sahne payload'u)
 //   scene_governance_action kararın dünya kanıtı: kervan/süreç/olay+yasa izi
+//   scene_decision_customs günlük sıra, sessizlik, sürü çanı ve devriye
 //   scene_regime         pusula → rejim kimliği; scene_estates hane/zümre dengesi
 //   scene_house_actions  oyuncunun hanelere müdahalesi; scene_house_stance karşılığı
 //
@@ -69,6 +70,7 @@
 //    içinde "gün N'den sonra" DEMEZ, oradan okur)
 //
 //  ── events — OLAYLAR & HİKÂYE ─────────────────────────────────────────────
+//   scene_news           haber yayını, görünür okuma süresi ve işlem fişi
 //   scene_events         rastgele olay + fx; scene_imperial dış tehdit
 //   scene_vignette       olayın DÜNYADAKİ sahnesi: roller + adımlar ("İzle")
 //   scene_crime          suç: tarama+plan (scene_crime), icra (scene_crime_act),
@@ -86,9 +88,15 @@
 //   scene_harness_flags  kProbe*/kCapture* bayrakları — oyunda hepsi varsayılan
 //
 //  DİĞER KATMANLAR:
+//   home_interior  ahşap ev kesiti: systems/npc model, rendering mobilya/poz,
+//                  ui/screens izleyici; tools/home_interior_main bağımsız deneme
+//                  home_interior_decor/style: bitkiler, süsler, üç döşeme ailesi
+//                  home_interior_layout: eve özgü kararlı yerleşim ve yollar
 //   lib/ui/{core,hud,ledger,events,screens,dev}  yalnız çizer, sim state tutmaz
 //   lib/rendering  game_painter (+ground/lighting/drawables part'ları),
 //                  character_renderer (+paints/body/shaded/roles/workers part'ları)
+//                  game_surface_motion: adım/yüzey tepkisi + su sisi;
+//                  systems/npc/footstep_trail: geçici, mesafeye bağlı izler
 //   lib/tools      bağımsız *_main.dart harness/editörleri (sürüme girmez)
 //
 //  NOT: sistemlerin SAF çekirdekleri lib/systems ve lib/entities altındadır
@@ -158,11 +166,13 @@ import 'systems/events/chronicle.dart';
 import 'systems/events/crime_system.dart';
 import 'systems/events/event_choreography.dart';
 import 'systems/events/event_system.dart';
+import 'systems/events/governance_event.dart';
 import 'systems/events/imperial.dart';
 import 'systems/events/imperial_battle.dart';
 import 'systems/events/imperial_raid.dart';
 import 'systems/events/story_threads.dart';
 import 'systems/events/village_news.dart';
+import 'systems/governance/decision_customs.dart';
 import 'systems/governance/decision_pacing.dart';
 import 'systems/governance/estate_system.dart';
 import 'systems/governance/governance_action.dart';
@@ -183,6 +193,8 @@ import 'systems/labor/hay_processor.dart';
 import 'systems/labor/job_feedback.dart';
 import 'systems/npc/anchor_system.dart';
 import 'systems/npc/combat_motion.dart';
+import 'systems/npc/footstep_trail.dart';
+import 'systems/npc/home_interior.dart';
 import 'systems/npc/npc_body.dart';
 import 'systems/npc/path_context.dart';
 import 'systems/npc/pedestrian_network.dart';
@@ -240,6 +252,7 @@ import 'ui/hud/world_tag.dart';
 import 'ui/ledger/law_book_panel.dart';
 import 'ui/ledger/village_ledger.dart';
 import 'ui/screens/collapse_screen.dart';
+import 'ui/screens/home_interior_screen.dart';
 import 'ui/screens/loading_screen.dart';
 import 'ui/screens/main_menu_screen.dart';
 import 'ui/screens/reckoning_screen.dart';
@@ -275,6 +288,7 @@ part 'scene/events/scene_crime.dart';
 part 'scene/events/scene_crime_act.dart';
 part 'scene/events/scene_crime_justice.dart';
 part 'scene/events/scene_events.dart';
+part 'scene/events/scene_news.dart';
 part 'scene/events/scene_funeral.dart';
 part 'scene/events/scene_illness.dart';
 part 'scene/events/scene_imperial.dart';
@@ -288,6 +302,7 @@ part 'scene/events/scene_wedding.dart';
 part 'scene/governance/scene_decision_pacing.dart';
 part 'scene/governance/scene_estates.dart';
 part 'scene/governance/scene_governance_action.dart';
+part 'scene/governance/scene_decision_customs.dart';
 part 'scene/governance/scene_house_actions.dart';
 part 'scene/governance/scene_house_stance.dart';
 part 'scene/governance/scene_law.dart';
@@ -548,6 +563,7 @@ class _VillageSceneState extends State<VillageScene>
   /// Kararın sayı olarak değil, köyde süren bir iş olarak yaşayan karşılığı.
   final List<DecisionProcess> _decisionProcesses = [];
   final List<GovernanceAftermath> _governanceAftermath = [];
+  DecisionCustoms _decisionCustoms = DecisionCustoms();
   double _lawBehaviorNextSim = 0;
   int _lawBehaviorCursor = 0;
 
@@ -628,6 +644,7 @@ class _VillageSceneState extends State<VillageScene>
   final Map<VillagerEntity, int> _rousedTonight = {}; // bu gece kaç kez kalktı
   double _shelterMurmurWait = 0; // köyün bu dertten söz etme bekleyişi (gün)
   BuildingEntity? _selectedBuilding;
+  bool _houseInteriorOpen = false;
   VillagerEntity? _selectedVillager;
 
   /// Çift tık ikinci dokunuşun yerini callback'ler arasında taşır. Flutter tek
@@ -1348,9 +1365,6 @@ class _VillageSceneState extends State<VillageScene>
   double _regimeScan = 0; // huzursuzluk poll sayacı (2 sn)
   double _crisisCooldown = 0; // krizler arası nefes (sim sn)
   bool _unrestStirShown = false; // "köy homurdanıyor" uyarısı bir kez
-  /// Yürüyen kriz dilekçesinde şık başlığı → huzursuzluk deltası. Kriz
-  /// sunulurken dolar, karar verilince tükenir (anlık, kaydedilmez).
-  Map<String, double> _regimeCrisisUnrest = const {};
 
   /// ÇÜRÜME — huzursuzluğun bıraktığı KALICI iz (bkz. Regime.rotStep). Yavaş
   /// birikir, daha yavaş silinir; eşiği aşınca rejime özgü KRONİK hâl doğar
@@ -1730,8 +1744,9 @@ class _VillageSceneState extends State<VillageScene>
   // ── Notification ───────────────────────────────────────────────────────────
   final VillageNewsQueue _notificationFeed = VillageNewsQueue(maxPending: 2);
   VillageNews? get _notification => _notificationFeed.active;
-  int _notifId = 0;
-  Timer? _notificationTimer;
+  final VillageNewsQueue _feedbackFeed = VillageNewsQueue();
+  bool _newsForeground = true;
+  bool _newsSkipFrame = false;
 
   // ── Dev olay günlüğü ───────────────────────────────────────────────────────
   // Dev modda ekranda kayan konsol: her random roll / olay tetiği burada bir
@@ -1898,8 +1913,8 @@ class _VillageSceneState extends State<VillageScene>
   @override
   void dispose() {
     _releaseVignette();
-    _notificationTimer?.cancel();
     _notificationFeed.clear();
+    _feedbackFeed.clear();
     WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalHotkey);
     _villageNamePromptCtrl.dispose();
@@ -1940,6 +1955,8 @@ class _VillageSceneState extends State<VillageScene>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _newsForeground = state == AppLifecycleState.resumed;
+    _newsSkipFrame = true;
     // A muted ticker does not request frames while the app is backgrounded.
     // Besides saving CPU/GPU, this avoids a clamped catch-up tick competing
     // with resume animations when the window becomes active again.
@@ -2082,77 +2099,6 @@ class _VillageSceneState extends State<VillageScene>
     setState(() {
       _speedIdx = 0;
       _timeScale = 1.0;
-    });
-  }
-
-  void _showNotification(
-    String msg, {
-    String? headline,
-    VillageNewsTopic? topic,
-    VillageNewsTone? tone,
-    VillageNewsPriority? priority,
-  }) {
-    logDev(msg, tag: '📣');
-
-    final news = VillageNews.fromMessage(
-      msg,
-      headline: headline,
-      topic: topic,
-      tone: tone,
-      priority: priority,
-      stamp: '${_season.label.toUpperCase()} · GÜN $_dayCount',
-    );
-
-    // Capture/prova harness'lerinde otokapatma timer'ını KURMA: banner görünmez
-    // ve zorlanmış olay yağmurunda biriken timer'lar test
-    // sonunda `!timersPending` assert'ini düşürür (prova testi yakaladı).
-    if (kCaptureMode) {
-      ++_notifId;
-      _notificationFeed.replace(news);
-      setState(() {});
-      return;
-    }
-
-    final update = _notificationFeed.add(news);
-    if (!update.accepted) return;
-    if (update.activeChanged) {
-      _presentNotification();
-    } else {
-      // Plaketin kuyruk sayacı yeni haberi hemen göstersin.
-      setState(() {});
-    }
-  }
-
-  void _presentNotification() {
-    final news = _notificationFeed.active;
-    if (news == null) return;
-    final id = ++_notifId;
-    setState(() {});
-    _notificationTimer?.cancel();
-    // Tam ekran panel açıkken plaket çizilmez. Okuma süresini görünmeden
-    // tüketmek haberi sessizce kaybetmek olur; panel kapanana kadar kısa
-    // aralıkla bekle, görünür olduğu anda tam okuma süresini başlat.
-    if (_panelFocusOpen) {
-      _notificationTimer = Timer(const Duration(milliseconds: 400), () {
-        if (!mounted || _notifId != id) return;
-        _presentNotification();
-      });
-      return;
-    }
-    _notificationTimer = Timer(news.readDuration, () {
-      if (!mounted || _notifId != id) return;
-      // Haber görünürken açılan panel de kalan süreyi yutmasın. Panel
-      // kapandığında bu haber baştan, okunabilir bir süreyle gösterilir.
-      if (_panelFocusOpen) {
-        _presentNotification();
-        return;
-      }
-      final next = _notificationFeed.completeActive();
-      if (next == null) {
-        setState(() {});
-        return;
-      }
-      _presentNotification();
     });
   }
 
@@ -2327,10 +2273,7 @@ class _VillageSceneState extends State<VillageScene>
                 buildSaveButton(),
               if (!_panelFocusOpen) buildHoverLabel(),
               if (!_panelFocusOpen) buildCameraGuide(),
-              if (_notification != null &&
-                  !_panelFocusOpen &&
-                  _imperialBattle == null)
-                buildNotificationToast(),
+              buildNotificationToast(),
               if (_devLogOn && _devLog.isNotEmpty) buildDevLogConsole(),
               if (_placing != null ||
                   _farmMode ||
