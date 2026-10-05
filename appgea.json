@@ -1,0 +1,11 @@
+{
+  "displayName": "village_sim",
+  "appType": "flutter",
+  "platforms": [
+    "iOS",
+    "android"
+  ],
+  "screenshots": {
+    "enabled": false
+  }
+}
