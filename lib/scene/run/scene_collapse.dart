@@ -127,8 +127,8 @@ extension _SceneCollapse on _VillageSceneState {
           for (final e in _storyLog.reversed.take(6))
             '${e.icon} ${e.text}',
         ],
-        onExit: () {
-          _saveNow();
+        onExit: () async {
+          await _saveNow();
           widget.onExitToMenu?.call();
         },
       );

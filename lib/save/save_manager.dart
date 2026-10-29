@@ -93,6 +93,7 @@ class SaveManager {
   /// Bozuk/okunamayan dosyalar sessizce atlanır.
   Future<List<SaveSlotMeta>> listSlots() async {
     final dir = await _dir();
+    await _recoverTemps(dir);
     final out = <SaveSlotMeta>[];
     await for (final ent in dir.list()) {
       if (ent is! File) continue;
@@ -115,6 +116,7 @@ class SaveManager {
   /// Slotun tam içeriğini ({version, meta, world}) döner; yoksa null.
   Future<Map<String, dynamic>?> readSlot(String id) async {
     final dir = await _dir();
+    await _recoverTemps(dir);
     final f = _fileFor(dir, id);
     if (!await f.exists()) return null;
     try {
@@ -130,9 +132,41 @@ class SaveManager {
     final f = _fileFor(dir, id);
     final tmp = File('${f.path}.tmp');
     await tmp.writeAsString(jsonEncode(data), flush: true);
-    if (await f.exists()) await f.delete();
+    // Eskisini SİLMEDEN üstüne yaz: rename hedefi tek adımda değiştirir. Silip
+    // sonra taşımak, araya giren bir durmada köyün tek kopyasını yok ederdi.
     await tmp.rename(f.path);
   }
+
+  /// Yazım `<dosya>.tmp`ye yapılıp taşınır. İkisi arasında bir durma, eksik ya da
+  /// bozuk bir slotun yanında TAM bir tmp bırakır: onu slota çıkar. Yarım kalmış
+  /// tmp çözümlenmez, yok sayılır.
+  Future<void> _recoverTemps(Directory dir) async {
+    final temps = await dir
+        .list()
+        .where((e) => e is File && e.path.endsWith('$_ext.tmp'))
+        .cast<File>()
+        .toList();
+    for (final tmp in temps) {
+      final target = File(tmp.path.substring(0, tmp.path.length - 4));
+      if (await _isSave(target) || !await _isSave(tmp)) continue;
+      try {
+        await tmp.rename(target.path);
+      } catch (_) {}
+    }
+  }
+
+  Future<bool> _isSave(File f) async {
+    try {
+      if (!await f.exists()) return false;
+      final j = jsonDecode(await f.readAsString());
+      return j is Map<String, dynamic> && j['meta'] is Map && j['world'] != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Yalnız testler için: kayıtları verilen dizine yazdırır.
+  void useDirectoryForTest(Directory dir) => _cachedDir = dir;
 
   Future<void> deleteSlot(String id) async {
     final dir = await _dir();

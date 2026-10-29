@@ -70,7 +70,8 @@ extension _SceneSave on _VillageSceneState {
     _autoSaveAccum += realDt;
     if (_autoSaveAccum >= _VillageSceneState._kAutoSaveInterval) {
       _autoSaveAccum = 0;
-      _saveNow();
+      // Bir yazım sürerken otomatik kayıt atlanır; sıradaki aralık yazar.
+      if (!_saves.busy) _saveNow();
     }
   }
 
@@ -83,10 +84,19 @@ extension _SceneSave on _VillageSceneState {
     bool manual = false,
     String? asSlot,
     String? asName,
-  }) async {
+  }) {
     final slot = asSlot ?? _slotId;
-    if (_saving || slot.isEmpty) return;
-    _saving = true;
+    if (slot.isEmpty) return Future<void>.value();
+    // Çalışan bir yazım varsa bunu bekler, sonra DÜNYAYI O ANDA yakalar: Kaydet
+    // ve Çık ile defter mührü eski görüntüyle kalmaz.
+    return _saves.run(() => _writeSave(slot, manual: manual, asName: asName));
+  }
+
+  Future<void> _writeSave(
+    String slot, {
+    required bool manual,
+    String? asName,
+  }) async {
     try {
       final data = <String, dynamic>{
         'version': SaveManager.schemaVersion,
@@ -118,8 +128,6 @@ extension _SceneSave on _VillageSceneState {
       }
     } catch (_) {
       if (manual && mounted) _showNotification('⚠ Kayıt başarısız');
-    } finally {
-      _saving = false;
     }
   }
 

@@ -161,6 +161,7 @@ import 'rendering/tool_renderer.dart';
 import 'rendering/tree_renderer.dart';
 import 'rendering/vehicle_renderer.dart';
 import 'save/save_manager.dart';
+import 'save/save_queue.dart';
 import 'scene/world/scene_data.dart';
 import 'systems/events/chronicle.dart';
 import 'systems/events/crime_system.dart';
@@ -530,8 +531,9 @@ class _VillageSceneState extends State<VillageScene>
   /// Periyodik otomatik kayıt için gerçek-zaman (wall clock) birikimi.
   double _autoSaveAccum = 0;
   static const double _kAutoSaveInterval = 30.0; // sn (gerçek zaman)
-  /// Aynı anda iki yazım çakışmasın diye basit kilit.
-  bool _saving = false;
+  /// Yazımlar sırayla koşar; çalışan varken istenen kayıt bekler ve en güncel
+  /// durumu yazar (bkz. SaveQueue).
+  final SaveQueue _saves = SaveQueue();
 
   // ── Asset loading ──────────────────────────────────────────────────────────
   /// Tüm sprite cache'leri yüklenene kadar oyun render edilmez.
