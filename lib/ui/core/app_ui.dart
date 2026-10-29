@@ -1,9 +1,9 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../systems/platform/audio_manager.dart';
+import 'phosphor_glyphs.dart';
 
 /// İzometrik oyun telefonda yatay çalışır. Yükseklik, telefon ile tablet
 /// ayrımında genişlikten daha güvenilir; capture harness'i de aynı mantıksal
@@ -1145,135 +1145,132 @@ class GameLogo extends StatelessWidget {
 // GameIconData → Phosphor glyph. Çoğu 'fill' (küçük boyda kütle + okunaklılık);
 // saf-çizgi olanlar (chevron/close) 'bold' daha temiz; confetti 'regular'.
 IconData _glyph(GameIconData i) {
-  const fill = PhosphorIconsStyle.fill;
-  const bold = PhosphorIconsStyle.bold;
-  const regular = PhosphorIconsStyle.regular;
   switch (i) {
     // menü
     case GameIconData.flame:
-      return PhosphorIcons.flame(fill);
+      return PhosphorGlyphs.flame;
     case GameIconData.gear:
-      return PhosphorIcons.gearSix(fill);
+      return PhosphorGlyphs.gearSix;
     case GameIconData.scroll:
-      return PhosphorIcons.scroll(fill);
+      return PhosphorGlyphs.scroll;
     case GameIconData.chevron:
-      return PhosphorIcons.caretRight(bold);
+      return PhosphorGlyphs.caretRightBold;
     case GameIconData.close:
-      return PhosphorIcons.x(bold);
+      return PhosphorGlyphs.xBold;
     case GameIconData.star:
-      return PhosphorIcons.star(fill);
+      return PhosphorGlyphs.star;
     // kaynak
     case GameIconData.wood:
-      return PhosphorIcons.tree(fill);
+      return PhosphorGlyphs.tree;
     case GameIconData.stone:
-      return PhosphorIcons.mountains(fill);
+      return PhosphorGlyphs.mountains;
     case GameIconData.iron:
-      return PhosphorIcons.cube(fill);
+      return PhosphorGlyphs.cube;
     case GameIconData.coal:
-      return PhosphorIcons.stack(fill);
+      return PhosphorGlyphs.stack;
     case GameIconData.wheat:
-      return PhosphorIcons.grains(fill);
+      return PhosphorGlyphs.grains;
     case GameIconData.coin:
-      return PhosphorIcons.coins(fill);
+      return PhosphorGlyphs.coins;
     case GameIconData.honey:
-      return PhosphorIcons.hexagon(fill);
+      return PhosphorGlyphs.hexagon;
     case GameIconData.drop:
-      return PhosphorIcons.drop(fill);
+      return PhosphorGlyphs.drop;
     case GameIconData.reed:
-      return PhosphorIcons.plant(fill);
+      return PhosphorGlyphs.plant;
     case GameIconData.snow:
-      return PhosphorIcons.snowflake(fill);
+      return PhosphorGlyphs.snowflake;
     case GameIconData.wool:
       // Yumak yok; en yakın okunan biçim sarmal/iplik.
-      return PhosphorIcons.spiral(fill);
+      return PhosphorGlyphs.spiral;
     // insan / iş
     case GameIconData.people:
-      return PhosphorIcons.usersThree(fill);
+      return PhosphorGlyphs.usersThree;
     case GameIconData.axe:
-      return PhosphorIcons.axe(fill);
+      return PhosphorGlyphs.axe;
     case GameIconData.pickaxe:
-      return PhosphorIcons.shovel(fill);
+      return PhosphorGlyphs.shovel;
     case GameIconData.fish:
-      return PhosphorIcons.fish(fill);
+      return PhosphorGlyphs.fish;
     case GameIconData.hammer:
-      return PhosphorIcons.hammer(fill);
+      return PhosphorGlyphs.hammer;
     // meslek
     case GameIconData.church:
-      return PhosphorIcons.church(fill);
+      return PhosphorGlyphs.church;
     case GameIconData.herd:
-      return PhosphorIcons.cow(fill);
+      return PhosphorGlyphs.cow;
     case GameIconData.bow:
-      return PhosphorIcons.crosshair(fill);
+      return PhosphorGlyphs.crosshair;
     case GameIconData.mill:
-      return PhosphorIcons.windmill(fill);
+      return PhosphorGlyphs.windmill;
     case GameIconData.tankard:
-      return PhosphorIcons.beerStein(fill);
+      return PhosphorGlyphs.beerStein;
     // hava
     case GameIconData.sun:
-      return PhosphorIcons.sun(fill);
+      return PhosphorGlyphs.sun;
     case GameIconData.moon:
-      return PhosphorIcons.moon(fill);
+      return PhosphorGlyphs.moon;
     case GameIconData.rain:
-      return PhosphorIcons.cloudRain(fill);
+      return PhosphorGlyphs.cloudRain;
     case GameIconData.storm:
-      return PhosphorIcons.cloudLightning(fill);
+      return PhosphorGlyphs.cloudLightning;
     case GameIconData.dawn:
-      return PhosphorIcons.sunHorizon(fill);
+      return PhosphorGlyphs.sunHorizon;
     // aksiyon
     case GameIconData.pause:
-      return PhosphorIcons.pause(fill);
+      return PhosphorGlyphs.pause;
     case GameIconData.play:
-      return PhosphorIcons.play(fill);
+      return PhosphorGlyphs.play;
     case GameIconData.festival:
-      return PhosphorIcons.confetti(regular);
+      return PhosphorGlyphs.confettiRegular;
     case GameIconData.demolish:
-      return PhosphorIcons.trash(fill);
+      return PhosphorGlyphs.trash;
     case GameIconData.tax:
-      return PhosphorIcons.handCoins(fill);
+      return PhosphorGlyphs.handCoins;
     case GameIconData.sell:
-      return PhosphorIcons.storefront(fill);
+      return PhosphorGlyphs.storefront;
     case GameIconData.dice:
-      return PhosphorIcons.diceFive(fill);
+      return PhosphorGlyphs.diceFive;
     case GameIconData.bolt:
-      return PhosphorIcons.lightning(fill);
+      return PhosphorGlyphs.lightning;
     case GameIconData.map:
-      return PhosphorIcons.mapTrifold(fill);
+      return PhosphorGlyphs.mapTrifold;
     case GameIconData.bug:
-      return PhosphorIcons.bug(fill);
+      return PhosphorGlyphs.bug;
     case GameIconData.speed:
-      return PhosphorIcons.fastForward(fill);
+      return PhosphorGlyphs.fastForward;
     // durum
     case GameIconData.cog:
-      return PhosphorIcons.gear(fill);
+      return PhosphorGlyphs.gear;
     case GameIconData.heart:
-      return PhosphorIcons.heart(fill);
+      return PhosphorGlyphs.heart;
     case GameIconData.home:
-      return PhosphorIcons.house(fill);
+      return PhosphorGlyphs.house;
     case GameIconData.warehouse:
-      return PhosphorIcons.warehouse(fill);
+      return PhosphorGlyphs.warehouse;
     // ses
     case GameIconData.sound:
-      return PhosphorIcons.speakerHigh(fill);
+      return PhosphorGlyphs.speakerHigh;
     case GameIconData.soundOff:
-      return PhosphorIcons.speakerSlash(fill);
+      return PhosphorGlyphs.speakerSlash;
     // görev/civic
     case GameIconData.bank:
-      return PhosphorIcons.bank(fill);
+      return PhosphorGlyphs.bank;
     case GameIconData.market:
-      return PhosphorIcons.storefront(fill);
+      return PhosphorGlyphs.storefront;
     case GameIconData.flower:
-      return PhosphorIcons.flower(fill);
+      return PhosphorGlyphs.flower;
     case GameIconData.scales:
-      return PhosphorIcons.scales(fill);
+      return PhosphorGlyphs.scales;
     case GameIconData.handshake:
-      return PhosphorIcons.handshake(fill);
+      return PhosphorGlyphs.handshake;
     case GameIconData.crown:
-      return PhosphorIcons.crown(fill);
+      return PhosphorGlyphs.crown;
     case GameIconData.door:
-      return PhosphorIcons.door(fill);
+      return PhosphorGlyphs.door;
     case GameIconData.eye:
-      return PhosphorIcons.eye(fill);
+      return PhosphorGlyphs.eye;
     case GameIconData.save:
-      return PhosphorIcons.floppyDisk(fill);
+      return PhosphorGlyphs.floppyDisk;
   }
 }
